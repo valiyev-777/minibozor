@@ -1,0 +1,60 @@
+letter-spacing:1.4px;color:#6B7280">33 — MANZILLARIM</div>
+  <div style="width:375px;min-height:812px;background:#F5F5F7;border-radius:38px;box-shadow:0 24px 70px rgba(14,18,40,0.18);overflow:hidden;position:relative;display:flex;flex-direction:column">
+    <div style="background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 22px 4px;font-size:14.5px;font-weight:700;color:#0E0F12">
+        <span>9:41</span>
+        <span style="width:17px;height:9px;border:1.4px solid #0E0F12;border-radius:2px;position:relative;opacity:0.85"><span style="position:absolute;inset:1px;width:72%;background:#0E0F12;border-radius:1px"></span></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 20px 14px">
+        <span style="width:34px;height:34px;flex:none;margin-left:-6px;border-radius:12px;background:#F3F3F5;display:flex;align-items:center;justify-content:center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0E0F12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg>
+        </span>
+        <span style="flex:1;font-size:17px;font-weight:800;color:#0E0F12;letter-spacing:-0.3px">Manzillarim</span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;padding:12px">
+      <sc-for list="{{ addresses }}" as="a" hint-placeholder-count="2">
+        <div style="background:#fff;border-radius:20px;padding:16px 18px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:38px;height:38px;border-radius:12px;background:#F3F3F5;display:flex;align-items:center;justify-content:center"><dc-import name="Icon" glyph="{{ a.icon }}" size="19" hint-size="19px,19px"></dc-import></div>
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:7px">
+                <span style="font-size:13.5px;font-weight:800;color:#0E0F12">{{ a.title }}</span>
+                <span style="background:{{ a.badgeBg }};color:{{ a.badgeColor }};font-size:9.5px;font-weight:800;padding:3px 7px;border-radius:6px">{{ a.badge }}</span>
+              </div>
+              <div style="font-size:11.5px;color:#6B7280;line-height:1.45;margin-top:3px">{{ a.line }}</div>
+            </div>
+          </div>
+          <div style="font-size:10.5px;color:#9096A1;margin-top:10px;padding-left:50px">{{ a.meta }}</div>
+          <div style="display:flex;gap:10px;margin-top:12px">
+            <div style="flex:1;border:1px solid #EAEBEF;border-radius:12px;text-align:center;padding:10px 0;font-size:12px;font-weight:700;color:#0E0F12">Tahrirlash</div>
+            <div style="flex:1;border:1px solid #F3D4DC;border-radius:12px;text-align:center;padding:10px 0;font-size:12px;font-weight:700;color:#E23A6A">O'chirish</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background:#fff;margin:0 12px 12px;border-radius:20px;padding:16px 18px;display:flex;align-items:center;gap:12px">
+      <div style="width:38px;height:38px;border-radius:12px;background:#F3F3F5;display:flex;align-items:center;justify-content:center;font-size:17px;color:#0E0F12">+</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;color:#0E0F12">Yangi manzil qo'shish</div>
+        <div style="font-size:10.5px;color:#9096A1;margin-top:1px">Xaritadan belgilash yoki qo'lda kiritish</div>
+      </div>
+      <span style="color:#CBCFD6;font-size:13px">›</span>
+    </div>
+    <div style="background:#fff;margin:0 12px 20px;border-radius:20px;padding:16px 18px">
+      <div style="font-size:12.5px;font-weight:800;color:#0E0F12">Yaqin topshirish punktlari</div>
+      <sc-for list="{{ pickups }}" as="p" hint-placeholder-count="2">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #F1F2F5">
+          <div style="width:34px;height:34px;border-radius:11px;background:#F3F3F5;display:flex;align-items:center;justify-content:center"><dc-import name="Icon" glyph="box" size="17" hint-size="17px,17px"></dc-import></div>
+          <div style="flex:1">
+            <div style="font-size:12.5px;font-weight:700;color:#0E0F12">{{ p.name }}</div>
+            <div style="font-size:10.5px;color:#9096A1;margin-top:1px">{{ p.hours }}</div>
+          </div>
+          <span style="font-size:11px;font-weight:700;color:{{ accent }}">{{ p.dist }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+  <div style="font:700 11px 'Plus Jakarta Sans';

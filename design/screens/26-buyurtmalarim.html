@@ -1,0 +1,39 @@
+letter-spacing:1.4px;color:#6B7280">26 — BUYURTMALARIM</div>
+  <div style="width:375px;min-height:812px;background:#F5F5F7;border-radius:38px;box-shadow:0 24px 70px rgba(14,18,40,0.18);overflow:hidden;position:relative;display:flex;flex-direction:column;padding-bottom:14px">
+    <div style="background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 22px 4px;font-size:14.5px;font-weight:700;color:#0E0F12">
+        <span>9:41</span>
+        <span style="width:17px;height:9px;border:1.4px solid #0E0F12;border-radius:2px;position:relative;opacity:0.85"><span style="position:absolute;inset:1px;width:72%;background:#0E0F12;border-radius:1px"></span></span>
+      </div>
+      <div style="padding:8px 20px 12px;font-size:23px;font-weight:800;color:#0E0F12;letter-spacing:-0.5px">Buyurtmalarim</div>
+      <div style="display:flex;gap:18px;padding:0 20px;border-bottom:1px solid #F1F2F5">
+        <div style="font-size:13px;font-weight:800;color:#0E0F12;padding-bottom:10px;border-bottom:2px solid {{ accent }}">Faol · 2</div>
+        <div style="font-size:13px;font-weight:600;color:#9096A1;padding-bottom:10px">Tarix</div>
+        <div style="font-size:13px;font-weight:600;color:#9096A1;padding-bottom:10px">Qaytarish</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;padding:12px">
+      <sc-for list="{{ orders }}" as="o" hint-placeholder-count="2">
+        <div style="background:#fff;border-radius:20px;padding:16px 18px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="background:{{ o.pillBg }};color:{{ o.pillColor }};font-size:10px;font-weight:800;padding:4px 8px;border-radius:7px">{{ o.status }}</span>
+            <span style="margin-left:auto;font-size:10.5px;color:#9096A1">{{ o.id }}</span>
+          </div>
+          <div style="font-size:13px;font-weight:700;color:#0E0F12;margin-top:10px">{{ o.eta }}</div>
+          <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+            <div style="width:46px;height:56px;border-radius:12px;background:#F2F1EE;overflow:hidden"><img src="{{ o.img1 }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+            <div style="width:46px;height:56px;border-radius:12px;background:#F2F1EE;overflow:hidden"><img src="{{ o.img2 }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+            <div style="width:46px;height:56px;border-radius:12px;background:#F5F5F7;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#6B7280">{{ o.more }}</div>
+            <div style="flex:1;text-align:right;font-size:15.5px;font-weight:800;color:#0E0F12;letter-spacing:-0.3px">{{ o.total }}</div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <div style="flex:1;border:1px solid #EAEBEF;border-radius:14px;text-align:center;padding:11px 0;font-size:12.5px;font-weight:700;color:#0E0F12">Tafsilotlar</div>
+            <div style="flex:1;background:{{ accent }};color:#fff;border-radius:14px;text-align:center;padding:11px 0;font-size:12.5px;font-weight:700">{{ o.cta }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+  <div style="font:700 11px 'Plus Jakarta Sans';

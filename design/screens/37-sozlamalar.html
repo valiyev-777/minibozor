@@ -1,0 +1,44 @@
+letter-spacing:1.4px;color:#6B7280">37 — SOZLAMALAR</div>
+  <div style="width:375px;min-height:812px;background:#F5F5F7;border-radius:38px;box-shadow:0 24px 70px rgba(14,18,40,0.18);overflow:hidden;position:relative;display:flex;flex-direction:column">
+    <div style="background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 22px 4px;font-size:14.5px;font-weight:700;color:#0E0F12">
+        <span>9:41</span>
+        <span style="width:17px;height:9px;border:1.4px solid #0E0F12;border-radius:2px;position:relative;opacity:0.85"><span style="position:absolute;inset:1px;width:72%;background:#0E0F12;border-radius:1px"></span></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 20px 14px">
+        <span style="width:34px;height:34px;flex:none;margin-left:-6px;border-radius:12px;background:#F3F3F5;display:flex;align-items:center;justify-content:center">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0E0F12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg>
+        </span>
+        <span style="font-size:17px;font-weight:800;color:#0E0F12;letter-spacing:-0.3px">Sozlamalar</span>
+      </div>
+    </div>
+    <div style="background:#fff;margin:12px;border-radius:20px;padding:2px 18px">
+      <sc-for list="{{ toggles }}" as="t" hint-placeholder-count="2">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #F1F2F5">
+          <div style="width:38px;height:38px;border-radius:12px;background:#F3F3F5;display:flex;align-items:center;justify-content:center"><dc-import name="Icon" glyph="{{ t.icon }}" size="19" hint-size="19px,19px"></dc-import></div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;color:#0E0F12">{{ t.label }}</div>
+            <div style="font-size:10.5px;color:#9096A1;margin-top:1px">{{ t.sub }}</div>
+          </div>
+          <span style="width:38px;height:22px;border-radius:12px;background:{{ t.track }};position:relative;display:block"><span style="position:absolute;top:2px;left:{{ t.knob }};width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(14,18,40,0.2)"></span></span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background:#fff;margin:0 12px 12px;border-radius:20px;padding:2px 18px">
+      <sc-for list="{{ settingsRows }}" as="r" hint-placeholder-count="5">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #F1F2F5">
+          <div style="width:38px;height:38px;border-radius:12px;background:#F3F3F5;display:flex;align-items:center;justify-content:center"><dc-import name="Icon" glyph="{{ r.icon }}" size="19" hint-size="19px,19px"></dc-import></div>
+          <span style="flex:1;font-size:13px;font-weight:700;color:#0E0F12">{{ r.label }}</span>
+          <span style="font-size:10.5px;color:#9096A1">{{ r.meta }}</span>
+          <span style="color:#CBCFD6;font-size:13px">›</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding:0 20px 20px">
+      <div style="background:#fff;border:1px solid #F3D4DC;color:#E23A6A;border-radius:14px;text-align:center;padding:13px 0;font-size:13.5px;font-weight:700">Chiqish</div>
+    </div>
+    <div style="text-align:center;font-size:10.5px;color:#B7BCC5;padding:0 0 20px">Mini Bozor · versiya 3.4.1</div>
+  </div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+  <div style="font:700 11px 'Plus Jakarta Sans';

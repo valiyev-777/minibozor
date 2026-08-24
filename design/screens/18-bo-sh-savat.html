@@ -1,0 +1,47 @@
+letter-spacing:1.4px;color:#6B7280">18 — BO'SH SAVAT</div>
+  <div style="width:375px;min-height:812px;background:#F5F5F7;border-radius:38px;box-shadow:0 24px 70px rgba(14,18,40,0.18);overflow:hidden;position:relative;display:flex;flex-direction:column">
+    <div style="background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 22px 4px;font-size:14.5px;font-weight:700;color:#0E0F12">
+        <span>9:41</span>
+        <span style="width:17px;height:9px;border:1.4px solid #0E0F12;border-radius:2px;position:relative;opacity:0.85"><span style="position:absolute;inset:1px;width:72%;background:#0E0F12;border-radius:1px"></span></span>
+      </div>
+      <div style="padding:8px 20px 14px;font-size:23px;font-weight:800;color:#0E0F12;letter-spacing:-0.5px">Savat</div>
+    </div>
+    <div style="background:#fff;margin:12px;border-radius:20px;padding:34px 24px;display:flex;flex-direction:column;align-items:center;text-align:center">
+      <div style="width:64px;height:64px;border-radius:22px;background:#F3F3F5;display:flex;align-items:center;justify-content:center"><dc-import name="Icon" glyph="basket" size="30" color="#0E0F12" weight="1.4" hint-size="30px,30px"></dc-import></div>
+      <div style="font-size:17px;font-weight:800;color:#0E0F12;margin-top:16px;letter-spacing:-0.3px">Savat hozircha bo'sh</div>
+      <div style="font-size:12.5px;color:#9096A1;line-height:1.5;margin-top:6px;max-width:230px">Yoqqan tovarlarni savatga qo'shing — narx tushganda xabar beramiz</div>
+      <div style="align-self:stretch;background:{{ accent }};color:#fff;border-radius:14px;text-align:center;padding:13px 0;font-size:13.5px;font-weight:700;margin-top:20px">Katalogga o'tish</div>
+    </div>
+    <div style="background:#fff;margin:0 12px 12px;border-radius:20px;padding:16px 0 16px 16px">
+      <div style="display:flex;align-items:baseline;gap:8px;padding-right:16px">
+        <div style="font-size:15.5px;font-weight:800;color:#0E0F12;letter-spacing:-0.2px">Yaqinda ko'rdingiz</div>
+        <span style="margin-left:auto;font-size:11px;font-weight:700;color:{{ accent }}">Barchasi</span>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px;overflow:hidden">
+        <sc-for list="{{ elektronika }}" as="el" hint-placeholder-count="3">
+          <div style="flex:none;width:112px;display:flex;flex-direction:column;gap:5px">
+            <div style="width:112px;height:112px;border-radius:13px;background:#F4F3F1;overflow:hidden"><img src="{{ el.img }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+            <div style="font-size:14px;font-weight:800;color:#0E0F12;letter-spacing:-0.3px">{{ el.price }}</div>
+            <div style="font-size:10.5px;color:#3A4050;line-height:1.3;height:27px;overflow:hidden">{{ el.name }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="height:106px"></div>
+    <dc-import name="TabBar" active="{{ tab2 }}" accent="{{ accent }}" hint-size="100%,70px" style="position:absolute;left:14px;right:14px;bottom:16px"></dc-import>
+  </div>
+</div>
+  </div>
+</div>
+<div style="display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;align-items:baseline;gap:12px;max-width:1720px">
+    <div style="font:800 12px 'Plus Jakarta Sans';letter-spacing:1.6px;color:#0E0F12;background:#DCDDE2;border-radius:999px;padding:6px 11px">04</div>
+    <div style="font:800 22px 'Plus Jakarta Sans';letter-spacing:-0.5px;color:#0E0F12">Buyurtma va yetkazish</div>
+    <div style="font:500 12.5px 'Plus Jakarta Sans';color:#8A8F98;white-space:nowrap">savatdan yetkazishgacha — ketma-ket</div>
+    <div style="flex:1;height:1px;background:#D2D4DA"></div>
+    <div style="font:600 11.5px 'Plus Jakarta Sans';color:#8A8F98;white-space:nowrap">11 ekran</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,375px);gap:44px 40px;align-items:start;justify-content:start">
+<div style="display:flex;flex-direction:column;gap:10px">
+  <div style="font:700 11px 'Plus Jakarta Sans';

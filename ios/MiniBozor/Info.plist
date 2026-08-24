@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>uz</string>
+	<key>CFBundleDisplayName</key>
+	<string>Mini Bozor</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Ilovaga tez va xavfsiz kirish uchun Face ID ishlatiladi.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Yaqin topshirish punktlarini va yetkazish manzilini aniqlash uchun.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Sharhga rasm biriktirish uchun.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>uz.minibozor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>minibozor</string>
+			</array>
+		</dict>
+	</array>
+	<!-- Debug builds talk to the FastAPI dev server over plain HTTP on the Mac.
+	     NSAllowsLocalNetworking exempts only local hostnames, so App Transport
+	     Security still applies to everything else. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

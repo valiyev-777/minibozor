@@ -1,0 +1,45 @@
+letter-spacing:1.4px;color:#6B7280">36 — BILDIRISHNOMALAR</div>
+  <div style="width:375px;min-height:812px;background:#F5F5F7;border-radius:38px;box-shadow:0 24px 70px rgba(14,18,40,0.18);overflow:hidden;position:relative;display:flex;flex-direction:column">
+    <div style="background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 22px 4px;font-size:14.5px;font-weight:700;color:#0E0F12">
+        <span>9:41</span>
+        <span style="width:17px;height:9px;border:1.4px solid #0E0F12;border-radius:2px;position:relative;opacity:0.85"><span style="position:absolute;inset:1px;width:72%;background:#0E0F12;border-radius:1px"></span></span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:8px;padding:8px 20px 16px">
+        <span style="font-size:23px;font-weight:800;color:#0E0F12;letter-spacing:-0.5px">Bildirishnomalar</span>
+        <span style="margin-left:auto;font-size:11px;font-weight:700;color:#9096A1">O'qilgan</span>
+      </div>
+    </div>
+    <div style="padding:14px 20px 8px;font-size:11px;font-weight:800;letter-spacing:0.8px;color:#9096A1">BUGUN</div>
+    <div style="background:#fff;margin:0 12px 12px;border-radius:20px;padding:2px 18px">
+      <sc-for list="{{ notifsToday }}" as="n" hint-placeholder-count="3">
+        <div style="display:flex;align-items:flex-start;gap:12px;padding:13px 0;border-bottom:1px solid #F1F2F5">
+          <div style="width:38px;height:38px;flex:none;border-radius:12px;background:#F3F3F5;display:flex;align-items:center;justify-content:center"><dc-import name="Icon" glyph="{{ n.icon }}" size="19" hint-size="19px,19px"></dc-import></div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;color:#0E0F12">{{ n.title }}</div>
+            <div style="font-size:11.5px;color:#6B7280;line-height:1.45;margin-top:2px">{{ n.text }}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+            <span style="font-size:10px;color:#9096A1">{{ n.time }}</span>
+            <span style="width:7px;height:7px;border-radius:50%;background:{{ n.dot }}"></span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding:2px 20px 8px;font-size:11px;font-weight:800;letter-spacing:0.8px;color:#9096A1">BU HAFTA</div>
+    <div style="background:#fff;margin:0 12px 12px;border-radius:20px;padding:2px 18px">
+      <sc-for list="{{ notifsWeek }}" as="n" hint-placeholder-count="2">
+        <div style="display:flex;align-items:flex-start;gap:12px;padding:13px 0;border-bottom:1px solid #F1F2F5">
+          <div style="width:38px;height:38px;flex:none;border-radius:12px;background:#F3F3F5;display:flex;align-items:center;justify-content:center"><dc-import name="Icon" glyph="{{ n.icon }}" size="19" hint-size="19px,19px"></dc-import></div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;color:#0E0F12">{{ n.title }}</div>
+            <div style="font-size:11.5px;color:#6B7280;line-height:1.45;margin-top:2px">{{ n.text }}</div>
+          </div>
+          <span style="font-size:10px;color:#9096A1">{{ n.time }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+  <div style="font:700 11px 'Plus Jakarta Sans';

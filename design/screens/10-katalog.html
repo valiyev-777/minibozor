@@ -1,0 +1,33 @@
+letter-spacing:1.4px;color:#6B7280">10 — KATALOG</div>
+  <div style="width:375px;min-height:812px;background:#F5F5F7;border-radius:38px;box-shadow:0 24px 70px rgba(14,18,40,0.18);overflow:hidden;position:relative;display:flex;flex-direction:column">
+    <div style="background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 22px 4px;font-size:14.5px;font-weight:700;color:#0E0F12">
+        <span>9:41</span>
+        <span style="width:17px;height:9px;border:1.4px solid #0E0F12;border-radius:2px;position:relative;opacity:0.85"><span style="position:absolute;inset:1px;width:72%;background:#0E0F12;border-radius:1px"></span></span>
+      </div>
+      <div style="padding:8px 20px 12px;font-size:23px;font-weight:800;color:#0E0F12;letter-spacing:-0.5px">Katalog</div>
+      <div style="padding:0 20px 14px">
+        <div style="display:flex;align-items:center;gap:8px;background:#F5F5F7;border-radius:12px;padding:9px 12px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9096A1" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
+          <span style="color:#9096A1;font-size:12.5px;white-space:nowrap">Turkum qidirish</span>
+        </div>
+      </div>
+    </div>
+    <div style="background:#fff;margin:12px;border-radius:20px;padding:2px 18px">
+      <sc-for list="{{ catalogRows }}" as="r" hint-placeholder-count="10">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #F1F2F5">
+          <div style="width:38px;height:38px;border-radius:12px;background:#F3F3F5;display:flex;align-items:center;justify-content:center"><dc-import name="Icon" glyph="{{ r.icon }}" size="19" hint-size="19px,19px"></dc-import></div>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;color:#0E0F12">{{ r.label }}</div>
+            <div style="font-size:10.5px;color:#9096A1;margin-top:1px">{{ r.sub }}</div>
+          </div>
+          <span style="color:#CBCFD6;font-size:13px">›</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="height:106px"></div>
+    <dc-import name="TabBar" active="{{ tab1 }}" accent="{{ accent }}" hint-size="100%,70px" style="position:absolute;left:14px;right:14px;bottom:16px"></dc-import>
+  </div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+  <div style="font:700 11px 'Plus Jakarta Sans';

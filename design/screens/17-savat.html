@@ -1,0 +1,45 @@
+letter-spacing:1.4px;color:#6B7280">17 — SAVAT</div>
+  <div style="width:375px;min-height:812px;background:#F5F5F7;border-radius:38px;box-shadow:0 24px 70px rgba(14,18,40,0.18);overflow:hidden;position:relative;display:flex;flex-direction:column">
+    <div style="background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 22px 4px;font-size:14.5px;font-weight:700;color:#0E0F12">
+        <span>9:41</span>
+        <span style="width:17px;height:9px;border:1.4px solid #0E0F12;border-radius:2px;position:relative;opacity:0.85"><span style="position:absolute;inset:1px;width:72%;background:#0E0F12;border-radius:1px"></span></span>
+      </div>
+      <div style="padding:8px 20px 14px;display:flex;align-items:baseline;gap:8px">
+        <span style="font-size:23px;font-weight:800;color:#0E0F12;letter-spacing:-0.5px">Savat</span>
+        <span style="font-size:11.5px;color:#9096A1">3 ta tovar</span>
+        <span style="margin-left:auto;font-size:11.5px;font-weight:700;color:#9096A1">Tanlash</span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;padding:12px 12px 0">
+      <sc-for list="{{ cart }}" as="c" hint-placeholder-count="3">
+        <div style="background:#fff;border-radius:20px;padding:14px;display:flex;gap:12px">
+          <div style="width:64px;height:80px;flex:none;border-radius:13px;background:#F2F1EE;overflow:hidden"><img src="{{ c.img }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <div style="font-size:11.5px;color:#3A4050;line-height:1.35">{{ c.name }}</div>
+            <div style="font-size:15.5px;font-weight:800;color:#0E0F12;letter-spacing:-0.3px">{{ c.price }}</div>
+            <div style="font-size:10.5px;color:#9096A1">{{ c.meta }}</div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+              <div style="display:flex;align-items:center;gap:12px;background:#F5F5F7;border-radius:12px;padding:5px 10px;font-size:12.5px;font-weight:700;color:#0E0F12">− <span>{{ c.qty }}</span> +</div>
+              <span style="margin-left:auto;display:flex"><dc-import name="Icon" glyph="heart" size="15" color="#C4C8D0" weight="1.5" hint-size="15px,15px"></dc-import></span>
+              <span style="font-size:12px;color:#C4C8D0;line-height:1">✕</span>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background:#fff;margin:0 12px 12px;border-radius:20px;padding:16px 18px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#6B7280;padding-bottom:9px">Tovarlar (3) <span style="color:#0E0F12;font-weight:600">592 100 so'm</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#6B7280;padding-bottom:9px">Chegirma <span style="color:#E23A6A;font-weight:600">−148 000 so'm</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#6B7280;padding-bottom:12px;border-bottom:1px solid #F1F2F5">Yetkazish <span style="color:#0E0F12;font-weight:600">Bepul</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:16.5px;font-weight:800;color:#0E0F12;padding-top:12px;letter-spacing:-0.3px">Jami <span>444 100 so'm</span></div>
+    </div>
+    <div style="padding:0 20px">
+      <div style="background:{{ accent }};color:#fff;border-radius:14px;text-align:center;padding:13px 0;font-size:13.5px;font-weight:700">Buyurtma berish</div>
+    </div>
+    <div style="height:106px"></div>
+    <dc-import name="TabBar" active="{{ tab2 }}" accent="{{ accent }}" hint-size="100%,70px" style="position:absolute;left:14px;right:14px;bottom:16px"></dc-import>
+  </div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+  <div style="font:700 11px 'Plus Jakarta Sans';

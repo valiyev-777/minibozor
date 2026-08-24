@@ -1,0 +1,35 @@
+letter-spacing:1.4px;color:#6B7280">35 — SEVIMLILAR</div>
+  <div style="width:375px;min-height:812px;background:#F5F5F7;border-radius:38px;box-shadow:0 24px 70px rgba(14,18,40,0.18);overflow:hidden;position:relative;display:flex;flex-direction:column;padding-bottom:14px">
+    <div style="background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 22px 4px;font-size:14.5px;font-weight:700;color:#0E0F12">
+        <span>9:41</span>
+        <span style="width:17px;height:9px;border:1.4px solid #0E0F12;border-radius:2px;position:relative;opacity:0.85"><span style="position:absolute;inset:1px;width:72%;background:#0E0F12;border-radius:1px"></span></span>
+      </div>
+      <div style="padding:8px 20px 16px;display:flex;align-items:baseline;gap:8px">
+        <span style="font-size:23px;font-weight:800;color:#0E0F12;letter-spacing:-0.5px">Sevimlilar</span>
+        <span style="font-size:11.5px;color:#9096A1">14 ta</span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;padding:12px">
+      <sc-for list="{{ favs }}" as="f" hint-placeholder-count="4">
+        <div style="background:#fff;border-radius:20px;padding:14px;display:flex;gap:12px">
+          <div style="width:64px;height:80px;flex:none;border-radius:13px;background:#F2F1EE;overflow:hidden"><img src="{{ f.img }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <div style="font-size:11.5px;color:#3A4050;line-height:1.35">{{ f.name }}</div>
+            <div style="display:flex;align-items:baseline;gap:7px">
+              <span style="font-size:15.5px;font-weight:800;color:#0E0F12;letter-spacing:-0.3px">{{ f.price }}</span>
+              <span style="font-size:10.5px;font-weight:800;color:#E23A6A">{{ f.drop }}</span>
+            </div>
+            <div style="font-size:10.5px;color:#9096A1">{{ f.meta }}</div>
+            <div style="display:flex;gap:8px;margin-top:5px">
+              <span style="background:{{ accent }};color:#fff;border-radius:12px;padding:8px 15px;font-size:11.5px;font-weight:700">Savatga</span>
+              <span style="border:1px solid #EAEBEF;border-radius:12px;padding:8px 12px;display:flex;align-items:center"><dc-import name="Icon" glyph="heart" size="15" color="#6B7280" hint-size="15px,15px"></dc-import></span>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+  <div style="font:700 11px 'Plus Jakarta Sans';
