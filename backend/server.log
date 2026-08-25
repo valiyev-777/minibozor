@@ -1,0 +1,17 @@
+INFO:     Will watch for changes in these directories: ['/home/muhammad-sodiq/minibozor/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [14781] using WatchFiles
+INFO:     Started server process [14903]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:43404 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39210 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39214 - "GET /api/v1/home HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39216 - "GET /media/products/gazelle.png HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58226 - "GET /api/v1/home HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56516 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40195 - "POST /api/v1/auth/otp/request HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47171 - "POST /api/v1/auth/otp/verify HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47171 - "GET /api/v1/cart HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41761 - "GET /api/v1/cart HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52451 - "GET /api/v1/home?city=Toshkent HTTP/1.1" 200 OK

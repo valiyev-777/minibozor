@@ -1,13 +1,15 @@
 # Mini Bozor
 
-Marketplace app built from the 47-screen **Shunaqa Tez** design: a FastAPI
-backend, a native Android client, and a native iOS client.
+Marketplace app built from the **Shunaqa Tez** design: a FastAPI backend, native
+Android and iOS clients for the 47-screen shopper app, and a Next.js seller
+panel for the 8-screen merchant cabinet.
 
 ```
 design/     the imported design + extracted tokens, icons and per-screen HTML
 backend/    FastAPI + SQLModel — 60 endpoints, seeded with the design's content
 android/    Kotlin + Jetpack Compose
 ios/        Swift + SwiftUI
+web/        Next.js + TypeScript + Tailwind + shadcn/ui — the seller panel
 ```
 
 ## Run the whole thing
@@ -22,6 +24,22 @@ builds point at the local backend (`10.0.2.2:8000` from the Android emulator,
 
 **Demo account** — phone `+998 90 123 45 67`, SMS code `123456`, PIN `1234`.
 Debug builds show the SMS code on screen, so no gateway is needed.
+
+## The seller panel
+
+`web/` is the desktop cabinet from the design's second panel
+(`Seller Panel.dc.html`) — eight screens covering daily work, the catalogue,
+warehouse shipments, payouts and reviews.
+
+```bash
+cd web && npm install && npm run dev   # http://localhost:3000
+```
+
+Next.js 16 + TypeScript + Tailwind v4 + shadcn/ui, with axios and TanStack Query
+over a Zod contract. It ships its own API as Next.js route handlers, because the
+FastAPI backend is customer-facing only — none of its 60 endpoints are seller
+endpoints yet. Point `NEXT_PUBLIC_API_URL` at a real upstream that serves the
+shapes in `web/src/lib/domain.ts` and the stand-in drops out. See `web/README.md`.
 
 ## The design as source of truth
 
@@ -61,6 +79,7 @@ PNG, so it stays sharp at every size and needs no asset.
 | Backend | Complete — 60 endpoints, 32 tables, seeded, 26 tests passing |
 | Android | Complete — 82 Kotlin files, all 47 screens, not yet compiled |
 | iOS | Complete — 60 Swift files, all 47 screens, not yet compiled |
+| Web (seller panel) | Complete — all 8 screens, builds and lints clean; API served by Next.js route handlers until the backend grows seller endpoints |
 
 Neither app has been compiled: this machine has no JDK, Android SDK or Swift
 toolchain, so the first build has to happen on a machine that does.
