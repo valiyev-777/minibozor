@@ -37,6 +37,8 @@ data class MbDimens(
     val bannerHeight: Dp = 146.dp,
     val tabBarHeight: Dp = 70.dp,
     val tabBarInset: Dp = 14.dp,
+    /** Gap below the floating bar, per the design. */
+    val tabBarBottom: Dp = 16.dp,
 
     val tileImageHeight: Dp = 148.dp,
     val railTileWidth: Dp = 112.dp,
