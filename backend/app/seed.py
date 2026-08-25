@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sys
 from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
 
 from sqlmodel import Session, SQLModel, delete, select
 
@@ -266,7 +267,7 @@ BANNERS = [
         kicker="MINI BOZOR / UY VA YORUG'LIK",
         title="Ish stolingiz uchun",
         subtitle="Chiroq va aksessuarlarga 40% gacha",
-        image_url="banners/lamp-room.png",
+        image_url="products/lamp.png",
         gradient_from="#14162A", gradient_to="#0E7BF5",
         target_type="category", target_value="yoruglik", sort=0,
     ),
@@ -425,6 +426,20 @@ def _seed_brands(session: Session) -> dict[str, Brand]:
     return out
 
 
+MEDIA_DIR = Path(__file__).resolve().parent.parent / "media"
+
+
+def _image_exists(path: str) -> bool:
+    """Whether the export actually shipped this file.
+
+    Several photos referenced by the design were never exported. Seeding a row
+    for a missing file leaves the app rendering a broken tile; skipping it lets
+    the tile show its "no photo" state instead, and a re-seed picks the photo
+    up the moment the real PNG lands in media/.
+    """
+    return (MEDIA_DIR / path).is_file()
+
+
 def _seed_products(
     session: Session, categories: dict[str, Category], brands: dict[str, Brand]
 ) -> dict[str, Product]:
@@ -451,8 +466,12 @@ def _seed_products(
         session.refresh(product)
         out[spec["sku"]] = product
 
-        for i, url in enumerate(spec.get("images", [])):
+        shipped = [u for u in spec.get("images", []) if _image_exists(u)]
+        for i, url in enumerate(shipped):
             session.add(ProductImage(product_id=product.id, url=url, sort=i))
+        for url in spec.get("images", []):
+            if url not in shipped:
+                print(f"  eksport qilinmagan rasm o'tkazib yuborildi: {url}")
         for i, label in enumerate(spec.get("sizes", [])):
             session.add(
                 ProductVariant(

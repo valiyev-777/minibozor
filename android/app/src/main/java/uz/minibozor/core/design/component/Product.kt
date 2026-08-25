@@ -43,19 +43,27 @@ import uz.minibozor.core.util.ratingText
 @Composable
 private fun pressTint(): Color = MbTheme.colors.ink.copy(alpha = 0.06f)
 
-/** Photo with the design's warm neutral backdrop showing through while it loads. */
+/**
+ * Photo with the design's warm neutral backdrop showing through while it loads.
+ *
+ * Fit, not Crop: catalogue photos are cut-outs of a whole product in mixed
+ * aspect ratios, and cropping a 387x516 shoe into a square tile shows its
+ * middle and cuts off the toe. Scene photography — the home banner — passes
+ * Crop explicitly, which is what it wants.
+ */
 @Composable
 fun MbProductImage(
     url: String?,
     modifier: Modifier = Modifier,
     shape: Shape = MbTheme.shapes.tile,
     background: Color = MbTheme.colors.photoWarmAlt,
-    contentScale: ContentScale = ContentScale.Crop,
+    contentScale: ContentScale = ContentScale.Fit,
 ) {
     Box(
         modifier
             .clip(shape)
-            .background(background)
+            .background(background),
+        contentAlignment = Alignment.Center,
     ) {
         val resolved = url.mediaUrl()
         if (resolved != null) {
@@ -65,6 +73,10 @@ fun MbProductImage(
                 contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
             )
+        } else {
+            // No photo yet. A muted glyph reads as "none supplied" where an
+            // empty warm rectangle just reads as broken.
+            MbIcon("box", size = 26.dp, tint = MbTheme.colors.hairlineStrong)
         }
     }
 }
@@ -161,8 +173,11 @@ fun MbProductTile(
             MbProductImage(
                 imageUrl,
                 modifier = Modifier
+                    // Square, like the rail tiles: the catalogue photos are
+                    // 1:1 with their own baked-in backdrop, so a letterboxed
+                    // strip of tile shows through any other ratio.
                     .fillMaxWidth()
-                    .height(MbTheme.dimens.tileImageHeight),
+                    .aspectRatio(1f),
             )
             FavoriteBubble(
                 isFavorite = isFavorite,
@@ -264,7 +279,7 @@ fun MbDealTile(
                 imageUrl,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(MbTheme.dimens.dealImageHeight),
+                    .aspectRatio(1f),
                 shape = MbTheme.shapes.tileSmall,
             )
             if (discountPercent != null) {
