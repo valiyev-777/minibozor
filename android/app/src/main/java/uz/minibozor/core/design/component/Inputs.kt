@@ -206,7 +206,9 @@ fun MbCodeField(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
 
-    Box(modifier) {
+    // The boxes share the row rather than taking a fixed width: six of them at
+    // 54 dp overflowed a 411 dp screen once the page padding was taken off.
+    Box(modifier.fillMaxWidth()) {
         BasicTextField(
             value = value,
             onValueChange = { if (it.length <= length && it.all(Char::isDigit)) onValueChange(it) },
@@ -221,13 +223,17 @@ fun MbCodeField(
                 .matchParentSize()
                 .focusRequester(focus),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(if (length > 4) 8.dp else 12.dp),
+        ) {
             repeat(length) { index ->
                 val char = value.getOrNull(index)
                 val filled = char != null
                 Box(
                     Modifier
-                        .size(54.dp, 60.dp)
+                        .weight(1f)
+                        .height(if (length > 4) 62.dp else 66.dp)
                         .clip(MbTheme.shapes.field)
                         .background(if (filled) MbTheme.colors.surface else MbTheme.colors.fill)
                         .border(
@@ -245,12 +251,12 @@ fun MbCodeField(
                         if (masked) {
                             Box(
                                 Modifier
-                                    .size(10.dp)
+                                    .size(12.dp)
                                     .clip(CircleShape)
                                     .background(MbTheme.colors.ink)
                             )
                         } else {
-                            MbText(char.toString(), MbTheme.type.title2)
+                            MbText(char.toString(), MbTheme.type.title1)
                         }
                     }
                 }
