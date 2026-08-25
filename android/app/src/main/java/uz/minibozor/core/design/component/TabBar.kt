@@ -9,13 +9,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -46,11 +46,15 @@ fun MbTabBar(
     onSelect: (MbTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Sit the design's 16 dp above the bottom, but never under the system
+    // navigation — on a three-button device that inset is what clears the keys.
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
     Box(
         modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = MbTheme.dimens.tabBarInset, vertical = 12.dp)
+            .padding(horizontal = MbTheme.dimens.tabBarInset)
+            .padding(top = 12.dp, bottom = maxOf(navBottom, MbTheme.dimens.tabBarBottom))
     ) {
         Row(
             Modifier

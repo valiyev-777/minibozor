@@ -15,7 +15,6 @@ import uz.minibozor.data.remote.AuthInterceptor
 import uz.minibozor.data.remote.MiniBozorApi
 import uz.minibozor.data.remote.TokenAuthenticator
 import java.util.concurrent.TimeUnit
-import javax.inject.Provider
 import javax.inject.Singleton
 
 @Module
@@ -32,7 +31,8 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun baseUrl(): Provider<String> = Provider { BuildConfig.API_BASE_URL }
+    @ApiBaseUrl
+    fun baseUrl(): String = BuildConfig.API_BASE_URL
 
     @Provides
     @Singleton

@@ -10,10 +10,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.Route
 import uz.minibozor.data.local.TokenStore
+import uz.minibozor.di.ApiBaseUrl
 import uz.minibozor.data.remote.dto.RefreshRequest
 import uz.minibozor.data.remote.dto.TokenPairDto
 import javax.inject.Inject
-import javax.inject.Provider
 import javax.inject.Singleton
 
 /** Attaches the access token to everything except the auth endpoints. */
@@ -45,7 +45,7 @@ class AuthInterceptor @Inject constructor(
 @Singleton
 class TokenAuthenticator @Inject constructor(
     private val tokens: TokenStore,
-    private val baseUrl: Provider<String>,
+    @ApiBaseUrl private val baseUrl: String,
     private val json: Json,
 ) : Authenticator {
 
@@ -76,7 +76,7 @@ class TokenAuthenticator @Inject constructor(
         val body = json.encodeToString(RefreshRequest.serializer(), RefreshRequest(refreshToken))
             .toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
-            .url(baseUrl.get() + "auth/refresh")
+            .url(baseUrl + "auth/refresh")
             .post(body)
             .build()
 

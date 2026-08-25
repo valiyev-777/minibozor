@@ -122,9 +122,9 @@ fun ReviewsScreen(
 
             item {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MbChip("Hammasi", state.stars == null) { viewModel.filter(null) }
+                    MbChip("Hammasi", state.stars == null, onClick = { viewModel.filter(null) })
                     (5 downTo 1).forEach { stars ->
-                        MbChip("$stars ★", state.stars == stars) { viewModel.filter(stars) }
+                        MbChip("$stars ★", state.stars == stars, onClick = { viewModel.filter(stars) })
                     }
                 }
             }

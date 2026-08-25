@@ -34,6 +34,7 @@ import uz.minibozor.core.design.component.MbTopBar
 import uz.minibozor.core.util.grouped
 import uz.minibozor.data.remote.dto.CategoryDto
 import uz.minibozor.ui.common.UiStateContent
+import uz.minibozor.ui.common.dataOrNull
 
 /** Screen 10 — Katalog. */
 @Composable
@@ -104,8 +105,7 @@ fun SubcategoryScreen(
     MbScreen(
         topBar = {
             MbTopBar(
-                title = state.let { (it as? uz.minibozor.ui.common.UiState.Ready)?.data?.first?.name }
-                    ?: "Turkum",
+                title = state.dataOrNull?.first?.name ?: "Turkum",
                 onBack = onBack,
             )
         },
