@@ -121,22 +121,41 @@ class CheckoutViewModel @Inject constructor(
         refreshPreview()
     }
 
-    fun createAddress(body: AddressRequest, onDone: () -> Unit) {
+    /** Called when returning from the address form, so a new one shows up. */
+    fun reloadAddresses() {
         viewModelScope.launch {
-            when (val result = orders.createAddress(body)) {
-                is Outcome.Success -> {
-                    _state.update {
-                        it.copy(
-                            addresses = it.addresses + result.data,
-                            addressId = result.data.id,
-                            pickupPointId = null,
-                        )
-                    }
-                    refreshPreview()
-                    onDone()
-                }
-                is Outcome.Failure -> _state.update { it.copy(error = result.message) }
+            val addresses = (orders.addresses() as? Outcome.Success)?.data.orEmpty()
+            _state.update { state ->
+                val stillThere = addresses.any { it.id == state.addressId }
+                state.copy(
+                    addresses = addresses,
+                    addressId = when {
+                        stillThere -> state.addressId
+                        state.pickupPointId != null -> null
+                        else -> addresses.firstOrNull { it.isDefault }?.id
+                            ?: addresses.firstOrNull()?.id
+                    },
+                )
             }
+            refreshPreview()
+        }
+    }
+
+    /** Called when returning from "add card", so a new card shows up at once. */
+    fun reloadCards() {
+        viewModelScope.launch {
+            val cards = (orders.cards() as? Outcome.Success)?.data.orEmpty()
+            _state.update { state ->
+                val stillThere = cards.any { it.id == state.cardId }
+                state.copy(
+                    cards = cards,
+                    cardId = if (stillThere) state.cardId else {
+                        cards.firstOrNull { it.isDefault && it.status == "active" }?.id
+                            ?: cards.firstOrNull { it.status == "active" }?.id
+                    },
+                )
+            }
+            refreshPreview()
         }
     }
 

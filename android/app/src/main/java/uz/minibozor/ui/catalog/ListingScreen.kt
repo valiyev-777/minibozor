@@ -1,5 +1,9 @@
 package uz.minibozor.ui.catalog
 
+import androidx.compose.ui.res.pluralStringResource
+import uz.minibozor.ui.product.VariantSheet
+import uz.minibozor.data.remote.dto.ProductCardDto
+import uz.minibozor.core.util.AppStrings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -30,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,8 +42,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbClickable
 import uz.minibozor.core.design.component.MbChip
 import uz.minibozor.core.design.component.MbEmptyState
 import uz.minibozor.core.design.component.MbErrorState
@@ -63,12 +70,14 @@ fun ListingScreen(
     query: String?,
     onBack: () -> Unit,
     onOpenProduct: (Int) -> Unit,
+    onOpenCart: () -> Unit,
     viewModel: ListingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
     val toast = rememberToast()
     var showFilters by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf<ProductCardDto?>(null) }
 
     LaunchedEffect(category, query) { viewModel.start(category, query) }
 
@@ -83,8 +92,12 @@ fun ListingScreen(
     MbScreen(
         topBar = {
             MbTopBar(
-                title = title.ifBlank { query.orEmpty().ifBlank { "Tovarlar" } },
-                subtitle = if (state.total > 0) "${state.total.grouped()} ta topildi" else null,
+                title = title.ifBlank { query.orEmpty().ifBlank { stringResource(R.string.tovarlar) } },
+                subtitle = if (state.total > 0) pluralStringResource(
+                    R.plurals.n_found,
+                    state.total,
+                    state.total.grouped(),
+                ) else null,
                 onBack = onBack,
             )
         },
@@ -95,10 +108,9 @@ fun ListingScreen(
                 .padding(padding)
         ) {
             Toolbar(
-                sorts = state.filters?.sorts.orEmpty(),
-                currentSort = state.query.sort,
+                total = state.total,
+                sortLabel = sortLabel(state.filters?.sorts, state.query.sort),
                 filterCount = state.query.activeFilterCount,
-                onSort = viewModel::setSort,
                 onOpenFilters = { showFilters = true },
             )
 
@@ -106,13 +118,28 @@ fun ListingScreen(
                 when {
                     state.loading -> MbLoading()
                     state.error != null -> MbErrorState(state.error!!, viewModel::reload)
-                    state.items.isEmpty() -> MbEmptyState(
-                        glyph = "search",
-                        title = "Hech narsa topilmadi",
-                        message = "Filtrlarni yumshatib yoki boshqa so'z bilan qidirib ko'ring.",
-                        actionLabel = if (state.query.activeFilterCount > 0) "Filtrlarni tozalash" else null,
-                        onAction = { viewModel.apply(state.query.cleared()) },
-                    )
+                    state.items.isEmpty() -> {
+                        val filtered = state.query.activeFilterCount > 0 ||
+                            !state.query.text.isNullOrBlank()
+                        if (filtered) {
+                            MbEmptyState(
+                                glyph = "search",
+                                title = stringResource(R.string.hech_narsa_topilmadi),
+                                message = stringResource(R.string.filtrlarni_yumshatib_yoki_boshqa_soz_bilan),
+                                actionLabel = stringResource(R.string.filtrlarni_tozalash),
+                                onAction = { viewModel.apply(state.query.cleared()) },
+                            )
+                        } else {
+                            // The category exists but has no stock yet.
+                            MbEmptyState(
+                                glyph = "box",
+                                title = stringResource(R.string.tovarlar_tez_orada_qoshiladi),
+                                message = stringResource(R.string.bu_turkumni_toldirib_borayapmiz_tez_kunda),
+                                actionLabel = stringResource(R.string.boshqa_turkumlarni_korish),
+                                onAction = onBack,
+                            )
+                        }
+                    }
                     else -> LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         state = gridState,
@@ -134,7 +161,11 @@ fun ListingScreen(
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { viewModel.toggleFavorite(product) },
                                 onAddToCart = {
-                                    viewModel.addToCart(product.id) { toast.value = it }
+                                    if (product.hasVariants) {
+                                        picking = product
+                                    } else {
+                                        viewModel.addToCart(product.id) { toast.value = it }
+                                    }
                                 },
                             )
                         }
@@ -143,6 +174,17 @@ fun ListingScreen(
                 MbToastHost(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp))
             }
         }
+    }
+
+    picking?.let { card ->
+        VariantSheet(
+            card = card,
+            onDismiss = { picking = null },
+            onOpenCart = {
+                picking = null
+                onOpenCart()
+            },
+        )
     }
 
     if (showFilters) {
@@ -166,43 +208,32 @@ fun ListingScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Toolbar(
-    sorts: List<Map<String, String>>,
-    currentSort: String,
+    total: Int,
+    sortLabel: String,
     filterCount: Int,
-    onSort: (String) -> Unit,
     onOpenFilters: () -> Unit,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .background(MbTheme.colors.surface)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            Modifier
-                .weight(1f)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            sorts.forEach { option ->
-                val key = option["key"].orEmpty()
-                MbChip(
-                    label = option["label"].orEmpty(),
-                    selected = key == currentSort,
-                    onClick = { onSort(key) },
-                )
-            }
+        Column(Modifier.weight(1f)) {
+            MbText(
+                if (total > 0) pluralStringResource(R.plurals.n_products, total, total.grouped()) else stringResource(R.string.tovarlar),
+                MbTheme.type.label,
+                MbTheme.colors.ink,
+            )
+            MbText(sortLabel, MbTheme.type.meta, MbTheme.colors.icon, maxLines = 1)
         }
         Row(
             Modifier
-                .clip(MbTheme.shapes.chip)
-                .background(if (filterCount > 0) MbTheme.colors.ink else MbTheme.colors.fill)
-                .clickable(onClick = onOpenFilters)
+                .mbClickable(MbTheme.shapes.chip, onClick = onOpenFilters)
+                .background(if (filterCount > 0) MbTheme.colors.inverse else MbTheme.colors.fill)
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -210,14 +241,18 @@ private fun Toolbar(
             MbIcon(
                 "gear",
                 size = 14.dp,
-                tint = if (filterCount > 0) Color.White
-                else MbTheme.colors.ink,
+                tint = if (filterCount > 0) MbTheme.colors.onInverse else MbTheme.colors.ink,
             )
             MbText(
-                if (filterCount > 0) "Filtr · $filterCount" else "Filtr",
+                if (filterCount > 0) stringResource(R.string.filtr_n, filterCount) else stringResource(R.string.filtr),
                 MbTheme.type.caption,
-                if (filterCount > 0) Color.White else MbTheme.colors.ink,
+                if (filterCount > 0) MbTheme.colors.onInverse else MbTheme.colors.ink,
             )
         }
     }
 }
+
+/** "Ommabop", "Avval arzoni" … shown as a subtitle instead of a chip row. */
+private fun sortLabel(sorts: List<Map<String, String>>?, current: String): String =
+    sorts?.firstOrNull { it["key"] == current }?.get("label")
+        ?: AppStrings[R.string.saralash]

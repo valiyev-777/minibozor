@@ -28,8 +28,14 @@ class CartRepository @Inject constructor(private val api: MiniBozorApi) {
     suspend fun refresh(promoCode: String? = null): Outcome<CartDto> =
         apiCall { api.cart(promoCode) }.also { it.cache() }
 
-    suspend fun add(productId: Int, variantId: Int?, quantity: Int = 1): Outcome<CartDto> =
-        apiCall { api.addToCart(CartAddRequest(productId, variantId, quantity)) }.also { it.cache() }
+    suspend fun add(
+        productId: Int,
+        variantId: Int? = null,
+        colorVariantId: Int? = null,
+        quantity: Int = 1,
+    ): Outcome<CartDto> = apiCall {
+        api.addToCart(CartAddRequest(productId, variantId, colorVariantId, quantity))
+    }.also { it.cache() }
 
     suspend fun setQuantity(itemId: Int, quantity: Int): Outcome<CartDto> =
         apiCall { api.updateCartItem(itemId, CartUpdateRequest(quantity = quantity)) }

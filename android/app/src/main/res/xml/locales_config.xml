@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The languages offered on screen 39. Uzbek is the default: it lives in
+  res/values/strings.xml, so selecting "uz" resolves through the usual
+  fallback rather than needing a values-uz/ copy.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="uz" />
+    <locale android:name="ru" />
+    <locale android:name="en" />
+</locale-config>

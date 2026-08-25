@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCard
@@ -51,7 +53,7 @@ fun OrdersScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    MbScreen(topBar = { MbTopBar("Buyurtmalarim", onBack = onBack) }) { padding ->
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.buyurtmalarim), onBack = onBack) }) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
@@ -64,10 +66,10 @@ fun OrdersScreen(
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                SegmentTab("Jarayonda", state.activeTab, Modifier.weight(1f)) {
+                SegmentTab(stringResource(R.string.jarayonda), state.activeTab, Modifier.weight(1f)) {
                     viewModel.selectTab(true)
                 }
-                SegmentTab("Tugagan", !state.activeTab, Modifier.weight(1f)) {
+                SegmentTab(stringResource(R.string.tugagan), !state.activeTab, Modifier.weight(1f)) {
                     viewModel.selectTab(false)
                 }
             }
@@ -77,9 +79,9 @@ fun OrdersScreen(
                 state.error != null -> MbErrorState(state.error!!, viewModel::load)
                 state.orders.isEmpty() -> MbEmptyState(
                     glyph = "box",
-                    title = if (state.activeTab) "Faol buyurtma yo'q" else "Tugagan buyurtma yo'q",
-                    message = "Buyurtma bergach, holati shu yerda ko'rinadi.",
-                    actionLabel = "Xaridni boshlash",
+                    title = if (state.activeTab) stringResource(R.string.faol_buyurtma_yoq) else stringResource(R.string.tugagan_buyurtma_yoq),
+                    message = stringResource(R.string.buyurtma_bergach_holati_shu_yerda_korinadi),
+                    actionLabel = stringResource(R.string.xaridni_boshlash),
                     onAction = onStartShopping,
                 )
 
@@ -102,7 +104,7 @@ private fun OrderCard(
     onOpen: (Int) -> Unit,
     onTrack: (Int) -> Unit,
 ) {
-    MbCard(Modifier.clickable { onOpen(order.id) }) {
+    MbCard(onClick = { onOpen(order.id) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             MbStatusPill(
                 label = order.statusLabel,
@@ -139,7 +141,7 @@ private fun OrderCard(
             }
             Spacer(Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.End) {
-                MbText("Jami", MbTheme.type.meta, MbTheme.colors.icon)
+                MbText(stringResource(R.string.jami), MbTheme.type.meta, MbTheme.colors.icon)
                 MbText(order.total.sum(), MbTheme.type.priceSmall)
             }
         }
@@ -156,7 +158,7 @@ private fun OrderCard(
             )
             if (order.canTrack) {
                 MbSecondaryButton(
-                    text = "Kuzatish",
+                    text = stringResource(R.string.kuzatish),
                     onClick = { onTrack(order.id) },
                     modifier = Modifier.width(120.dp),
                 )
@@ -175,7 +177,7 @@ private fun SegmentTab(
     Box(
         modifier
             .clip(MbTheme.shapes.field)
-            .background(if (selected) MbTheme.colors.ink else MbTheme.colors.fill)
+            .background(if (selected) MbTheme.colors.inverse else MbTheme.colors.fill)
             .clickable(onClick = onClick)
             .padding(vertical = 11.dp),
         contentAlignment = Alignment.Center,
@@ -183,7 +185,7 @@ private fun SegmentTab(
         MbText(
             label,
             MbTheme.type.label,
-            if (selected) Color.White else MbTheme.colors.textSecondary,
+            if (selected) MbTheme.colors.onInverse else MbTheme.colors.textSecondary,
         )
     }
 }

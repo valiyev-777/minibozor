@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbPrimaryButton
@@ -71,7 +73,7 @@ fun LoginScreen(
             MbText("Mini Bozor", MbTheme.type.display)
             Spacer(Modifier.height(8.dp))
             MbText(
-                "Telefon raqamingizni kiriting — SMS kod yuboramiz",
+                stringResource(R.string.telefon_raqamingizni_kiriting_sms_kod),
                 MbTheme.type.bodySmall,
                 MbTheme.colors.textTertiary,
             )
@@ -85,7 +87,7 @@ fun LoginScreen(
 
             Spacer(Modifier.height(18.dp))
             MbPrimaryButton(
-                text = "Davom etish",
+                text = stringResource(R.string.davom_etish),
                 onClick = viewModel::sendCode,
                 enabled = state.phoneValid,
                 loading = state.sending,
@@ -93,7 +95,7 @@ fun LoginScreen(
 
             Spacer(Modifier.height(14.dp))
             MbText(
-                "Menda referal-kod bor",
+                stringResource(R.string.menda_referal_kod_bor),
                 MbTheme.type.label,
                 MbTheme.colors.accent,
                 modifier = Modifier
@@ -106,7 +108,7 @@ fun LoginScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Divider(Modifier.weight(1f))
                 MbText(
-                    "  yoki tezkor kirish  ",
+                    stringResource(R.string.yoki_tezkor_kirish),
                     MbTheme.type.caption,
                     MbTheme.colors.textQuaternary,
                 )
@@ -115,7 +117,7 @@ fun LoginScreen(
 
             Spacer(Modifier.height(18.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                listOf("Apple", "Google", "OneID").forEach { provider ->
+                listOf(stringResource(R.string.apple), stringResource(R.string.google), stringResource(R.string.oneid)).forEach { provider ->
                     SocialButton(provider, Modifier.weight(1f))
                 }
             }
@@ -126,14 +128,14 @@ fun LoginScreen(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
             ) {
-                MbText("Kirish orqali ", MbTheme.type.caption, MbTheme.colors.textQuaternary)
+                MbText(stringResource(R.string.kirish_orqali), MbTheme.type.caption, MbTheme.colors.textQuaternary)
                 MbText(
-                    "ommaviy oferta",
+                    stringResource(R.string.ommaviy_oferta),
                     MbTheme.type.caption,
                     MbTheme.colors.accent,
                     modifier = Modifier.clickable(onClick = onOpenTerms),
                 )
-                MbText(" shartlariga rozilik bildirasiz", MbTheme.type.caption, MbTheme.colors.textQuaternary)
+                MbText(stringResource(R.string.shartlariga_rozilik_bildirasiz), MbTheme.type.caption, MbTheme.colors.textQuaternary)
             }
             Spacer(Modifier.height(24.dp))
         }

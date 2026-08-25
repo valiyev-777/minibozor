@@ -1,5 +1,6 @@
 package uz.minibozor.core.design.component
 
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,33 +30,53 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbPressable
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.util.grouped
+import uz.minibozor.core.util.mediaUrl
 import uz.minibozor.core.util.ratingText
 
-/** Photo with the design's warm neutral backdrop showing through while it loads. */
+/** The soft ink wash a pressed tile is highlighted with. */
+@Composable
+private fun pressTint(): Color = MbTheme.colors.ink.copy(alpha = 0.06f)
+
+/**
+ * Photo with the design's warm neutral backdrop showing through while it loads.
+ *
+ * Fit, not Crop: catalogue photos are cut-outs of a whole product in mixed
+ * aspect ratios, and cropping a 387x516 shoe into a square tile shows its
+ * middle and cuts off the toe. Scene photography — the home banner — passes
+ * Crop explicitly, which is what it wants.
+ */
 @Composable
 fun MbProductImage(
     url: String?,
     modifier: Modifier = Modifier,
     shape: Shape = MbTheme.shapes.tile,
     background: Color = MbTheme.colors.photoWarmAlt,
-    contentScale: ContentScale = ContentScale.Crop,
+    contentScale: ContentScale = ContentScale.Fit,
 ) {
     Box(
         modifier
             .clip(shape)
-            .background(background)
+            .background(background),
+        contentAlignment = Alignment.Center,
     ) {
-        if (url != null) {
+        val resolved = url.mediaUrl()
+        if (resolved != null) {
             AsyncImage(
-                model = url,
+                model = resolved,
                 contentDescription = null,
                 contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
             )
+        } else {
+            // No photo yet. A muted glyph reads as "none supplied" where an
+            // empty warm rectangle just reads as broken.
+            MbIcon("box", size = 26.dp, tint = MbTheme.colors.hairlineStrong)
         }
     }
 }
@@ -103,7 +125,7 @@ fun MbRating(
         MbText(ratingText(rating), MbTheme.type.meta, MbTheme.colors.icon)
         if (reviewsCount > 0) {
             MbText("·", MbTheme.type.meta, MbTheme.colors.hairlineStrong)
-            MbText("$reviewsCount sharh", MbTheme.type.meta, MbTheme.colors.icon)
+            MbText(pluralStringResource(R.plurals.n_reviews, reviewsCount, reviewsCount), MbTheme.type.meta, MbTheme.colors.icon)
         }
     }
 }
@@ -142,15 +164,20 @@ fun MbProductTile(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.clickable(onClick = onClick),
+        // mbPressable, not mbClickable: the tile's content reaches its edges,
+        // and a clip would shave the title and button at the corner arcs.
+        modifier.mbPressable(MbTheme.shapes.tile, pressTint(), onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Box {
             MbProductImage(
                 imageUrl,
                 modifier = Modifier
+                    // Square, like the rail tiles: the catalogue photos are
+                    // 1:1 with their own baked-in backdrop, so a letterboxed
+                    // strip of tile shows through any other ratio.
                     .fillMaxWidth()
-                    .height(MbTheme.dimens.tileImageHeight),
+                    .aspectRatio(1f),
             )
             FavoriteBubble(
                 isFavorite = isFavorite,
@@ -162,8 +189,8 @@ fun MbProductTile(
             if (!badge.isNullOrBlank()) {
                 MbStatusPill(
                     label = badge,
-                    background = MbTheme.colors.ink.copy(alpha = 0.8f),
-                    contentColor = Color.White,
+                    background = MbTheme.colors.scrim,
+                    contentColor = MbTheme.colors.onScrim,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(6.dp),
@@ -171,7 +198,9 @@ fun MbProductTile(
             }
         }
         MbPriceRow(price, oldPrice, discountPercent)
-        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2)
+        // Two lines always, so every tile in a row is the same height and no
+        // title ends up pressed against the card edge.
+        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
         MbRating(rating, reviewsCount)
         if (onAddToCart != null) {
             Spacer(Modifier.height(3.dp))
@@ -184,7 +213,7 @@ fun MbProductTile(
                     .padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                MbText("Savatga", MbTheme.type.label, Color.White)
+                MbText(stringResource(R.string.savatga), MbTheme.type.label, Color.White)
             }
         }
     }
@@ -203,7 +232,9 @@ fun MbRailTile(
     Column(
         modifier
             .width(MbTheme.dimens.railTileWidth)
-            .clickable(onClick = onClick),
+            // mbPressable, not mbClickable: a clip's corner arcs would cut the
+            // first and last glyphs of a two-line title at the tile's bottom.
+            .mbPressable(MbTheme.shapes.tileSmall, pressTint(), onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         MbProductImage(
@@ -223,7 +254,7 @@ fun MbRailTile(
                 MbText("−$discountPercent%", MbTheme.type.micro, MbTheme.colors.danger)
             }
         }
-        MbText(title, MbTheme.type.meta, MbTheme.colors.inkSoft, maxLines = 2)
+        MbText(title, MbTheme.type.meta, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
     }
 }
 
@@ -239,7 +270,8 @@ fun MbDealTile(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.clickable(onClick = onClick),
+        // mbPressable, not mbClickable — see MbRailTile.
+        modifier.mbPressable(MbTheme.shapes.tileSmall, pressTint(), onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Box {
@@ -247,7 +279,7 @@ fun MbDealTile(
                 imageUrl,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(MbTheme.dimens.dealImageHeight),
+                    .aspectRatio(1f),
                 shape = MbTheme.shapes.tileSmall,
             )
             if (discountPercent != null) {
@@ -262,7 +294,9 @@ fun MbDealTile(
             }
         }
         MbPriceRow(price, oldPrice, null)
-        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2)
+        // Two lines always, so every tile in a row is the same height and no
+        // title ends up pressed against the card edge.
+        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
     }
 }
 
@@ -283,9 +317,10 @@ fun FavoriteBubble(
     ) {
         MbIcon(
             "heart",
-            size = size * 0.5f,
+            size = size * 0.52f,
             tint = if (isFavorite) MbTheme.colors.danger else MbTheme.colors.textSecondary,
             strokeWidth = 2f,
+            filled = isFavorite,
         )
     }
 }

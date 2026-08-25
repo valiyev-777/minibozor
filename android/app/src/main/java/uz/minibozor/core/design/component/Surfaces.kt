@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +63,13 @@ fun MbTopBar(
     onBack: (() -> Unit)? = null,
     subtitle: String? = null,
     background: Color = MbTheme.colors.surface,
+    /**
+     * Fades the title in and out without relaying the row out. The product
+     * screen uses it to bring the product name up into the bar only once the
+     * gallery has scrolled away, and reads the value in the layer phase so the
+     * fade costs no recomposition.
+     */
+    titleAlpha: () -> Float = { 1f },
     action: @Composable (() -> Unit)? = null,
 ) {
     Column(
@@ -72,7 +81,7 @@ fun MbTopBar(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (onBack != null) {
-                CircleIconButton(glyph = "ret", onClick = onBack)
+                CircleIconButton(glyph = "arrow-left", onClick = onBack)
             } else {
                 Spacer(Modifier.size(36.dp))
             }
@@ -80,12 +89,21 @@ fun MbTopBar(
                 Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                MbText(title, MbTheme.type.title3, maxLines = 1)
+                MbText(
+                    title,
+                    MbTheme.type.title3,
+                    maxLines = 1,
+                    modifier = Modifier.graphicsLayer { alpha = titleAlpha() },
+                )
                 if (subtitle != null) {
                     MbText(subtitle, MbTheme.type.meta, MbTheme.colors.textQuaternary, maxLines = 1)
                 }
             }
-            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+            Row(
+                Modifier.defaultMinSize(minWidth = 36.dp, minHeight = 36.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 action?.invoke()
             }
         }
@@ -119,6 +137,7 @@ fun MbCard(
     modifier: Modifier = Modifier,
     padding: Dp = 16.dp,
     background: Color = MbTheme.colors.surface,
+    onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -126,6 +145,7 @@ fun MbCard(
             .fillMaxWidth()
             .clip(MbTheme.shapes.card)
             .background(background)
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .padding(padding),
         content = content,
     )

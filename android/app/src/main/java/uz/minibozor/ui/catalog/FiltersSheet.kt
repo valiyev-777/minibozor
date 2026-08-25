@@ -18,10 +18,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCheckRow
@@ -62,10 +64,10 @@ fun FiltersSheet(
                 .padding(horizontal = 20.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MbText("Filtrlar", MbTheme.type.title2)
+            MbText(stringResource(R.string.filtrlar), MbTheme.type.title2)
             Spacer(Modifier.weight(1f))
             MbText(
-                "Tozalash",
+                stringResource(R.string.tozalash),
                 MbTheme.type.label,
                 MbTheme.colors.accent,
                 modifier = Modifier
@@ -85,8 +87,27 @@ fun FiltersSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
         ) {
-            Spacer(Modifier.height(16.dp))
-            SectionHeader("Narx", "so'm")
+            if (!filters?.sorts.isNullOrEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                SectionHeader(stringResource(R.string.saralash))
+                Spacer(Modifier.height(10.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    filters!!.sorts.forEach { option ->
+                        val key = option["key"].orEmpty()
+                        MbChip(
+                            label = option["label"].orEmpty(),
+                            selected = draft.sort == key,
+                            onClick = { draft = draft.copy(sort = key) },
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(22.dp))
+            SectionHeader(stringResource(R.string.narx), stringResource(R.string.som))
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 MbTextField(
@@ -107,7 +128,7 @@ fun FiltersSheet(
 
             if (!filters?.brands.isNullOrEmpty()) {
                 Spacer(Modifier.height(22.dp))
-                SectionHeader("Brend")
+                SectionHeader(stringResource(R.string.brend))
                 Spacer(Modifier.height(4.dp))
                 filters!!.brands.forEach { brand ->
                     MbCheckRow(
@@ -121,7 +142,7 @@ fun FiltersSheet(
 
             if (!filters?.sizes.isNullOrEmpty()) {
                 Spacer(Modifier.height(22.dp))
-                SectionHeader("O'lcham")
+                SectionHeader(stringResource(R.string.olcham))
                 Spacer(Modifier.height(10.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -139,10 +160,10 @@ fun FiltersSheet(
 
             if (!filters?.ratings.isNullOrEmpty()) {
                 Spacer(Modifier.height(22.dp))
-                SectionHeader("Reyting")
+                SectionHeader(stringResource(R.string.reyting))
                 Spacer(Modifier.height(10.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val options = listOf(4.5 to "4.5 ★ dan yuqori", 4.0 to "4.0 ★ dan yuqori")
+                    val options = listOf(4.5 to stringResource(R.string.rating_4_5_dan_yuqori), 4.0 to stringResource(R.string.rating_4_0_dan_yuqori))
                     options.forEach { (value, label) ->
                         MbChip(
                             label = label,
@@ -159,7 +180,7 @@ fun FiltersSheet(
 
             if (!filters?.flags.isNullOrEmpty()) {
                 Spacer(Modifier.height(22.dp))
-                SectionHeader("Qo'shimcha")
+                SectionHeader(stringResource(R.string.qoshimcha))
                 Spacer(Modifier.height(4.dp))
                 filters!!.flags.forEach { flag ->
                     MbCheckRow(
@@ -179,8 +200,8 @@ fun FiltersSheet(
         Column(Modifier.padding(20.dp)) {
             MbPrimaryButton(
                 text = if (resultCount > 0) {
-                    "Ko'rsatish · ${resultCount.grouped()} ta"
-                } else "Qo'llash",
+                    stringResource(R.string.korsatish_n, resultCount.grouped())
+                } else stringResource(R.string.qollash),
                 onClick = {
                     onApply(
                         draft.copy(

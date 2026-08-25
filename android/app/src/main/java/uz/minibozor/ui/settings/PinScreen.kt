@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -49,9 +51,9 @@ fun PinScreen(
     }
 
     val (title, subtitle) = when (state.step) {
-        0 -> "Joriy PIN kod" to "Xavfsizlik uchun avval joriy kodni kiriting"
-        1 -> "Yangi PIN kod" to "4 xonali kod o'ylab toping"
-        else -> "Kodni tasdiqlang" to "Yangi kodni yana bir marta kiriting"
+        0 -> stringResource(R.string.joriy_pin_kod) to stringResource(R.string.xavfsizlik_uchun_avval_joriy_kodni_kiriting)
+        1 -> stringResource(R.string.yangi_pin_kod) to stringResource(R.string.pin_4_xonali_kod_oylab_toping)
+        else -> stringResource(R.string.kodni_tasdiqlang) to stringResource(R.string.yangi_kodni_yana_bir_marta_kiriting)
     }
     val value = when (state.step) {
         0 -> state.current
@@ -93,7 +95,7 @@ fun PinScreen(
             }
             Spacer(Modifier.weight(1f))
             MbText(
-                "Kodni hech kimga aytmang. Mini Bozor xodimlari PIN so'ramaydi.",
+                stringResource(R.string.kodni_hech_kimga_aytmang_mini_bozor),
                 MbTheme.type.caption,
                 MbTheme.colors.disabled,
                 textAlign = TextAlign.Center,
@@ -108,7 +110,7 @@ fun PinScreen(
 private fun PinDoneScreen(onDone: () -> Unit) {
     MbScreen(
         background = MbTheme.colors.surface,
-        bottomBar = { MbBottomBar { MbPrimaryButton("Tayyor", onDone) } },
+        bottomBar = { MbBottomBar { MbPrimaryButton(stringResource(R.string.tayyor), onDone) } },
     ) { padding ->
         Column(
             Modifier
@@ -128,10 +130,10 @@ private fun PinDoneScreen(onDone: () -> Unit) {
                 MbIcon("gear", size = 40.dp, tint = MbTheme.colors.success, strokeWidth = 1.6f)
             }
             Spacer(Modifier.height(22.dp))
-            MbText("PIN o'zgartirildi", MbTheme.type.title1, textAlign = TextAlign.Center)
+            MbText(stringResource(R.string.pin_ozgartirildi), MbTheme.type.title1, textAlign = TextAlign.Center)
             Spacer(Modifier.height(8.dp))
             MbText(
-                "Endi ilovaga kirishda yangi kod so'raladi.",
+                stringResource(R.string.endi_ilovaga_kirishda_yangi_kod_soraladi),
                 MbTheme.type.bodySmall,
                 MbTheme.colors.textTertiary,
                 textAlign = TextAlign.Center,

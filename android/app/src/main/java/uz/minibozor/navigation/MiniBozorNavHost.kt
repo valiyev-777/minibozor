@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.navDeepLink
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -30,6 +31,7 @@ import uz.minibozor.ui.catalog.CatalogScreen
 import uz.minibozor.ui.catalog.ListingScreen
 import uz.minibozor.ui.catalog.SubcategoryScreen
 import uz.minibozor.ui.checkout.AddressFormScreen
+import uz.minibozor.ui.checkout.AddressPickerScreen
 import uz.minibozor.ui.checkout.CheckoutScreen
 import uz.minibozor.ui.checkout.CheckoutViewModel
 import uz.minibozor.ui.checkout.ConfirmScreen
@@ -104,14 +106,16 @@ fun MiniBozorNavHost(
         // ---------------------------------------------------------- 01-06
 
         composable(Routes.ONBOARDING) {
+            val toLogin: () -> Unit = {
+                startViewModel.markOnboardingSeen()
+                navController.navigate(Routes.LOGIN) {
+                    popUpTo(Routes.ONBOARDING) { inclusive = true }
+                }
+            }
             OnboardingScreen(
                 mediaBase = BuildConfig.MEDIA_BASE_URL,
-                onFinished = {
-                    startViewModel.markOnboardingSeen()
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.ONBOARDING) { inclusive = true }
-                    }
-                },
+                onFinished = toLogin,
+                onSignIn = toLogin,
             )
         }
 
@@ -143,11 +147,27 @@ fun MiniBozorNavHost(
             MainScaffold(currentRoute, ::switchTab) {
                 HomeScreen(
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
-                    onOpenCategory = { slug -> navController.navigate(Routes.subcategory(slug)) },
+                    // A leaf category has nothing to drill into, so go straight
+                    // to its listing rather than an empty subcategory page.
+                    onOpenCategory = { category ->
+                        if (category.hasChildren) {
+                            navController.navigate(Routes.subcategory(category.slug))
+                        } else {
+                            navController.navigate(
+                                Routes.listing(category = category.slug, title = category.name)
+                            )
+                        }
+                    },
+                    onOpenBanner = { banner ->
+                        navController.navigate(
+                            Routes.listing(category = banner.targetValue, title = banner.title)
+                        )
+                    },
                     onOpenProduct = { id -> navController.navigate(Routes.product(id)) },
                     onOpenListing = { category, title ->
                         navController.navigate(Routes.listing(category = category, title = title))
                     },
+                    onOpenCart = { switchTab(Routes.CART) },
                 )
             }
         }
@@ -212,6 +232,7 @@ fun MiniBozorNavHost(
                 query = entry.arguments?.getString(Args.QUERY)?.ifBlank { null },
                 onBack = { navController.popBackStack() },
                 onOpenProduct = { id -> navController.navigate(Routes.product(id)) },
+                onOpenCart = { switchTab(Routes.CART) },
             )
         }
 
@@ -231,6 +252,9 @@ fun MiniBozorNavHost(
         composable(
             Routes.PRODUCT,
             arguments = listOf(navArgument(Args.ID) { type = NavType.IntType }),
+            // Makes the link the share sheet hands out actually open the
+            // product, rather than dropping the recipient on the home screen.
+            deepLinks = listOf(navDeepLink { uriPattern = "minibozor://product/{id}" }),
         ) { entry ->
             ProductScreen(
                 productId = entry.arguments?.getInt(Args.ID) ?: 0,
@@ -277,21 +301,18 @@ fun MiniBozorNavHost(
                 CheckoutScreen(
                     viewModel = vm,
                     onBack = { navController.popBackStack() },
-                    onEditAddress = { navController.navigate(Routes.addressForm()) },
+                    onEditAddress = { navController.navigate(Routes.ADDRESS_PICKER) },
                     onEditTime = { navController.navigate(Routes.DELIVERY_TIME) },
                     onEditPayment = { navController.navigate(Routes.PAYMENT_METHOD) },
                     onConfirm = { navController.navigate(Routes.CONFIRM) },
                 )
             }
 
-            composable(
-                Routes.ADDRESS_FORM,
-                arguments = listOf(navArgument(Args.ID) { defaultValue = "-1" }),
-            ) { entry ->
-                AddressFormScreen(
+            composable(Routes.ADDRESS_PICKER) { entry ->
+                AddressPickerScreen(
                     viewModel = entry.checkoutViewModel(navController),
                     onBack = { navController.popBackStack() },
-                    onSaved = { navController.popBackStack() },
+                    onAddNew = { navController.navigate(Routes.ADDRESS_FORM) },
                 )
             }
 
@@ -408,14 +429,21 @@ fun MiniBozorNavHost(
         composable("add_card") {
             AddCardScreen(
                 onBack = { navController.popBackStack() },
-                onLaunchProvider = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
             )
         }
 
         composable(Routes.ADDRESSES) {
             AddressesScreen(
                 onBack = { navController.popBackStack() },
-                onAddAddress = { navController.navigate(CHECKOUT_GRAPH) },
+                onAddAddress = { navController.navigate(Routes.ADDRESS_FORM) },
+            )
+        }
+
+        composable(Routes.ADDRESS_FORM) {
+            AddressFormScreen(
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
             )
         }
 

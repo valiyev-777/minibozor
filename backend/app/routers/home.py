@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 from sqlmodel import col, select
 
+from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import OptionalUser, SessionDep
@@ -33,8 +34,8 @@ def home(
         sections.append(
             s.SectionOut(
                 key=section.key,
-                title=section.title,
-                subtitle=section.subtitle,
+                title=i18n.t(session, "section", section.id, "title", section.title),
+                subtitle=i18n.t(session, "section", section.id, "subtitle", section.subtitle),
                 layout=section.layout,
                 category_slug=section.category_slug,
                 products=sv.product_cards(session, products, favs),
@@ -46,10 +47,10 @@ def home(
         banners=[
             s.BannerOut(
                 id=b.id,
-                kicker=b.kicker,
-                title=b.title,
-                subtitle=b.subtitle,
-                cta=b.cta,
+                kicker=i18n.t(session, "banner", b.id, "kicker", b.kicker),
+                title=i18n.t(session, "banner", b.id, "title", b.title),
+                subtitle=i18n.t(session, "banner", b.id, "subtitle", b.subtitle),
+                cta=i18n.t(session, "banner", b.id, "cta", b.cta),
                 image_url=sv.media_url(b.image_url) or "",
                 gradient_from=b.gradient_from,
                 gradient_to=b.gradient_to,

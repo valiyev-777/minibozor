@@ -38,10 +38,10 @@ fun MbToastHost(message: MutableState<String?>, modifier: Modifier = Modifier) {
             Box(
                 Modifier
                     .clip(MbTheme.shapes.chip)
-                    .background(MbTheme.colors.ink)
+                    .background(MbTheme.colors.inverse)
                     .padding(horizontal = 18.dp, vertical = 12.dp)
             ) {
-                MbText(text, MbTheme.type.caption, Color.White)
+                MbText(text, MbTheme.type.caption, MbTheme.colors.onInverse)
             }
         }
     }

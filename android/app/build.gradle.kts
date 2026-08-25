@@ -23,9 +23,11 @@ android {
 
     buildTypes {
         debug {
-            // 10.0.2.2 is the host machine as seen from the Android emulator.
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/v1/\"")
-            buildConfigField("String", "MEDIA_BASE_URL", "\"http://10.0.2.2:8000/media\"")
+            // `adb reverse tcp:8000 tcp:8000` points the device's own localhost at
+            // the dev server, which works over USB on a real phone and on the
+            // emulator alike — unlike 10.0.2.2, which is emulator-only.
+            buildConfigField("String", "API_BASE_URL", "\"http://localhost:8000/api/v1/\"")
+            buildConfigField("String", "MEDIA_BASE_URL", "\"http://localhost:8000/media\"")
             applicationIdSuffix = ".debug"
         }
         release {
@@ -58,6 +60,9 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // Per-app language: AppCompatDelegate.setApplicationLocales backports the
+    // Android 13 picker down to our minSdk and persists the choice itself.
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

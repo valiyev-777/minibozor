@@ -29,13 +29,25 @@ Requirements: JDK 17, Android SDK 35, minSdk 26.
 
 | Build | API | Media |
 |---|---|---|
-| debug | `http://10.0.2.2:8000/api/v1/` | `http://10.0.2.2:8000/media` |
+| debug | `http://localhost:8000/api/v1/` | `http://localhost:8000/media` |
 | release | `https://api.minibozor.uz/api/v1/` | `https://api.minibozor.uz/media` |
 
-`10.0.2.2` is the host machine as seen from the Android emulator. On a physical
-device use your machine's LAN address and add it to
-`res/xml/network_security_config.xml` (cleartext is allowed only for the local
-hosts listed there).
+Debug builds talk to `localhost`, so **you must open a reverse tunnel once per
+adb session**:
+
+```bash
+adb reverse tcp:8000 tcp:8000
+```
+
+That points the device's own `localhost:8000` at the dev server on your machine.
+It works over USB on a physical phone and on the emulator alike — unlike
+`10.0.2.2`, which only exists inside the emulator. The tunnel is dropped when
+the cable is unplugged or the adb server restarts, so re-run it after either.
+
+If you would rather go over Wi-Fi, put your machine's LAN address in
+`build.gradle.kts` instead and add that host to
+`res/xml/network_security_config.xml` — cleartext is permitted only for the
+hosts listed there.
 
 Start the backend with `cd ../backend && ./run.sh`, then sign in with
 `+998 90 123 45 67`. Debug builds print the SMS code on the code screen, so no

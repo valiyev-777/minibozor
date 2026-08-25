@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,8 +29,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.component.MbPrimaryButton
+import uz.minibozor.core.design.mbClickable
+import uz.minibozor.core.design.mbTap
 import uz.minibozor.core.design.component.MbProductImage
 import uz.minibozor.core.design.component.MbScreen
 import uz.minibozor.core.design.icon.MbIcon
@@ -43,35 +48,34 @@ private data class OnboardingPage(
 
 /**
  * Screens 01–04. Copy and imagery come from the design; the illustration is a
- * product photo inset in a soft circle, with a floating chip on the first page.
+ * product photo inset in a soft circle with a floating chip. The last page
+ * swaps the skip/next pair for a single "Boshlash" plus a sign-in link.
  */
+@Composable
 private fun pages(mediaBase: String) = listOf(
     OnboardingPage(
-        title = "Ertaga yetib keladi",
-        body = "Toshkent bo'ylab bir kunda, viloyatlarga 2–3 kunda. " +
-            "Kuryerni real vaqtda kuzatib boring.",
+        title = stringResource(R.string.onboarding_1_title),
+        body = stringResource(R.string.onboarding_1_body),
         image = "$mediaBase/products/nike-zoomx.png",
-        chip = "1 kunda yetkazish",
+        chip = stringResource(R.string.onboarding_1_chip),
     ),
     OnboardingPage(
-        title = "Faqat original brendlar",
-        body = "Har bir sotuvchi tekshiruvdan o'tadi. " +
-            "Original bo'lmasa — pulingizni to'liq qaytaramiz.",
+        title = stringResource(R.string.onboarding_2_title),
+        body = stringResource(R.string.onboarding_2_body),
         image = "$mediaBase/products/gazelle.png",
-        chip = null,
+        chip = stringResource(R.string.onboarding_2_chip),
     ),
     OnboardingPage(
-        title = "Narxni kuzatib turing",
-        body = "Sevimlilarga qo'shing — narx tushganda birinchi bo'lib xabar olasiz.",
+        title = stringResource(R.string.onboarding_3_title),
+        body = stringResource(R.string.onboarding_3_body),
         image = "$mediaBase/products/airpods.png",
-        chip = null,
+        chip = stringResource(R.string.onboarding_3_chip),
     ),
     OnboardingPage(
-        title = "Xarid qilishni boshlang",
-        body = "Kunlik yetkazish, oson qaytarish va bir marta kiritiladigan to'lov — " +
-            "hammasi bir ilovada.",
+        title = stringResource(R.string.onboarding_4_title),
+        body = stringResource(R.string.onboarding_4_body),
         image = "$mediaBase/banners/lamp-room.png",
-        chip = null,
+        chip = stringResource(R.string.onboarding_4_chip),
     ),
 )
 
@@ -79,6 +83,7 @@ private fun pages(mediaBase: String) = listOf(
 fun OnboardingScreen(
     mediaBase: String,
     onFinished: () -> Unit,
+    onSignIn: () -> Unit = onFinished,
 ) {
     val items = pages(mediaBase)
     val pagerState = rememberPagerState(pageCount = { items.size })
@@ -149,25 +154,53 @@ fun OnboardingScreen(
                 )
             }
 
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 30.dp)
-                    .padding(bottom = 32.dp, top = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                MbText(
-                    "O'tkazib yuborish",
-                    MbTheme.type.label,
-                    MbTheme.colors.textQuaternary,
-                    modifier = Modifier.clickable(onClick = onFinished),
-                )
-                Spacer(Modifier.weight(1f))
-                NextButton {
-                    if (pagerState.currentPage == items.lastIndex) {
-                        onFinished()
-                    } else {
-                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+            if (pagerState.currentPage == items.lastIndex) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .padding(top = 18.dp, bottom = 26.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    MbPrimaryButton(
+                        text = stringResource(R.string.boshlash),
+                        onClick = onFinished,
+                        container = MbTheme.colors.inverse,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        MbText(
+                            stringResource(R.string.hisobingiz_bormi),
+                            MbTheme.type.caption,
+                            MbTheme.colors.textQuaternary,
+                        )
+                        MbText(
+                            stringResource(R.string.kirish),
+                            MbTheme.type.label,
+                            MbTheme.colors.accent,
+                            modifier = Modifier.mbTap(onClick = onSignIn),
+                        )
+                    }
+                }
+            } else {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 26.dp)
+                        .padding(bottom = 28.dp, top = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MbText(
+                        stringResource(R.string.otkazish),
+                        MbTheme.type.label,
+                        MbTheme.colors.textQuaternary,
+                        modifier = Modifier.mbTap(onClick = onFinished),
+                    )
+                    Spacer(Modifier.weight(1f))
+                    NextButton {
+                        scope.launch {
+                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                        }
                     }
                 }
             }
@@ -230,15 +263,16 @@ private fun PageContent(page: OnboardingPage) {
 
 @Composable
 private fun NextButton(onClick: () -> Unit) {
-    Box(
+    Row(
         Modifier
-            .size(56.dp)
-            .clip(CircleShape)
-            .background(MbTheme.colors.ink)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+            .mbClickable(CircleShape, onClick = onClick)
+            .background(MbTheme.colors.inverse)
+            .padding(start = 24.dp, end = 20.dp, top = 15.dp, bottom = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        MbText("→", MbTheme.type.title2, Color.White)
+        MbText(stringResource(R.string.keyingi), MbTheme.type.label, MbTheme.colors.onInverse)
+        MbText("→", MbTheme.type.title3, MbTheme.colors.onInverse)
     }
 }
 

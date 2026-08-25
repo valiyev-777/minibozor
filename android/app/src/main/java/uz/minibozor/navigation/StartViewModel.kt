@@ -24,10 +24,11 @@ class StartViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val seenOnboarding = prefs.onboardingSeen.first()
+            // Signed in wins: someone with a session never sees the intro again.
             _destination.value = when {
+                tokens.signedIn.value -> Routes.HOME
                 !seenOnboarding -> Routes.ONBOARDING
-                !tokens.signedIn.value -> Routes.LOGIN
-                else -> Routes.HOME
+                else -> Routes.LOGIN
             }
         }
     }

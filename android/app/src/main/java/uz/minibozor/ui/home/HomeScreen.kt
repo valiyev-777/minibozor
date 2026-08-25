@@ -1,10 +1,18 @@
 package uz.minibozor.ui.home
 
+import kotlinx.coroutines.delay
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,18 +22,36 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import uz.minibozor.R
+import uz.minibozor.core.design.component.MbDivider
+import uz.minibozor.core.design.component.MbRadioRow
+import uz.minibozor.core.design.mbClickable
+import uz.minibozor.core.util.UZ_REGIONS
+import uz.minibozor.core.util.regionLabel
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -47,25 +73,47 @@ import uz.minibozor.data.remote.dto.BannerDto
 import uz.minibozor.data.remote.dto.CategoryDto
 import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.SectionDto
+import uz.minibozor.ui.product.VariantSheet
 import uz.minibozor.ui.common.MbToastHost
 import uz.minibozor.ui.common.UiStateContent
 import uz.minibozor.ui.common.rememberToast
 
 /**
+ * The 20 dp card corners, split across a card's lazy fragments. A section card
+ * is emitted as several small lazy items (header, rows, rail) rather than one
+ * card-sized item — composing a whole card in a single frame is what made the
+ * scroll hitch — so the top and bottom fragments each carry their half of the
+ * card's rounding and the middle fragments draw a plain surface.
+ */
+private val CardTopShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+private val CardBottomShape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
+
+/** The gap between blocks; explicit because spacedBy would split card fragments. */
+private val SectionGap = 12.dp
+
+/**
  * Screen 07. One request fills the whole page: banners, the 5x2 category grid,
  * a deals pair, a two-column recommendation grid and two horizontal rails.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onOpenSearch: () -> Unit,
-    onOpenCategory: (String) -> Unit,
+    onOpenCategory: (CategoryDto) -> Unit,
+    onOpenBanner: (BannerDto) -> Unit,
     onOpenProduct: (Int) -> Unit,
     onOpenListing: (category: String?, title: String) -> Unit,
+    onOpenCart: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val city by viewModel.city.collectAsStateWithLifecycle()
     val toast = rememberToast()
+    var showRegions by remember { mutableStateOf(false) }
+    // A product that comes in sizes or colours opens the picker instead of
+    // being added with a variant we guessed for the customer.
+    var picking by remember { mutableStateOf<ProductCardDto?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
 
     MbScreen { padding ->
         Box(Modifier.fillMaxSize()) {
@@ -73,64 +121,169 @@ fun HomeScreen(
                 state = state,
                 onRetry = viewModel::load,
                 modifier = Modifier.padding(padding),
+                loading = { HomeSkeleton(it) },
             ) { home ->
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = {
+                        refreshing = true
+                        viewModel.refresh { refreshing = false }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                ) {
+                // The payload has landed: fade and lift the whole screen in
+                // once, rather than having it appear fully formed. One
+                // animation for the lot, read in the layer phase, so it costs
+                // nothing per item.
+                val enter = remember { Animatable(0f) }
+                LaunchedEffect(Unit) {
+                    enter.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+                }
+
                 LazyColumn(
                     Modifier
                         .fillMaxSize()
-                        .padding(padding),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                        .graphicsLayer {
+                            alpha = enter.value
+                            translationY = (1f - enter.value) * 26.dp.toPx()
+                        }
                 ) {
-                    item { HomeHeader(city = city, onOpenSearch = onOpenSearch) }
-
-                    if (home.banners.isNotEmpty()) {
-                        item { BannerCarousel(home.banners) { onOpenCategory(it.targetValue) } }
-                    }
-
-                    item {
-                        CategoryGrid(
-                            categories = home.categories,
-                            onClick = { onOpenCategory(it.slug) },
-                            modifier = Modifier.padding(horizontal = 12.dp),
+                    item(contentType = "header") {
+                        HomeHeader(
+                            city = city,
+                            onOpenSearch = onOpenSearch,
+                            onPickRegion = { showRegions = true },
                         )
                     }
 
-                    home.sections.forEach { section ->
-                        item(key = section.key) {
-                            HomeSection(
-                                section = section,
-                                onOpenProduct = onOpenProduct,
-                                onOpenAll = { onOpenListing(section.categorySlug, section.title) },
-                                onToggleFavorite = { p -> viewModel.toggleFavorite(p.id, p.isFavorite) },
-                                onAddToCart = { p ->
-                                    viewModel.addToCart(p.id) { toast.value = it }
-                                },
-                            )
+                    if (home.banners.isNotEmpty()) {
+                        item(contentType = "banners") {
+                            Box(Modifier.padding(top = SectionGap)) {
+                                BannerCarousel(home.banners, onOpenBanner)
+                            }
                         }
                     }
 
-                    item { MbTabBarSpacer() }
+                    categoryGrid(home.categories, onOpenCategory)
+
+                    home.sections.forEach { section ->
+                        homeSection(
+                            section = section,
+                            onOpenProduct = onOpenProduct,
+                            onOpenAll = { onOpenListing(section.categorySlug, section.title) },
+                            onToggleFavorite = { p -> viewModel.toggleFavorite(p.id, p.isFavorite) },
+                            onAddToCart = { p ->
+                                if (p.hasVariants) {
+                                    picking = p
+                                } else {
+                                    viewModel.addToCart(p.id) { toast.value = it }
+                                }
+                            },
+                        )
+                    }
+
+                    item(contentType = "spacer") { MbTabBarSpacer() }
+                }
                 }
             }
             MbToastHost(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp))
+            picking?.let { card ->
+                VariantSheet(
+                    card = card,
+                    onDismiss = { picking = null },
+                    onOpenCart = {
+                        picking = null
+                        onOpenCart()
+                    },
+                )
+            }
+        }
+    }
+
+    if (showRegions) {
+        RegionPicker(
+            current = city,
+            onPick = {
+                viewModel.setCity(it)
+                showRegions = false
+            },
+            onDismiss = { showRegions = false },
+        )
+    }
+}
+
+/** The 14 delivery regions, as a sheet off the location row. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RegionPicker(
+    current: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MbTheme.colors.surface,
+        shape = MbTheme.shapes.sheet,
+    ) {
+        Column(Modifier.padding(horizontal = 20.dp)) {
+            MbText(stringResource(R.string.hududni_tanlang), MbTheme.type.title2)
+            Spacer(Modifier.height(4.dp))
+            MbText(
+                stringResource(R.string.yetkazish_muddati_va_narxi_hududga_qarab),
+                MbTheme.type.meta,
+                MbTheme.colors.icon,
+            )
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(Modifier.fillMaxWidth()) {
+                items(UZ_REGIONS, key = { it.canonical }) { region ->
+                    MbRadioRow(
+                        label = stringResource(region.labelRes),
+                        // The stored value stays Uzbek in every language, so a
+                        // city picked in Russian still matches delivery data.
+                        selected = region.canonical == current,
+                        onSelect = { onPick(region.canonical) },
+                        leading = {
+                            MbIcon("pin", size = 18.dp, tint = MbTheme.colors.icon)
+                        },
+                    )
+                    MbDivider(inset = 30.dp)
+                }
+                item { Spacer(Modifier.height(24.dp)) }
+            }
         }
     }
 }
 
 @Composable
-private fun HomeHeader(city: String, onOpenSearch: () -> Unit) {
+private fun HomeHeader(
+    city: String,
+    onOpenSearch: () -> Unit,
+    onPickRegion: () -> Unit,
+) {
     Column(Modifier.background(MbTheme.colors.surface)) {
         Row(
-            Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 10.dp),
+            Modifier
+                .padding(start = 14.dp, end = 20.dp, top = 6.dp, bottom = 8.dp)
+                .mbClickable(MbTheme.shapes.chip, onClick = onPickRegion)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            MbIcon("pin", size = 15.dp, tint = MbTheme.colors.accent, strokeWidth = 1.9f)
-            MbText(city, MbTheme.type.body.copy(
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
-            MbText("▾", MbTheme.type.micro, MbTheme.colors.hairlineStrong)
+            MbIcon("pin", size = 16.dp, tint = MbTheme.colors.accent, strokeWidth = 1.9f)
+            // The stored city is always Uzbek; show it in the app language.
+            MbText(regionLabel(city), MbTheme.type.body.copy(fontWeight = FontWeight.Bold))
+            MbIcon(
+                "chevron-down",
+                size = 18.dp,
+                tint = MbTheme.colors.textSecondary,
+                strokeWidth = 2f,
+            )
         }
         Box(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 14.dp)) {
-            MbSearchPill("Mahsulot va turkumlar qidirish", onOpenSearch)
+            MbSearchPill(stringResource(R.string.mahsulot_va_turkumlar_qidirish), onOpenSearch)
         }
     }
 }
@@ -138,13 +291,34 @@ private fun HomeHeader(city: String, onOpenSearch: () -> Unit) {
 @Composable
 private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Unit) {
     val pager = rememberPagerState(pageCount = { banners.size })
+
+    // Keyed on settledPage, so the wait restarts every time the carousel comes
+    // to rest — including after the customer swipes it themselves, which is
+    // what stops it yanking the page away from under their thumb.
+    LaunchedEffect(pager.settledPage, banners.size) {
+        if (banners.size < 2) return@LaunchedEffect
+        delay(4_500)
+        pager.animateScrollToPage(
+            page = (pager.settledPage + 1) % banners.size,
+            animationSpec = tween(700, easing = FastOutSlowInEasing),
+        )
+    }
+
     Column {
         HorizontalPager(
             state = pager,
             pageSpacing = 10.dp,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp),
         ) { page ->
-            BannerCard(banners[page]) { onClick(banners[page]) }
+            // How far this page is from settled, -1..1. Drives a small drift so
+            // a swipe reads as depth rather than as a flat slide.
+            val drift = (pager.currentPage - page + pager.currentPageOffsetFraction)
+                .coerceIn(-1f, 1f)
+            BannerCard(
+                banner = banners[page],
+                drift = drift,
+                onClick = { onClick(banners[page]) },
+            )
         }
         Spacer(Modifier.height(10.dp))
         Row(
@@ -153,14 +327,22 @@ private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Uni
         ) {
             repeat(banners.size) { index ->
                 val active = index == pager.currentPage
+                val width by animateDpAsState(
+                    if (active) 14.dp else 3.5.dp,
+                    tween(260, easing = FastOutSlowInEasing),
+                    label = "dot",
+                )
+                val color by animateColorAsState(
+                    if (active) MbTheme.colors.accent else MbTheme.colors.hairlineStrong,
+                    tween(260),
+                    label = "dotColor",
+                )
                 Box(
                     Modifier
                         .padding(horizontal = 2.dp)
-                        .size(width = if (active) 14.dp else 3.5.dp, height = 3.5.dp)
+                        .size(width = width, height = 3.5.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(
-                            if (active) MbTheme.colors.accent else MbTheme.colors.hairlineStrong
-                        )
+                        .background(color)
                 )
             }
         }
@@ -168,7 +350,7 @@ private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Uni
 }
 
 @Composable
-private fun BannerCard(banner: BannerDto, onClick: () -> Unit) {
+private fun BannerCard(banner: BannerDto, drift: Float, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -205,7 +387,8 @@ private fun BannerCard(banner: BannerDto, onClick: () -> Unit) {
             banner.imageUrl,
             modifier = Modifier
                 .width(110.dp)
-                .fillMaxSize(),
+                .fillMaxSize()
+                .graphicsLayer { translationX = drift * 40.dp.toPx() },
             shape = MbTheme.shapes.tile,
             background = Color.White.copy(alpha = 0.08f),
             contentScale = ContentScale.Crop,
@@ -213,46 +396,39 @@ private fun BannerCard(banner: BannerDto, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun CategoryGrid(
+/** The 5x2 quick-link grid, one lazy item per row of five. */
+private fun LazyListScope.categoryGrid(
     categories: List<CategoryDto>,
     onClick: (CategoryDto) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    MbCard(modifier, padding = 14.dp) {
-        categories.chunked(5).forEach { row ->
+    val rows = categories.chunked(5)
+    rows.forEachIndexed { index, row ->
+        item(key = "categories:$index", contentType = "category-row") {
+            val first = index == 0
+            val last = index == rows.lastIndex
+            val shape = when {
+                first && last -> MbTheme.shapes.card
+                first -> CardTopShape
+                last -> CardBottomShape
+                else -> RectangleShape
+            }
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 7.dp),
+                    .padding(start = 12.dp, end = 12.dp, top = if (first) SectionGap else 0.dp)
+                    .background(MbTheme.colors.surface, shape)
+                    .padding(
+                        start = 14.dp,
+                        end = 14.dp,
+                        // 14 dp card padding on the outer rows, plus the 7 dp
+                        // every row keeps around itself.
+                        top = if (first) 21.dp else 7.dp,
+                        bottom = if (last) 21.dp else 7.dp,
+                    ),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 row.forEach { category ->
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .clickable { onClick(category) },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Box(
-                            Modifier
-                                .size(MbTheme.dimens.categoryTile)
-                                .clip(MbTheme.shapes.tile)
-                                .background(MbTheme.colors.fill),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            MbIcon(category.icon, size = 20.dp)
-                        }
-                        MbText(
-                            category.name,
-                            MbTheme.type.micro.copy(
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-                            MbTheme.colors.inkSoft,
-                            maxLines = 2,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        )
-                    }
+                    CategoryCell(category, onClick, Modifier.weight(1f))
                 }
                 repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
             }
@@ -261,7 +437,41 @@ private fun CategoryGrid(
 }
 
 @Composable
-private fun HomeSection(
+private fun CategoryCell(
+    category: CategoryDto,
+    onClick: (CategoryDto) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.clickable { onClick(category) },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            Modifier
+                .size(MbTheme.dimens.categoryTile)
+                .clip(MbTheme.shapes.tile)
+                .background(MbTheme.colors.fill),
+            contentAlignment = Alignment.Center,
+        ) {
+            MbIcon(category.icon, size = 20.dp)
+        }
+        MbText(
+            category.name,
+            MbTheme.type.micro.copy(
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+            MbTheme.colors.inkSoft,
+            maxLines = 2,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+    }
+}
+
+/**
+ * One home section, emitted as several small lazy items so a scroll frame
+ * composes a header or a single product row, never a whole card.
+ */
+private fun LazyListScope.homeSection(
     section: SectionDto,
     onOpenProduct: (Int) -> Unit,
     onOpenAll: () -> Unit,
@@ -269,75 +479,122 @@ private fun HomeSection(
     onAddToCart: (ProductCardDto) -> Unit,
 ) {
     when (section.layout) {
-        "deals" -> MbCard(Modifier.padding(horizontal = 12.dp), padding = 16.dp) {
-            SectionHeader(section.title, section.subtitle)
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                section.products.forEach { product ->
-                    MbDealTile(
-                        title = product.title,
-                        price = product.price,
-                        oldPrice = product.oldPrice,
-                        discountPercent = product.discountPercent,
-                        imageUrl = product.imageUrl,
-                        onClick = { onOpenProduct(product.id) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-
-        "grid" -> MbCard(Modifier.padding(horizontal = 12.dp), padding = 14.dp) {
-            SectionHeader(section.title, section.subtitle)
-            Spacer(Modifier.height(14.dp))
-            section.products.chunked(2).forEach { row ->
-                Row(
-                    Modifier.padding(bottom = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    row.forEach { product ->
-                        MbProductTile(
+        // Two tiles and a header — light enough to stay a single item.
+        "deals" -> item(key = section.key, contentType = "deals") {
+            MbCard(
+                Modifier.padding(start = 12.dp, end = 12.dp, top = SectionGap),
+                padding = 16.dp,
+            ) {
+                SectionHeader(section.title, section.subtitle)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    section.products.forEach { product ->
+                        MbDealTile(
                             title = product.title,
                             price = product.price,
                             oldPrice = product.oldPrice,
                             discountPercent = product.discountPercent,
                             imageUrl = product.imageUrl,
-                            rating = product.rating,
-                            reviewsCount = product.reviewsCount,
-                            badge = product.badge,
-                            isFavorite = product.isFavorite,
                             onClick = { onOpenProduct(product.id) },
-                            onToggleFavorite = { onToggleFavorite(product) },
-                            onAddToCart = { onAddToCart(product) },
                             modifier = Modifier.weight(1f),
                         )
                     }
-                    repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
 
-        else -> MbCard(Modifier.padding(horizontal = 12.dp), padding = 0.dp) {
-            SectionHeader(
-                title = section.title,
-                subtitle = section.subtitle,
-                actionLabel = "Barchasi",
-                onAction = onOpenAll,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
-            )
-            LazyRow(
-                Modifier.padding(top = 12.dp, bottom = 16.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(section.products, key = { it.id }) { product ->
-                    MbRailTile(
-                        title = product.title,
-                        price = product.price,
-                        discountPercent = product.discountPercent,
-                        imageUrl = product.imageUrl,
-                        onClick = { onOpenProduct(product.id) },
+        "grid" -> {
+            item(key = "${section.key}:head", contentType = "grid-head") {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, top = SectionGap)
+                        .background(MbTheme.colors.surface, CardTopShape)
+                        .padding(14.dp),
+                ) {
+                    SectionHeader(section.title, section.subtitle)
+                }
+            }
+            val rows = section.products.chunked(2)
+            rows.forEachIndexed { index, row ->
+                item(key = "${section.key}:row$index", contentType = "grid-row") {
+                    val last = index == rows.lastIndex
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp)
+                            .background(
+                                MbTheme.colors.surface,
+                                if (last) CardBottomShape else RectangleShape,
+                            )
+                            .padding(
+                                start = 14.dp,
+                                end = 14.dp,
+                                // The last row also carries the card's own
+                                // 14 dp bottom padding.
+                                bottom = if (last) 30.dp else 16.dp,
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        row.forEach { product ->
+                            MbProductTile(
+                                title = product.title,
+                                price = product.price,
+                                oldPrice = product.oldPrice,
+                                discountPercent = product.discountPercent,
+                                imageUrl = product.imageUrl,
+                                rating = product.rating,
+                                reviewsCount = product.reviewsCount,
+                                badge = product.badge,
+                                isFavorite = product.isFavorite,
+                                onClick = { onOpenProduct(product.id) },
+                                onToggleFavorite = { onToggleFavorite(product) },
+                                onAddToCart = { onAddToCart(product) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+        }
+
+        else -> {
+            item(key = "${section.key}:head", contentType = "rail-head") {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, top = SectionGap)
+                        .background(MbTheme.colors.surface, CardTopShape)
+                        .padding(start = 16.dp, end = 16.dp, top = 16.dp),
+                ) {
+                    SectionHeader(
+                        title = section.title,
+                        subtitle = section.subtitle,
+                        actionLabel = stringResource(R.string.barchasi),
+                        onAction = onOpenAll,
                     )
+                }
+            }
+            item(key = "${section.key}:rail", contentType = "rail-list") {
+                LazyRow(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .background(MbTheme.colors.surface, CardBottomShape)
+                        .padding(top = 12.dp, bottom = 16.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(section.products, key = { it.id }, contentType = { "rail-tile" }) { product ->
+                        MbRailTile(
+                            title = product.title,
+                            price = product.price,
+                            discountPercent = product.discountPercent,
+                            imageUrl = product.imageUrl,
+                            onClick = { onOpenProduct(product.id) },
+                        )
+                    }
                 }
             }
         }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,7 +28,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCard
@@ -53,7 +56,13 @@ fun CardsScreen(
 ) {
     val cards by viewModel.cards.collectAsStateWithLifecycle()
 
-    MbScreen(topBar = { MbTopBar("To'lov kartalari", onBack = onBack) }) { padding ->
+    // Re-reads on every return, so a card added on the next screen appears here.
+    LifecycleResumeEffect(Unit) {
+        viewModel.load()
+        onPauseOrDispose {}
+    }
+
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.tolov_kartalari), onBack = onBack) }) { padding ->
         LazyColumn(
             Modifier
                 .fillMaxSize()
@@ -86,7 +95,7 @@ fun CardsScreen(
                                 Spacer(Modifier.weight(1f))
                                 if (card.isDefault) {
                                     MbStatusPill(
-                                        "ASOSIY",
+                                        stringResource(R.string.asosiy),
                                         Color.White.copy(alpha = 0.2f),
                                         Color.White,
                                     )
@@ -114,13 +123,13 @@ fun CardsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (expired) {
                             MbText(
-                                "Muddati o'tgan",
+                                stringResource(R.string.muddati_otgan),
                                 MbTheme.type.caption,
                                 MbTheme.colors.danger,
                             )
                         } else if (!card.isDefault) {
                             MbText(
-                                "Asosiy qilish",
+                                stringResource(R.string.asosiy_qilish),
                                 MbTheme.type.label,
                                 MbTheme.colors.accent,
                                 modifier = Modifier.clickable { viewModel.makeDefault(card.id) },
@@ -128,7 +137,7 @@ fun CardsScreen(
                         }
                         Spacer(Modifier.weight(1f))
                         MbText(
-                            "O'chirish",
+                            stringResource(R.string.ochirish),
                             MbTheme.type.label,
                             MbTheme.colors.danger,
                             modifier = Modifier.clickable { viewModel.delete(card.id) },
@@ -140,9 +149,9 @@ fun CardsScreen(
             item {
                 MbCard(padding = 6.dp) {
                     MbListRow(
-                        label = "Yangi karta qo'shish",
+                        label = stringResource(R.string.yangi_karta_qoshish),
                         glyph = "card",
-                        subtitle = "Humo, UzCard, Visa",
+                        subtitle = stringResource(R.string.humo_uzcard_visa),
                         tint = MbTheme.colors.accent,
                         onClick = onAddCard,
                         modifier = Modifier.padding(horizontal = 10.dp),
@@ -153,7 +162,7 @@ fun CardsScreen(
             if (cards.isEmpty()) {
                 item {
                     MbText(
-                        "Karta qo'shsangiz — buyurtmani bir bosishda to'laysiz.",
+                        stringResource(R.string.karta_qoshsangiz_buyurtmani_bir_bosishda),
                         MbTheme.type.caption,
                         MbTheme.colors.textQuaternary,
                         modifier = Modifier.padding(horizontal = 6.dp),
@@ -173,7 +182,12 @@ fun AddressesScreen(
 ) {
     val addresses by viewModel.addresses.collectAsStateWithLifecycle()
 
-    MbScreen(topBar = { MbTopBar("Manzillarim", onBack = onBack) }) { padding ->
+    LifecycleResumeEffect(Unit) {
+        viewModel.load()
+        onPauseOrDispose {}
+    }
+
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.manzillarim), onBack = onBack) }) { padding ->
         LazyColumn(
             Modifier
                 .fillMaxSize()
@@ -211,7 +225,7 @@ fun AddressesScreen(
                         }
                         Spacer(Modifier.weight(1f))
                         MbText(
-                            "O'chirish",
+                            stringResource(R.string.ochirish),
                             MbTheme.type.caption,
                             MbTheme.colors.danger,
                             modifier = Modifier.clickable { viewModel.delete(address.id) },
@@ -228,7 +242,7 @@ fun AddressesScreen(
             item {
                 MbCard(padding = 6.dp) {
                     MbListRow(
-                        label = "Yangi manzil qo'shish",
+                        label = stringResource(R.string.yangi_manzil_qoshish),
                         glyph = "pin",
                         tint = MbTheme.colors.accent,
                         onClick = onAddAddress,
@@ -249,12 +263,12 @@ fun MyReviewsScreen(
 ) {
     val reviews by viewModel.reviews.collectAsStateWithLifecycle()
 
-    MbScreen(topBar = { MbTopBar("Sharhlarim", onBack = onBack) }) { padding ->
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.sharhlarim), onBack = onBack) }) { padding ->
         if (reviews.isEmpty()) {
             MbEmptyState(
                 glyph = "star",
-                title = "Hali sharh yozmagansiz",
-                message = "Yetkazilgan tovarlarga sharh qoldiring — boshqalarga yordam beradi.",
+                title = stringResource(R.string.hali_sharh_yozmagansiz),
+                message = stringResource(R.string.yetkazilgan_tovarlarga_sharh_qoldiring),
                 modifier = Modifier.padding(padding),
             )
             return@MbScreen
@@ -282,8 +296,8 @@ fun MyReviewsScreen(
                                 modifier = Modifier.weight(1f),
                             )
                             MbStatusPill(
-                                if (review.status == "published") "E'LON QILINDI"
-                                else "TEKSHIRILMOQDA",
+                                if (review.status == "published") stringResource(R.string.e_lon_qilindi)
+                                else stringResource(R.string.tekshirilmoqda),
                                 if (review.status == "published") MbTheme.colors.successBg
                                 else MbTheme.colors.warningBg,
                                 if (review.status == "published") MbTheme.colors.success
@@ -295,7 +309,7 @@ fun MyReviewsScreen(
                     ReviewRow(review, onLike = null)
                     Spacer(Modifier.height(10.dp))
                     MbText(
-                        "O'chirish",
+                        stringResource(R.string.ochirish),
                         MbTheme.type.caption,
                         MbTheme.colors.danger,
                         modifier = Modifier.clickable { viewModel.delete(review.id) },
@@ -318,7 +332,7 @@ fun FavoritesScreen(
     val loading by viewModel.loading.collectAsStateWithLifecycle()
     val toast = rememberToast()
 
-    MbScreen(topBar = { MbTopBar("Sevimlilar", onBack = onBack) }) { padding ->
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.sevimlilar), onBack = onBack) }) { padding ->
         Box(
             Modifier
                 .fillMaxSize()
@@ -328,9 +342,9 @@ fun FavoritesScreen(
                 loading -> MbLoading()
                 items.isEmpty() -> MbEmptyState(
                     glyph = "heart",
-                    title = "Sevimlilar bo'sh",
-                    message = "Yoqqan tovarlarni belgilab qo'ying — narx tushganda xabar beramiz.",
-                    actionLabel = "Xaridni boshlash",
+                    title = stringResource(R.string.sevimlilar_bosh),
+                    message = stringResource(R.string.yoqqan_tovarlarni_belgilab_qoying_narx),
+                    actionLabel = stringResource(R.string.xaridni_boshlash),
                     onAction = onStartShopping,
                 )
 

@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, select
 
+from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
@@ -66,7 +67,7 @@ def delete_address(address_id: int, user: CurrentUser, session: SessionDep) -> s
     address = _owned_address(session, user.id, address_id)
     session.delete(address)
     session.commit()
-    return s.Message(message="Manzil o'chirildi")
+    return s.Message(message=i18n.label("address_removed"))
 
 
 # --------------------------------------------------------------------------- slots
@@ -120,7 +121,7 @@ def pickup_points(session: SessionDep) -> list[s.PickupPointOut]:
 def _owned_address(session: SessionDep, user_id: int, address_id: int) -> Address:
     address = session.get(Address, address_id)
     if address is None or address.user_id != user_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Manzil topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("address_not_found"))
     return address
 
 

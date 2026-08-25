@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -29,17 +30,16 @@ object MbTheme {
 }
 
 /**
- * The design ships a single light appearance. [darkTheme] is accepted so the
- * "Tungi rejim" switch on screen 37 has something to drive later, but for now it
- * intentionally renders the same palette rather than inventing colours the
- * design never specified.
+ * The design ships a single light appearance; [MbColors.dark] derives the dark
+ * one from it. The palette follows the system setting, which is also what the
+ * "Tungi rejim" row on screen 37 describes ("Tizim bilan moslashadi").
  */
 @Composable
 fun MiniBozorTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    val colors = MbColors()
+    val colors = if (darkTheme) MbColors.dark() else MbColors()
     val typography = MbTypography()
 
     CompositionLocalProvider(
@@ -49,8 +49,19 @@ fun MiniBozorTheme(
         LocalMbShapes provides MbShapes(),
         LocalTextStyle provides typography.body.copy(color = colors.ink),
     ) {
-        MaterialTheme(
-            colorScheme = lightColorScheme(
+        val scheme = if (darkTheme) {
+            darkColorScheme(
+                primary = colors.accent,
+                onPrimary = Color.White,
+                background = colors.canvas,
+                onBackground = colors.ink,
+                surface = colors.surface,
+                onSurface = colors.ink,
+                surfaceContainerLow = colors.surface,
+                error = colors.danger,
+            )
+        } else {
+            lightColorScheme(
                 primary = colors.accent,
                 onPrimary = Color.White,
                 background = colors.canvas,
@@ -58,9 +69,9 @@ fun MiniBozorTheme(
                 surface = colors.surface,
                 onSurface = colors.ink,
                 error = colors.danger,
-            ),
-            content = content,
-        )
+            )
+        }
+        MaterialTheme(colorScheme = scheme, content = content)
     }
 }
 
@@ -71,6 +82,7 @@ fun MbText(
     style: TextStyle,
     color: Color = MbTheme.colors.ink,
     maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
     overflow: androidx.compose.ui.text.style.TextOverflow =
         androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -81,6 +93,7 @@ fun MbText(
         style = style,
         color = color,
         maxLines = maxLines,
+        minLines = minLines,
         overflow = overflow,
         textAlign = textAlign,
         modifier = modifier,

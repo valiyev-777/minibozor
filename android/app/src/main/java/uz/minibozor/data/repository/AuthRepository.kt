@@ -3,6 +3,7 @@ package uz.minibozor.data.repository
 import kotlinx.coroutines.flow.StateFlow
 import uz.minibozor.core.util.Outcome
 import uz.minibozor.core.util.apiCall
+import uz.minibozor.data.local.AppPrefs
 import uz.minibozor.data.local.TokenStore
 import uz.minibozor.data.remote.MiniBozorApi
 import uz.minibozor.data.remote.dto.OtpRequestedDto
@@ -17,6 +18,7 @@ import javax.inject.Singleton
 class AuthRepository @Inject constructor(
     private val api: MiniBozorApi,
     private val tokens: TokenStore,
+    private val prefs: AppPrefs,
 ) {
     val signedIn: StateFlow<Boolean> = tokens.signedIn
 
@@ -42,6 +44,9 @@ class AuthRepository @Inject constructor(
     suspend fun logout(): Outcome<Unit> {
         apiCall { api.logout() }
         tokens.clear()
+        // Signing out returns the app to its first-run state, so the next person
+        // to pick up the phone gets the introduction again.
+        prefs.setOnboardingSeen(false)
         return Outcome.Success(Unit)
     }
 

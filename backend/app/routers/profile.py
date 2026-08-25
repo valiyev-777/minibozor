@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from sqlmodel import col, func, select
 
+from app import i18n
 from app import schemas as s
 from app.deps import CurrentUser, SessionDep
 from app.models import (
@@ -133,4 +134,4 @@ def delete_account(user: CurrentUser, session: SessionDep) -> s.Message:
     user.is_active = False
     session.add(user)
     session.commit()
-    return s.Message(message="Hisob o'chirildi")
+    return s.Message(message=i18n.label("account_deleted"))

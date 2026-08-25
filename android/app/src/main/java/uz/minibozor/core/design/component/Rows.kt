@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbClickable
 import uz.minibozor.core.design.icon.MbIcon
 
 /**
@@ -48,7 +49,7 @@ fun MbListRow(
     Row(
         modifier
             .fillMaxWidth()
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+            .let { if (onClick != null) it.mbClickable(MbTheme.shapes.field, onClick = onClick) else it }
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -140,7 +141,7 @@ fun MbRadioRow(
     Row(
         modifier
             .fillMaxWidth()
-            .clickable(onClick = onSelect)
+            .mbClickable(MbTheme.shapes.field, onClick = onSelect)
             .padding(vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -186,7 +187,7 @@ fun MbCheckRow(
     Row(
         modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
+            .mbClickable(MbTheme.shapes.field, onClick = onToggle)
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

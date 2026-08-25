@@ -1,5 +1,6 @@
 package uz.minibozor.ui.checkout
 
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,10 +12,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -45,19 +48,19 @@ fun CheckoutScreen(
     val preview = state.preview
 
     MbScreen(
-        topBar = { MbTopBar("Buyurtma berish", onBack = onBack) },
+        topBar = { MbTopBar(stringResource(R.string.buyurtma_berish), onBack = onBack) },
         bottomBar = {
             MbBottomBar {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.padding(end = 14.dp)) {
-                        MbText("Jami", MbTheme.type.meta, MbTheme.colors.icon)
+                        MbText(stringResource(R.string.jami), MbTheme.type.meta, MbTheme.colors.icon)
                         MbText(
                             (preview?.totals?.total ?: 0).grouped(),
                             MbTheme.type.price,
                         )
                     }
                     MbPrimaryButton(
-                        text = "Davom etish",
+                        text = stringResource(R.string.davom_etish),
                         onClick = onConfirm,
                         enabled = state.ready,
                         modifier = Modifier.weight(1f),
@@ -82,7 +85,7 @@ fun CheckoutScreen(
                 MbCard(padding = 6.dp) {
                     MbListRow(
                         label = preview.address?.title ?: preview.pickupPoint?.name
-                        ?: "Manzilni tanlang",
+                        ?: stringResource(R.string.manzilni_tanlang),
                         glyph = "pin",
                         subtitle = preview.address?.line ?: preview.pickupPoint?.address,
                         onClick = onEditAddress,
@@ -92,7 +95,7 @@ fun CheckoutScreen(
                     MbListRow(
                         label = preview.slot?.let { slot ->
                             "${slot.label}"
-                        } ?: "Yetkazish vaqtini tanlang",
+                        } ?: stringResource(R.string.yetkazish_vaqtini_tanlang),
                         glyph = "clock",
                         subtitle = preview.slot?.note,
                         onClick = onEditTime,
@@ -101,13 +104,13 @@ fun CheckoutScreen(
                     MbDivider(inset = 62.dp)
                     MbListRow(
                         label = when {
-                            state.paymentMethod == "cash" -> "Naqd pul"
-                            preview.card != null -> "Karta ···· ${preview.card.last4}"
-                            else -> "To'lov usulini tanlang"
+                            state.paymentMethod == "cash" -> stringResource(R.string.naqd_pul)
+                            preview.card != null -> stringResource(R.string.karta_niqob, preview.card.last4)
+                            else -> stringResource(R.string.tolov_usulini_tanlang)
                         },
                         glyph = "card",
                         subtitle = if (state.paymentMethod == "cash") {
-                            "Kuryerga topshirishda"
+                            stringResource(R.string.kuryerga_topshirishda)
                         } else preview.card?.brand,
                         onClick = onEditPayment,
                         modifier = Modifier.padding(horizontal = 10.dp),
@@ -117,7 +120,7 @@ fun CheckoutScreen(
 
             item {
                 MbCard {
-                    SectionHeader("Savat", "${preview.items.size} tovar")
+                    SectionHeader(stringResource(R.string.savat), pluralStringResource(R.plurals.n_products, preview.items.size, preview.items.size))
                     Spacer(Modifier.height(12.dp))
                     preview.items.forEachIndexed { index, item ->
                         MbLineItem(
@@ -137,25 +140,25 @@ fun CheckoutScreen(
             item {
                 MbCard {
                     MbTotalRow(
-                        "Tovarlar (${preview.totals.itemsCount})",
+                        stringResource(R.string.tovarlar_soni, preview.totals.itemsCount),
                         preview.totals.subtotal.sum(),
                     )
                     if (preview.totals.discount > 0) {
                         MbTotalRow(
-                            "Chegirma",
+                            stringResource(R.string.chegirma),
                             "−${preview.totals.discount.grouped()}",
                             valueColor = MbTheme.colors.success,
                         )
                     }
                     MbTotalRow(
-                        "Yetkazish",
-                        if (preview.totals.deliveryFee == 0) "Bepul"
+                        stringResource(R.string.yetkazish),
+                        if (preview.totals.deliveryFee == 0) stringResource(R.string.bepul)
                         else preview.totals.deliveryFee.sum(),
                         valueColor = if (preview.totals.deliveryFee == 0) MbTheme.colors.success
                         else MbTheme.colors.ink,
                     )
                     MbDivider(Modifier.padding(vertical = 8.dp))
-                    MbTotalRow("Jami", preview.totals.total.sum(), strong = true)
+                    MbTotalRow(stringResource(R.string.jami), preview.totals.total.sum(), strong = true)
                 }
             }
         }

@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.icon.MbIcon
@@ -82,10 +84,10 @@ fun MbErrorState(
     modifier: Modifier = Modifier,
 ) = MbEmptyState(
     glyph = "ret",
-    title = "Nimadir noto'g'ri ketdi",
+    title = stringResource(R.string.nimadir_notogri_ketdi),
     message = message,
     modifier = modifier,
-    actionLabel = "Qayta urinish",
+    actionLabel = stringResource(R.string.qayta_urinish),
     onAction = onRetry,
 )
 

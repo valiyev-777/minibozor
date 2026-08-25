@@ -1,4 +1,376 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Uzbek is the default locale; ru and en live in values-ru / values-en. -->
 <resources>
     <string name="app_name">Mini Bozor</string>
+    <string name="qaytarish_14_kun_ichida_qadoq_butun_bolsa">14 kun ichida, qadoq butun bo\'lsa</string>
+    <string name="rating_4_0_dan_yuqori">4.0 ★ dan yuqori</string>
+    <string name="rating_4_5_dan_yuqori">4.5 ★ dan yuqori</string>
+    <string name="pin_4_xonali_kod_oylab_toping">4 xonali kod o\'ylab toping</string>
+    <string name="amal_qilish_muddati">Amal qilish muddati</string>
+    <string name="apple">Apple</string>
+    <string name="ariza_korib_chiqilgach_sms_yuboramiz">Ariza ko\'rib chiqilgach SMS yuboramiz. Tovarni qadog\'i bilan saqlang.</string>
+    <string name="ariza_yuborish">Ariza yuborish</string>
+    <string name="asosiy">ASOSIY</string>
+    <string name="asosiy_karta">Asosiy karta</string>
+    <string name="asosiy_manzil">Asosiy manzil</string>
+    <string name="asosiy_qilish">Asosiy qilish</string>
+    <string name="aziz_toshmatov">AZIZ TOSHMATOV</string>
+    <string name="aziz_toshmatov_2">Aziz Toshmatov</string>
+    <string name="barcha_tovarlar">Barcha tovarlar</string>
+    <string name="barchasi">Barchasi</string>
+    <string name="bekor">Bekor</string>
+    <string name="bekor_qilish">Bekor qilish</string>
+    <string name="bekor_qilishni_tasdiqlash">Bekor qilishni tasdiqlash</string>
+    <string name="bepul">Bepul</string>
+    <string name="bildirishnoma_sozlamalari">Bildirishnoma sozlamalari</string>
+    <string name="bildirishnoma_yoq">Bildirishnoma yo\'q</string>
+    <string name="bildirishnomalar">Bildirishnomalar</string>
+    <string name="bosh_sahifaga">Bosh sahifaga</string>
+    <string name="boshlash">Boshlash</string>
+    <string name="boshqa_turkumlarni_korish">Boshqa turkumlarni ko\'rish</string>
+    <string name="brend">Brend</string>
+    <string name="bu_filtr_boyicha_sharh_topilmadi">Bu filtr bo\'yicha sharh topilmadi.</string>
+    <string name="bu_kunga_bosh_oraliq_qolmadi">Bu kunga bo\'sh oraliq qolmadi.</string>
+    <string name="bu_turkumni_toldirib_borayapmiz_tez_kunda">Bu turkumni to\'ldirib borayapmiz. Tez kunda birinchi tovarlar paydo bo\'ladi.</string>
+    <string name="buyurtma">Buyurtma</string>
+    <string name="buyurtma_bergach_holati_shu_yerda_korinadi">Buyurtma bergach, holati shu yerda ko\'rinadi.</string>
+    <string name="buyurtma_berish">Buyurtma berish</string>
+    <string name="buyurtma_berishda_avtomatik_tanlanadi">Buyurtma berishda avtomatik tanlanadi</string>
+    <string name="buyurtma_holati">Buyurtma holati</string>
+    <string name="buyurtma_holati_va_chegirmalar_haqida_shu">Buyurtma holati va chegirmalar haqida shu yerda xabar beramiz.</string>
+    <string name="buyurtma_qabul_qilindi">Buyurtma qabul qilindi</string>
+    <string name="buyurtma_sanasi">Buyurtma sanasi</string>
+    <string name="buyurtma_tafsilotlari">Buyurtma tafsilotlari</string>
+    <string name="buyurtmalar">Buyurtmalar</string>
+    <string name="buyurtmalarim">Buyurtmalarim</string>
+    <string name="buyurtmani_bekor_qilish">Buyurtmani bekor qilish</string>
+    <string name="buyurtmani_kuzatish">Buyurtmani kuzatish</string>
+    <string name="buyurtmani_nima_uchun_bekor_qilyapsiz">Buyurtmani nima uchun bekor qilyapsiz?</string>
+    <string name="buyurtmani_rasmiylashtirish">Buyurtmani rasmiylashtirish</string>
+    <string name="chegirma">Chegirma</string>
+    <string name="chegirma_va_aksiyalar">Chegirma va aksiyalar</string>
+    <string name="chiqish">Chiqish</string>
+    <string name="davom_etish">Davom etish</string>
+    <string name="domofon_ishlamaydi_qongiroq_qiling">Domofon ishlamaydi, qo\'ng\'iroq qiling</string>
+    <string name="e_lon_qilindi">E\'LON QILINDI</string>
+    <string name="email">Email</string>
+    <string name="endi_ilovaga_kirishda_yangi_kod_soraladi">Endi ilovaga kirishda yangi kod so\'raladi.</string>
+    <string name="face_id_barmoq_izi">Face ID / barmoq izi</string>
+    <string name="faol_buyurtma_yoq">Faol buyurtma yo\'q</string>
+    <string name="fikringiz">Fikringiz</string>
+    <string name="filtr">Filtr</string>
+    <string name="filtrlar">Filtrlar</string>
+    <string name="filtrlarni_tozalash">Filtrlarni tozalash</string>
+    <string name="filtrlarni_yumshatib_yoki_boshqa_soz_bilan">Filtrlarni yumshatib yoki boshqa so\'z bilan qidirib ko\'ring.</string>
+    <string name="google">Google</string>
+    <string name="haftada_2_martadan_kop_emas">Haftada 2 martadan ko\'p emas</string>
+    <string name="hali_sharh_yoq_birinchi_boling">Hali sharh yo\'q — birinchi bo\'ling.</string>
+    <string name="hali_sharh_yozmagansiz">Hali sharh yozmagansiz</string>
+    <string name="hammasi">Hammasi</string>
+    <string name="hech_narsa_topilmadi">Hech narsa topilmadi</string>
+    <string name="hisobdan_chiqasizmi">Hisobdan chiqasizmi?</string>
+    <string name="hisobdan_chiqish">Hisobdan chiqish</string>
+    <string name="hisobingiz_bormi">"Hisobingiz bormi? "</string>
+    <string name="hozircha_mavjud_emas">Hozircha mavjud emas</string>
+    <string name="hududni_tanlang">Hududni tanlang</string>
+    <string name="hujjat">Hujjat</string>
+    <string name="humo_uzcard_visa">Humo, UzCard, Visa</string>
+    <string name="ilova_tili">Ilova tili</string>
+    <string name="ilovaga_kirishda_soraladi">Ilovaga kirishda so\'raladi</string>
+    <string name="ism_va_familiya">Ism va familiya</string>
+    <string name="ismingizni_kiriting">Ismingizni kiriting</string>
+    <string name="izoh">Izoh</string>
+    <string name="jami">Jami</string>
+    <string name="jarayonda">Jarayonda</string>
+    <string name="jins">Jins</string>
+    <string name="joriy_pin_kod">Joriy PIN kod</string>
+    <string name="joylashuv">Joylashuv</string>
+    <string name="kafolat">Kafolat</string>
+    <string name="kanallar">Kanallar</string>
+    <string name="karta_egasi">Karta egasi</string>
+    <string name="karta_egasi_2">KARTA EGASI</string>
+    <string name="karta_ma_lumotlari_tolov_provayderi">Karta ma\'lumotlari to\'lov provayderi tomonidan saqlanadi — ilova karta raqamini ko\'rmaydi.</string>
+    <string name="karta_qoshish">Karta qo\'shish</string>
+    <string name="karta_qoshsangiz_buyurtmani_bir_bosishda">Karta qo\'shsangiz — buyurtmani bir bosishda to\'laysiz.</string>
+    <string name="karta_raqami">Karta raqami</string>
+    <string name="karta_raqami_notogri">Karta raqami noto\'g\'ri</string>
+    <string name="karta_raqami_qurilmadan_chiqmaydi_serverda">Karta raqami qurilmadan chiqmaydi — serverda faqat oxirgi 4 raqam va muddati saqlanadi.</string>
+    <string name="kartani_saqlash">Kartani saqlash</string>
+    <string name="katalog">Katalog</string>
+    <string name="keyingi">Keyingi</string>
+    <string name="kirish">Kirish</string>
+    <string name="kirish_kodi">Kirish kodi</string>
+    <string name="kirish_orqali">"Kirish orqali "</string>
+    <string name="kocha_va_uy_raqami">Ko\'cha va uy raqami</string>
+    <string name="kod_avtomatik_oqiladi_sms_kelishi_bilan">Kod avtomatik o\'qiladi — SMS kelishi bilan davom etamiz</string>
+    <string name="kod_kelmadimi_1150_raqamiga_qongiroq_qiling">Kod kelmadimi? 1150 raqamiga qo\'ng\'iroq qiling — bepul</string>
+    <string name="kodni_hech_kimga_aytmang_mini_bozor">Kodni hech kimga aytmang. Mini Bozor xodimlari PIN so\'ramaydi.</string>
+    <string name="kodni_qayta_yuborish">Kodni qayta yuborish</string>
+    <string name="kodni_qayta_yuborish_2">"Kodni qayta yuborish — "</string>
+    <string name="kodni_tasdiqlang">Kodni tasdiqlang</string>
+    <string name="kop_soraladigan_savollar">Ko\'p so\'raladigan savollar</string>
+    <string name="kuryer_yetkazishdan_30_daqiqa_oldin">Kuryer yetkazishdan 30 daqiqa oldin qo\'ng\'iroq qiladi.</string>
+    <string name="kuryerga_izoh">Kuryerga izoh</string>
+    <string name="kuryerga_topshirishda">Kuryerga topshirishda</string>
+    <string name="kutilmoqda">Kutilmoqda</string>
+    <string name="kuzatish">Kuzatish</string>
+    <string name="ma_lumot">Ma\'lumot</string>
+    <string name="mahsulot_va_turkumlar_qidirish">Mahsulot va turkumlar qidirish</string>
+    <string name="mahsulotni_qanday_baholaysiz">Mahsulotni qanday baholaysiz?</string>
+    <string name="manzil">Manzil</string>
+    <string name="manzil_qoshish">Manzil qo\'shish</string>
+    <string name="manzil_turi">Manzil turi</string>
+    <string name="manzil_yoq">Manzil yo\'q</string>
+    <string name="manzillarim">Manzillarim</string>
+    <string name="manzilni_tanlang">Manzilni tanlang</string>
+    <string name="mavjud_emas">Mavjud emas</string>
+    <string name="menda_referal_kod_bor">Menda referal-kod bor</string>
+    <string name="mini_bozor_versiya_1_0">Mini Bozor · versiya 1.0</string>
+    <string name="mm_yy">MM/YY</string>
+    <string name="muddati_otgan">Muddati o\'tgan</string>
+    <string name="naqd_pul">Naqd pul</string>
+    <string name="narx">Narx</string>
+    <string name="narx_tushganda_xabar">Narx tushganda xabar</string>
+    <string name="nimadir_notogri_ketdi">Nimadir noto\'g\'ri ketdi</string>
+    <string name="nimasi_yoqdi">Nimasi yoqdi?</string>
+    <string name="ochirish">O\'chirish</string>
+    <string name="odatda_5_daqiqada_javob_beramiz">Odatda 5 daqiqada javob beramiz</string>
+    <string name="olcham">O\'lcham</string>
+    <string name="olchamlar_jadvali">o\'lchamlar jadvali</string>
+    <string name="ommabop_sorovlar">Ommabop so\'rovlar</string>
+    <string name="ommaviy_oferta">ommaviy oferta</string>
+    <string name="oneid">OneID</string>
+    <string name="original">ORIGINAL</string>
+    <string name="otkazish">O\'tkazish</string>
+    <string name="oxirgi_qidiruvlar">Oxirgi qidiruvlar</string>
+    <string name="oxshash_tovarlar">O\'xshash tovarlar</string>
+    <string name="ozgartirib_bolmaydi">O\'zgartirib bo\'lmaydi</string>
+    <string name="pin_kod_ilovani_ochishda_soraladi_unutib">PIN kod ilovani ochishda so\'raladi. Unutib qo\'ysangiz — hisobdan chiqib, SMS orqali qayta kiring.</string>
+    <string name="pin_kod_ornatish">PIN kod o\'rnatish</string>
+    <string name="pin_kodni_ozgartirish">PIN kodni o\'zgartirish</string>
+    <string name="pin_ornatilmagan">PIN o\'rnatilmagan</string>
+    <string name="pin_orniga_biometrika">PIN o\'rniga biometrika</string>
+    <string name="pin_ozgartirildi">PIN o\'zgartirildi</string>
+    <string name="pin_yoqilgan">PIN yoqilgan</string>
+    <string name="punktdan_olish">Punktdan olish</string>
+    <string name="push_bildirishnoma">Push bildirishnoma</string>
+    <string name="push_sms">Push, SMS</string>
+    <string name="qabul_qiluvchi">Qabul qiluvchi</string>
+    <string name="qavat">Qavat</string>
+    <string name="qayta_urinish">Qayta urinish</string>
+    <string name="qaytarish">Qaytarish</string>
+    <string name="qaytarish_arizasi">Qaytarish arizasi</string>
+    <string name="qisqacha_yozib_qoldiring">Qisqacha yozib qoldiring…</string>
+    <string name="qollash">Qo\'llash</string>
+    <string name="qongiroq_qilish">Qo\'ng\'iroq qilish</string>
+    <string name="qoshimcha">Qo\'shimcha</string>
+    <string name="rang">Rang</string>
+    <string name="reyting">Reyting</string>
+    <string name="sana">Sana</string>
+    <string name="saqlash">Saqlash</string>
+    <string name="saralash">Saralash</string>
+    <string name="savat">Savat</string>
+    <string name="savat_bosh">Savat bo\'sh</string>
+    <string name="savat_va_sevimlilar_hisobingizda_saqlanadi">Savat va sevimlilar hisobingizda saqlanadi — qaytib kirsangiz hammasi joyida bo\'ladi.</string>
+    <string name="savatga">Savatga</string>
+    <string name="sevimlilar">Sevimlilar</string>
+    <string name="sevimlilar_bosh">Sevimlilar bo\'sh</string>
+    <string name="sevimlilar_narxi">Sevimlilar narxi</string>
+    <string name="sharh">Sharh</string>
+    <string name="sharh_moderatsiyadan_otgach_e_lon_qilinadi">Sharh moderatsiyadan o\'tgach e\'lon qilinadi.</string>
+    <string name="sharh_yozish">Sharh yozish</string>
+    <string name="sharhlar">Sharhlar</string>
+    <string name="sharhlarim">Sharhlarim</string>
+    <string name="shartlar_va_maxfiylik">Shartlar va maxfiylik</string>
+    <string name="shartlariga_rozilik_bildirasiz">" shartlariga rozilik bildirasiz"</string>
+    <string name="shaxsiy_ma_lumotlar">Shaxsiy ma\'lumotlar</string>
+    <string name="sifati_olchami_yetkazish_haqida_yozing">Sifati, o\'lchami, yetkazish haqida yozing…</string>
+    <string name="sms">SMS</string>
+    <string name="som">so\'m</string>
+    <string name="sotuvchi">Sotuvchi</string>
+    <string name="sozlamalar">Sozlamalar</string>
+    <string name="tahrirlash">Tahrirlash</string>
+    <string name="tanlangan_til_darhol_qollanadi_turkum">Tanlangan til darhol qo\'llanadi. Turkum nomlari va buyurtma holatlari ham shu tilda ko\'rsatiladi.</string>
+    <string name="tanlash">Tanlash</string>
+    <string name="tasdiqlash">Tasdiqlash</string>
+    <string name="tasdiqlash_kodi">Tasdiqlash kodi</string>
+    <string name="tavsif">Tavsif</string>
+    <string name="tayyor">Tayyor</string>
+    <string name="tekshirilmoqda">TEKSHIRILMOQDA</string>
+    <string name="telefon">Telefon</string>
+    <string name="telefon_raqamingizni_kiriting_sms_kod">Telefon raqamingizni kiriting — SMS kod yuboramiz</string>
+    <string name="telegram_orqali_yozish">Telegram orqali yozish</string>
+    <string name="tez_orada_yigishni_boshlaymiz">Tez orada yig\'ishni boshlaymiz</string>
+    <string name="tizim_bilan_moslashadi">Tizim bilan moslashadi</string>
+    <string name="tolanadi">To\'lanadi</string>
+    <string name="tolangan_summa_1_3_ish_kunida_kartangizga">To\'langan summa 1–3 ish kunida kartangizga qaytariladi.</string>
+    <string name="tolov">To\'lov</string>
+    <string name="tolov_kartalari">To\'lov kartalari</string>
+    <string name="tolov_tizimi">To\'lov tizimi</string>
+    <string name="tolov_usuli">To\'lov usuli</string>
+    <string name="tolov_usulini_tanlang">To\'lov usulini tanlang</string>
+    <string name="tolovni_tasdiqlash">To\'lovni tasdiqlash</string>
+    <string name="toshkent_amir_temur_shoh_kochasi_108">Toshkent, Amir Temur shoh ko\'chasi 108</string>
+    <string name="tovarlar">Tovarlar</string>
+    <string name="tovarlar_tez_orada_qoshiladi">Tovarlar tez orada qo\'shiladi</string>
+    <string name="tovarni_nima_uchun_qaytarmoqchisiz">Tovarni nima uchun qaytarmoqchisiz?</string>
+    <string name="tozalash">Tozalash</string>
+    <string name="tugagan">Tugagan</string>
+    <string name="tugagan_buyurtma_yoq">Tugagan buyurtma yo\'q</string>
+    <string name="tugilgan_sana">Tug\'ilgan sana</string>
+    <string name="tugmani_bosish_orqali_ommaviy_oferta">Tugmani bosish orqali ommaviy oferta shartlariga rozilik bildirasiz.</string>
+    <string name="tungi_rejim">Tungi rejim</string>
+    <string name="turkum">Turkum</string>
+    <string name="turkum_yoki_mahsulot_qidirish">Turkum yoki mahsulot qidirish</string>
+    <string name="xaridni_boshlash">Xaridni boshlash</string>
+    <string name="xavfsizlik">Xavfsizlik</string>
+    <string name="xavfsizlik_uchun_avval_joriy_kodni_kiriting">Xavfsizlik uchun avval joriy kodni kiriting</string>
+    <string name="xona">Xona</string>
+    <string name="xususiyatlari">Xususiyatlari</string>
+    <string name="yangi_karta">Yangi karta</string>
+    <string name="yangi_karta_qoshish">Yangi karta qo\'shish</string>
+    <string name="yangi_kodni_yana_bir_marta_kiriting">Yangi kodni yana bir marta kiriting</string>
+    <string name="yangi_manzil_qoshish">Yangi manzil qo\'shish</string>
+    <string name="yangi_pin_kod">Yangi PIN kod</string>
+    <string name="yaqin_punktlarni_korsatish">Yaqin punktlarni ko\'rsatish</string>
+    <string name="yetkazilgan_tovarlarga_sharh_qoldiring">Yetkazilgan tovarlarga sharh qoldiring — boshqalarga yordam beradi.</string>
+    <string name="yetkazish">Yetkazish</string>
+    <string name="yetkazish_holati">Yetkazish holati</string>
+    <string name="yetkazish_manzili">Yetkazish manzili</string>
+    <string name="yetkazish_muddati_va_narxi_hududga_qarab">Yetkazish muddati va narxi hududga qarab o\'zgaradi</string>
+    <string name="yetkazish_uchun_birinchi_manzilingizni">Yetkazish uchun birinchi manzilingizni qo\'shing.</string>
+    <string name="yetkazish_vaqti">Yetkazish vaqti</string>
+    <string name="yetkazish_vaqtini_tanlang">Yetkazish vaqtini tanlang</string>
+    <string name="yigildi_yolda_yetkazildi">Yig\'ildi, yo\'lda, yetkazildi</string>
+    <string name="yoki_punktdan_olib_ketish">Yoki punktdan olib ketish</string>
+    <string name="yoki_tezkor_kirish">"  yoki tezkor kirish  "</string>
+    <string name="yoqqan_tovarlarni_belgilab_qoying_narx">Yoqqan tovarlarni belgilab qo\'ying — narx tushganda xabar beramiz.</string>
+    <string name="yoqqan_tovarlarni_savatga_qoshing_keyin_bir">Yoqqan tovarlarni savatga qo\'shing — keyin bir marta buyurtma berasiz.</string>
+    <string name="yordam_markazi">Yordam markazi</string>
+    <string name="yuborish">Yuborish</string>
+
+    <!-- ─────────── Errors raised on the device (server messages arrive
+         already translated, via the Accept-Language header) ─────────── -->
+    <string name="error_no_internet">Internetga ulanib bo\'lmadi. Aloqani tekshiring.</string>
+    <string name="error_unexpected">Kutilmagan xatolik yuz berdi</string>
+    <string name="error_session_expired">Sessiya tugadi. Qaytadan kiring.</string>
+    <string name="error_not_found">Topilmadi</string>
+    <string name="error_conflict">Bu amalni bajarib bo\'lmaydi</string>
+    <string name="error_server">Server javob bermayapti. Birozdan so\'ng urinib ko\'ring.</string>
+    <string name="error_generic">Xatolik yuz berdi</string>
+
+    <!-- ─────────── Tab bar ─────────── -->
+    <string name="tab_home">Bosh sahifa</string>
+    <string name="tab_catalog">Katalog</string>
+    <string name="tab_cart">Savat</string>
+    <string name="tab_profile">Profil</string>
+
+    <!-- ─────────── Dates and money.
+         The day/month order is part of the translation, not just the words:
+         Uzbek writes 22-avgust, Russian 22 августа, English 22 August. -->
+    <string name="currency_sum">so\'m</string>
+    <string name="date_day_month">%1$d-%2$s</string>
+    <string name="date_day_month_time">%1$d-%2$s, %3$s</string>
+    <string name="bugun">Bugun</string>
+    <string name="ertaga">Ertaga</string>
+
+    <!-- ─────────── Regions. The value stored on an address stays Uzbek in
+         every language; only these labels change. ─────────── -->
+    <string name="region_toshkent">Toshkent</string>
+    <string name="region_toshkent_viloyati">Toshkent viloyati</string>
+    <string name="region_andijon">Andijon</string>
+    <string name="region_buxoro">Buxoro</string>
+    <string name="region_fargona">Farg\'ona</string>
+    <string name="region_jizzax">Jizzax</string>
+    <string name="region_xorazm">Xorazm</string>
+    <string name="region_namangan">Namangan</string>
+    <string name="region_navoiy">Navoiy</string>
+    <string name="region_qashqadaryo">Qashqadaryo</string>
+    <string name="region_qoraqalpogiston">Qoraqalpog\'iston</string>
+    <string name="region_samarqand">Samarqand</string>
+    <string name="region_sirdaryo">Sirdaryo</string>
+    <string name="region_surxondaryo">Surxondaryo</string>
+
+    <!-- ─────────── Address form presets ─────────── -->
+    <string name="preset_uy">Uy</string>
+    <string name="preset_ish">Ish</string>
+    <string name="preset_boshqa">Boshqa</string>
+    <string name="preset_badge_asosiy">ASOSIY</string>
+    <string name="preset_badge_ofis">OFIS</string>
+
+    <!-- ─────────── Messages raised from view models ─────────── -->
+    <string name="savatga_qoshildi">Savatga qo\'shildi</string>
+    <string name="turkumni_yuklab_bolmadi">Turkumni yuklab bo\'lmadi</string>
+    <string name="kodlar_mos_kelmadi">Kodlar mos kelmadi</string>
+    <string name="karta_raqamini_toliq_kiriting">Karta raqamini to\'liq kiriting</string>
+    <string name="amal_qilish_muddatini_kiriting">Amal qilish muddatini kiriting</string>
+    <string name="oy_01_12_oraligida_bolishi_kerak">Oy 01–12 oralig\'ida bo\'lishi kerak</string>
+    <string name="kartaning_muddati_otgan">Kartaning muddati o\'tgan</string>
+    <string name="karta">Karta</string>
+
+    <!-- ─────────── Onboarding, screens 01–04 ─────────── -->
+    <string name="onboarding_1_title">Ertaga yetib keladi</string>
+    <string name="onboarding_1_body">Toshkent bo\'ylab bir kunda, viloyatlarga 2–3 kunda. Kuryerni real vaqtda kuzatib boring.</string>
+    <string name="onboarding_1_chip">1 kunda yetkazish</string>
+    <string name="onboarding_2_title">Faqat original brendlar</string>
+    <string name="onboarding_2_body">Har bir sotuvchi tekshiruvdan o\'tadi. Original bo\'lmasa — pulingizni to\'liq qaytaramiz.</string>
+    <string name="onboarding_2_chip">Original kafolati</string>
+    <string name="onboarding_3_title">Narxni kuzatib turing</string>
+    <string name="onboarding_3_body">Sevimlilarga qo\'shing — narx tushganda birinchi bo\'lib xabar olasiz.</string>
+    <string name="onboarding_3_chip" formatted="false">Narx tushdi −25%</string>
+    <string name="onboarding_4_title">Xarid qilishni boshlang</string>
+    <string name="onboarding_4_body">Kunlik yetkazish, oson qaytarish va bir marta kiritiladigan to\'lov — hammasi bir ilovada.</string>
+    <string name="onboarding_4_chip">12 000+ tovar</string>
+
+    <!-- ─────────── Text with values in it ─────────── -->
+    <string name="tovarlar_soni">Tovarlar (%1$d)</string>
+    <string name="bepul_yetkazishgacha">Yana %1$s qo\'shsangiz — bepul yetkazish</string>
+    <string name="korsatish_n">Ko\'rsatish · %1$s ta</string>
+    <string name="filtr_n">Filtr · %1$d</string>
+    <string name="n_km">%1$s km</string>
+    <string name="n_yangi">%1$s yangi</string>
+    <string name="tolash_n">To\'lash · %1$s</string>
+    <string name="buyurtma_raqami_bilan_qabul_qildik">%1$s raqami bilan qabul qildik</string>
+    <string name="sotuvchi_va_qoldiq">%1$s · %2$d dona qoldi</string>
+    <string name="otp_yuborildi">%1$s raqamiga %2$d xonali kod yubordik</string>
+    <string name="dev_rejim_kod">Dev rejim: kod %1$s</string>
+    <string name="karta_niqob">Karta ···· %1$s</string>
+
+    <string-array name="rating_words">
+        <item></item>
+        <item>Yomon</item>
+        <item>O\'rtacha</item>
+        <item>Yaxshi</item>
+        <item>Juda yaxshi</item>
+        <item>Ajoyib</item>
+    </string-array>
+
+    <!-- ─────────── Counted nouns.
+         Uzbek does not inflect after a number, so "one" and "other" match;
+         they are here because Russian needs one/few/many and English needs
+         one/other, and a plural resource is what lets each language pick. -->
+    <plurals name="n_products">
+        <item quantity="one">%1$s tovar</item>
+        <item quantity="other">%1$s tovar</item>
+    </plurals>
+    <plurals name="n_reviews">
+        <item quantity="one">%1$s sharh</item>
+        <item quantity="other">%1$s sharh</item>
+    </plurals>
+    <plurals name="n_items">
+        <item quantity="one">%1$s ta</item>
+        <item quantity="other">%1$s ta</item>
+    </plurals>
+    <plurals name="n_found">
+        <item quantity="one">%1$s ta topildi</item>
+        <item quantity="other">%1$s ta topildi</item>
+    </plurals>
+
+    <!-- Variant picker sheet -->
+    <string name="xususiyatlarni_tanlang">Xususiyatlarni tanlang</string>
+    <string name="otish">O\'tish</string>
+
+    <!-- Recommendation chips -->
+    <string name="oxshash">O\'xshash</string>
+    <string name="ommabop">Ommabop</string>
 </resources>

@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
+from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.core.config import settings
@@ -35,7 +36,7 @@ def create_review(
 ) -> s.ReviewOut:
     product = session.get(Product, product_id)
     if product is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mahsulot topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
 
     existing = session.exec(
         select(Review).where(Review.user_id == user.id, Review.product_id == product_id)
@@ -76,7 +77,7 @@ def create_review(
 def toggle_like(review_id: int, user: CurrentUser, session: SessionDep) -> s.ReviewOut:
     review = session.get(Review, review_id)
     if review is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sharh topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("review_not_found"))
 
     existing = session.exec(
         select(ReviewLike).where(ReviewLike.review_id == review_id, ReviewLike.user_id == user.id)
@@ -120,13 +121,13 @@ def my_reviews(
 def delete_review(review_id: int, user: CurrentUser, session: SessionDep) -> s.Message:
     review = session.get(Review, review_id)
     if review is None or review.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sharh topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("review_not_found"))
     product_id = review.product_id
     session.delete(review)
     session.commit()
     sv.recalc_product_rating(session, product_id)
     session.commit()
-    return s.Message(message="Sharh o'chirildi")
+    return s.Message(message=i18n.label("review_removed"))
 
 
 @router.get(

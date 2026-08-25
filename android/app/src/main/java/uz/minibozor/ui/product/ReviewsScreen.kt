@@ -1,5 +1,6 @@
 package uz.minibozor.ui.product
 
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,12 +21,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -52,9 +55,9 @@ fun ReviewsScreen(
     LaunchedEffect(productId) { viewModel.load(productId) }
 
     MbScreen(
-        topBar = { MbTopBar("Sharhlar", onBack = onBack) },
+        topBar = { MbTopBar(stringResource(R.string.sharhlar), onBack = onBack) },
         bottomBar = {
-            MbBottomBar { MbPrimaryButton("Sharh yozish", onWriteReview, leadingGlyph = "star") }
+            MbBottomBar { MbPrimaryButton(stringResource(R.string.sharh_yozish), onWriteReview, leadingGlyph = "star") }
         },
     ) { padding ->
         LazyColumn(
@@ -73,7 +76,7 @@ fun ReviewsScreen(
                                 MbStars(summary.rating.toInt())
                                 Spacer(Modifier.height(4.dp))
                                 MbText(
-                                    "${summary.total} sharh",
+                                    pluralStringResource(R.plurals.n_reviews, summary.total, summary.total),
                                     MbTheme.type.meta,
                                     MbTheme.colors.icon,
                                 )
@@ -122,7 +125,7 @@ fun ReviewsScreen(
 
             item {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MbChip("Hammasi", state.stars == null, onClick = { viewModel.filter(null) })
+                    MbChip(stringResource(R.string.hammasi), state.stars == null, onClick = { viewModel.filter(null) })
                     (5 downTo 1).forEach { stars ->
                         MbChip("$stars ★", state.stars == stars, onClick = { viewModel.filter(stars) })
                     }
@@ -139,7 +142,7 @@ fun ReviewsScreen(
                 item {
                     MbCard {
                         MbText(
-                            "Bu filtr bo'yicha sharh topilmadi.",
+                            stringResource(R.string.bu_filtr_boyicha_sharh_topilmadi),
                             MbTheme.type.bodySmall,
                             MbTheme.colors.icon,
                         )

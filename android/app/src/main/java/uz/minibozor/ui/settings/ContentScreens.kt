@@ -23,12 +23,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCard
@@ -48,7 +50,7 @@ fun HelpScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var expanded by remember { mutableStateOf<Int?>(null) }
 
-    MbScreen(topBar = { MbTopBar("Yordam markazi", onBack = onBack) }) { padding ->
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.yordam_markazi), onBack = onBack) }) { padding ->
         LazyColumn(
             Modifier
                 .fillMaxSize()
@@ -59,7 +61,7 @@ fun HelpScreen(
             item {
                 MbCard(padding = 6.dp) {
                     MbListRow(
-                        label = "Qo'ng'iroq qilish",
+                        label = stringResource(R.string.qongiroq_qilish),
                         subtitle = state.support["hours"],
                         glyph = "headset",
                         meta = state.support["phone"],
@@ -67,8 +69,8 @@ fun HelpScreen(
                     )
                     MbDivider(inset = 60.dp)
                     MbListRow(
-                        label = "Telegram orqali yozish",
-                        subtitle = "Odatda 5 daqiqada javob beramiz",
+                        label = stringResource(R.string.telegram_orqali_yozish),
+                        subtitle = stringResource(R.string.odatda_5_daqiqada_javob_beramiz),
                         glyph = "phone",
                         modifier = Modifier.padding(horizontal = 10.dp),
                     )
@@ -77,7 +79,7 @@ fun HelpScreen(
 
             item {
                 MbText(
-                    "Ko'p so'raladigan savollar",
+                    stringResource(R.string.kop_soraladigan_savollar),
                     MbTheme.type.captionBold,
                     MbTheme.colors.textSecondary,
                     modifier = Modifier.padding(start = 6.dp),
@@ -137,7 +139,7 @@ fun LegalScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    MbScreen(topBar = { MbTopBar("Shartlar va maxfiylik", onBack = onBack) }) { padding ->
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.shartlar_va_maxfiylik), onBack = onBack) }) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
@@ -170,7 +172,7 @@ fun LegalDocScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(slug) { viewModel.loadDoc(slug) }
 
-    MbScreen(topBar = { MbTopBar(state.doc?.title ?: "Hujjat", onBack = onBack) }) { padding ->
+    MbScreen(topBar = { MbTopBar(state.doc?.title ?: stringResource(R.string.hujjat), onBack = onBack) }) { padding ->
         Column(
             Modifier
                 .fillMaxSize()

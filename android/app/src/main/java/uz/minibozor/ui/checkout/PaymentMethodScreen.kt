@@ -15,13 +15,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -45,12 +48,17 @@ fun PaymentMethodScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    LifecycleResumeEffect(Unit) {
+        viewModel.reloadCards()
+        onPauseOrDispose {}
+    }
+
     MbScreen(
-        topBar = { MbTopBar("To'lov usuli", onBack = onBack) },
+        topBar = { MbTopBar(stringResource(R.string.tolov_usuli), onBack = onBack) },
         bottomBar = {
             MbBottomBar {
                 MbPrimaryButton(
-                    "Tanlash",
+                    stringResource(R.string.tanlash),
                     onDone,
                     enabled = state.paymentMethod == "cash" || state.cardId != null,
                 )
@@ -69,8 +77,8 @@ fun PaymentMethodScreen(
                     state.cards.forEachIndexed { index, card ->
                         val expired = card.status == "expired"
                         MbRadioRow(
-                            label = "Karta ···· ${card.last4}",
-                            subtitle = if (expired) "Muddati o'tgan" else card.brand,
+                            label = stringResource(R.string.karta_niqob, card.last4),
+                            subtitle = if (expired) stringResource(R.string.muddati_otgan) else card.brand,
                             selected = state.paymentMethod == "card" && state.cardId == card.id,
                             onSelect = { if (!expired) viewModel.selectCard(card.id) },
                             leading = {
@@ -95,8 +103,8 @@ fun PaymentMethodScreen(
                     }
                     if (state.cards.isNotEmpty()) MbDivider(inset = 68.dp)
                     MbRadioRow(
-                        label = "Naqd pul",
-                        subtitle = "Kuryerga topshirishda",
+                        label = stringResource(R.string.naqd_pul),
+                        subtitle = stringResource(R.string.kuryerga_topshirishda),
                         selected = state.paymentMethod == "cash",
                         onSelect = viewModel::selectCash,
                         leading = {
@@ -118,9 +126,9 @@ fun PaymentMethodScreen(
             item {
                 MbCard(padding = 6.dp) {
                     MbListRow(
-                        label = "Yangi karta qo'shish",
+                        label = stringResource(R.string.yangi_karta_qoshish),
                         glyph = "card",
-                        subtitle = "Humo, UzCard, Visa",
+                        subtitle = stringResource(R.string.humo_uzcard_visa),
                         onClick = onAddCard,
                         tint = MbTheme.colors.accent,
                         modifier = Modifier.padding(horizontal = 10.dp),
@@ -135,8 +143,7 @@ fun PaymentMethodScreen(
                 ) {
                     MbIcon("gear", size = 16.dp, tint = MbTheme.colors.icon)
                     MbText(
-                        "Karta ma'lumotlari to'lov provayderi tomonidan saqlanadi — " +
-                            "ilova karta raqamini ko'rmaydi.",
+                        stringResource(R.string.karta_ma_lumotlari_tolov_provayderi),
                         MbTheme.type.caption,
                         MbTheme.colors.textQuaternary,
                     )

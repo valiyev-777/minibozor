@@ -1,5 +1,7 @@
 package uz.minibozor.ui.home
 
+import uz.minibozor.core.util.AppStrings
+import uz.minibozor.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +24,7 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val catalog: CatalogRepository,
     private val cart: CartRepository,
-    prefs: AppPrefs,
+    private val prefs: AppPrefs,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<UiState<HomeDto>>(UiState.Loading)
@@ -50,6 +52,27 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** Pull-to-refresh: reload without blanking the page first. */
+    fun refresh(onDone: () -> Unit) {
+        viewModelScope.launch {
+            when (val result = catalog.home(city.value)) {
+                is Outcome.Success -> _state.value = UiState.Ready(result.data)
+                is Outcome.Failure -> if (_state.value !is UiState.Ready) {
+                    _state.value = UiState.Error(result.message)
+                }
+            }
+            cart.refresh()
+            onDone()
+        }
+    }
+
+    fun setCity(value: String) {
+        viewModelScope.launch {
+            prefs.setCity(value)
+            load()
+        }
+    }
+
     fun toggleFavorite(productId: Int, current: Boolean) {
         viewModelScope.launch {
             catalog.setFavorite(productId, !current)
@@ -62,7 +85,7 @@ class HomeViewModel @Inject constructor(
     fun addToCart(productId: Int, onDone: (String) -> Unit) {
         viewModelScope.launch {
             when (val result = cart.add(productId, null)) {
-                is Outcome.Success -> onDone("Savatga qo'shildi")
+                is Outcome.Success -> onDone(AppStrings[R.string.savatga_qoshildi])
                 is Outcome.Failure -> onDone(result.message)
             }
         }

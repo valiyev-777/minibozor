@@ -37,8 +37,10 @@ object Routes {
 
     // Checkout flow
     const val CHECKOUT = "checkout"                        // 19
-    const val ADDRESS_FORM = "address_form?id={id}"        // 20
-    fun addressForm(id: Int? = null) = "address_form?id=${id ?: -1}"
+    /** Picking where an order goes; lives inside the checkout graph. */
+    const val ADDRESS_PICKER = "address_picker"
+    /** Adding one; reachable from checkout and from the profile alike. */
+    const val ADDRESS_FORM = "address_form"                 // 20
     const val DELIVERY_TIME = "delivery_time"              // 21
     const val PAYMENT_METHOD = "payment_method"            // 22
     const val CONFIRM = "confirm"                          // 23

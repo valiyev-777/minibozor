@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.icon.MbIcon
@@ -52,6 +54,8 @@ fun MbTextField(
     leadingGlyph: String? = null,
     trailing: @Composable (() -> Unit)? = null,
     error: String? = null,
+    readOnly: Boolean = false,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     Column(modifier) {
         if (label != null) {
@@ -84,7 +88,11 @@ fun MbTextField(
                     value = value,
                     onValueChange = onValueChange,
                     singleLine = singleLine,
-                    textStyle = MbTheme.type.bodySmall.copy(color = MbTheme.colors.ink),
+                    readOnly = readOnly,
+                    visualTransformation = visualTransformation,
+                    textStyle = MbTheme.type.bodySmall.copy(
+                        color = if (readOnly) MbTheme.colors.textSecondary else MbTheme.colors.ink
+                    ),
                     cursorBrush = SolidColor(MbTheme.colors.accent),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = keyboardType,
@@ -132,7 +140,7 @@ fun MbSearchField(
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Mahsulot va turkumlar qidirish",
+    placeholder: String = stringResource(R.string.mahsulot_va_turkumlar_qidirish),
     autoFocus: Boolean = true,
 ) {
     val focus = remember { FocusRequester() }
@@ -200,7 +208,9 @@ fun MbCodeField(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
 
-    Box(modifier) {
+    // The boxes share the row rather than taking a fixed width: six of them at
+    // 54 dp overflowed a 411 dp screen once the page padding was taken off.
+    Box(modifier.fillMaxWidth()) {
         BasicTextField(
             value = value,
             onValueChange = { if (it.length <= length && it.all(Char::isDigit)) onValueChange(it) },
@@ -215,13 +225,17 @@ fun MbCodeField(
                 .matchParentSize()
                 .focusRequester(focus),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(if (length > 4) 8.dp else 12.dp),
+        ) {
             repeat(length) { index ->
                 val char = value.getOrNull(index)
                 val filled = char != null
                 Box(
                     Modifier
-                        .size(54.dp, 60.dp)
+                        .weight(1f)
+                        .height(if (length > 4) 62.dp else 66.dp)
                         .clip(MbTheme.shapes.field)
                         .background(if (filled) MbTheme.colors.surface else MbTheme.colors.fill)
                         .border(
@@ -239,12 +253,12 @@ fun MbCodeField(
                         if (masked) {
                             Box(
                                 Modifier
-                                    .size(10.dp)
+                                    .size(12.dp)
                                     .clip(CircleShape)
                                     .background(MbTheme.colors.ink)
                             )
                         } else {
-                            MbText(char.toString(), MbTheme.type.title2)
+                            MbText(char.toString(), MbTheme.type.title1)
                         }
                     }
                 }
@@ -253,7 +267,13 @@ fun MbCodeField(
     }
 }
 
-/** −/+ stepper used in the cart and on the product page. */
+/**
+ * −/+ stepper used in the cart, on the product page and in the picker sheet.
+ *
+ * [size] is the tap target for each end: the cart rows want the compact 34dp,
+ * while a stepper standing next to a button wants that button's height so the
+ * two read as one bar.
+ */
 @Composable
 fun MbQuantityStepper(
     quantity: Int,
@@ -261,6 +281,7 @@ fun MbQuantityStepper(
     modifier: Modifier = Modifier,
     min: Int = 1,
     max: Int = 99,
+    size: Dp = 34.dp,
 ) {
     Row(
         modifier
@@ -268,25 +289,33 @@ fun MbQuantityStepper(
             .background(MbTheme.colors.fill),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StepperButton("−", enabled = quantity > min) { onChange(quantity - 1) }
-        Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
-            MbText(quantity.toString(), MbTheme.type.label)
+        StepperButton("−", enabled = quantity > min, size = size) { onChange(quantity - 1) }
+        Box(Modifier.width(size), contentAlignment = Alignment.Center) {
+            MbText(
+                quantity.toString(),
+                if (size >= 44.dp) MbTheme.type.title3 else MbTheme.type.label,
+            )
         }
-        StepperButton("+", enabled = quantity < max) { onChange(quantity + 1) }
+        StepperButton("+", enabled = quantity < max, size = size) { onChange(quantity + 1) }
     }
 }
 
 @Composable
-private fun StepperButton(symbol: String, enabled: Boolean, onClick: () -> Unit) {
+private fun StepperButton(
+    symbol: String,
+    enabled: Boolean,
+    size: Dp,
+    onClick: () -> Unit,
+) {
     Box(
         Modifier
-            .size(34.dp)
+            .size(size)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         MbText(
             symbol,
-            MbTheme.type.title3,
+            if (size >= 44.dp) MbTheme.type.title2 else MbTheme.type.title3,
             if (enabled) MbTheme.colors.ink else MbTheme.colors.disabled,
         )
     }

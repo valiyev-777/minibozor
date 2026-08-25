@@ -1,6 +1,7 @@
 package uz.minibozor.core.util
 
 import retrofit2.HttpException
+import uz.minibozor.R
 import java.io.IOException
 
 /** What every repository call returns: a value, or a message the UI can show. */
@@ -17,27 +18,31 @@ inline fun <T, R> Outcome<T>.map(transform: (T) -> R): Outcome<R> = when (this) 
 }
 
 /**
- * Turns an API call into an [Outcome]. Server-side messages are surfaced as-is —
- * the backend already speaks Uzbek, so there is nothing to translate.
+ * Turns an API call into an [Outcome].
+ *
+ * A message from the server is surfaced as-is: the request carried an
+ * Accept-Language header, so it already arrives in the user's language. Only
+ * the fallbacks below — the cases where no response reached us — come from
+ * local resources.
  */
 suspend fun <T> apiCall(block: suspend () -> T): Outcome<T> = try {
     Outcome.Success(block())
 } catch (e: HttpException) {
     Outcome.Failure(e.detailMessage(), e.code())
 } catch (e: IOException) {
-    Outcome.Failure("Internetga ulanib bo'lmadi. Aloqani tekshiring.")
+    Outcome.Failure(AppStrings[R.string.error_no_internet])
 } catch (e: Exception) {
-    Outcome.Failure(e.message ?: "Kutilmagan xatolik yuz berdi")
+    Outcome.Failure(e.message ?: AppStrings[R.string.error_unexpected])
 }
 
 private fun HttpException.detailMessage(): String {
     val raw = runCatching { response()?.errorBody()?.string() }.getOrNull().orEmpty()
     val detail = Regex("\"detail\"\\s*:\\s*\"(.*?)\"").find(raw)?.groupValues?.getOrNull(1)
     return detail ?: when (code()) {
-        401 -> "Sessiya tugadi. Qaytadan kiring."
-        404 -> "Topilmadi"
-        409 -> "Bu amalni bajarib bo'lmaydi"
-        in 500..599 -> "Server javob bermayapti. Birozdan so'ng urinib ko'ring."
-        else -> "Xatolik yuz berdi"
+        401 -> AppStrings[R.string.error_session_expired]
+        404 -> AppStrings[R.string.error_not_found]
+        409 -> AppStrings[R.string.error_conflict]
+        in 500..599 -> AppStrings[R.string.error_server]
+        else -> AppStrings[R.string.error_generic]
     }
 }

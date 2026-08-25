@@ -5,6 +5,7 @@ from datetime import timedelta
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
+from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
@@ -85,7 +86,7 @@ def mark_read(
         row.read_at = now
         session.add(row)
     session.commit()
-    return s.Message(message="O'qilgan deb belgilandi")
+    return s.Message(message=i18n.label("marked_read"))
 
 
 @router.delete("/{notification_id}", response_model=s.Message)
@@ -97,4 +98,4 @@ def delete_notification(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Bildirishnoma topilmadi")
     session.delete(row)
     session.commit()
-    return s.Message(message="O'chirildi")
+    return s.Message(message=i18n.label("deleted"))

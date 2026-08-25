@@ -361,3 +361,57 @@ def test_logout_revokes_refresh_tokens(client: TestClient) -> None:
     assert client.post(
         f"{API}/auth/refresh", json={"refresh_token": pair["refresh_token"]}
     ).status_code == 401
+
+
+# --------------------------------------------------------------------------- languages
+
+
+def test_categories_follow_accept_language(client: TestClient) -> None:
+    def first_name(lang: str | None) -> str:
+        headers = {"Accept-Language": lang} if lang else {}
+        return client.get(f"{API}/categories", headers=headers).json()[0]["name"]
+
+    assert first_name(None) == "Elektronika"          # no header: the default
+    assert first_name("uz") == "Elektronika"
+    assert first_name("ru") == "Электроника"
+    assert first_name("en") == "Electronics"
+
+
+def test_unknown_language_falls_back_to_uzbek(client: TestClient) -> None:
+    body = client.get(f"{API}/categories", headers={"Accept-Language": "de"}).json()
+    assert body[0]["name"] == "Elektronika"
+
+
+def test_quality_values_are_honoured(client: TestClient) -> None:
+    headers = {"Accept-Language": "de;q=1.0, ru;q=0.9, en;q=0.8"}
+    body = client.get(f"{API}/categories", headers=headers).json()
+    assert body[0]["name"] == "Электроника"
+
+
+def test_untranslated_rows_keep_their_uzbek(client: TestClient) -> None:
+    """A missing translation degrades to Uzbek rather than to a blank."""
+    uz = client.get(f"{API}/products/1", headers={"Accept-Language": "uz"}).json()
+    ru = client.get(f"{API}/products/1", headers={"Accept-Language": "ru"}).json()
+
+    # Brands have no translations and must survive the lookup untouched.
+    assert ru["brand"]["name"] == uz["brand"]["name"]
+    # Everything that is translated came back filled in, not blank.
+    assert ru["subtitle"] and ru["description"] and ru["title"]
+    assert ru["subtitle"] != uz["subtitle"]
+
+
+def test_error_details_are_translated(client: TestClient) -> None:
+    missing = f"{API}/products/999999"
+    assert client.get(missing, headers={"Accept-Language": "ru"}).json()["detail"] == (
+        "Товар не найден"
+    )
+    assert client.get(missing, headers={"Accept-Language": "en"}).json()["detail"] == (
+        "Product not found"
+    )
+
+
+def test_response_advertises_its_language(client: TestClient) -> None:
+    response = client.get(f"{API}/categories", headers={"Accept-Language": "ru"})
+    assert response.headers["Content-Language"] == "ru"
+    # Without this a cache could hand a Russian body to an English client.
+    assert response.headers["Vary"] == "Accept-Language"

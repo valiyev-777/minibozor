@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sys
 from datetime import UTC, date, datetime, time, timedelta
+from pathlib import Path
 
 from sqlmodel import Session, SQLModel, delete, select
 
@@ -51,6 +52,7 @@ from app.models import (
     User,
     VariantKind,
 )
+from app.seed_i18n import seed_translations
 
 DEMO_PHONE = "+998901234567"
 DEMO_PIN = "1234"
@@ -64,51 +66,61 @@ def _at(day_offset: int, hh: int, mm: int) -> datetime:
 # --------------------------------------------------------------------------- catalogue
 
 ROOT_CATEGORIES = [
-    # slug, name, subtitle, icon, quick_link, product_count
-    ("elektronika", "Elektronika", "Smartfon, noutbuk, aksessuar", "phone", True, 12_400),
-    ("kiyim-poyabzal", "Kiyim va poyabzal", "Ayollar, erkaklar, bolalar", "shirt", True, 21_800),
-    ("maishiy-texnika", "Maishiy texnika", "Kir mashina, muzlatgich", "washer", True, 6_200),
-    ("uy-bog", "Uy va bog'", "Mebel, dekor, asboblar", "sofa", True, 9_800),
-    ("oyinchoqlar", "O'yinchoqlar", "Bolalar uchun hammasi", "gift", True, 4_300),
-    ("gozallik", "Go'zallik", "Parfyumeriya, kosmetika", "lipstick", False, 5_600),
-    ("oziq-ovqat", "Oziq-ovqat", "Kundalik mahsulotlar", "basket", False, 3_100),
-    ("avto", "Avto tovarlar", "Ehtiyot qism, aksessuar", "car", True, 7_400),
-    ("sport", "Sport", "Trenajyor, kiyim, jihoz", "ball", False, 2_900),
-    ("maktab-bozori", "Maktab bozori", "Sumka, daftar, forma", "backpack", True, 1_800),
-    ("taom-yetkazish", "Taom yetkazish", "Restoran va kafelardan", "food", True, 940),
-    ("chet-eldan", "Chet eldan", "Xalqaro yetkazish", "globe", True, 2_200),
-    ("kundalik", "Kundalik", "Gigiyena, uy kimyosi", "bottle", True, 3_600),
+    # slug, name, subtitle, icon, quick_link, product_count (counted at read time)
+    ("elektronika", "Elektronika", "Smartfon, noutbuk, aksessuar", "phone", True, 0),
+    ("kiyim-poyabzal", "Kiyim va poyabzal", "Ayollar, erkaklar, bolalar", "shirt", True, 0),
+    ("maishiy-texnika", "Maishiy texnika", "Kir mashina, muzlatgich", "washer", True, 0),
+    ("uy-bog", "Uy va bog'", "Mebel, dekor, asboblar", "sofa", True, 0),
+    ("oyinchoqlar", "O'yinchoqlar", "Bolalar uchun hammasi", "gift", True, 0),
+    ("gozallik", "Go'zallik", "Parfyumeriya, kosmetika", "lipstick", False, 0),
+    ("oziq-ovqat", "Oziq-ovqat", "Kundalik mahsulotlar", "basket", False, 0),
+    ("avto", "Avto tovarlar", "Ehtiyot qism, aksessuar", "car", True, 0),
+    ("sport", "Sport", "Trenajyor, kiyim, jihoz", "ball", False, 0),
+    ("maktab-bozori", "Maktab bozori", "Sumka, daftar, forma", "backpack", True, 0),
+    ("taom-yetkazish", "Taom yetkazish", "Restoran va kafelardan", "food", True, 0),
+    ("chet-eldan", "Chet eldan", "Xalqaro yetkazish", "globe", True, 0),
+    ("kundalik", "Kundalik", "Gigiyena, uy kimyosi", "bottle", True, 0),
+    # Not a quick link: the home grid is exactly 5x2, so an eleventh tile
+    # would break the row. Reachable from the catalogue tab.
+    ("aksessuar", "Aksessuar", "Soat, ko'zoynak, taqinchoq", "star", False, 0),
 ]
 
 SUBCATEGORIES = [
-    # parent, slug, name, image, product_count
+    # parent, slug, name, image, product_count (counted at read time)
     ("kiyim-poyabzal", "futbolka-toplar", "Futbolka va toplar",
      "products/tshirt-black.png", 2_140),
-    ("kiyim-poyabzal", "krossovkalar", "Krossovkalar", "products/gazelle.png", 1_860),
-    ("kiyim-poyabzal", "koylak-libos", "Ko'ylak va libos", "products/tshirt-red.png", 980),
+    ("kiyim-poyabzal", "krossovkalar", "Krossovkalar", "products/gazelle.png", 0),
+    ("kiyim-poyabzal", "koylak-libos", "Ko'ylak va libos", "products/tshirt-red.png", 0),
     ("kiyim-poyabzal", "kundalik-poyabzal", "Kundalik poyabzal", "products/af1.png", 1_240),
-    ("kiyim-poyabzal", "sport-kiyim", "Sport kiyim", "products/tshirt-green.png", 760),
-    ("kiyim-poyabzal", "bolalar-poyabzali", "Bolalar poyabzali", "products/adidas-black.png", 430),
-    ("elektronika", "quloqchinlar", "Quloqchinlar", "products/airpods.png", 1_420),
-    ("elektronika", "quvvat-aksessuar", "Quvvat va aksessuar", "products/powerbank.png", 2_060),
-    ("uy-bog", "yoruglik", "Yoritish", "products/lamp.png", 880),
+    ("kiyim-poyabzal", "sport-kiyim", "Sport kiyim", "products/tshirt-green.png", 0),
+    ("kiyim-poyabzal", "bolalar-poyabzali", "Bolalar poyabzali", "products/adidas-black.png", 0),
+    ("elektronika", "quloqchinlar", "Quloqchinlar", "products/airpods.png", 0),
+    ("elektronika", "quvvat-aksessuar", "Quvvat va aksessuar", "products/powerbank.png", 0),
+    ("uy-bog", "yoruglik", "Yoritish", "products/lamp.png", 0),
+    ("kiyim-poyabzal", "polo", "Polo ko'ylaklar", "products/polo-burgundy.png", 0),
+    ("aksessuar", "soatlar", "Qo'l soatlari", "products/rolex-datejust-blue.png", 0),
+    ("aksessuar", "kozoynaklar", "Quyosh ko'zoynaklari",
+     "products/sunglasses-aviator-black.png", 0),
 ]
 
 BRANDS = [
     ("nike", "Nike"), ("adidas", "adidas"), ("apple", "Apple"), ("ugreen", "UGREEN"),
     ("anker", "Anker"), ("zara", "Zara"), ("hm", "H&M"), ("puma", "Puma"),
     ("new-balance", "New Balance"), ("reebok", "Reebok"), ("mango", "Mango"),
+    ("jordan", "Jordan"), ("rolex", "Rolex"), ("gucci", "Gucci"), ("dita", "DITA"),
+    ("uniqlo", "UNIQLO"),
 ]
 
 SHOE_SIZES = ["39", "40", "41", "42", "43", "44", "45", "46"]
 TEE_SIZES = ["S", "M", "L", "XL", "XXL"]
+WATCH_SIZES = ["36 mm", "41 mm"]
 
 PRODUCTS = [
     dict(
         sku="MB-1001", title="adidas Gazelle, ko'k zamsh", subtitle="Ko'k · zamsh",
         category="krossovkalar", brand="adidas", price=1_090_000, old_price=1_540_000,
         rating=4.8, reviews_count=136, sold_count=1_240, badge="Original",
-        images=["products/gazelle.png", "products/adidas-black.png"],
+        images=["products/gazelle.png", "products/af1-black.png"],
         sizes=SHOE_SIZES, colors=[("Ko'k", "#2F4B8F"), ("Qora", "#0E0F12")],
         warranty="Original kafolati",
         description=(
@@ -122,7 +134,7 @@ PRODUCTS = [
         sku="MB-1002", title="Nike Air Force 1 Low, oq", subtitle="Oq · charm",
         category="kundalik-poyabzal", brand="nike", price=1_249_000, old_price=1_665_000,
         rating=4.9, reviews_count=204, sold_count=2_010, badge="Bestseller",
-        images=["products/af1.png"], sizes=SHOE_SIZES, colors=[("Oq", "#FFFFFF")],
+        images=["products/jordan1-low-white.png"], sizes=SHOE_SIZES, colors=[("Oq", "#FFFFFF")],
         warranty="Original kafolati",
         description="Har narsaga mos keladigan oq AF1. Charm yuza, Air amortizatsiyasi.",
         specs=[("Material", "Tabiiy charm"), ("Taglik", "Rezina, Air"), ("Mavsum", "Butun yil")],
@@ -131,7 +143,7 @@ PRODUCTS = [
         sku="MB-1003", title="Nike ZoomX, yugurish uchun", subtitle="Yugurish · yengil",
         category="krossovkalar", brand="nike", price=1_480_000, old_price=1_805_000,
         rating=4.7, reviews_count=88, sold_count=640,
-        images=["products/nike-zoomx.png"], sizes=SHOE_SIZES,
+        images=["products/nike-pink.png"], sizes=SHOE_SIZES,
         description="ZoomX ko'pikli taglik — uzoq masofaga yugurish uchun yengil va qaytaruvchan.",
         specs=[("Vazn", "218 g"), ("Taglik", "ZoomX"), ("Turi", "Yugurish")],
     ),
@@ -147,7 +159,7 @@ PRODUCTS = [
         sku="MB-1005", title="adidas Grand Court, qora", subtitle="Qora · kundalik",
         category="bolalar-poyabzali", brand="adidas", price=890_000, old_price=1_290_000,
         rating=4.5, reviews_count=42, sold_count=520,
-        images=["products/adidas-black.png"], sizes=["32", "33", "34", "35", "36"],
+        images=["products/af1-black.png"], sizes=["32", "33", "34", "35", "36"],
         description="Bolalar uchun qulay, oson kiyiladigan model.",
         specs=[("Material", "Sun'iy charm"), ("Yopilishi", "Ilma")],
     ),
@@ -212,7 +224,7 @@ PRODUCTS = [
         sku="MB-3001", title="Stol chirog'i LED, sensorli", subtitle="Oq · 3 rejim",
         category="yoruglik", price=189_000, old_price=320_000,
         rating=4.7, reviews_count=92, sold_count=780, badge="Kafolat 1 yil",
-        images=["products/lamp.png", "products/lamp-room.png"],
+        images=["products/lamp.png"],
         colors=[("Oq", "#FFFFFF"), ("Qora", "#0E0F12")], warranty="Kafolat 1 yil",
         description="Sensorli boshqaruv, uchta yorug'lik harorati va yorqinlikni sozlash.",
         specs=[("Quvvat", "9W"), ("Rejimlar", "3"), ("Ulanish", "USB-C")],
@@ -221,7 +233,7 @@ PRODUCTS = [
         sku="MB-3002", title="Bolalar stol chirog'i, astronavt", subtitle="3 rang · 6 dona qoldi",
         category="yoruglik", price=129_000, old_price=190_000,
         rating=4.8, reviews_count=44, sold_count=310, stock_left=6,
-        images=["products/lamp-kids.png"],
+        images=["products/lamp.png"],
         description="Bolalar xonasi uchun yumshoq yorug'lik beruvchi chiroq.",
         specs=[("Quvvat", "6W"), ("Ranglar", "3")],
     ),
@@ -229,7 +241,7 @@ PRODUCTS = [
         sku="MB-4001", title="Oversize futbolka, 100% paxta", subtitle="Qora · L",
         category="futbolka-toplar", brand="zara", price=149_000, old_price=249_000,
         rating=5.0, reviews_count=38, sold_count=920, badge="Yangi",
-        images=["products/tshirt-black.png"], sizes=TEE_SIZES,
+        images=["products/tshirt-navy.png"], sizes=TEE_SIZES,
         colors=[("Qora", "#0E0F12"), ("Oq", "#FFFFFF")],
         description="Qalin paxta mato, oversize bichim. Yuvishdan keyin rangi o'zgarmaydi.",
         specs=[("Material", "100% paxta"), ("Bichim", "Oversize"), ("Zichlik", "220 g/m²")],
@@ -243,20 +255,172 @@ PRODUCTS = [
         specs=[("Material", "95% paxta, 5% elastan")],
     ),
     dict(
-        sku="MB-4003", title="Ko'ylak, qizil", subtitle="Qizil · yozgi",
-        category="koylak-libos", brand="mango", price=169_000, old_price=239_000,
-        rating=4.5, reviews_count=19, sold_count=260,
-        images=["products/tshirt-red.png"], sizes=TEE_SIZES,
-        description="Yengil yozgi ko'ylak, nafas oladigan mato.",
-        specs=[("Material", "Viskoza"), ("Mavsum", "Yoz")],
-    ),
-    dict(
         sku="MB-5001", title="Parfyumeriya to'plami, 7 predmet", subtitle="Sovg'a qutisi",
         category="gozallik", price=749_000, old_price=913_000,
         rating=4.7, reviews_count=58, sold_count=340,
         images=["products/cosmetics.png"],
         description="Yetti predmetli sovg'abop to'plam, hediya qutisi bilan.",
         specs=[("Predmetlar", "7 ta"), ("Qadoq", "Sovg'a qutisi")],
+    ),
+    # ---- added from photographs supplied by the shop ----
+    dict(
+        sku="MB-1006", title="Nike Air Force 1 '07, oq-pushti", subtitle="Oq · pushti swoosh",
+        category="kundalik-poyabzal", brand="nike", price=1_690_000, old_price=2_100_000,
+        rating=4.9, reviews_count=112, sold_count=780, badge="Yangi",
+        images=["products/af1-pink.png"], sizes=SHOE_SIZES,
+        colors=[("Oq-pushti", "#F3D4DC")],
+        warranty="Original kafolati",
+        description=(
+            "Klassik AF1 siluetidagi ayollar modeli — pushti swoosh va binafsha taglik. "
+            "Charm yuza, Air amortizatsiyasi."
+        ),
+        specs=[("Material", "Tabiiy charm"), ("Taglik", "Rezina, Air"),
+               ("Mavsum", "Butun yil"), ("Bichim", "Past")],
+    ),
+    dict(
+        sku="MB-1007", title="Air Jordan 1 Low, butunlay oq", subtitle="Oq · charm",
+        category="kundalik-poyabzal", brand="jordan", price=2_290_000, old_price=2_690_000,
+        rating=4.9, reviews_count=176, sold_count=1_430, badge="Bestseller",
+        images=["products/jordan1-low-white.png"], sizes=SHOE_SIZES,
+        colors=[("Oq", "#FFFFFF")],
+        warranty="Original kafolati",
+        description="Bir rangli oq Jordan 1 Low — har qanday kiyimga mos keladigan model.",
+        specs=[("Material", "Tabiiy charm"), ("Taglik", "Rezina"), ("Mavsum", "Butun yil")],
+    ),
+    dict(
+        sku="MB-1008", title="Nike Air Force 1, butunlay qora", subtitle="Qora · tekstura",
+        category="kundalik-poyabzal", brand="nike", price=1_590_000, old_price=1_990_000,
+        rating=4.7, reviews_count=94, sold_count=610,
+        images=["products/af1-black.png"], sizes=SHOE_SIZES,
+        colors=[("Qora", "#0E0F12")],
+        warranty="Original kafolati",
+        description="Butunlay qora AF1 — uch burchakli teksturali yuza, kunlik kiyish uchun.",
+        specs=[("Material", "Sun'iy charm"), ("Taglik", "Rezina, Air"), ("Mavsum", "Butun yil")],
+    ),
+    dict(
+        sku="MB-4004", title="Klassik futbolka, oq", subtitle="Oq · paxta",
+        category="futbolka-toplar", brand="uniqlo", price=189_000, old_price=239_000,
+        rating=4.7, reviews_count=64, sold_count=1_180,
+        images=["products/tshirt-white.png"], sizes=TEE_SIZES,
+        colors=[("Oq", "#FFFFFF")],
+        description="Yumshoq paxta trikotaj, tik yoqa. Kundalik kiyish uchun asos.",
+        specs=[("Material", "100% paxta"), ("Bichim", "Klassik"), ("Zichlik", "180 g/m²")],
+    ),
+    dict(
+        sku="MB-4005", title="Klassik futbolka, to'q ko'k", subtitle="To'q ko'k · paxta",
+        category="futbolka-toplar", brand="uniqlo", price=199_000, old_price=249_000,
+        rating=4.8, reviews_count=51, sold_count=870,
+        images=["products/tshirt-navy.png"], sizes=TEE_SIZES,
+        colors=[("To'q ko'k", "#141A2E")],
+        description="Oq modelning to'q ko'k varianti — bir xil mato, bir xil bichim.",
+        specs=[("Material", "100% paxta"), ("Bichim", "Klassik"), ("Zichlik", "180 g/m²")],
+    ),
+    dict(
+        sku="MB-4006", title="Polo ko'ylak, bordo", subtitle="Bordo · pike",
+        category="polo", brand="zara", price=449_000, old_price=599_000,
+        rating=4.8, reviews_count=42, sold_count=380, badge="Yangi",
+        images=["products/polo-burgundy.png"], sizes=TEE_SIZES,
+        colors=[("Bordo", "#6E1F35")],
+        description="Yoqasi va yengi oq chiziqli bordo polo. Pike to'qimasi nafas oladi.",
+        specs=[("Material", "100% paxta pike"), ("Yoqasi", "Chiziqli"), ("Bichim", "Klassik")],
+    ),
+    dict(
+        sku="MB-4007", title="Polo ko'ylak, ko'k-oq chiziqli", subtitle="Ko'k · chiziqli",
+        category="polo", brand="puma", price=289_000, old_price=379_000,
+        rating=4.5, reviews_count=29, sold_count=240,
+        images=["products/polo-striped.png"], sizes=TEE_SIZES,
+        colors=[("Ko'k", "#1B4FD8")],
+        description="Yuqori qismi bir rang, pastki qismi keng chiziqli polo.",
+        specs=[("Material", "Paxta aralashma"), ("Bichim", "Klassik")],
+    ),
+    dict(
+        sku="MB-6001", title="Rolex Datejust 41, ko'k siferblat", subtitle="Jubilee · po'lat",
+        category="soatlar", brand="rolex", price=168_000_000, old_price=185_000_000,
+        rating=5.0, reviews_count=8, sold_count=12, badge="Original",
+        images=["products/rolex-datejust-blue.png"], sizes=WATCH_SIZES,
+        colors=[("Ko'k", "#1C4E9C")],
+        warranty="Rasmiy kafolat 1 yil",
+        description=(
+            "Oysterste'l korpus, Jubilee brasleti va rifli bezel. "
+            "Sana oynasi, avtomatik mexanizm."
+        ),
+        specs=[("Korpus", "Po'lat 41 mm"), ("Braslet", "Jubilee"),
+               ("Mexanizm", "Avtomatik"), ("Suvga chidamlilik", "100 m")],
+    ),
+    dict(
+        sku="MB-6002", title="Rolex Datejust 41, yashil siferblat", subtitle="Jubilee · po'lat",
+        category="soatlar", brand="rolex", price=182_000_000,
+        rating=5.0, reviews_count=5, sold_count=6, badge="Original",
+        images=["products/rolex-datejust-green.png"], sizes=WATCH_SIZES,
+        colors=[("Yashil", "#1F5C3A")],
+        warranty="Rasmiy kafolat 1 yil",
+        description="Mint-yashil siferblatli Datejust — kamdan-kam uchraydigan rang.",
+        specs=[("Korpus", "Po'lat 41 mm"), ("Braslet", "Jubilee"),
+               ("Mexanizm", "Avtomatik"), ("Suvga chidamlilik", "100 m")],
+    ),
+    dict(
+        sku="MB-6003", title="Rolex Datejust 41, qora siferblat", subtitle="Jubilee · po'lat",
+        category="soatlar", brand="rolex", price=159_000_000, old_price=172_000_000,
+        rating=4.9, reviews_count=11, sold_count=15, badge="Original",
+        images=["products/rolex-datejust-black.png"], sizes=WATCH_SIZES,
+        colors=[("Qora", "#0E0F12")],
+        warranty="Rasmiy kafolat 1 yil",
+        description="Qora siferblat, Jubilee braslet — Datejust oilasining eng ko'p sotilgani.",
+        specs=[("Korpus", "Po'lat 41 mm"), ("Braslet", "Jubilee"),
+               ("Mexanizm", "Avtomatik"), ("Suvga chidamlilik", "100 m")],
+    ),
+    dict(
+        sku="MB-6004", title="Rolex Datejust 41, Oyster braslet", subtitle="Oyster · po'lat",
+        category="soatlar", brand="rolex", price=154_000_000,
+        rating=4.9, reviews_count=7, sold_count=9, badge="Original",
+        images=["products/rolex-datejust-oyster.png"], sizes=WATCH_SIZES,
+        colors=[("Qora", "#0E0F12")],
+        warranty="Rasmiy kafolat 1 yil",
+        description="Tekis bezel va uch bo'g'inli Oyster braslet — soddaroq ko'rinish.",
+        specs=[("Korpus", "Po'lat 41 mm"), ("Braslet", "Oyster"),
+               ("Mexanizm", "Avtomatik"), ("Suvga chidamlilik", "100 m")],
+    ),
+    dict(
+        sku="MB-6005", title="Gucci G-Timeless, yashil siferblat", subtitle="Po'lat · avtomatik",
+        category="soatlar", brand="gucci", price=21_500_000, old_price=25_900_000,
+        rating=4.8, reviews_count=14, sold_count=22,
+        images=["products/gucci-g-timeless.png"], sizes=["40 mm"],
+        colors=[("Yashil", "#1F5C3A")],
+        warranty="Rasmiy kafolat 1 yil",
+        description="Yashil siferblat, kichik soniya mili va rifli bezel. Shveysariya yig'uvi.",
+        specs=[("Korpus", "Po'lat 40 mm"), ("Mexanizm", "Avtomatik"),
+               ("Suvga chidamlilik", "50 m")],
+    ),
+    dict(
+        sku="MB-7001", title="DITA quyosh ko'zoynagi, oltin-qora",
+        subtitle="Gradient linza · titan",
+        category="kozoynaklar", brand="dita", price=6_900_000, old_price=8_200_000,
+        rating=4.9, reviews_count=16, sold_count=31, badge="Original",
+        images=["products/sunglasses-gold-gradient.png"],
+        colors=[("Oltin-qora", "#3A2E1C")],
+        warranty="Original kafolati",
+        description="Yarim ramkali to'rtburchak model, kulrang gradient linza, titan dastalar.",
+        specs=[("Ramka", "Titan"), ("Linza", "Gradient"), ("UV himoya", "UV400")],
+    ),
+    dict(
+        sku="MB-7002", title="Ramkasiz ko'zoynak, ko'k linza", subtitle="Ramkasiz · oltin",
+        category="kozoynaklar", brand="dita", price=5_400_000, old_price=6_400_000,
+        rating=4.7, reviews_count=9, sold_count=18,
+        images=["products/sunglasses-rimless-blue.png"],
+        colors=[("Ko'k", "#2C4A6E")],
+        warranty="Original kafolati",
+        description="Ramkasiz to'rtburchak linza, oltin rangli ingichka dastalar.",
+        specs=[("Ramka", "Ramkasiz"), ("Linza", "Bir tekis"), ("UV himoya", "UV400")],
+    ),
+    dict(
+        sku="MB-7003", title="DITA aviator, qora", subtitle="Aviator · qora",
+        category="kozoynaklar", brand="dita", price=7_200_000,
+        rating=4.9, reviews_count=21, sold_count=44, badge="Original",
+        images=["products/sunglasses-aviator-black.png"],
+        colors=[("Qora", "#0E0F12")],
+        warranty="Original kafolati",
+        description="Ikki ko'prikli aviator, butunlay qora ramka va gradient linza.",
+        specs=[("Ramka", "Titan"), ("Linza", "Gradient"), ("UV himoya", "UV400")],
     ),
 ]
 
@@ -265,7 +429,7 @@ BANNERS = [
         kicker="MINI BOZOR / UY VA YORUG'LIK",
         title="Ish stolingiz uchun",
         subtitle="Chiroq va aksessuarlarga 40% gacha",
-        image_url="banners/lamp-room.png",
+        image_url="products/lamp.png",
         gradient_from="#14162A", gradient_to="#0E7BF5",
         target_type="category", target_value="yoruglik", sort=0,
     ),
@@ -385,8 +549,10 @@ def seed(session: Session) -> None:
     _seed_reviews(session, products, users)
     _seed_user_data(session, users["demo"], products)
     session.commit()
+    translated = seed_translations(session)
 
     print(f"Seeded {len(products)} products, {len(categories)} categories.")
+    print(f"Seeded {translated} translation rows (ru, en).")
     print(f"Demo login: {DEMO_PHONE} · SMS code 123456 (dev) · PIN {DEMO_PIN}")
 
 
@@ -422,6 +588,20 @@ def _seed_brands(session: Session) -> dict[str, Brand]:
     return out
 
 
+MEDIA_DIR = Path(__file__).resolve().parent.parent / "media"
+
+
+def _image_exists(path: str) -> bool:
+    """Whether the export actually shipped this file.
+
+    Several photos referenced by the design were never exported. Seeding a row
+    for a missing file leaves the app rendering a broken tile; skipping it lets
+    the tile show its "no photo" state instead, and a re-seed picks the photo
+    up the moment the real PNG lands in media/.
+    """
+    return (MEDIA_DIR / path).is_file()
+
+
 def _seed_products(
     session: Session, categories: dict[str, Category], brands: dict[str, Brand]
 ) -> dict[str, Product]:
@@ -448,8 +628,12 @@ def _seed_products(
         session.refresh(product)
         out[spec["sku"]] = product
 
-        for i, url in enumerate(spec.get("images", [])):
+        shipped = [u for u in spec.get("images", []) if _image_exists(u)]
+        for i, url in enumerate(shipped):
             session.add(ProductImage(product_id=product.id, url=url, sort=i))
+        for url in spec.get("images", []):
+            if url not in shipped:
+                print(f"  eksport qilinmagan rasm o'tkazib yuborildi: {url}")
         for i, label in enumerate(spec.get("sizes", [])):
             session.add(
                 ProductVariant(
@@ -724,6 +908,11 @@ def main() -> None:
         if "--reset" in sys.argv:
             reset(session)
             print("Database cleared.")
+        if "--translations" in sys.argv:
+            # Re-runnable on its own: translations change far more often than
+            # the catalogue they describe.
+            print(f"Seeded {seed_translations(session)} translation rows (ru, en).")
+            return
         seed(session)
 
 

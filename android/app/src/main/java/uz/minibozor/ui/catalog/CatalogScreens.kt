@@ -1,5 +1,6 @@
 package uz.minibozor.ui.catalog
 
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,11 +17,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCard
@@ -57,9 +60,9 @@ fun CatalogScreen(
                     .background(MbTheme.colors.surface)
                     .padding(horizontal = 20.dp, vertical = 12.dp)
             ) {
-                MbText("Katalog", MbTheme.type.title1)
+                MbText(stringResource(R.string.katalog), MbTheme.type.title1)
                 Spacer(Modifier.height(12.dp))
-                MbSearchPill("Turkum yoki mahsulot qidirish", onOpenSearch)
+                MbSearchPill(stringResource(R.string.turkum_yoki_mahsulot_qidirish), onOpenSearch)
             }
 
             UiStateContent(state, viewModel::load) { categories ->
@@ -75,7 +78,11 @@ fun CatalogScreen(
                                     glyph = category.icon,
                                     subtitle = category.subtitle.ifBlank { null },
                                     meta = if (category.productCount > 0) {
-                                        "${category.productCount.grouped()} tovar"
+                                        pluralStringResource(
+                    R.plurals.n_products,
+                    category.productCount,
+                    category.productCount.grouped(),
+                )
                                     } else null,
                                     onClick = { onOpenCategory(category) },
                                     modifier = Modifier.padding(horizontal = 12.dp),
@@ -105,7 +112,7 @@ fun SubcategoryScreen(
     MbScreen(
         topBar = {
             MbTopBar(
-                title = state.dataOrNull?.first?.name ?: "Turkum",
+                title = state.dataOrNull?.first?.name ?: stringResource(R.string.turkum),
                 onBack = onBack,
             )
         },
@@ -119,9 +126,13 @@ fun SubcategoryScreen(
                 item {
                     MbCard(padding = 8.dp) {
                         MbListRow(
-                            label = "Barcha tovarlar",
+                            label = stringResource(R.string.barcha_tovarlar),
                             glyph = parent.icon,
-                            meta = "${parent.productCount.grouped()} tovar",
+                            meta = pluralStringResource(
+                    R.plurals.n_products,
+                    parent.productCount,
+                    parent.productCount.grouped(),
+                ),
                             onClick = { onOpenListing(parent.slug, parent.name) },
                             modifier = Modifier.padding(horizontal = 8.dp),
                         )
@@ -148,7 +159,11 @@ fun SubcategoryScreen(
                                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
                                 )
                                 MbText(
-                                    "${child.productCount.grouped()} tovar",
+                                    pluralStringResource(
+                    R.plurals.n_products,
+                    child.productCount,
+                    child.productCount.grouped(),
+                ),
                                     MbTheme.type.meta,
                                     MbTheme.colors.icon,
                                 )
