@@ -65,6 +65,7 @@ import uz.minibozor.data.remote.dto.BannerDto
 import uz.minibozor.data.remote.dto.CategoryDto
 import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.SectionDto
+import uz.minibozor.ui.product.VariantSheet
 import uz.minibozor.ui.common.MbToastHost
 import uz.minibozor.ui.common.UiStateContent
 import uz.minibozor.ui.common.rememberToast
@@ -94,12 +95,16 @@ fun HomeScreen(
     onOpenBanner: (BannerDto) -> Unit,
     onOpenProduct: (Int) -> Unit,
     onOpenListing: (category: String?, title: String) -> Unit,
+    onOpenCart: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val city by viewModel.city.collectAsStateWithLifecycle()
     val toast = rememberToast()
     var showRegions by remember { mutableStateOf(false) }
+    // A product that comes in sizes or colours opens the picker instead of
+    // being added with a variant we guessed for the customer.
+    var picking by remember { mutableStateOf<ProductCardDto?>(null) }
     var refreshing by remember { mutableStateOf(false) }
 
     MbScreen { padding ->
@@ -145,7 +150,11 @@ fun HomeScreen(
                             onOpenAll = { onOpenListing(section.categorySlug, section.title) },
                             onToggleFavorite = { p -> viewModel.toggleFavorite(p.id, p.isFavorite) },
                             onAddToCart = { p ->
-                                viewModel.addToCart(p.id) { toast.value = it }
+                                if (p.hasVariants) {
+                                    picking = p
+                                } else {
+                                    viewModel.addToCart(p.id) { toast.value = it }
+                                }
                             },
                         )
                     }
@@ -155,6 +164,16 @@ fun HomeScreen(
                 }
             }
             MbToastHost(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp))
+            picking?.let { card ->
+                VariantSheet(
+                    card = card,
+                    onDismiss = { picking = null },
+                    onOpenCart = {
+                        picking = null
+                        onOpenCart()
+                    },
+                )
+            }
         }
     }
 

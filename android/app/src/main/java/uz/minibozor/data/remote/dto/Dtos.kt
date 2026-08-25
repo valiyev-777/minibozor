@@ -189,6 +189,8 @@ data class ProductCardDto(
     val badge: String? = null,
     @SerialName("in_stock") val inStock: Boolean = true,
     @SerialName("is_favorite") val isFavorite: Boolean = false,
+    /** Whether tapping "Savatga" should open the picker sheet or add at once. */
+    @SerialName("has_variants") val hasVariants: Boolean = false,
 )
 
 @Immutable
@@ -373,6 +375,7 @@ data class CartDto(val items: List<CartItemDto>, val totals: CartTotalsDto)
 data class CartAddRequest(
     @SerialName("product_id") val productId: Int,
     @SerialName("variant_id") val variantId: Int? = null,
+    @SerialName("color_variant_id") val colorVariantId: Int? = null,
     val quantity: Int = 1,
 )
 

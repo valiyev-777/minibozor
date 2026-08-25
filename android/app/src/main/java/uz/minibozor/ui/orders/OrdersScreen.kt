@@ -177,7 +177,7 @@ private fun SegmentTab(
     Box(
         modifier
             .clip(MbTheme.shapes.field)
-            .background(if (selected) MbTheme.colors.ink else MbTheme.colors.fill)
+            .background(if (selected) MbTheme.colors.inverse else MbTheme.colors.fill)
             .clickable(onClick = onClick)
             .padding(vertical = 11.dp),
         contentAlignment = Alignment.Center,
@@ -185,7 +185,7 @@ private fun SegmentTab(
         MbText(
             label,
             MbTheme.type.label,
-            if (selected) Color.White else MbTheme.colors.textSecondary,
+            if (selected) MbTheme.colors.onInverse else MbTheme.colors.textSecondary,
         )
     }
 }

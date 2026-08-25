@@ -24,8 +24,10 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     if not product.in_stock:
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock"))
-    if payload.variant_id is not None:
-        variant = session.get(ProductVariant, payload.variant_id)
+    for variant_id in (payload.variant_id, payload.color_variant_id):
+        if variant_id is None:
+            continue
+        variant = session.get(ProductVariant, variant_id)
         if variant is None or variant.product_id != product.id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("variant_invalid"))
 
@@ -34,6 +36,7 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
             CartItem.user_id == user.id,
             CartItem.product_id == payload.product_id,
             CartItem.variant_id == payload.variant_id,
+            CartItem.color_variant_id == payload.color_variant_id,
         )
     ).first()
 
@@ -46,6 +49,7 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
                 user_id=user.id,
                 product_id=payload.product_id,
                 variant_id=payload.variant_id,
+                color_variant_id=payload.color_variant_id,
                 quantity=payload.quantity,
             )
         )

@@ -32,7 +32,7 @@ fun MbChip(
             .background(
                 when {
                     !enabled -> MbTheme.colors.fill
-                    selected -> MbTheme.colors.ink
+                    selected -> MbTheme.colors.inverse
                     else -> MbTheme.colors.surface
                 }
             )
@@ -50,7 +50,7 @@ fun MbChip(
             MbTheme.type.caption,
             when {
                 !enabled -> MbTheme.colors.disabled
-                selected -> Color.White
+                selected -> MbTheme.colors.onInverse
                 else -> MbTheme.colors.inkSoft
             },
             maxLines = 1,
@@ -70,10 +70,10 @@ fun MbSizeChip(
     Box(
         modifier
             .clip(MbTheme.shapes.field)
-            .background(if (selected) MbTheme.colors.ink else MbTheme.colors.surface)
+            .background(if (selected) MbTheme.colors.inverse else MbTheme.colors.surface)
             .border(
                 width = if (selected) 1.6.dp else 1.dp,
-                color = if (selected) MbTheme.colors.ink else MbTheme.colors.border,
+                color = if (selected) MbTheme.colors.inverse else MbTheme.colors.border,
                 shape = MbTheme.shapes.field,
             )
             .clickable(enabled = enabled, onClick = onClick)
@@ -85,7 +85,7 @@ fun MbSizeChip(
             MbTheme.type.label,
             when {
                 !enabled -> MbTheme.colors.disabled
-                selected -> Color.White
+                selected -> MbTheme.colors.onInverse
                 else -> MbTheme.colors.textSecondary
             },
         )

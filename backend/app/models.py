@@ -277,7 +277,10 @@ class CartItem(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     product_id: int = Field(foreign_key="products.id", index=True)
+    # Two variants, not one: a shirt is a size *and* a colour, and the
+    # picker sheet lets the customer choose both before adding.
     variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
+    color_variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
     quantity: int = 1
     selected: bool = True
     created_at: datetime = Field(default_factory=utcnow)

@@ -134,7 +134,16 @@ def product_card(session: Session, p: Product, favs: set[int]) -> s.ProductCardO
         badge=i18n.t(session, "product", p.id, "badge", p.badge) if p.badge else None,
         in_stock=p.in_stock,
         is_favorite=p.id in favs,
+        has_variants=has_variants(session, p.id),
     )
+
+
+def has_variants(session: Session, product_id: int) -> bool:
+    return session.exec(
+        select(func.count())
+        .select_from(ProductVariant)
+        .where(ProductVariant.product_id == product_id)
+    ).one() > 0
 
 
 def product_cards(
@@ -329,13 +338,24 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
     product = session.get(Product, item.product_id)
     if product is None:
         return None
-    variant = session.get(ProductVariant, item.variant_id) if item.variant_id else None
+    labels = [
+        i18n.t(session, "variant", v.id, "label", v.label)
+        for v in (
+            session.get(ProductVariant, item.color_variant_id)
+            if item.color_variant_id
+            else None,
+            session.get(ProductVariant, item.variant_id) if item.variant_id else None,
+        )
+        if v is not None
+    ]
     return s.CartItemOut(
         id=item.id,
         product_id=product.id,
-        title=product.title,
+        title=i18n.t(session, "product", product.id, "title", product.title),
         image_url=primary_image(session, product.id),
-        variant_label=variant.label if variant else product.subtitle,
+        variant_label=" · ".join(labels)
+        if labels
+        else i18n.t(session, "product", product.id, "subtitle", product.subtitle),
         unit_price=product.price,
         old_unit_price=product.old_price,
         quantity=item.quantity,

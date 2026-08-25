@@ -343,4 +343,8 @@
         <item quantity="one">%1$s found</item>
         <item quantity="other">%1$s found</item>
     </plurals>
+
+    <!-- Variant picker sheet -->
+    <string name="xususiyatlarni_tanlang">Choose options</string>
+    <string name="otish">Go to cart</string>
 </resources>

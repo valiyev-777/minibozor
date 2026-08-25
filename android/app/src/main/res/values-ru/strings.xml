@@ -353,4 +353,8 @@
         <item quantity="many">Найдено %1$s</item>
         <item quantity="other">Найдено %1$s</item>
     </plurals>
+
+    <!-- Variant picker sheet -->
+    <string name="xususiyatlarni_tanlang">Выберите характеристики</string>
+    <string name="otish">Перейти</string>
 </resources>

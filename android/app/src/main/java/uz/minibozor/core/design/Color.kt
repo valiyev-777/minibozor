@@ -50,6 +50,23 @@ data class MbColors(
     val cardFrom: Color = Color(0xFF1F2444),
 
     /** Translucent slab behind the floating tab bar. */
+    /**
+     * A surface that is always the opposite of [canvas], with [onInverse] for
+     * anything drawn on it — selected chips, the toast pill, the onboarding
+     * button. The design draws these with `ink` on white, but `ink` inverts
+     * with the theme, so pairing it with a fixed white leaves white on white
+     * once the palette flips.
+     */
+    val inverse: Color = Color(0xFF0E0F12),
+    val onInverse: Color = Color(0xFFFFFFFF),
+
+    /**
+     * For labels sitting on a photo. Product shots are light whatever the
+     * theme, so this pair stays dark-on-light in both.
+     */
+    val scrim: Color = Color(0xCC0E0F12),
+    val onScrim: Color = Color(0xFFFFFFFF),
+
     val glass: Color = Color(0xF0FFFFFF),
     val isDark: Boolean = false,
 ) {
@@ -99,6 +116,11 @@ data class MbColors(
 
             heroFrom = Color(0xFF10121C),
             cardFrom = Color(0xFF1A1E33),
+
+            inverse = Color(0xFFF3F5F8),
+            onInverse = Color(0xFF0E0F12),
+            // scrim and onScrim keep their defaults: a photo is light in
+            // either theme, so the label on top of it does not flip.
 
             glass = Color(0xF01B1F26),
             isDark = true,

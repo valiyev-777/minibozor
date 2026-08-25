@@ -166,6 +166,7 @@ fun MiniBozorNavHost(
                     onOpenListing = { category, title ->
                         navController.navigate(Routes.listing(category = category, title = title))
                     },
+                    onOpenCart = { switchTab(Routes.CART) },
                 )
             }
         }
@@ -230,6 +231,7 @@ fun MiniBozorNavHost(
                 query = entry.arguments?.getString(Args.QUERY)?.ifBlank { null },
                 onBack = { navController.popBackStack() },
                 onOpenProduct = { id -> navController.navigate(Routes.product(id)) },
+                onOpenCart = { switchTab(Routes.CART) },
             )
         }
 

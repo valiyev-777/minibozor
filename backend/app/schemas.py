@@ -191,6 +191,9 @@ class ProductCardOut(BaseModel):
     badge: str | None
     in_stock: bool
     is_favorite: bool = False
+    # Lets a tile decide between adding straight to the cart and opening the
+    # picker sheet, without fetching the whole product first.
+    has_variants: bool = False
 
 
 class ProductOut(ProductCardOut):
@@ -341,6 +344,7 @@ class CartOut(BaseModel):
 class CartAddIn(BaseModel):
     product_id: int
     variant_id: int | None = None
+    color_variant_id: int | None = None
     quantity: int = Field(default=1, ge=1, le=99)
 
 

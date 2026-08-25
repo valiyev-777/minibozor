@@ -1,6 +1,8 @@
 package uz.minibozor.ui.catalog
 
 import androidx.compose.ui.res.pluralStringResource
+import uz.minibozor.ui.product.VariantSheet
+import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.core.util.AppStrings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -68,12 +70,14 @@ fun ListingScreen(
     query: String?,
     onBack: () -> Unit,
     onOpenProduct: (Int) -> Unit,
+    onOpenCart: () -> Unit,
     viewModel: ListingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
     val toast = rememberToast()
     var showFilters by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf<ProductCardDto?>(null) }
 
     LaunchedEffect(category, query) { viewModel.start(category, query) }
 
@@ -157,7 +161,11 @@ fun ListingScreen(
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { viewModel.toggleFavorite(product) },
                                 onAddToCart = {
-                                    viewModel.addToCart(product.id) { toast.value = it }
+                                    if (product.hasVariants) {
+                                        picking = product
+                                    } else {
+                                        viewModel.addToCart(product.id) { toast.value = it }
+                                    }
                                 },
                             )
                         }
@@ -166,6 +174,17 @@ fun ListingScreen(
                 MbToastHost(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp))
             }
         }
+    }
+
+    picking?.let { card ->
+        VariantSheet(
+            card = card,
+            onDismiss = { picking = null },
+            onOpenCart = {
+                picking = null
+                onOpenCart()
+            },
+        )
     }
 
     if (showFilters) {
@@ -214,7 +233,7 @@ private fun Toolbar(
         Row(
             Modifier
                 .mbClickable(MbTheme.shapes.chip, onClick = onOpenFilters)
-                .background(if (filterCount > 0) MbTheme.colors.ink else MbTheme.colors.fill)
+                .background(if (filterCount > 0) MbTheme.colors.inverse else MbTheme.colors.fill)
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -222,12 +241,12 @@ private fun Toolbar(
             MbIcon(
                 "gear",
                 size = 14.dp,
-                tint = if (filterCount > 0) Color.White else MbTheme.colors.ink,
+                tint = if (filterCount > 0) MbTheme.colors.onInverse else MbTheme.colors.ink,
             )
             MbText(
                 if (filterCount > 0) stringResource(R.string.filtr_n, filterCount) else stringResource(R.string.filtr),
                 MbTheme.type.caption,
-                if (filterCount > 0) Color.White else MbTheme.colors.ink,
+                if (filterCount > 0) MbTheme.colors.onInverse else MbTheme.colors.ink,
             )
         }
     }

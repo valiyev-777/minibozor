@@ -77,7 +77,7 @@ fun DeliveryTimeScreen(
                                 )
                                 .border(
                                     width = if (selected) 1.6.dp else 1.dp,
-                                    color = if (selected) MbTheme.colors.ink
+                                    color = if (selected) MbTheme.colors.inverse
                                     else MbTheme.colors.border,
                                     shape = MbTheme.shapes.tile,
                                 )
@@ -88,19 +88,20 @@ fun DeliveryTimeScreen(
                             MbText(
                                 day.weekdayLabel,
                                 MbTheme.type.micro,
-                                if (selected) Color.White.copy(alpha = 0.6f)
+                                if (selected) MbTheme.colors.onInverse.copy(alpha = 0.6f)
                                 else MbTheme.colors.disabled,
                             )
                             Spacer(Modifier.height(4.dp))
                             MbText(
                                 day.dayLabel,
                                 MbTheme.type.title2,
-                                if (selected) Color.White else MbTheme.colors.textSecondary,
+                                if (selected) MbTheme.colors.onInverse
+                                else MbTheme.colors.textSecondary,
                             )
                             MbText(
                                 day.monthLabel,
                                 MbTheme.type.micro,
-                                if (selected) Color.White.copy(alpha = 0.6f)
+                                if (selected) MbTheme.colors.onInverse.copy(alpha = 0.6f)
                                 else MbTheme.colors.disabled,
                             )
                         }

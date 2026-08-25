@@ -388,8 +388,8 @@ private fun Gallery(images: List<String>, badge: String?) {
         if (badge != null) {
             MbStatusPill(
                 badge,
-                MbTheme.colors.ink.copy(alpha = 0.8f),
-                Color.White,
+                MbTheme.colors.scrim,
+                MbTheme.colors.onScrim,
                 Modifier
                     .align(Alignment.TopStart)
                     .padding(14.dp),

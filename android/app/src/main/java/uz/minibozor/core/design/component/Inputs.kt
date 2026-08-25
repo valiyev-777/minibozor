@@ -267,7 +267,13 @@ fun MbCodeField(
     }
 }
 
-/** −/+ stepper used in the cart and on the product page. */
+/**
+ * −/+ stepper used in the cart, on the product page and in the picker sheet.
+ *
+ * [size] is the tap target for each end: the cart rows want the compact 34dp,
+ * while a stepper standing next to a button wants that button's height so the
+ * two read as one bar.
+ */
 @Composable
 fun MbQuantityStepper(
     quantity: Int,
@@ -275,6 +281,7 @@ fun MbQuantityStepper(
     modifier: Modifier = Modifier,
     min: Int = 1,
     max: Int = 99,
+    size: Dp = 34.dp,
 ) {
     Row(
         modifier
@@ -282,25 +289,33 @@ fun MbQuantityStepper(
             .background(MbTheme.colors.fill),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StepperButton("−", enabled = quantity > min) { onChange(quantity - 1) }
-        Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
-            MbText(quantity.toString(), MbTheme.type.label)
+        StepperButton("−", enabled = quantity > min, size = size) { onChange(quantity - 1) }
+        Box(Modifier.width(size), contentAlignment = Alignment.Center) {
+            MbText(
+                quantity.toString(),
+                if (size >= 44.dp) MbTheme.type.title3 else MbTheme.type.label,
+            )
         }
-        StepperButton("+", enabled = quantity < max) { onChange(quantity + 1) }
+        StepperButton("+", enabled = quantity < max, size = size) { onChange(quantity + 1) }
     }
 }
 
 @Composable
-private fun StepperButton(symbol: String, enabled: Boolean, onClick: () -> Unit) {
+private fun StepperButton(
+    symbol: String,
+    enabled: Boolean,
+    size: Dp,
+    onClick: () -> Unit,
+) {
     Box(
         Modifier
-            .size(34.dp)
+            .size(size)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         MbText(
             symbol,
-            MbTheme.type.title3,
+            if (size >= 44.dp) MbTheme.type.title2 else MbTheme.type.title3,
             if (enabled) MbTheme.colors.ink else MbTheme.colors.disabled,
         )
     }

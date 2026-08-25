@@ -174,8 +174,8 @@ fun MbProductTile(
             if (!badge.isNullOrBlank()) {
                 MbStatusPill(
                     label = badge,
-                    background = MbTheme.colors.ink.copy(alpha = 0.8f),
-                    contentColor = Color.White,
+                    background = MbTheme.colors.scrim,
+                    contentColor = MbTheme.colors.onScrim,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(6.dp),

@@ -365,4 +365,8 @@
         <item quantity="one">%1$s ta topildi</item>
         <item quantity="other">%1$s ta topildi</item>
     </plurals>
+
+    <!-- Variant picker sheet -->
+    <string name="xususiyatlarni_tanlang">Xususiyatlarni tanlang</string>
+    <string name="otish">O\'tish</string>
 </resources>

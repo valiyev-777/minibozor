@@ -165,7 +165,7 @@ fun OnboardingScreen(
                     MbPrimaryButton(
                         text = stringResource(R.string.boshlash),
                         onClick = onFinished,
-                        container = MbTheme.colors.ink,
+                        container = MbTheme.colors.inverse,
                     )
                     Spacer(Modifier.height(14.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -266,13 +266,13 @@ private fun NextButton(onClick: () -> Unit) {
     Row(
         Modifier
             .mbClickable(CircleShape, onClick = onClick)
-            .background(MbTheme.colors.ink)
+            .background(MbTheme.colors.inverse)
             .padding(start = 24.dp, end = 20.dp, top = 15.dp, bottom = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        MbText(stringResource(R.string.keyingi), MbTheme.type.label, Color.White)
-        MbText("→", MbTheme.type.title3, Color.White)
+        MbText(stringResource(R.string.keyingi), MbTheme.type.label, MbTheme.colors.onInverse)
+        MbText("→", MbTheme.type.title3, MbTheme.colors.onInverse)
     }
 }
 
