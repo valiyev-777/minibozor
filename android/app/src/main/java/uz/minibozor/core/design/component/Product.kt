@@ -1,5 +1,6 @@
 package uz.minibozor.core.design.component
 
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,13 +30,18 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
-import uz.minibozor.core.design.mbClickable
+import uz.minibozor.core.design.mbPressable
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.util.grouped
 import uz.minibozor.core.util.mediaUrl
 import uz.minibozor.core.util.ratingText
+
+/** The soft ink wash a pressed tile is highlighted with. */
+@Composable
+private fun pressTint(): Color = MbTheme.colors.ink.copy(alpha = 0.06f)
 
 /** Photo with the design's warm neutral backdrop showing through while it loads. */
 @Composable
@@ -106,7 +113,7 @@ fun MbRating(
         MbText(ratingText(rating), MbTheme.type.meta, MbTheme.colors.icon)
         if (reviewsCount > 0) {
             MbText("·", MbTheme.type.meta, MbTheme.colors.hairlineStrong)
-            MbText("$reviewsCount sharh", MbTheme.type.meta, MbTheme.colors.icon)
+            MbText(pluralStringResource(R.plurals.n_reviews, reviewsCount, reviewsCount), MbTheme.type.meta, MbTheme.colors.icon)
         }
     }
 }
@@ -145,7 +152,9 @@ fun MbProductTile(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.mbClickable(MbTheme.shapes.tile, onClick = onClick),
+        // mbPressable, not mbClickable: the tile's content reaches its edges,
+        // and a clip would shave the title and button at the corner arcs.
+        modifier.mbPressable(MbTheme.shapes.tile, pressTint(), onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Box {
@@ -189,7 +198,7 @@ fun MbProductTile(
                     .padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                MbText("Savatga", MbTheme.type.label, Color.White)
+                MbText(stringResource(R.string.savatga), MbTheme.type.label, Color.White)
             }
         }
     }
@@ -208,7 +217,9 @@ fun MbRailTile(
     Column(
         modifier
             .width(MbTheme.dimens.railTileWidth)
-            .mbClickable(MbTheme.shapes.tileSmall, onClick = onClick),
+            // mbPressable, not mbClickable: a clip's corner arcs would cut the
+            // first and last glyphs of a two-line title at the tile's bottom.
+            .mbPressable(MbTheme.shapes.tileSmall, pressTint(), onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         MbProductImage(
@@ -244,7 +255,8 @@ fun MbDealTile(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.mbClickable(MbTheme.shapes.tileSmall, onClick = onClick),
+        // mbPressable, not mbClickable — see MbRailTile.
+        modifier.mbPressable(MbTheme.shapes.tileSmall, pressTint(), onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Box {
@@ -322,9 +334,7 @@ fun MbLineItem(
             shape = MbTheme.shapes.tileSmall,
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            // Two lines always, so every tile in a row is the same height and no
-        // title ends up pressed against the card edge.
-        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
+            MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2)
             if (meta.isNotBlank()) {
                 MbText(meta, MbTheme.type.meta, MbTheme.colors.icon, maxLines = 1)
             }

@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCodeField
@@ -57,11 +59,14 @@ fun OtpScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(12.dp))
-            MbText("Tasdiqlash kodi", MbTheme.type.display, textAlign = TextAlign.Center)
+            MbText(stringResource(R.string.tasdiqlash_kodi), MbTheme.type.display, textAlign = TextAlign.Center)
             Spacer(Modifier.height(10.dp))
             MbText(
-                "${phoneDigits.formatPhone()} raqamiga " +
-                    "${AuthState.CODE_LENGTH} xonali kod yubordik",
+                stringResource(
+                    R.string.otp_yuborildi,
+                    phoneDigits.formatPhone(),
+                    AuthState.CODE_LENGTH,
+                ),
                 MbTheme.type.bodySmall,
                 MbTheme.colors.textTertiary,
                 textAlign = TextAlign.Center,
@@ -83,7 +88,7 @@ fun OtpScreen(
             if (state.devCode != null) {
                 Spacer(Modifier.height(12.dp))
                 MbText(
-                    "Dev rejim: kod ${state.devCode}",
+                    stringResource(R.string.dev_rejim_kod, state.devCode.orEmpty()),
                     MbTheme.type.caption,
                     MbTheme.colors.textQuaternary,
                 )
@@ -93,14 +98,14 @@ fun OtpScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (state.canResend) {
                     MbText(
-                        "Kodni qayta yuborish",
+                        stringResource(R.string.kodni_qayta_yuborish),
                         MbTheme.type.label,
                         MbTheme.colors.accent,
                         modifier = Modifier.clickable { viewModel.sendCode() },
                     )
                 } else {
                     MbText(
-                        "Kodni qayta yuborish — ",
+                        stringResource(R.string.kodni_qayta_yuborish_2),
                         MbTheme.type.caption,
                         MbTheme.colors.textQuaternary,
                     )
@@ -110,7 +115,7 @@ fun OtpScreen(
 
             Spacer(Modifier.height(24.dp))
             MbPrimaryButton(
-                text = "Tasdiqlash",
+                text = stringResource(R.string.tasdiqlash),
                 onClick = viewModel::verify,
                 enabled = state.codeValid,
                 loading = state.verifying,
@@ -123,13 +128,13 @@ fun OtpScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 MbText(
-                    "Kod avtomatik o'qiladi — SMS kelishi bilan davom etamiz",
+                    stringResource(R.string.kod_avtomatik_oqiladi_sms_kelishi_bilan),
                     MbTheme.type.caption,
                     MbTheme.colors.textQuaternary,
                     textAlign = TextAlign.Center,
                 )
                 MbText(
-                    "Kod kelmadimi? 1150 raqamiga qo'ng'iroq qiling — bepul",
+                    stringResource(R.string.kod_kelmadimi_1150_raqamiga_qongiroq_qiling),
                     MbTheme.type.caption,
                     MbTheme.colors.disabled,
                     textAlign = TextAlign.Center,

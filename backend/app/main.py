@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app import i18n
 from app.core.config import settings
 from app.db import init_db
 from app.routers import (
@@ -47,6 +48,22 @@ app = FastAPI(
     description=DESCRIPTION,
     lifespan=lifespan,
 )
+
+@app.middleware("http")
+async def language_middleware(request, call_next):
+    """Pins the request to the language the app asked for.
+
+    Set here rather than as a router dependency so it covers every endpoint,
+    including ones added later, and so ``services.py`` can read it without
+    taking a language argument in every function.
+    """
+    i18n.set_language(i18n.parse_accept_language(request.headers.get("accept-language")))
+    response = await call_next(request)
+    response.headers["Content-Language"] = i18n.current()
+    # Caches must not serve a Russian body to an English client.
+    response.headers["Vary"] = "Accept-Language"
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,

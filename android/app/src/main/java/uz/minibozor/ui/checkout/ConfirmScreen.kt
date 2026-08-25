@@ -12,10 +12,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -45,14 +47,14 @@ fun ConfirmScreen(
     }
 
     MbScreen(
-        topBar = { MbTopBar("To'lovni tasdiqlash", onBack = onBack) },
+        topBar = { MbTopBar(stringResource(R.string.tolovni_tasdiqlash), onBack = onBack) },
         bottomBar = {
             MbBottomBar {
                 MbPrimaryButton(
                     text = if (state.paymentMethod == "cash") {
-                        "Buyurtmani rasmiylashtirish"
+                        stringResource(R.string.buyurtmani_rasmiylashtirish)
                     } else {
-                        "To'lash · ${(preview?.totals?.total ?: 0).grouped()}"
+                        stringResource(R.string.tolash_n, (preview?.totals?.total ?: 0).grouped())
                     },
                     onClick = viewModel::place,
                     enabled = state.ready,
@@ -84,7 +86,7 @@ fun ConfirmScreen(
                     )
                     MbDivider(inset = 62.dp)
                     MbListRow(
-                        label = preview.slot?.label ?: "Punktdan olish",
+                        label = preview.slot?.label ?: stringResource(R.string.punktdan_olish),
                         glyph = "clock",
                         subtitle = preview.slot?.note,
                         showChevron = false,
@@ -92,11 +94,11 @@ fun ConfirmScreen(
                     )
                     MbDivider(inset = 62.dp)
                     MbListRow(
-                        label = if (state.paymentMethod == "cash") "Naqd pul"
-                        else "Karta ···· ${preview.card?.last4.orEmpty()}",
+                        label = if (state.paymentMethod == "cash") stringResource(R.string.naqd_pul)
+                        else stringResource(R.string.karta_niqob, preview.card?.last4.orEmpty()),
                         glyph = "card",
                         subtitle = if (state.paymentMethod == "cash") {
-                            "Kuryerga topshirishda"
+                            stringResource(R.string.kuryerga_topshirishda)
                         } else preview.card?.brand,
                         showChevron = false,
                         modifier = Modifier.padding(horizontal = 10.dp),
@@ -107,23 +109,23 @@ fun ConfirmScreen(
             item {
                 MbCard {
                     MbTotalRow(
-                        "Tovarlar (${preview.totals.itemsCount})",
+                        stringResource(R.string.tovarlar_soni, preview.totals.itemsCount),
                         preview.totals.subtotal.sum(),
                     )
                     if (preview.totals.discount > 0) {
                         MbTotalRow(
-                            "Chegirma",
+                            stringResource(R.string.chegirma),
                             "−${preview.totals.discount.grouped()}",
                             valueColor = MbTheme.colors.success,
                         )
                     }
                     MbTotalRow(
-                        "Yetkazish",
-                        if (preview.totals.deliveryFee == 0) "Bepul"
+                        stringResource(R.string.yetkazish),
+                        if (preview.totals.deliveryFee == 0) stringResource(R.string.bepul)
                         else preview.totals.deliveryFee.sum(),
                     )
                     MbDivider(Modifier.padding(vertical = 8.dp))
-                    MbTotalRow("To'lanadi", preview.totals.total.sum(), strong = true)
+                    MbTotalRow(stringResource(R.string.tolanadi), preview.totals.total.sum(), strong = true)
                 }
             }
 
@@ -140,7 +142,7 @@ fun ConfirmScreen(
 
             item {
                 MbText(
-                    "Tugmani bosish orqali ommaviy oferta shartlariga rozilik bildirasiz.",
+                    stringResource(R.string.tugmani_bosish_orqali_ommaviy_oferta),
                     MbTheme.type.caption,
                     MbTheme.colors.textQuaternary,
                     textAlign = TextAlign.Center,

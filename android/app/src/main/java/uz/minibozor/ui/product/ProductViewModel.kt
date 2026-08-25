@@ -1,5 +1,7 @@
 package uz.minibozor.ui.product
 
+import uz.minibozor.core.util.AppStrings
+import uz.minibozor.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -109,7 +111,7 @@ class ProductViewModel @Inject constructor(
             _state.update { it.copy(adding = false) }
             onDone(
                 when (result) {
-                    is Outcome.Success -> "Savatga qo'shildi"
+                    is Outcome.Success -> AppStrings[R.string.savatga_qoshildi]
                     is Outcome.Failure -> result.message
                 }
             )

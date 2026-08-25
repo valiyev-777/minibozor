@@ -60,6 +60,9 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // Per-app language: AppCompatDelegate.setApplicationLocales backports the
+    // Android 13 picker down to our minSdk and persists the choice itself.
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

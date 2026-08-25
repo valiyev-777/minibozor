@@ -12,6 +12,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import uz.minibozor.BuildConfig
 import uz.minibozor.data.remote.AuthInterceptor
+import uz.minibozor.data.remote.LanguageInterceptor
 import uz.minibozor.data.remote.MiniBozorApi
 import uz.minibozor.data.remote.TokenAuthenticator
 import java.util.concurrent.TimeUnit
@@ -38,11 +39,13 @@ object NetworkModule {
     @Singleton
     fun okHttp(
         auth: AuthInterceptor,
+        language: LanguageInterceptor,
         authenticator: TokenAuthenticator,
     ): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .addInterceptor(auth)
+        .addInterceptor(language)
         .authenticator(authenticator)
         .apply {
             if (BuildConfig.DEBUG) {

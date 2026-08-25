@@ -1,5 +1,7 @@
 package uz.minibozor.ui.profile
 
+import uz.minibozor.core.util.AppStrings
+import uz.minibozor.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -112,11 +114,12 @@ class AddCardViewModel @Inject constructor(
     }
 
     private fun validationMessage(state: CardFormState): String = when {
-        !state.numberComplete -> "Karta raqamini to'liq kiriting"
-        !state.numberValid -> "Karta raqami noto'g'ri"
-        state.expiry.length != 4 -> "Amal qilish muddatini kiriting"
-        state.expiryMonth == null -> "Oy 01–12 oralig'ida bo'lishi kerak"
-        else -> "Kartaning muddati o'tgan"
+        !state.numberComplete -> AppStrings[R.string.karta_raqamini_toliq_kiriting]
+        !state.numberValid -> AppStrings[R.string.karta_raqami_notogri]
+        state.expiryMonth == null && state.expiry.length != 4 ->
+            AppStrings[R.string.amal_qilish_muddatini_kiriting]
+        state.expiryMonth == null -> AppStrings[R.string.oy_01_12_oraligida_bolishi_kerak]
+        else -> AppStrings[R.string.kartaning_muddati_otgan]
     }
 
     companion object {

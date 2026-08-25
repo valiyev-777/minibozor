@@ -1,5 +1,6 @@
 package uz.minibozor.ui.product
 
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,12 +18,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -34,9 +37,7 @@ import uz.minibozor.core.design.component.MbTextField
 import uz.minibozor.core.design.component.MbTopBar
 import uz.minibozor.core.design.component.SectionHeader
 
-private val RATING_WORDS = listOf(
-    "", "Yomon", "O'rtacha", "Yaxshi", "Juda yaxshi", "Ajoyib",
-)
+
 
 /** Screen 16 — Sharh yozish. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -53,11 +54,11 @@ fun WriteReviewScreen(
     LaunchedEffect(state.done) { if (state.done) onDone() }
 
     MbScreen(
-        topBar = { MbTopBar("Sharh yozish", onBack = onBack) },
+        topBar = { MbTopBar(stringResource(R.string.sharh_yozish), onBack = onBack) },
         bottomBar = {
             MbBottomBar {
                 MbPrimaryButton(
-                    text = "Yuborish",
+                    text = stringResource(R.string.yuborish),
                     onClick = { viewModel.submit(productId, orderItemId) },
                     loading = state.submitting,
                     enabled = state.rating > 0,
@@ -75,7 +76,7 @@ fun WriteReviewScreen(
         ) {
             MbCard {
                 MbText(
-                    "Mahsulotni qanday baholaysiz?",
+                    stringResource(R.string.mahsulotni_qanday_baholaysiz),
                     MbTheme.type.title3,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
@@ -98,7 +99,8 @@ fun WriteReviewScreen(
                 }
                 Spacer(Modifier.height(10.dp))
                 MbText(
-                    RATING_WORDS.getOrElse(state.rating) { "" },
+                    stringArrayResource(R.array.rating_words)
+                        .getOrElse(state.rating) { "" },
                     MbTheme.type.label,
                     MbTheme.colors.textSecondary,
                     textAlign = TextAlign.Center,
@@ -108,7 +110,7 @@ fun WriteReviewScreen(
 
             if (state.tags.isNotEmpty()) {
                 MbCard {
-                    SectionHeader("Nimasi yoqdi?")
+                    SectionHeader(stringResource(R.string.nimasi_yoqdi))
                     Spacer(Modifier.height(12.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -126,12 +128,12 @@ fun WriteReviewScreen(
             }
 
             MbCard {
-                SectionHeader("Fikringiz", "ixtiyoriy")
+                SectionHeader(stringResource(R.string.fikringiz), "ixtiyoriy")
                 Spacer(Modifier.height(12.dp))
                 MbTextField(
                     value = state.text,
                     onValueChange = viewModel::setText,
-                    placeholder = "Sifati, o'lchami, yetkazish haqida yozing…",
+                    placeholder = stringResource(R.string.sifati_olchami_yetkazish_haqida_yozing),
                     singleLine = false,
                     minHeight = 120.dp,
                 )
@@ -142,7 +144,7 @@ fun WriteReviewScreen(
             }
 
             MbText(
-                "Sharh moderatsiyadan o'tgach e'lon qilinadi.",
+                stringResource(R.string.sharh_moderatsiyadan_otgach_e_lon_qilinadi),
                 MbTheme.type.caption,
                 MbTheme.colors.textQuaternary,
                 textAlign = TextAlign.Center,

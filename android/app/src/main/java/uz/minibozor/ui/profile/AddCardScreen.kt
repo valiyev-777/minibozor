@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -60,11 +62,11 @@ fun AddCardScreen(
     LaunchedEffect(state.done) { if (state.done) onSaved() }
 
     MbScreen(
-        topBar = { MbTopBar("Karta qo'shish", onBack = onBack) },
+        topBar = { MbTopBar(stringResource(R.string.karta_qoshish), onBack = onBack) },
         bottomBar = {
             MbBottomBar {
                 MbPrimaryButton(
-                    text = "Kartani saqlash",
+                    text = stringResource(R.string.kartani_saqlash),
                     onClick = viewModel::save,
                     enabled = state.canSave,
                     loading = state.saving,
@@ -83,14 +85,14 @@ fun AddCardScreen(
             CardPreview(state)
 
             val numberError = if (state.numberComplete && !state.numberValid) {
-                "Karta raqami noto'g'ri"
+                stringResource(R.string.karta_raqami_notogri)
             } else null
 
             MbCard {
                 MbTextField(
                     value = state.number,
                     onValueChange = viewModel::onNumberChange,
-                    label = "Karta raqami",
+                    label = stringResource(R.string.karta_raqami),
                     placeholder = "8600 0000 0000 0000",
                     keyboardType = KeyboardType.NumberPassword,
                     leadingGlyph = "card",
@@ -102,16 +104,20 @@ fun AddCardScreen(
                     MbTextField(
                         value = state.expiry,
                         onValueChange = viewModel::onExpiryChange,
-                        label = "Amal qilish muddati",
-                        placeholder = "MM/YY",
+                        label = stringResource(R.string.amal_qilish_muddati),
+                        placeholder = stringResource(R.string.mm_yy),
                         keyboardType = KeyboardType.NumberPassword,
                         visualTransformation = ExpiryMask,
                         modifier = Modifier.weight(1f),
                     )
                     MbTextField(
-                        value = state.brand.label,
+                        value = if (state.brand == CardBrand.UNKNOWN) {
+                            stringResource(R.string.karta)
+                        } else {
+                            state.brand.label
+                        },
                         onValueChange = {},
-                        label = "To'lov tizimi",
+                        label = stringResource(R.string.tolov_tizimi),
                         readOnly = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -120,16 +126,16 @@ fun AddCardScreen(
                 MbTextField(
                     value = state.holder,
                     onValueChange = viewModel::onHolderChange,
-                    label = "Karta egasi",
-                    placeholder = "AZIZ TOSHMATOV",
+                    label = stringResource(R.string.karta_egasi),
+                    placeholder = stringResource(R.string.aziz_toshmatov),
                     imeAction = ImeAction.Done,
                 )
             }
 
             MbCard(padding = 6.dp) {
                 MbToggleRow(
-                    label = "Asosiy karta",
-                    subtitle = "Buyurtma berishda avtomatik tanlanadi",
+                    label = stringResource(R.string.asosiy_karta),
+                    subtitle = stringResource(R.string.buyurtma_berishda_avtomatik_tanlanadi),
                     glyph = "card",
                     checked = state.makeDefault,
                     onCheckedChange = viewModel::onDefaultChange,
@@ -152,8 +158,7 @@ fun AddCardScreen(
             ) {
                 MbIcon("gear", size = 16.dp, tint = MbTheme.colors.icon)
                 MbText(
-                    "Karta raqami qurilmadan chiqmaydi — serverda faqat oxirgi " +
-                        "4 raqam va muddati saqlanadi.",
+                    stringResource(R.string.karta_raqami_qurilmadan_chiqmaydi_serverda),
                     MbTheme.type.caption,
                     MbTheme.colors.textQuaternary,
                 )
@@ -184,13 +189,13 @@ private fun CardPreview(state: CardFormState) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             MbText(
-                if (state.brand == CardBrand.UNKNOWN) "Yangi karta" else state.brand.label,
+                if (state.brand == CardBrand.UNKNOWN) stringResource(R.string.yangi_karta) else state.brand.label,
                 MbTheme.type.label,
                 Color.White,
             )
             Spacer(Modifier.weight(1f))
             if (state.makeDefault) {
-                MbStatusPill("ASOSIY", Color.White.copy(alpha = 0.2f), Color.White)
+                MbStatusPill(stringResource(R.string.asosiy), Color.White.copy(alpha = 0.2f), Color.White)
             }
         }
         Spacer(Modifier.weight(1f))
@@ -198,7 +203,7 @@ private fun CardPreview(state: CardFormState) {
         Spacer(Modifier.height(10.dp))
         Row {
             MbText(
-                state.holder.ifBlank { "KARTA EGASI" },
+                state.holder.ifBlank { stringResource(R.string.karta_egasi_2) },
                 MbTheme.type.caption,
                 Color.White.copy(alpha = 0.75f),
             )
@@ -206,7 +211,7 @@ private fun CardPreview(state: CardFormState) {
             MbText(
                 if (state.expiry.length == 4) {
                     "${state.expiry.take(2)}/${state.expiry.drop(2)}"
-                } else "MM/YY",
+                } else stringResource(R.string.mm_yy),
                 MbTheme.type.caption,
                 Color.White.copy(alpha = 0.75f),
             )

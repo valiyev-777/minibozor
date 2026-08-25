@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import col, select
 
+from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
@@ -38,7 +39,7 @@ def add_card(payload: s.CardIn, user: CurrentUser, session: SessionDep) -> s.Car
 def make_default(card_id: int, user: CurrentUser, session: SessionDep) -> s.CardOut:
     card = _owned(session, user.id, card_id)
     if card.status == CardStatus.EXPIRED:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Kartaning muddati o'tgan")
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("card_expired"))
     _clear_default(session, user.id)
     card.is_default = True
     session.add(card)
@@ -52,13 +53,13 @@ def delete_card(card_id: int, user: CurrentUser, session: SessionDep) -> s.Messa
     card = _owned(session, user.id, card_id)
     session.delete(card)
     session.commit()
-    return s.Message(message="Karta o'chirildi")
+    return s.Message(message=i18n.label("card_removed"))
 
 
 def _owned(session: SessionDep, user_id: int, card_id: int) -> PaymentCard:
     card = session.get(PaymentCard, card_id)
     if card is None or card.user_id != user_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Karta topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("card_not_found"))
     return card
 
 

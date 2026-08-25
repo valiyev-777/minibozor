@@ -1,8 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.MiniBozor" parent="android:Theme.Material.Light.NoActionBar">
+    <!--
+      AppCompat parent because MainActivity is an AppCompatActivity, which is
+      what AppCompatDelegate needs to apply a per-app language below API 33.
+      Bar icon colours are set from Compose instead of here, since the app's
+      dark mode follows our own "Tungi rejim" switch, not just the system.
+    -->
+    <style name="Theme.MiniBozor" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/canvas</item>
     </style>
 </resources>

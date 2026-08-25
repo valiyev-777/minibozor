@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import select
 
+from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
@@ -20,13 +21,13 @@ def get_cart(user: CurrentUser, session: SessionDep, promo_code: str | None = No
 def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.CartOut:
     product = session.get(Product, payload.product_id)
     if product is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mahsulot topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     if not product.in_stock:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Mahsulot mavjud emas")
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock"))
     if payload.variant_id is not None:
         variant = session.get(ProductVariant, payload.variant_id)
         if variant is None or variant.product_id != product.id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Variant noto'g'ri")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("variant_invalid"))
 
     existing = session.exec(
         select(CartItem).where(
@@ -58,7 +59,7 @@ def update_item(
 ) -> s.CartOut:
     item = session.get(CartItem, item_id)
     if item is None or item.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Savatda topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("cart_item_not_found"))
 
     if payload.quantity is not None:
         if payload.quantity == 0:
@@ -78,7 +79,7 @@ def update_item(
 def delete_item(item_id: int, user: CurrentUser, session: SessionDep) -> s.CartOut:
     item = session.get(CartItem, item_id)
     if item is None or item.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Savatda topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("cart_item_not_found"))
     session.delete(item)
     session.commit()
     return sv.build_cart(session, user)

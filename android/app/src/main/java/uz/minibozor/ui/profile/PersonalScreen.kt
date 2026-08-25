@@ -16,12 +16,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -52,11 +54,11 @@ fun PersonalScreen(
     LaunchedEffect(state.saved) { if (state.saved) onBack() }
 
     MbScreen(
-        topBar = { MbTopBar("Shaxsiy ma'lumotlar", onBack = onBack) },
+        topBar = { MbTopBar(stringResource(R.string.shaxsiy_ma_lumotlar), onBack = onBack) },
         bottomBar = {
             MbBottomBar {
                 MbPrimaryButton(
-                    text = "Saqlash",
+                    text = stringResource(R.string.saqlash),
                     onClick = {
                         viewModel.save(
                             fullName = fullName,
@@ -83,23 +85,23 @@ fun PersonalScreen(
                 MbTextField(
                     value = fullName,
                     onValueChange = { fullName = it },
-                    label = "Ism va familiya",
-                    placeholder = "Aziz Toshmatov",
+                    label = stringResource(R.string.ism_va_familiya),
+                    placeholder = stringResource(R.string.aziz_toshmatov_2),
                 )
                 Spacer(Modifier.height(14.dp))
                 MbTextField(
                     value = user?.phone?.formatPhone().orEmpty(),
                     onValueChange = {},
-                    label = "Telefon",
+                    label = stringResource(R.string.telefon),
                     trailing = {
-                        MbText("O'zgartirib bo'lmaydi", MbTheme.type.micro, MbTheme.colors.disabled)
+                        MbText(stringResource(R.string.ozgartirib_bolmaydi), MbTheme.type.micro, MbTheme.colors.disabled)
                     },
                 )
                 Spacer(Modifier.height(14.dp))
                 MbTextField(
                     value = email,
                     onValueChange = { email = it },
-                    label = "Email",
+                    label = stringResource(R.string.email),
                     placeholder = "siz@example.uz",
                     keyboardType = KeyboardType.Email,
                 )
@@ -107,7 +109,7 @@ fun PersonalScreen(
                 MbTextField(
                     value = birthDate,
                     onValueChange = { birthDate = it },
-                    label = "Tug'ilgan sana",
+                    label = stringResource(R.string.tugilgan_sana),
                     placeholder = "1994-05-12",
                     keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Done,
@@ -115,7 +117,7 @@ fun PersonalScreen(
             }
 
             MbCard {
-                SectionHeader("Jins")
+                SectionHeader(stringResource(R.string.jins))
                 Spacer(Modifier.height(12.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("erkak", "ayol").forEach { option ->

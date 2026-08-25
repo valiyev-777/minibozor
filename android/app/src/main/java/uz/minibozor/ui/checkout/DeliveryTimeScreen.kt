@@ -19,12 +19,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -48,10 +50,10 @@ fun DeliveryTimeScreen(
     val days = state.slotDays
 
     MbScreen(
-        topBar = { MbTopBar("Yetkazish vaqti", onBack = onBack) },
+        topBar = { MbTopBar(stringResource(R.string.yetkazish_vaqti), onBack = onBack) },
         bottomBar = {
             MbBottomBar {
-                MbPrimaryButton("Tasdiqlash", onDone, enabled = state.slotId != null)
+                MbPrimaryButton(stringResource(R.string.tasdiqlash), onDone, enabled = state.slotId != null)
             }
         },
     ) { padding ->
@@ -111,7 +113,7 @@ fun DeliveryTimeScreen(
                     val slots = days.getOrNull(dayIndex)?.slots.orEmpty()
                     if (slots.isEmpty()) {
                         MbText(
-                            "Bu kunga bo'sh oraliq qolmadi.",
+                            stringResource(R.string.bu_kunga_bosh_oraliq_qolmadi),
                             MbTheme.type.bodySmall,
                             MbTheme.colors.icon,
                             modifier = Modifier.padding(16.dp),
@@ -123,7 +125,7 @@ fun DeliveryTimeScreen(
                             subtitle = slot.note.ifBlank { null },
                             selected = slot.id == state.slotId,
                             onSelect = { viewModel.selectSlot(slot.id) },
-                            trailingLabel = if (slot.price == 0) "Bepul" else "+${slot.price.sum()}",
+                            trailingLabel = if (slot.price == 0) stringResource(R.string.bepul) else "+${slot.price.sum()}",
                             trailingColor = if (slot.price == 0) MbTheme.colors.success
                             else MbTheme.colors.ink,
                             modifier = Modifier.padding(horizontal = 10.dp),
@@ -135,7 +137,7 @@ fun DeliveryTimeScreen(
 
             item {
                 MbText(
-                    "Kuryer yetkazishdan 30 daqiqa oldin qo'ng'iroq qiladi.",
+                    stringResource(R.string.kuryer_yetkazishdan_30_daqiqa_oldin),
                     MbTheme.type.caption,
                     MbTheme.colors.textQuaternary,
                     modifier = Modifier.padding(horizontal = 6.dp),

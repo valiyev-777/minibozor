@@ -1,5 +1,6 @@
 package uz.minibozor.ui.product
 
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +32,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
@@ -45,6 +47,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.mbTap
@@ -159,7 +162,7 @@ fun ProductScreen(
                         }
                         Spacer(Modifier.size(14.dp))
                         MbPrimaryButton(
-                            text = if (product.inStock) "Savatga" else "Mavjud emas",
+                            text = if (product.inStock) stringResource(R.string.savatga) else stringResource(R.string.mavjud_emas),
                             onClick = {
                                 viewModel.addToCart { message ->
                                     toast.value = message
@@ -214,7 +217,7 @@ fun ProductScreen(
                                     MbRating(product.rating, product.reviewsCount)
                                     if (product.isOriginal) {
                                         MbStatusPill(
-                                            "ORIGINAL",
+                                            stringResource(R.string.original),
                                             MbTheme.colors.successBg,
                                             MbTheme.colors.success,
                                         )
@@ -227,7 +230,7 @@ fun ProductScreen(
                         if (sizes.isNotEmpty()) {
                             item {
                                 MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                    SectionHeader("O'lcham", "o'lchamlar jadvali")
+                                    SectionHeader(stringResource(R.string.olcham), stringResource(R.string.olchamlar_jadvali))
                                     Spacer(Modifier.height(12.dp))
                                     FlowRow(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -250,7 +253,7 @@ fun ProductScreen(
                         if (colors.isNotEmpty()) {
                             item {
                                 MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                    SectionHeader("Rang")
+                                    SectionHeader(stringResource(R.string.rang))
                                     Spacer(Modifier.height(12.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                         colors.forEach { variant ->
@@ -268,22 +271,22 @@ fun ProductScreen(
 
                         item {
                             MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                DeliveryRow("box", "Yetkazish", product.deliveryNote)
+                                DeliveryRow("box", stringResource(R.string.yetkazish), product.deliveryNote)
                                 MbDivider()
                                 DeliveryRow(
                                     "ret",
-                                    "Qaytarish",
-                                    "14 kun ichida, qadoq butun bo'lsa",
+                                    stringResource(R.string.qaytarish),
+                                    stringResource(R.string.qaytarish_14_kun_ichida_qadoq_butun_bolsa),
                                 )
                                 if (product.warranty != null) {
                                     MbDivider()
-                                    DeliveryRow("gear", "Kafolat", product.warranty)
+                                    DeliveryRow("gear", stringResource(R.string.kafolat), product.warranty)
                                 }
                                 MbDivider()
                                 DeliveryRow(
                                     "basket",
-                                    "Sotuvchi",
-                                    "${product.seller} · ${product.stockLeft} dona qoldi",
+                                    stringResource(R.string.sotuvchi),
+                                    stringResource(R.string.sotuvchi_va_qoldiq, product.seller, product.stockLeft),
                                 )
                             }
                         }
@@ -291,7 +294,7 @@ fun ProductScreen(
                         if (product.description.isNotBlank()) {
                             item {
                                 MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                    SectionHeader("Tavsif")
+                                    SectionHeader(stringResource(R.string.tavsif))
                                     Spacer(Modifier.height(10.dp))
                                     MbText(
                                         product.description,
@@ -305,7 +308,7 @@ fun ProductScreen(
                         if (product.specs.isNotEmpty()) {
                             item {
                                 MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                    SectionHeader("Xususiyatlari")
+                                    SectionHeader(stringResource(R.string.xususiyatlari))
                                     Spacer(Modifier.height(4.dp))
                                     product.specs.forEach { MbKeyValueRow(it.key, it.value) }
                                 }
@@ -315,9 +318,9 @@ fun ProductScreen(
                         item {
                             MbCard(Modifier.padding(horizontal = 12.dp)) {
                                 SectionHeader(
-                                    title = "Sharhlar",
-                                    subtitle = state.summary?.let { "${it.total} ta" },
-                                    actionLabel = "Barchasi",
+                                    title = stringResource(R.string.sharhlar),
+                                    subtitle = state.summary?.let { pluralStringResource(R.plurals.n_items, it.total, it.total) },
+                                    actionLabel = stringResource(R.string.barchasi),
                                     onAction = { onOpenReviews(product.id) },
                                 )
                                 Spacer(Modifier.height(12.dp))
@@ -327,7 +330,7 @@ fun ProductScreen(
                                 }
                                 if (state.topReviews.isEmpty()) {
                                     MbText(
-                                        "Hali sharh yo'q — birinchi bo'ling.",
+                                        stringResource(R.string.hali_sharh_yoq_birinchi_boling),
                                         MbTheme.type.bodySmall,
                                         MbTheme.colors.icon,
                                     )
@@ -339,7 +342,7 @@ fun ProductScreen(
                             item {
                                 MbCard(Modifier.padding(horizontal = 12.dp), padding = 0.dp) {
                                     SectionHeader(
-                                        "O'xshash tovarlar",
+                                        stringResource(R.string.oxshash_tovarlar),
                                         modifier = Modifier.padding(16.dp),
                                     )
                                     LazyRow(

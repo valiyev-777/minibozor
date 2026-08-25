@@ -21,11 +21,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbChip
@@ -74,7 +76,7 @@ fun SearchScreen(
                     modifier = Modifier.weight(1f),
                 )
                 MbText(
-                    "Bekor",
+                    stringResource(R.string.bekor),
                     MbTheme.type.label,
                     MbTheme.colors.accent,
                     modifier = Modifier.clickable(onClick = onBack),
@@ -115,8 +117,8 @@ fun SearchScreen(
                     if (state.recent.isNotEmpty()) {
                         Spacer(Modifier.height(18.dp))
                         SectionHeader(
-                            title = "Oxirgi qidiruvlar",
-                            actionLabel = "Tozalash",
+                            title = stringResource(R.string.oxirgi_qidiruvlar),
+                            actionLabel = stringResource(R.string.tozalash),
                             onAction = viewModel::clearHistory,
                         )
                         Spacer(Modifier.height(12.dp))
@@ -138,7 +140,7 @@ fun SearchScreen(
 
                     if (state.popular.isNotEmpty()) {
                         Spacer(Modifier.height(22.dp))
-                        SectionHeader(title = "Ommabop so'rovlar")
+                        SectionHeader(title = stringResource(R.string.ommabop_sorovlar))
                         Spacer(Modifier.height(12.dp))
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),

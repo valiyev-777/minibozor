@@ -1,5 +1,6 @@
 package uz.minibozor.ui.checkout
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -19,9 +20,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import uz.minibozor.R
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
 import uz.minibozor.core.design.component.MbCard
@@ -32,12 +35,24 @@ import uz.minibozor.core.design.component.MbTextField
 import uz.minibozor.core.design.component.MbToggleRow
 import uz.minibozor.core.design.component.MbTopBar
 import uz.minibozor.core.design.component.SectionHeader
+import uz.minibozor.core.util.AppStrings
 import uz.minibozor.data.remote.dto.AddressRequest
 
+/**
+ * The quick-fill chips. The title is stored on the address, so it is written in
+ * whichever language the user was using when they saved it — same as anything
+ * else they type into the form.
+ */
+private data class AddressPreset(
+    @StringRes val titleRes: Int,
+    val glyph: String,
+    @StringRes val badgeRes: Int?,
+)
+
 private val PRESETS = listOf(
-    Triple("Uy", "pin", "ASOSIY"),
-    Triple("Ish", "box", "OFIS"),
-    Triple("Boshqa", "star", null),
+    AddressPreset(R.string.preset_uy, "pin", R.string.preset_badge_asosiy),
+    AddressPreset(R.string.preset_ish, "box", R.string.preset_badge_ofis),
+    AddressPreset(R.string.preset_boshqa, "star", null),
 )
 
 /** Screen 20 — Manzil qo'shish. */
@@ -60,19 +75,22 @@ fun AddressFormScreen(
     var isDefault by remember { mutableStateOf(false) }
 
     MbScreen(
-        topBar = { MbTopBar("Manzil qo'shish", onBack = onBack) },
+        topBar = { MbTopBar(stringResource(R.string.manzil_qoshish), onBack = onBack) },
         bottomBar = {
             MbBottomBar {
                 MbPrimaryButton(
-                    text = "Saqlash",
+                    text = stringResource(R.string.saqlash),
                     enabled = line.isNotBlank(),
                     loading = state.saving,
                     onClick = {
                         viewModel.save(
                             AddressRequest(
-                                title = preset.first,
-                                icon = preset.second,
-                                badge = preset.third,
+                                // Resolved here rather than read from the chip
+                                // so the saved title matches the language the
+                                // user is actually typing in.
+                                title = AppStrings[preset.titleRes],
+                                icon = preset.glyph,
+                                badge = preset.badgeRes?.let { AppStrings[it] },
                                 line = line.trim(),
                                 floor = floor.ifBlank { null },
                                 apartment = apartment.ifBlank { null },
@@ -95,12 +113,12 @@ fun AddressFormScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             MbCard {
-                SectionHeader("Manzil turi")
+                SectionHeader(stringResource(R.string.manzil_turi))
                 Spacer(Modifier.height(12.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PRESETS.forEach { option ->
                         MbChip(
-                            label = option.first,
+                            label = stringResource(option.titleRes),
                             selected = option == preset,
                             onClick = { preset = option },
                         )
@@ -112,22 +130,22 @@ fun AddressFormScreen(
                 MbTextField(
                     value = line,
                     onValueChange = { line = it },
-                    label = "Ko'cha va uy raqami",
-                    placeholder = "Toshkent, Amir Temur shoh ko'chasi 108",
+                    label = stringResource(R.string.kocha_va_uy_raqami),
+                    placeholder = stringResource(R.string.toshkent_amir_temur_shoh_kochasi_108),
                 )
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     MbTextField(
                         value = floor,
                         onValueChange = { floor = it },
-                        label = "Qavat",
+                        label = stringResource(R.string.qavat),
                         placeholder = "12",
                         modifier = Modifier.weight(1f),
                     )
                     MbTextField(
                         value = apartment,
                         onValueChange = { apartment = it },
-                        label = "Xona",
+                        label = stringResource(R.string.xona),
                         placeholder = "45",
                         modifier = Modifier.weight(1f),
                     )
@@ -136,15 +154,15 @@ fun AddressFormScreen(
                 MbTextField(
                     value = entranceCode,
                     onValueChange = { entranceCode = it },
-                    label = "Kirish kodi",
+                    label = stringResource(R.string.kirish_kodi),
                     placeholder = "1245K",
                 )
                 Spacer(Modifier.height(14.dp))
                 MbTextField(
                     value = comment,
                     onValueChange = { comment = it },
-                    label = "Kuryerga izoh",
-                    placeholder = "Domofon ishlamaydi, qo'ng'iroq qiling",
+                    label = stringResource(R.string.kuryerga_izoh),
+                    placeholder = stringResource(R.string.domofon_ishlamaydi_qongiroq_qiling),
                     imeAction = ImeAction.Done,
                     singleLine = false,
                     minHeight = 80.dp,
@@ -162,8 +180,8 @@ fun AddressFormScreen(
 
             MbCard(padding = 6.dp) {
                 MbToggleRow(
-                    label = "Asosiy manzil",
-                    subtitle = "Buyurtma berishda avtomatik tanlanadi",
+                    label = stringResource(R.string.asosiy_manzil),
+                    subtitle = stringResource(R.string.buyurtma_berishda_avtomatik_tanlanadi),
                     checked = isDefault,
                     onCheckedChange = { isDefault = it },
                     glyph = "pin",

@@ -1,5 +1,7 @@
 package uz.minibozor.navigation
 
+import androidx.compose.ui.res.stringResource
+import uz.minibozor.R
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -12,12 +14,30 @@ import uz.minibozor.core.design.component.MbTab
 import uz.minibozor.core.design.component.MbTabBar
 import uz.minibozor.ui.cart.CartBadgeViewModel
 
-private val TABS = listOf(
-    MbTab(Routes.HOME, "home", "Bosh sahifa"),
-    MbTab(Routes.CATALOG, "grid", "Katalog"),
-    MbTab(Routes.CART, "cart", "Savat"),
-    MbTab(Routes.PROFILE, "user", "Profil"),
+private val TAB_LABELS = listOf(
+    Routes.HOME to R.string.tab_home,
+    Routes.CATALOG to R.string.tab_catalog,
+    Routes.CART to R.string.tab_cart,
+    Routes.PROFILE to R.string.tab_profile,
 )
+
+private val TAB_GLYPHS = mapOf(
+    Routes.HOME to "home",
+    Routes.CATALOG to "grid",
+    Routes.CART to "cart",
+    Routes.PROFILE to "user",
+)
+
+/** Built inside the composition so the labels follow the app language. */
+@Composable
+private fun tabs(badge: Int): List<MbTab> = TAB_LABELS.map { (route, label) ->
+    MbTab(
+        route = route,
+        glyph = TAB_GLYPHS.getValue(route),
+        label = stringResource(label),
+        badge = if (route == Routes.CART) badge else 0,
+    )
+}
 
 /**
  * Wraps the four tab destinations with the floating bar from the design. The
@@ -35,7 +55,7 @@ fun MainScaffold(
     Box(Modifier.fillMaxSize()) {
         content()
         MbTabBar(
-            tabs = TABS.map { if (it.route == Routes.CART) it.copy(badge = badge) else it },
+            tabs = tabs(badge),
             currentRoute = currentRoute,
             onSelect = { onSelectTab(it.route) },
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -43,4 +63,4 @@ fun MainScaffold(
     }
 }
 
-val TabRoutes: List<String> = TABS.map { it.route }
+val TabRoutes: List<String> = TAB_LABELS.map { it.first }

@@ -21,12 +21,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCard
@@ -56,7 +58,7 @@ fun NotificationsScreen(
     MbScreen(
         topBar = {
             MbTopBar(
-                title = "Bildirishnomalar",
+                title = stringResource(R.string.bildirishnomalar),
                 onBack = onBack,
                 action = {
                     MbIcon(
@@ -72,8 +74,8 @@ fun NotificationsScreen(
         if (groups.isEmpty()) {
             MbEmptyState(
                 glyph = "bell",
-                title = "Bildirishnoma yo'q",
-                message = "Buyurtma holati va chegirmalar haqida shu yerda xabar beramiz.",
+                title = stringResource(R.string.bildirishnoma_yoq),
+                message = stringResource(R.string.buyurtma_holati_va_chegirmalar_haqida_shu),
                 modifier = Modifier.padding(padding),
             )
             return@MbScreen
@@ -162,7 +164,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    MbScreen(topBar = { MbTopBar("Sozlamalar", onBack = onBack) }) { padding ->
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.sozlamalar), onBack = onBack) }) { padding ->
         LazyColumn(
             Modifier
                 .fillMaxSize()
@@ -173,20 +175,20 @@ fun SettingsScreen(
             item {
                 MbCard(padding = 6.dp) {
                     val rows = listOf(
-                        Triple("bell", "Bildirishnoma sozlamalari", "Push, SMS") to
+                        Triple("bell", stringResource(R.string.bildirishnoma_sozlamalari), stringResource(R.string.push_sms)) to
                             "notification_settings",
                         Triple(
                             "globe",
-                            "Ilova tili",
-                            languageLabel(state.settings?.language),
+                            stringResource(R.string.ilova_tili),
+                            languageLabel(state.language),
                         ) to "language",
                         Triple(
                             "gear",
-                            "Xavfsizlik",
-                            if (state.hasPin) "PIN yoqilgan" else "PIN o'rnatilmagan",
+                            stringResource(R.string.xavfsizlik),
+                            if (state.hasPin) stringResource(R.string.pin_yoqilgan) else stringResource(R.string.pin_ornatilmagan),
                         ) to "security",
-                        Triple("headset", "Yordam markazi", "1150") to "help",
-                        Triple("ret", "Shartlar va maxfiylik", "") to "legal",
+                        Triple("headset", stringResource(R.string.yordam_markazi), "1150") to "help",
+                        Triple("ret", stringResource(R.string.shartlar_va_maxfiylik), "") to "legal",
                     )
                     rows.forEachIndexed { index, (row, route) ->
                         MbListRow(
@@ -204,8 +206,8 @@ fun SettingsScreen(
             item {
                 MbCard(padding = 6.dp) {
                     MbToggleRow(
-                        label = "Joylashuv",
-                        subtitle = "Yaqin punktlarni ko'rsatish",
+                        label = stringResource(R.string.joylashuv),
+                        subtitle = stringResource(R.string.yaqin_punktlarni_korsatish),
                         glyph = "pin",
                         checked = state.settings?.locationEnabled ?: true,
                         onCheckedChange = viewModel::setLocation,
@@ -213,8 +215,8 @@ fun SettingsScreen(
                     )
                     MbDivider(inset = 60.dp)
                     MbToggleRow(
-                        label = "Tungi rejim",
-                        subtitle = "Tizim bilan moslashadi",
+                        label = stringResource(R.string.tungi_rejim),
+                        subtitle = stringResource(R.string.tizim_bilan_moslashadi),
                         glyph = "gear",
                         checked = state.settings?.nightMode ?: false,
                         onCheckedChange = viewModel::setNightMode,
@@ -225,7 +227,7 @@ fun SettingsScreen(
 
             item {
                 MbText(
-                    "Mini Bozor · versiya 1.0",
+                    stringResource(R.string.mini_bozor_versiya_1_0),
                     MbTheme.type.caption,
                     MbTheme.colors.disabled,
                     modifier = Modifier.padding(horizontal = 6.dp),
@@ -244,7 +246,7 @@ fun NotificationSettingsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val prefs = state.prefs
 
-    MbScreen(topBar = { MbTopBar("Bildirishnomalar", onBack = onBack) }) { padding ->
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.bildirishnomalar), onBack = onBack) }) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
@@ -254,8 +256,8 @@ fun NotificationSettingsScreen(
         ) {
             MbCard(padding = 6.dp) {
                 MbToggleRow(
-                    label = "Buyurtma holati",
-                    subtitle = "Yig'ildi, yo'lda, yetkazildi",
+                    label = stringResource(R.string.buyurtma_holati),
+                    subtitle = stringResource(R.string.yigildi_yolda_yetkazildi),
                     glyph = "box",
                     checked = prefs?.orderStatus ?: true,
                     onCheckedChange = { viewModel.setPref(NotificationPrefsRequest(orderStatus = it)) },
@@ -263,8 +265,8 @@ fun NotificationSettingsScreen(
                 )
                 MbDivider(inset = 60.dp)
                 MbToggleRow(
-                    label = "Chegirma va aksiyalar",
-                    subtitle = "Haftada 2 martadan ko'p emas",
+                    label = stringResource(R.string.chegirma_va_aksiyalar),
+                    subtitle = stringResource(R.string.haftada_2_martadan_kop_emas),
                     glyph = "gift",
                     checked = prefs?.promotions ?: true,
                     onCheckedChange = { viewModel.setPref(NotificationPrefsRequest(promotions = it)) },
@@ -272,8 +274,8 @@ fun NotificationSettingsScreen(
                 )
                 MbDivider(inset = 60.dp)
                 MbToggleRow(
-                    label = "Sevimlilar narxi",
-                    subtitle = "Narx tushganda xabar",
+                    label = stringResource(R.string.sevimlilar_narxi),
+                    subtitle = stringResource(R.string.narx_tushganda_xabar),
                     glyph = "heart",
                     checked = prefs?.priceDrop ?: true,
                     onCheckedChange = { viewModel.setPref(NotificationPrefsRequest(priceDrop = it)) },
@@ -283,11 +285,11 @@ fun NotificationSettingsScreen(
 
             MbCard(padding = 6.dp) {
                 SectionHeader(
-                    "Kanallar",
+                    stringResource(R.string.kanallar),
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                 )
                 MbToggleRow(
-                    label = "Push bildirishnoma",
+                    label = stringResource(R.string.push_bildirishnoma),
                     glyph = "bell",
                     checked = prefs?.push ?: true,
                     onCheckedChange = { viewModel.setPref(NotificationPrefsRequest(push = it)) },
@@ -295,7 +297,7 @@ fun NotificationSettingsScreen(
                 )
                 MbDivider(inset = 60.dp)
                 MbToggleRow(
-                    label = "SMS",
+                    label = stringResource(R.string.sms),
                     glyph = "phone",
                     checked = prefs?.sms ?: true,
                     onCheckedChange = { viewModel.setPref(NotificationPrefsRequest(sms = it)) },
@@ -314,7 +316,7 @@ fun LanguageScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    MbScreen(topBar = { MbTopBar("Ilova tili", onBack = onBack) }) { padding ->
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.ilova_tili), onBack = onBack) }) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
@@ -327,7 +329,7 @@ fun LanguageScreen(
                     MbRadioRow(
                         label = language["label"].orEmpty(),
                         subtitle = language["native"],
-                        selected = state.settings?.language == code,
+                        selected = state.language == code,
                         onSelect = { viewModel.setLanguage(code) },
                         leading = {
                             Box(
@@ -351,7 +353,7 @@ fun LanguageScreen(
             }
             Spacer(Modifier.height(12.dp))
             MbText(
-                "Til o'zgarishi ilova qayta ishga tushganda to'liq qo'llanadi.",
+                stringResource(R.string.tanlangan_til_darhol_qollanadi_turkum),
                 MbTheme.type.caption,
                 MbTheme.colors.textQuaternary,
                 modifier = Modifier.padding(horizontal = 6.dp),
@@ -369,7 +371,7 @@ fun SecurityScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    MbScreen(topBar = { MbTopBar("Xavfsizlik", onBack = onBack) }) { padding ->
+    MbScreen(topBar = { MbTopBar(stringResource(R.string.xavfsizlik), onBack = onBack) }) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
@@ -379,16 +381,16 @@ fun SecurityScreen(
         ) {
             MbCard(padding = 6.dp) {
                 MbListRow(
-                    label = if (state.hasPin) "PIN kodni o'zgartirish" else "PIN kod o'rnatish",
-                    subtitle = "Ilovaga kirishda so'raladi",
+                    label = if (state.hasPin) stringResource(R.string.pin_kodni_ozgartirish) else stringResource(R.string.pin_kod_ornatish),
+                    subtitle = stringResource(R.string.ilovaga_kirishda_soraladi),
                     glyph = "gear",
                     onClick = onChangePin,
                     modifier = Modifier.padding(horizontal = 10.dp),
                 )
                 MbDivider(inset = 60.dp)
                 MbToggleRow(
-                    label = "Face ID / barmoq izi",
-                    subtitle = "PIN o'rniga biometrika",
+                    label = stringResource(R.string.face_id_barmoq_izi),
+                    subtitle = stringResource(R.string.pin_orniga_biometrika),
                     glyph = "user",
                     checked = state.biometrics,
                     onCheckedChange = viewModel::setBiometrics,
@@ -397,8 +399,7 @@ fun SecurityScreen(
             }
 
             MbText(
-                "PIN kod ilovani ochishda so'raladi. Unutib qo'ysangiz — " +
-                    "hisobdan chiqib, SMS orqali qayta kiring.",
+                stringResource(R.string.pin_kod_ilovani_ochishda_soraladi_unutib),
                 MbTheme.type.caption,
                 MbTheme.colors.textQuaternary,
                 modifier = Modifier.padding(horizontal = 6.dp),

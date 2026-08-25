@@ -5,6 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, or_, select
 
+from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import OptionalUser, SessionDep
@@ -14,21 +15,14 @@ router = APIRouter(tags=["catalog"])
 
 SortKey = Literal["popular", "price_asc", "price_desc", "rating", "new", "discount"]
 
-SORT_OPTIONS = [
-    {"key": "popular", "label": "Ommabop"},
-    {"key": "price_asc", "label": "Avval arzoni"},
-    {"key": "price_desc", "label": "Avval qimmati"},
-    {"key": "rating", "label": "Reyting bo'yicha"},
-    {"key": "new", "label": "Yangilari"},
-    {"key": "discount", "label": "Chegirma bo'yicha"},
-]
+SORT_KEYS = ["popular", "price_asc", "price_desc", "rating", "new", "discount"]
 
-FLAG_LABELS = {
-    "next_day_delivery": ("Ertaga yetkaziladi", "Toshkent bo'ylab"),
-    "free_delivery": ("Bepul yetkazish", "250 000 so'mdan yuqori"),
-    "discounted": ("Chegirmada", "Faqat arzonlashgan tovarlar"),
-    "is_original": ("Original kafolati", "Tekshirilgan sotuvchilar"),
-}
+
+def sort_options() -> list[dict[str, str]]:
+    """Built per request so the labels follow Accept-Language."""
+    return [{"key": k, "label": i18n.label(f"sort_{k}")} for k in SORT_KEYS]
+
+FLAG_KEYS = ("next_day_delivery", "free_delivery", "discounted", "is_original")
 
 
 @router.get("/categories", response_model=list[s.CategoryOut], summary="Screen 10 — catalogue root")
@@ -43,7 +37,7 @@ def list_categories(
     elif parent:
         parent_row = session.exec(select(Category).where(Category.slug == parent)).first()
         if parent_row is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Turkum topilmadi")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("category_not_found"))
         stmt = stmt.where(Category.parent_id == parent_row.id)
     else:
         stmt = stmt.where(col(Category.parent_id).is_(None))
@@ -55,7 +49,7 @@ def list_categories(
 def get_category(slug: str, session: SessionDep) -> s.CategoryOut:
     row = session.exec(select(Category).where(Category.slug == slug)).first()
     if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Turkum topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("category_not_found"))
     return sv.category_out(session, row)
 
 
@@ -168,11 +162,11 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
     flags = [
         s.FilterFlagOut(
             key=key,
-            label=label,
-            subtitle=subtitle,
+            label=i18n.label(f"flag_{key}"),
+            subtitle=i18n.label(f"flag_{key}_sub"),
             count=sum(1 for p in products if _flag_matches(p, key)),
         )
-        for key, (label, subtitle) in FLAG_LABELS.items()
+        for key in FLAG_KEYS
     ]
 
     return s.FiltersOut(
@@ -180,9 +174,13 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
         price_max=max(prices),
         brands=brands,
         sizes=sizes,
-        ratings=["4.5 ★ dan yuqori", "4.0 ★ dan yuqori", "Sharhi ko'p"],
+        ratings=[
+            i18n.label("rating_45"),
+            i18n.label("rating_40"),
+            i18n.label("rating_many"),
+        ],
         flags=flags,
-        sorts=SORT_OPTIONS,
+        sorts=sort_options(),
     )
 
 
@@ -190,7 +188,7 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
 def get_product(product_id: int, session: SessionDep, user: OptionalUser) -> s.ProductOut:
     product = session.get(Product, product_id)
     if product is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mahsulot topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     return sv.product_out(session, product, sv.favorite_ids(session, user))
 
 
@@ -200,7 +198,7 @@ def similar_products(
 ) -> list[s.ProductCardOut]:
     product = session.get(Product, product_id)
     if product is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mahsulot topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     rows = session.exec(
         select(Product)
         .where(Product.category_id == product.category_id, Product.id != product_id)

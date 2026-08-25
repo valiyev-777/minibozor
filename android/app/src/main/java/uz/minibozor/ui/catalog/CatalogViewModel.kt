@@ -1,5 +1,7 @@
 package uz.minibozor.ui.catalog
 
+import uz.minibozor.core.util.AppStrings
+import uz.minibozor.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -58,7 +60,7 @@ class SubcategoryViewModel @Inject constructor(
                     UiState.Ready(parent.data to children.data)
                 parent is Outcome.Failure -> UiState.Error(parent.message)
                 children is Outcome.Failure -> UiState.Error(children.message)
-                else -> UiState.Error("Turkumni yuklab bo'lmadi")
+                else -> UiState.Error(AppStrings[R.string.turkumni_yuklab_bolmadi])
             }
         }
     }

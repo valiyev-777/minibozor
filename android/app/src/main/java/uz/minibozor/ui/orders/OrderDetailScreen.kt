@@ -1,5 +1,6 @@
 package uz.minibozor.ui.orders
 
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,12 +18,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCard
@@ -61,7 +64,7 @@ fun OrderDetailScreen(
     MbScreen(
         topBar = {
             MbTopBar(
-                title = if (trackingOnly) "Yetkazish holati" else "Buyurtma tafsilotlari",
+                title = if (trackingOnly) stringResource(R.string.yetkazish_holati) else stringResource(R.string.buyurtma_tafsilotlari),
                 subtitle = order?.code,
                 onBack = onBack,
             )
@@ -99,7 +102,7 @@ fun OrderDetailScreen(
 
                 item {
                     MbCard {
-                        SectionHeader("Tovarlar", "${order.itemsCount} ta")
+                        SectionHeader(stringResource(R.string.tovarlar), pluralStringResource(R.plurals.n_items, order.itemsCount, order.itemsCount))
                         Spacer(Modifier.height(12.dp))
                         order.items.forEachIndexed { index, item ->
                             MbLineItem(
@@ -113,7 +116,7 @@ fun OrderDetailScreen(
                                         item.productId != null
                                     ) {
                                         MbSecondaryButton(
-                                            text = "Sharh",
+                                            text = stringResource(R.string.sharh),
                                             onClick = { onWriteReview(item.productId, item.id) },
                                             modifier = Modifier.width(88.dp),
                                         )
@@ -128,21 +131,21 @@ fun OrderDetailScreen(
                 if (!trackingOnly) {
                     item {
                         MbCard {
-                            SectionHeader("Ma'lumot")
+                            SectionHeader(stringResource(R.string.ma_lumot))
                             Spacer(Modifier.height(4.dp))
                             MbKeyValueRow(
-                                "Buyurtma sanasi",
+                                stringResource(R.string.buyurtma_sanasi),
                                 order.createdAt.toLocalDateTimeOrNull()?.uzDateTime().orEmpty(),
                             )
-                            MbKeyValueRow("To'lov", order.paymentLabel)
+                            MbKeyValueRow(stringResource(R.string.tolov), order.paymentLabel)
                             MbKeyValueRow(
-                                "Manzil",
+                                stringResource(R.string.manzil),
                                 listOf(order.addressLine, order.addressMeta)
                                     .filter { it.isNotBlank() }
                                     .joinToString(", "),
                             )
                             MbKeyValueRow(
-                                "Qabul qiluvchi",
+                                stringResource(R.string.qabul_qiluvchi),
                                 "${order.recipientName}, ${order.recipientPhone}",
                             )
                         }
@@ -150,20 +153,20 @@ fun OrderDetailScreen(
 
                     item {
                         MbCard {
-                            MbTotalRow("Tovarlar", order.subtotal.sum())
+                            MbTotalRow(stringResource(R.string.tovarlar), order.subtotal.sum())
                             if (order.discount > 0) {
                                 MbTotalRow(
-                                    "Chegirma",
+                                    stringResource(R.string.chegirma),
                                     "−${order.discount.grouped()}",
                                     valueColor = MbTheme.colors.success,
                                 )
                             }
                             MbTotalRow(
-                                "Yetkazish",
-                                if (order.deliveryFee == 0) "Bepul" else order.deliveryFee.sum(),
+                                stringResource(R.string.yetkazish),
+                                if (order.deliveryFee == 0) stringResource(R.string.bepul) else order.deliveryFee.sum(),
                             )
                             MbDivider(Modifier.padding(vertical = 8.dp))
-                            MbTotalRow("Jami", order.total.sum(), strong = true)
+                            MbTotalRow(stringResource(R.string.jami), order.total.sum(), strong = true)
                         }
                     }
 
@@ -172,14 +175,14 @@ fun OrderDetailScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 if (order.canCancel) {
                                     MbSecondaryButton(
-                                        "Buyurtmani bekor qilish",
+                                        stringResource(R.string.buyurtmani_bekor_qilish),
                                         { onCancel(order.id) },
                                         contentColor = MbTheme.colors.danger,
                                     )
                                 }
                                 if (order.status == "delivered") {
                                     MbSecondaryButton(
-                                        "Qaytarish arizasi",
+                                        stringResource(R.string.qaytarish_arizasi),
                                         { onReturn(order.id) },
                                     )
                                 }
@@ -226,7 +229,7 @@ private fun TimelineRow(event: OrderEventDto, isLast: Boolean) {
             )
             val stamp = event.happenedAt?.toLocalDateTimeOrNull()?.uzDateTime()
             MbText(
-                stamp ?: event.note.ifBlank { "Kutilmoqda" },
+                stamp ?: event.note.ifBlank { stringResource(R.string.kutilmoqda) },
                 MbTheme.type.meta,
                 MbTheme.colors.icon,
             )

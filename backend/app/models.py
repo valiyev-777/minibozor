@@ -572,3 +572,24 @@ class LegalDoc(SQLModel, table=True):
     meta: str = ""
     body: str = ""
     sort: int = 0
+
+
+class Translation(SQLModel, table=True):
+    """Russian and English text for a row that is written in Uzbek.
+
+    Keyed by (entity, entity_id, field) rather than held in extra columns on
+    every table: adding a language then costs rows, not a migration on a dozen
+    tables. A missing row falls back to the Uzbek already on the record, so a
+    partly translated catalogue degrades to Uzbek rather than to blanks.
+    """
+
+    __table_args__ = (
+        UniqueConstraint("entity", "entity_id", "field", "lang", name="uq_translation"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    entity: str = Field(index=True)          # "category", "banner", "product", …
+    entity_id: int = Field(index=True)
+    field: str                               # "name", "subtitle", "description", …
+    lang: str = Field(index=True)            # "ru" | "en"
+    value: str

@@ -5,18 +5,28 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.Month
+import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
+import java.util.Locale
+import uz.minibozor.R
 
 private const val NBSP = ' '
 
-private val UZ_MONTHS = listOf(
-    "yanvar", "fevral", "mart", "aprel", "may", "iyun",
-    "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr",
-)
+/**
+ * Month and weekday names come from the JDK's own locale data rather than a
+ * hand-written table: it already knows "avgust", "августа" and "August", and
+ * gets the Russian genitive right, which a table of nominative names would not.
+ */
+private fun locale(): Locale = Locale.forLanguageTag(AppLocale.current())
 
-private val UZ_WEEKDAYS = listOf(
-    "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba",
-)
+private fun monthName(monthValue: Int): String =
+    Month.of(monthValue).getDisplayName(TextStyle.FULL, locale())
+
+private fun weekdayName(isoDay: Int): String =
+    java.time.DayOfWeek.of(isoDay)
+        .getDisplayName(TextStyle.FULL_STANDALONE, locale())
+        .replaceFirstChar { it.titlecase(locale()) }
 
 /** `1090000` → `1 090 000`, grouped exactly the way the design writes prices. */
 fun Int.grouped(): String {
@@ -30,7 +40,7 @@ fun Int.grouped(): String {
 }
 
 /** `1090000` → `1 090 000 so'm`. */
-fun Int.sum(): String = "${grouped()}${NBSP}so'm"
+fun Int.sum(): String = "${grouped()}$NBSP${AppStrings[R.string.currency_sum]}"
 
 /** `29` → `−29%`, the discount pill. */
 fun Int.discountPill(): String = "−$this%"
@@ -50,26 +60,31 @@ fun String.toLocalDateTimeOrNull(): LocalDateTime? = runCatching {
 fun String.toLocalDateOrNull(): LocalDate? = runCatching { LocalDate.parse(this) }.getOrNull()
 
 /** `2026-08-22T19:40` → `22-avgust, 19:40`. */
-fun LocalDateTime.uzDateTime(): String =
-    "${dayOfMonth}-${UZ_MONTHS[monthValue - 1]}, ${format(DateTimeFormatter.ofPattern("HH:mm"))}"
+fun LocalDateTime.uzDateTime(): String = AppStrings[
+    R.string.date_day_month_time,
+    dayOfMonth,
+    monthName(monthValue),
+    format(DateTimeFormatter.ofPattern("HH:mm")),
+]
 
 /** `2026-08-22` → `22-avgust`. */
-fun LocalDate.uzDate(): String = "$dayOfMonth-${UZ_MONTHS[monthValue - 1]}"
+fun LocalDate.uzDate(): String =
+    AppStrings[R.string.date_day_month, dayOfMonth, monthName(monthValue)]
 
 /** `Bugun` / `Ertaga` / weekday name — the day chips on the delivery screen. */
 fun LocalDate.uzDayLabel(today: LocalDate = LocalDate.now()): String = when (this) {
-    today -> "Bugun"
-    today.plusDays(1) -> "Ertaga"
-    else -> UZ_WEEKDAYS[dayOfWeek.value - 1]
+    today -> AppStrings[R.string.bugun]
+    today.plusDays(1) -> AppStrings[R.string.ertaga]
+    else -> weekdayName(dayOfWeek.value)
 }
 
-fun LocalDate.uzMonth(): String = UZ_MONTHS[monthValue - 1]
+fun LocalDate.uzMonth(): String = monthName(monthValue)
 
 /** Relative stamp for notifications and reviews: `12:05`, `19-avg`, `4-iyul`. */
 fun LocalDateTime.uzRelative(now: LocalDateTime = LocalDateTime.now()): String = when {
     toLocalDate() == now.toLocalDate() -> format(DateTimeFormatter.ofPattern("HH:mm"))
     ChronoUnit.DAYS.between(toLocalDate(), now.toLocalDate()) < 7 ->
-        "$dayOfMonth-${UZ_MONTHS[monthValue - 1].take(3)}"
+        AppStrings[R.string.date_day_month, dayOfMonth, monthName(monthValue).take(3)]
     else -> toLocalDate().uzDate()
 }
 

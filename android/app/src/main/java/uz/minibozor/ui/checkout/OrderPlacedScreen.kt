@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -55,9 +57,9 @@ fun OrderPlacedScreen(
         background = MbTheme.colors.surface,
         bottomBar = {
             MbBottomBar {
-                MbPrimaryButton("Buyurtmani kuzatish", { onTrack(orderId) }, leadingGlyph = "box")
+                MbPrimaryButton(stringResource(R.string.buyurtmani_kuzatish), { onTrack(orderId) }, leadingGlyph = "box")
                 Spacer(Modifier.height(10.dp))
-                MbSecondaryButton("Bosh sahifaga", onGoHome)
+                MbSecondaryButton(stringResource(R.string.bosh_sahifaga), onGoHome)
             }
         },
     ) { padding ->
@@ -79,11 +81,11 @@ fun OrderPlacedScreen(
                 MbIcon("box", size = 40.dp, tint = MbTheme.colors.success, strokeWidth = 1.6f)
             }
             Spacer(Modifier.height(22.dp))
-            MbText("Buyurtma qabul qilindi", MbTheme.type.title1, textAlign = TextAlign.Center)
+            MbText(stringResource(R.string.buyurtma_qabul_qilindi), MbTheme.type.title1, textAlign = TextAlign.Center)
             Spacer(Modifier.height(8.dp))
             MbText(
-                order?.code?.let { "$it raqami bilan qabul qildik" }
-                    ?: "Tez orada yig'ishni boshlaymiz",
+                order?.code?.let { stringResource(R.string.buyurtma_raqami_bilan_qabul_qildik, it) }
+                    ?: stringResource(R.string.tez_orada_yigishni_boshlaymiz),
                 MbTheme.type.bodySmall,
                 MbTheme.colors.textTertiary,
                 textAlign = TextAlign.Center,
@@ -92,14 +94,14 @@ fun OrderPlacedScreen(
             if (order != null) {
                 Spacer(Modifier.height(26.dp))
                 MbCard(background = MbTheme.colors.canvas) {
-                    MbKeyValueRow("Buyurtma", order.code)
+                    MbKeyValueRow(stringResource(R.string.buyurtma), order.code)
                     MbKeyValueRow(
-                        "Sana",
+                        stringResource(R.string.sana),
                         order.createdAt.toLocalDateTimeOrNull()?.uzDateTime().orEmpty(),
                     )
-                    MbKeyValueRow("Yetkazish", order.etaLabel)
-                    MbKeyValueRow("To'lov", order.paymentLabel)
-                    MbKeyValueRow("Jami", order.total.sum())
+                    MbKeyValueRow(stringResource(R.string.yetkazish), order.etaLabel)
+                    MbKeyValueRow(stringResource(R.string.tolov), order.paymentLabel)
+                    MbKeyValueRow(stringResource(R.string.jami), order.total.sum())
                 }
             }
         }

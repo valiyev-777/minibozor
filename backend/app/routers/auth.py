@@ -5,6 +5,7 @@ from datetime import timedelta
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import col, select
 
+from app import i18n
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
@@ -69,17 +70,17 @@ def verify_otp(payload: OtpVerifyIn, session: SessionDep) -> TokenPair:
     ).first()
 
     if otp is None or otp.expires_at < now():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kod eskirgan — qaytadan so'rang")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("otp_expired"))
     if otp.attempts >= settings.otp_max_attempts:
         raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS, "Juda ko'p urinish — qaytadan so'rang"
+            status.HTTP_429_TOO_MANY_REQUESTS, i18n.label("otp_too_many")
         )
 
     if not verify_secret(payload.code, otp.code_hash):
         otp.attempts += 1
         session.add(otp)
         session.commit()
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Kod noto'g'ri")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("otp_wrong"))
 
     otp.consumed = True
     session.add(otp)
@@ -105,7 +106,7 @@ def refresh(payload: RefreshIn, session: SessionDep) -> TokenPair:
 
     user = session.get(User, int(claims["sub"]))
     if user is None or not user.is_active:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Foydalanuvchi topilmadi")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, i18n.label("user_not_found"))
 
     stored = _find_refresh(session, user.id, payload.refresh_token)
     if stored is None:
@@ -125,7 +126,7 @@ def logout(user: CurrentUser, session: SessionDep) -> Message:
         token.revoked = True
         session.add(token)
     session.commit()
-    return Message(message="Hisobdan chiqdingiz")
+    return Message(message=i18n.label("signed_out"))
 
 
 @router.post("/pin", response_model=Message, summary="Screens 41–44 — set or change the PIN")
@@ -133,28 +134,28 @@ def set_pin(payload: PinChangeIn, user: CurrentUser, session: SessionDep) -> Mes
     if user.pin_hash and (
         not payload.current_pin or not verify_secret(payload.current_pin, user.pin_hash)
     ):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Joriy kod noto'g'ri")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("pin_current_wrong"))
     user.pin_hash = hash_secret(payload.new_pin)
     session.add(user)
     session.commit()
-    return Message(message="PIN o'zgartirildi")
+    return Message(message=i18n.label("pin_changed"))
 
 
 @router.post("/pin/verify", response_model=Message)
 def verify_pin(payload: PinIn, user: CurrentUser) -> Message:
     if not user.pin_hash or not verify_secret(payload.pin, user.pin_hash):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "PIN noto'g'ri")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("pin_wrong"))
     return Message(message="Tasdiqlandi")
 
 
 @router.delete("/pin", response_model=Message)
 def remove_pin(payload: PinIn, user: CurrentUser, session: SessionDep) -> Message:
     if not user.pin_hash or not verify_secret(payload.pin, user.pin_hash):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "PIN noto'g'ri")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("pin_wrong"))
     user.pin_hash = None
     session.add(user)
     session.commit()
-    return Message(message="PIN o'chirildi")
+    return Message(message=i18n.label("pin_removed"))
 
 
 # --------------------------------------------------------------------------- helpers

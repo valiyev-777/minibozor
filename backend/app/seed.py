@@ -51,6 +51,7 @@ from app.models import (
     User,
     VariantKind,
 )
+from app.seed_i18n import seed_translations
 
 DEMO_PHONE = "+998901234567"
 DEMO_PIN = "1234"
@@ -385,8 +386,10 @@ def seed(session: Session) -> None:
     _seed_reviews(session, products, users)
     _seed_user_data(session, users["demo"], products)
     session.commit()
+    translated = seed_translations(session)
 
     print(f"Seeded {len(products)} products, {len(categories)} categories.")
+    print(f"Seeded {translated} translation rows (ru, en).")
     print(f"Demo login: {DEMO_PHONE} · SMS code 123456 (dev) · PIN {DEMO_PIN}")
 
 
@@ -724,6 +727,11 @@ def main() -> None:
         if "--reset" in sys.argv:
             reset(session)
             print("Database cleared.")
+        if "--translations" in sys.argv:
+            # Re-runnable on its own: translations change far more often than
+            # the catalogue they describe.
+            print(f"Seeded {seed_translations(session)} translation rows (ru, en).")
+            return
         seed(session)
 
 

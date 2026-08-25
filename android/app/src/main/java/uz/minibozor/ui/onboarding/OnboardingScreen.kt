@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbPrimaryButton
@@ -49,33 +51,31 @@ private data class OnboardingPage(
  * product photo inset in a soft circle with a floating chip. The last page
  * swaps the skip/next pair for a single "Boshlash" plus a sign-in link.
  */
+@Composable
 private fun pages(mediaBase: String) = listOf(
     OnboardingPage(
-        title = "Ertaga yetib keladi",
-        body = "Toshkent bo'ylab bir kunda, viloyatlarga 2–3 kunda. " +
-            "Kuryerni real vaqtda kuzatib boring.",
+        title = stringResource(R.string.onboarding_1_title),
+        body = stringResource(R.string.onboarding_1_body),
         image = "$mediaBase/products/nike-zoomx.png",
-        chip = "1 kunda yetkazish",
+        chip = stringResource(R.string.onboarding_1_chip),
     ),
     OnboardingPage(
-        title = "Faqat original brendlar",
-        body = "Har bir sotuvchi tekshiruvdan o'tadi. " +
-            "Original bo'lmasa — pulingizni to'liq qaytaramiz.",
+        title = stringResource(R.string.onboarding_2_title),
+        body = stringResource(R.string.onboarding_2_body),
         image = "$mediaBase/products/gazelle.png",
-        chip = "Original kafolati",
+        chip = stringResource(R.string.onboarding_2_chip),
     ),
     OnboardingPage(
-        title = "Narxni kuzatib turing",
-        body = "Sevimlilarga qo'shing — narx tushganda birinchi bo'lib xabar olasiz.",
+        title = stringResource(R.string.onboarding_3_title),
+        body = stringResource(R.string.onboarding_3_body),
         image = "$mediaBase/products/airpods.png",
-        chip = "Narx tushdi −25%",
+        chip = stringResource(R.string.onboarding_3_chip),
     ),
     OnboardingPage(
-        title = "Xarid qilishni boshlang",
-        body = "Kunlik yetkazish, oson qaytarish va bir marta kiritiladigan to'lov — " +
-            "hammasi bir ilovada.",
+        title = stringResource(R.string.onboarding_4_title),
+        body = stringResource(R.string.onboarding_4_body),
         image = "$mediaBase/banners/lamp-room.png",
-        chip = "12 000+ tovar",
+        chip = stringResource(R.string.onboarding_4_chip),
     ),
 )
 
@@ -163,19 +163,19 @@ fun OnboardingScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     MbPrimaryButton(
-                        text = "Boshlash",
+                        text = stringResource(R.string.boshlash),
                         onClick = onFinished,
                         container = MbTheme.colors.ink,
                     )
                     Spacer(Modifier.height(14.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         MbText(
-                            "Hisobingiz bormi? ",
+                            stringResource(R.string.hisobingiz_bormi),
                             MbTheme.type.caption,
                             MbTheme.colors.textQuaternary,
                         )
                         MbText(
-                            "Kirish",
+                            stringResource(R.string.kirish),
                             MbTheme.type.label,
                             MbTheme.colors.accent,
                             modifier = Modifier.mbTap(onClick = onSignIn),
@@ -191,7 +191,7 @@ fun OnboardingScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     MbText(
-                        "O'tkazish",
+                        stringResource(R.string.otkazish),
                         MbTheme.type.label,
                         MbTheme.colors.textQuaternary,
                         modifier = Modifier.mbTap(onClick = onFinished),
@@ -271,7 +271,7 @@ private fun NextButton(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        MbText("Keyingi", MbTheme.type.label, Color.White)
+        MbText(stringResource(R.string.keyingi), MbTheme.type.label, Color.White)
         MbText("→", MbTheme.type.title3, Color.White)
     }
 }

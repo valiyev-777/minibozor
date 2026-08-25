@@ -1,5 +1,6 @@
 package uz.minibozor.ui.profile
 
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,12 +22,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCard
@@ -53,10 +56,10 @@ fun ProfileScreen(
     LaunchedEffect(state.signedOut) { if (state.signedOut) onSignedOut() }
 
     val quickActions = listOf(
-        QuickAction("box", "Buyurtmalar", "orders"),
-        QuickAction("heart", "Sevimlilar", "favorites"),
-        QuickAction("star", "Sharhlarim", "my_reviews"),
-        QuickAction("ret", "Qaytarish", "orders"),
+        QuickAction("box", stringResource(R.string.buyurtmalar), "orders"),
+        QuickAction("heart", stringResource(R.string.sevimlilar), "favorites"),
+        QuickAction("star", stringResource(R.string.sharhlarim), "my_reviews"),
+        QuickAction("ret", stringResource(R.string.qaytarish), "orders"),
     )
 
     MbScreen { padding ->
@@ -82,7 +85,7 @@ fun ProfileScreen(
                         Spacer(Modifier.size(14.dp))
                         Column(Modifier.weight(1f)) {
                             MbText(
-                                overview?.user?.fullName?.ifBlank { "Ismingizni kiriting" }
+                                overview?.user?.fullName?.ifBlank { stringResource(R.string.ismingizni_kiriting) }
                                     ?: "…",
                                 MbTheme.type.title3,
                             )
@@ -93,7 +96,7 @@ fun ProfileScreen(
                             )
                         }
                         MbText(
-                            "Tahrirlash",
+                            stringResource(R.string.tahrirlash),
                             MbTheme.type.label,
                             MbTheme.colors.accent,
                             modifier = Modifier.clickable { onNavigate("personal") },
@@ -130,17 +133,29 @@ fun ProfileScreen(
             item {
                 MbCard(padding = 6.dp) {
                     val rows = listOf(
-                        Triple("card", "To'lov kartalari", "${overview?.cardsCount ?: 0} ta") to "cards",
-                        Triple("pin", "Manzillarim", "${overview?.addressesCount ?: 0} ta") to "addresses",
-                        Triple("star", "Sharhlarim", "${overview?.reviewsCount ?: 0} ta") to "my_reviews",
+                        Triple("card", stringResource(R.string.tolov_kartalari), pluralStringResource(
+            R.plurals.n_items,
+            overview?.cardsCount ?: 0,
+            overview?.cardsCount ?: 0,
+        )) to "cards",
+                        Triple("pin", stringResource(R.string.manzillarim), pluralStringResource(
+            R.plurals.n_items,
+            overview?.addressesCount ?: 0,
+            overview?.addressesCount ?: 0,
+        )) to "addresses",
+                        Triple("star", stringResource(R.string.sharhlarim), pluralStringResource(
+            R.plurals.n_items,
+            overview?.reviewsCount ?: 0,
+            overview?.reviewsCount ?: 0,
+        )) to "my_reviews",
                         Triple(
                             "bell",
-                            "Bildirishnomalar",
+                            stringResource(R.string.bildirishnomalar),
                             (overview?.unreadNotifications ?: 0).let {
-                                if (it > 0) "$it yangi" else ""
+                                if (it > 0) stringResource(R.string.n_yangi, it) else ""
                             },
                         ) to "notifications",
-                        Triple("gear", "Sozlamalar", "") to "settings",
+                        Triple("gear", stringResource(R.string.sozlamalar), "") to "settings",
                     )
                     rows.forEachIndexed { index, (row, route) ->
                         MbListRow(
@@ -158,7 +173,7 @@ fun ProfileScreen(
             item {
                 MbCard(padding = 6.dp) {
                     MbListRow(
-                        label = "Hisobdan chiqish",
+                        label = stringResource(R.string.hisobdan_chiqish),
                         glyph = "ret",
                         tint = MbTheme.colors.danger,
                         showChevron = false,

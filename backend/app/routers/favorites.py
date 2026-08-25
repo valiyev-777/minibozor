@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
+from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
@@ -40,7 +41,7 @@ def list_favorites(
 def add_favorite(product_id: int, user: CurrentUser, session: SessionDep) -> s.Message:
     product = session.get(Product, product_id)
     if product is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mahsulot topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     existing = session.exec(
         select(Favorite).where(Favorite.user_id == user.id, Favorite.product_id == product_id)
     ).first()
@@ -49,7 +50,7 @@ def add_favorite(product_id: int, user: CurrentUser, session: SessionDep) -> s.M
             Favorite(user_id=user.id, product_id=product_id, price_when_added=product.price)
         )
         session.commit()
-    return s.Message(message="Sevimlilarga qo'shildi")
+    return s.Message(message=i18n.label("fav_added"))
 
 
 @router.delete("/{product_id}", response_model=s.Message)
@@ -60,4 +61,4 @@ def remove_favorite(product_id: int, user: CurrentUser, session: SessionDep) -> 
     if existing:
         session.delete(existing)
         session.commit()
-    return s.Message(message="Sevimlilardan olib tashlandi")
+    return s.Message(message=i18n.label("fav_removed"))

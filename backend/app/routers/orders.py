@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
+from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
@@ -40,7 +41,7 @@ def checkout_preview(
     cart = sv.build_cart(session, user, payload.promo_code)
     selected = [i for i in cart.items if i.selected and i.in_stock]
     if not selected:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Savat bo'sh")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("cart_empty"))
 
     address = _resolve_address(session, user.id, payload.address_id)
     pickup = session.get(PickupPoint, payload.pickup_point_id) if payload.pickup_point_id else None
@@ -145,8 +146,8 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
             user_id=user.id,
             kind=NotificationKind.ORDER,
             icon="box",
-            title="Buyurtma qabul qilindi",
-            text=f"{order.code} qabul qilindi — tez orada yig'amiz",
+            title=i18n.label("order_placed"),
+            text=i18n.label("order_placed_note", code=order.code),
             deep_link=f"minibozor://orders/{order.id}",
         )
     )
@@ -196,7 +197,12 @@ def list_orders(
 def cancel_reasons(session: SessionDep) -> list[s.ReasonOut]:
     rows = session.exec(select(CancelReason).order_by(col(CancelReason.sort))).all()
     return [
-        s.ReasonOut(id=r.id, label=r.label, requires_comment=r.requires_comment) for r in rows
+        s.ReasonOut(
+            id=r.id,
+            label=i18n.t(session, "cancel_reason", r.id, "label", r.label),
+            requires_comment=r.requires_comment,
+        )
+        for r in rows
     ]
 
 
@@ -204,7 +210,12 @@ def cancel_reasons(session: SessionDep) -> list[s.ReasonOut]:
 def return_reasons(session: SessionDep) -> list[s.ReasonOut]:
     rows = session.exec(select(ReturnReason).order_by(col(ReturnReason.sort))).all()
     return [
-        s.ReasonOut(id=r.id, label=r.label, requires_comment=r.requires_comment) for r in rows
+        s.ReasonOut(
+            id=r.id,
+            label=i18n.t(session, "return_reason", r.id, "label", r.label),
+            requires_comment=r.requires_comment,
+        )
+        for r in rows
     ]
 
 
@@ -223,7 +234,7 @@ def cancel_order(
 ) -> s.OrderOut:
     order = _owned_order(session, user.id, order_id)
     if order.status not in (OrderStatus.PLACED, OrderStatus.PACKING):
-        raise HTTPException(status.HTTP_409_CONFLICT, "Bu buyurtmani bekor qilib bo'lmaydi")
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("order_not_cancellable"))
 
     reason = payload.reason
     if payload.reason_id:
@@ -239,8 +250,8 @@ def cancel_order(
             user_id=user.id,
             kind=NotificationKind.ORDER,
             icon="box",
-            title="Buyurtma bekor qilindi",
-            text=f"{order.code} bekor qilindi. To'lov 1–3 kunda qaytariladi.",
+            title=i18n.label("order_cancelled"),
+            text=i18n.label("order_cancelled_note", code=order.code),
             deep_link=f"minibozor://orders/{order.id}",
         )
     )
@@ -261,7 +272,7 @@ def request_return(
     order = _owned_order(session, user.id, order_id)
     if order.status != OrderStatus.DELIVERED:
         raise HTTPException(
-            status.HTTP_409_CONFLICT, "Faqat yetkazilgan buyurtmani qaytarish mumkin"
+            status.HTTP_409_CONFLICT, i18n.label("return_delivered_only")
         )
 
     reason = payload.reason
@@ -319,7 +330,7 @@ def list_returns(user: CurrentUser, session: SessionDep) -> list[s.ReturnOut]:
 def _owned_order(session: SessionDep, user_id: int, order_id: int) -> Order:
     order = session.get(Order, order_id)
     if order is None or order.user_id != user_id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("order_not_found"))
     return order
 
 
@@ -327,7 +338,7 @@ def _resolve_address(session: SessionDep, user_id: int, address_id: int | None) 
     if address_id is not None:
         address = session.get(Address, address_id)
         if address is None or address.user_id != user_id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Manzil topilmadi")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("address_not_found"))
         return address
     return session.exec(
         select(Address)
@@ -344,7 +355,7 @@ def _resolve_card(
     if card_id is not None:
         card = session.get(PaymentCard, card_id)
         if card is None or card.user_id != user_id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Karta topilmadi")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("card_not_found"))
         return card
     return session.exec(
         select(PaymentCard)

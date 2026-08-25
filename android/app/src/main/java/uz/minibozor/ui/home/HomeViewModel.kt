@@ -1,5 +1,7 @@
 package uz.minibozor.ui.home
 
+import uz.minibozor.core.util.AppStrings
+import uz.minibozor.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -83,7 +85,7 @@ class HomeViewModel @Inject constructor(
     fun addToCart(productId: Int, onDone: (String) -> Unit) {
         viewModelScope.launch {
             when (val result = cart.add(productId, null)) {
-                is Outcome.Success -> onDone("Savatga qo'shildi")
+                is Outcome.Success -> onDone(AppStrings[R.string.savatga_qoshildi])
                 is Outcome.Failure -> onDone(result.message)
             }
         }

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 
 from sqlmodel import Session, col, func, select
 
+from app import i18n
 from app import schemas as s
 from app.models import (
     Address,
@@ -41,23 +42,20 @@ UZ_MONTHS = [
 ]
 UZ_WEEKDAYS = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
 
-ORDER_STATUS_LABELS = {
-    OrderStatus.PLACED: "QABUL QILINDI",
-    OrderStatus.PACKING: "YIG'ILMOQDA",
-    OrderStatus.SHIPPED: "YO'LDA",
-    OrderStatus.DELIVERED: "YETKAZILDI",
-    OrderStatus.CANCELLED: "BEKOR QILINDI",
-    OrderStatus.RETURNED: "QAYTARILDI",
-}
-
 ORDER_FLOW = [OrderStatus.PLACED, OrderStatus.PACKING, OrderStatus.SHIPPED, OrderStatus.DELIVERED]
 
-ORDER_EVENT_TITLES = {
-    OrderStatus.PLACED: "Buyurtma qabul qilindi",
-    OrderStatus.PACKING: "Omborda yig'ildi",
-    OrderStatus.SHIPPED: "Kuryerga topshirildi",
-    OrderStatus.DELIVERED: "Yetkazildi",
-}
+
+def order_status_label(status: OrderStatus) -> str:
+    return i18n.label(f"status_{status.value}")
+
+
+def order_event_title(status: OrderStatus) -> str:
+    """Derived from the status rather than read from the stored row.
+
+    The timeline is written once when the order is placed, so a stored title
+    would be stuck in whatever language the customer used that day.
+    """
+    return i18n.label(f"event_{status.value}")
 
 
 # --------------------------------------------------------------------------- formatting
@@ -79,16 +77,12 @@ def media_url(path: str | None) -> str | None:
 
 
 def uz_date(d: date) -> str:
-    return f"{d.day}-{UZ_MONTHS[d.month - 1]}"
+    """Kept under the old name; the wording follows the request's language."""
+    return i18n.format_date(d)
 
 
 def uz_weekday_label(d: date, today: date | None = None) -> str:
-    today = today or date.today()
-    if d == today:
-        return "Bugun"
-    if d == today + timedelta(days=1):
-        return "Ertaga"
-    return UZ_WEEKDAYS[d.weekday()]
+    return i18n.day_label(d, today)
 
 
 def initials(name: str) -> str:
@@ -130,14 +124,14 @@ def favorite_ids(session: Session, user: User | None) -> set[int]:
 def product_card(session: Session, p: Product, favs: set[int]) -> s.ProductCardOut:
     return s.ProductCardOut(
         id=p.id,
-        title=p.title,
+        title=i18n.t(session, "product", p.id, "title", p.title),
         price=p.price,
         old_price=p.old_price,
         discount_percent=p.discount_percent,
         image_url=primary_image(session, p.id),
         rating=round(p.rating, 1),
         reviews_count=p.reviews_count,
-        badge=p.badge,
+        badge=i18n.t(session, "product", p.id, "badge", p.badge) if p.badge else None,
         in_stock=p.in_stock,
         is_favorite=p.id in favs,
     )
@@ -184,8 +178,8 @@ def category_out(session: Session, c: Category) -> s.CategoryOut:
     return s.CategoryOut(
         id=c.id,
         slug=c.slug,
-        name=c.name,
-        subtitle=c.subtitle,
+        name=i18n.t(session, "category", c.id, "name", c.name),
+        subtitle=i18n.t(session, "category", c.id, "subtitle", c.subtitle),
         icon=c.icon,
         image_url=media_url(c.image_url),
         product_count=category_product_count(session, c.id),
@@ -209,25 +203,37 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
     category = session.get(Category, p.category_id)
     brand = session.get(Brand, p.brand_id) if p.brand_id else None
 
-    note = "Ertaga yetkaziladi" if p.next_day_delivery else "2–3 kunda yetkaziladi"
+    note = i18n.label("eta_next_day" if p.next_day_delivery else "eta_few_days")
     if p.free_delivery:
-        note += " · bepul"
+        note += i18n.label("eta_free_suffix")
 
     return s.ProductOut(
         **card.model_dump(),
         sku=p.sku,
-        subtitle=p.subtitle,
-        description=p.description,
+        subtitle=i18n.t(session, "product", p.id, "subtitle", p.subtitle),
+        description=i18n.t(session, "product", p.id, "description", p.description),
         images=[media_url(i.url) for i in images],
         category=category_out(session, category),
         brand=s.BrandOut(id=brand.id, slug=brand.slug, name=brand.name) if brand else None,
         variants=[
-            s.VariantOut(id=v.id, kind=v.kind, label=v.label, value=v.value, in_stock=v.in_stock)
+            s.VariantOut(
+                id=v.id,
+                kind=v.kind,
+                label=i18n.t(session, "variant", v.id, "label", v.label),
+                value=v.value,
+                in_stock=v.in_stock,
+            )
             for v in variants
         ],
-        specs=[s.SpecOut(key=sp.key, value=sp.value) for sp in specs],
+        specs=[
+            s.SpecOut(
+                key=i18n.t(session, "spec", sp.id, "key", sp.key),
+                value=i18n.t(session, "spec", sp.id, "value", sp.value),
+            )
+            for sp in specs
+        ],
         seller=p.seller,
-        warranty=p.warranty,
+        warranty=i18n.t(session, "product", p.id, "warranty", p.warranty) if p.warranty else None,
         stock_left=p.stock_left,
         is_original=p.is_original,
         free_delivery=p.free_delivery,
@@ -443,28 +449,29 @@ def card_out(c: PaymentCard) -> s.CardOut:
 
 def order_eta_label(o: Order) -> str:
     if o.status == OrderStatus.DELIVERED:
-        return "Yetkazildi"
+        return i18n.label("delivered")
     if o.status == OrderStatus.CANCELLED:
-        return "Bekor qilindi"
+        return i18n.label("cancelled")
     if o.delivery_kind.value == "pickup":
-        return "Punktdan olish"
+        return i18n.label("pickup")
     if o.delivery_day is None:
-        return "Yetkazish sanasi aniqlanmoqda"
-    label = uz_weekday_label(o.delivery_day)
+        return i18n.label("eta_pending")
+    day = uz_weekday_label(o.delivery_day)
     window = f"{o.delivery_start} – {o.delivery_end}" if o.delivery_start else ""
-    if label in ("Bugun", "Ertaga"):
-        return f"{label} {window} orasida".strip()
-    return f"{uz_date(o.delivery_day)} yetkaziladi"
+    if day in (i18n.label("today"), i18n.label("tomorrow")):
+        return i18n.label("between", label=day, window=window).strip()
+    return i18n.label("delivered_on", date=uz_date(o.delivery_day))
 
 
 def payment_label(session: Session, o: Order) -> str:
     if o.payment_method == PaymentMethod.CASH:
-        return "Naqd pul · kuryerga"
+        return i18n.label("cash_courier")
     if o.payment_card_id:
         card = session.get(PaymentCard, o.payment_card_id)
         if card:
-            return f"Karta ···· {card.last4} · {'to`landi' if o.paid else 'to`lanmagan'}"
-    return "Karta"
+            state = i18n.label("paid" if o.paid else "unpaid")
+            return i18n.label("card_masked", last4=card.last4, state=state)
+    return i18n.label("card")
 
 
 def order_summary(session: Session, o: Order) -> s.OrderSummaryOut:
@@ -473,7 +480,7 @@ def order_summary(session: Session, o: Order) -> s.OrderSummaryOut:
         id=o.id,
         code=o.code,
         status=o.status,
-        status_label=ORDER_STATUS_LABELS[o.status],
+        status_label=order_status_label(o.status),
         total=o.total,
         items_count=sum(i.quantity for i in items),
         preview_images=[media_url(i.image_url) for i in items[:3] if i.image_url],
@@ -524,7 +531,7 @@ def order_out(session: Session, o: Order) -> s.OrderOut:
         events=[
             s.OrderEventOut(
                 status=e.status,
-                title=e.title,
+                title=order_event_title(e.status),
                 happened_at=e.happened_at,
                 note=e.note,
                 done=(e.status in ORDER_FLOW and ORDER_FLOW.index(e.status) <= reached),
@@ -546,7 +553,7 @@ def seed_order_events(session: Session, order: Order) -> None:
             OrderEvent(
                 order_id=order.id,
                 status=status,
-                title=ORDER_EVENT_TITLES[status],
+                title="",   # rendered from the status at read time
                 happened_at=order.created_at if status == OrderStatus.PLACED else None,
                 sort=idx,
             )

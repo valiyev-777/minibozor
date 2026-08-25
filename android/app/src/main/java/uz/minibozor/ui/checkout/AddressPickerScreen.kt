@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -47,11 +49,11 @@ fun AddressPickerScreen(
     }
 
     MbScreen(
-        topBar = { MbTopBar("Yetkazish manzili", onBack = onBack) },
+        topBar = { MbTopBar(stringResource(R.string.yetkazish_manzili), onBack = onBack) },
         bottomBar = {
             MbBottomBar {
                 MbPrimaryButton(
-                    text = "Tasdiqlash",
+                    text = stringResource(R.string.tasdiqlash),
                     onClick = onBack,
                     enabled = state.addressId != null || state.pickupPointId != null,
                 )
@@ -61,9 +63,9 @@ fun AddressPickerScreen(
         if (state.addresses.isEmpty() && state.pickupPoints.isEmpty()) {
             MbEmptyState(
                 glyph = "pin",
-                title = "Manzil yo'q",
-                message = "Yetkazish uchun birinchi manzilingizni qo'shing.",
-                actionLabel = "Manzil qo'shish",
+                title = stringResource(R.string.manzil_yoq),
+                message = stringResource(R.string.yetkazish_uchun_birinchi_manzilingizni),
+                actionLabel = stringResource(R.string.manzil_qoshish),
                 onAction = onAddNew,
                 modifier = Modifier.padding(padding),
             )
@@ -100,7 +102,7 @@ fun AddressPickerScreen(
             if (state.pickupPoints.isNotEmpty()) {
                 item {
                     MbText(
-                        "Yoki punktdan olib ketish",
+                        stringResource(R.string.yoki_punktdan_olib_ketish),
                         MbTheme.type.captionBold,
                         MbTheme.colors.textSecondary,
                         modifier = Modifier.padding(start = 6.dp),
@@ -114,7 +116,7 @@ fun AddressPickerScreen(
                                 subtitle = listOfNotNull(
                                     point.address.ifBlank { null },
                                     point.hours.ifBlank { null },
-                                    point.distanceKm?.let { "$it km" },
+                                    point.distanceKm?.let { stringResource(R.string.n_km, it) },
                                 ).joinToString(" · "),
                                 selected = state.pickupPointId == point.id,
                                 onSelect = { viewModel.selectPickup(point.id) },
@@ -130,7 +132,7 @@ fun AddressPickerScreen(
             item {
                 MbCard(padding = 6.dp) {
                     MbListRow(
-                        label = "Yangi manzil qo'shish",
+                        label = stringResource(R.string.yangi_manzil_qoshish),
                         glyph = "pin",
                         tint = MbTheme.colors.accent,
                         onClick = onAddNew,

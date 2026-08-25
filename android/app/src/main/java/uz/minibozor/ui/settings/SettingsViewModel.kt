@@ -1,5 +1,7 @@
 package uz.minibozor.ui.settings
 
+import uz.minibozor.core.util.AppStrings
+import uz.minibozor.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -7,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uz.minibozor.core.util.AppLocale
 import uz.minibozor.core.util.Outcome
 import uz.minibozor.data.remote.dto.FaqDto
 import uz.minibozor.data.remote.dto.LegalDocDto
@@ -25,6 +28,8 @@ data class SettingsState(
     val settings: SettingsDto? = null,
     val prefs: NotificationPrefsDto? = null,
     val languages: List<Map<String, String>> = emptyList(),
+    /** The language actually in force on this device, not the account's copy. */
+    val language: String = AppLocale.DEFAULT,
     val hasPin: Boolean = false,
     val biometrics: Boolean = false,
 )
@@ -41,6 +46,7 @@ class SettingsViewModel @Inject constructor(
     val state = _state.asStateFlow()
 
     init {
+        _state.update { it.copy(language = AppLocale.current()) }
         load()
     }
 
@@ -61,7 +67,17 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setLanguage(code: String) = update(SettingsRequest(language = code))
+    /**
+     * Applied on the device first, then mirrored to the account. The device is
+     * what the user is looking at; the round trip only keeps other devices in
+     * step. Changing the locale recreates this activity, so the state update
+     * is mostly for the frame before that happens.
+     */
+    fun setLanguage(code: String) {
+        _state.update { it.copy(language = code) }
+        AppLocale.apply(code)
+        update(SettingsRequest(language = code))
+    }
 
     fun setLocation(enabled: Boolean) = update(SettingsRequest(locationEnabled = enabled))
 
@@ -147,7 +163,7 @@ class PinViewModel @Inject constructor(
         val state = _state.value
         if (state.first != state.confirm) {
             _state.update {
-                it.copy(step = 1, first = "", confirm = "", error = "Kodlar mos kelmadi")
+                it.copy(step = 1, first = "", confirm = "", error = AppStrings[R.string.kodlar_mos_kelmadi])
             }
             return
         }

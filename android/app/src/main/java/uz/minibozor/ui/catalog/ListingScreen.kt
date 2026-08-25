@@ -1,5 +1,7 @@
 package uz.minibozor.ui.catalog
 
+import androidx.compose.ui.res.pluralStringResource
+import uz.minibozor.core.util.AppStrings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -30,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.mbClickable
@@ -84,8 +88,12 @@ fun ListingScreen(
     MbScreen(
         topBar = {
             MbTopBar(
-                title = title.ifBlank { query.orEmpty().ifBlank { "Tovarlar" } },
-                subtitle = if (state.total > 0) "${state.total.grouped()} ta topildi" else null,
+                title = title.ifBlank { query.orEmpty().ifBlank { stringResource(R.string.tovarlar) } },
+                subtitle = if (state.total > 0) pluralStringResource(
+                    R.plurals.n_found,
+                    state.total,
+                    state.total.grouped(),
+                ) else null,
                 onBack = onBack,
             )
         },
@@ -112,19 +120,18 @@ fun ListingScreen(
                         if (filtered) {
                             MbEmptyState(
                                 glyph = "search",
-                                title = "Hech narsa topilmadi",
-                                message = "Filtrlarni yumshatib yoki boshqa so'z bilan qidirib ko'ring.",
-                                actionLabel = "Filtrlarni tozalash",
+                                title = stringResource(R.string.hech_narsa_topilmadi),
+                                message = stringResource(R.string.filtrlarni_yumshatib_yoki_boshqa_soz_bilan),
+                                actionLabel = stringResource(R.string.filtrlarni_tozalash),
                                 onAction = { viewModel.apply(state.query.cleared()) },
                             )
                         } else {
                             // The category exists but has no stock yet.
                             MbEmptyState(
                                 glyph = "box",
-                                title = "Tovarlar tez orada qo'shiladi",
-                                message = "Bu turkumni to'ldirib borayapmiz. " +
-                                    "Tez kunda birinchi tovarlar paydo bo'ladi.",
-                                actionLabel = "Boshqa turkumlarni ko'rish",
+                                title = stringResource(R.string.tovarlar_tez_orada_qoshiladi),
+                                message = stringResource(R.string.bu_turkumni_toldirib_borayapmiz_tez_kunda),
+                                actionLabel = stringResource(R.string.boshqa_turkumlarni_korish),
                                 onAction = onBack,
                             )
                         }
@@ -198,7 +205,7 @@ private fun Toolbar(
     ) {
         Column(Modifier.weight(1f)) {
             MbText(
-                if (total > 0) "${total.grouped()} ta tovar" else "Tovarlar",
+                if (total > 0) pluralStringResource(R.plurals.n_products, total, total.grouped()) else stringResource(R.string.tovarlar),
                 MbTheme.type.label,
                 MbTheme.colors.ink,
             )
@@ -218,7 +225,7 @@ private fun Toolbar(
                 tint = if (filterCount > 0) Color.White else MbTheme.colors.ink,
             )
             MbText(
-                if (filterCount > 0) "Filtr · $filterCount" else "Filtr",
+                if (filterCount > 0) stringResource(R.string.filtr_n, filterCount) else stringResource(R.string.filtr),
                 MbTheme.type.caption,
                 if (filterCount > 0) Color.White else MbTheme.colors.ink,
             )
@@ -228,4 +235,5 @@ private fun Toolbar(
 
 /** "Ommabop", "Avval arzoni" … shown as a subtitle instead of a chip row. */
 private fun sortLabel(sorts: List<Map<String, String>>?, current: String): String =
-    sorts?.firstOrNull { it["key"] == current }?.get("label") ?: "Saralash"
+    sorts?.firstOrNull { it["key"] == current }?.get("label")
+        ?: AppStrings[R.string.saralash]

@@ -11,10 +11,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbBottomBar
@@ -55,7 +57,7 @@ fun ReasonScreen(
     MbScreen(
         topBar = {
             MbTopBar(
-                title = if (isReturn) "Qaytarish arizasi" else "Buyurtmani bekor qilish",
+                title = if (isReturn) stringResource(R.string.qaytarish_arizasi) else stringResource(R.string.buyurtmani_bekor_qilish),
                 onBack = onBack,
             )
         },
@@ -63,14 +65,14 @@ fun ReasonScreen(
             MbBottomBar {
                 if (isReturn) {
                     MbPrimaryButton(
-                        "Ariza yuborish",
+                        stringResource(R.string.ariza_yuborish),
                         viewModel::requestReturn,
                         enabled = canSubmit,
                         loading = state.submitting,
                     )
                 } else {
                     MbDangerButton(
-                        "Bekor qilishni tasdiqlash",
+                        stringResource(R.string.bekor_qilishni_tasdiqlash),
                         viewModel::cancel,
                         loading = state.submitting,
                     )
@@ -88,9 +90,9 @@ fun ReasonScreen(
             item {
                 MbText(
                     if (isReturn) {
-                        "Tovarni nima uchun qaytarmoqchisiz?"
+                        stringResource(R.string.tovarni_nima_uchun_qaytarmoqchisiz)
                     } else {
-                        "Buyurtmani nima uchun bekor qilyapsiz?"
+                        stringResource(R.string.buyurtmani_nima_uchun_bekor_qilyapsiz)
                     },
                     MbTheme.type.title3,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
@@ -113,12 +115,12 @@ fun ReasonScreen(
 
             item {
                 MbCard {
-                    SectionHeader("Izoh", if (needsComment) "majburiy" else "ixtiyoriy")
+                    SectionHeader(stringResource(R.string.izoh), if (needsComment) "majburiy" else "ixtiyoriy")
                     Spacer(Modifier.height(12.dp))
                     MbTextField(
                         value = state.comment,
                         onValueChange = viewModel::setComment,
-                        placeholder = "Qisqacha yozib qoldiring…",
+                        placeholder = stringResource(R.string.qisqacha_yozib_qoldiring),
                         singleLine = false,
                         minHeight = 100.dp,
                     )
@@ -139,9 +141,9 @@ fun ReasonScreen(
             item {
                 MbText(
                     if (isReturn) {
-                        "Ariza ko'rib chiqilgach SMS yuboramiz. Tovarni qadog'i bilan saqlang."
+                        stringResource(R.string.ariza_korib_chiqilgach_sms_yuboramiz)
                     } else {
-                        "To'langan summa 1–3 ish kunida kartangizga qaytariladi."
+                        stringResource(R.string.tolangan_summa_1_3_ish_kunida_kartangizga)
                     },
                     MbTheme.type.caption,
                     MbTheme.colors.textQuaternary,

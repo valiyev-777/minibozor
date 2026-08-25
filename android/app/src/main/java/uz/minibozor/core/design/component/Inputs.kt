@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.icon.MbIcon
@@ -138,7 +140,7 @@ fun MbSearchField(
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Mahsulot va turkumlar qidirish",
+    placeholder: String = stringResource(R.string.mahsulot_va_turkumlar_qidirish),
     autoFocus: Boolean = true,
 ) {
     val focus = remember { FocusRequester() }
