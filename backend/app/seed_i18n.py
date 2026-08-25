@@ -47,6 +47,11 @@ PHRASES: dict[str, tuple[str, str]] = {
     "Qizil": ("Красный", "Red"),
     "Pushti": ("Розовый", "Pink"),
     "Kulrang": ("Серый", "Grey"),
+    "Bordo": ("Бордовый", "Burgundy"),
+    "To'q ko'k": ("Тёмно-синий", "Navy"),
+    "Oq-pushti": ("Бело-розовый", "White and pink"),
+    "Oltin-qora": ("Золотой с чёрным", "Gold and black"),
+    "Yashil": ("Зелёный", "Green"),
     # subtitle tokens
     "zamsh": ("замша", "suede"),
     "charm": ("кожа", "leather"),
@@ -66,6 +71,23 @@ PHRASES: dict[str, tuple[str, str]] = {
     "S–XXL": ("S–XXL", "S–XXL"),
     "L": ("L", "L"),
     "3 o'lcham": ("3 размера", "3 sizes"),
+    # subtitle tokens for the new arrivals
+    "pushti swoosh": ("розовый swoosh", "pink swoosh"),
+    "tekstura": ("текстура", "textured"),
+    "paxta": ("хлопок", "cotton"),
+    "pike": ("пике", "pique"),
+    "chiziqli": ("в полоску", "striped"),
+    "Jubilee": ("Jubilee", "Jubilee"),
+    "Oyster": ("Oyster", "Oyster"),
+    "po'lat": ("сталь", "steel"),
+    "avtomatik": ("автоматический", "automatic"),
+    "Gradient linza": ("Градиентные линзы", "Gradient lenses"),
+    "titan": ("титан", "titanium"),
+    "Ramkasiz": ("Без оправы", "Rimless"),
+    "oltin": ("золотой", "gold"),
+    "Aviator": ("Авиатор", "Aviator"),
+    "qora": ("чёрный", "black"),
+    "Past": ("Низкий", "Low"),
     # spec keys
     "Material": ("Материал", "Material"),
     "Materiali": ("Материал", "Material"),
@@ -89,6 +111,14 @@ PHRASES: dict[str, tuple[str, str]] = {
     "Predmetlar": ("Предметы", "Items"),
     "Qadoq": ("Упаковка", "Packaging"),
     "ANC": ("ANC", "ANC"),
+    "Korpus": ("Корпус", "Case"),
+    "Braslet": ("Браслет", "Bracelet"),
+    "Mexanizm": ("Механизм", "Movement"),
+    "Suvga chidamlilik": ("Водозащита", "Water resistance"),
+    "Ramka": ("Оправа", "Frame"),
+    "Linza": ("Линзы", "Lenses"),
+    "UV himoya": ("УФ-защита", "UV protection"),
+    "Yoqasi": ("Воротник", "Collar"),
     # spec values
     "Tabiiy zamsh": ("Натуральная замша", "Genuine suede"),
     "Tabiiy charm": ("Натуральная кожа", "Genuine leather"),
@@ -113,6 +143,19 @@ PHRASES: dict[str, tuple[str, str]] = {
     "7 ta": ("7 шт.", "7 pieces"),
     "218 g": ("218 г", "218 g"),
     "220 g/m²": ("220 г/м²", "220 g/m²"),
+    "180 g/m²": ("180 г/м²", "180 g/m²"),
+    "Klassik": ("Классический", "Classic"),
+    "100% paxta pike": ("100% хлопок пике", "100% cotton pique"),
+    "Paxta aralashma": ("Смесь хлопка", "Cotton blend"),
+    "Po'lat 41 mm": ("Сталь 41 мм", "Steel 41 mm"),
+    "Po'lat 40 mm": ("Сталь 40 мм", "Steel 40 mm"),
+    "Avtomatik": ("Автоматический", "Automatic"),
+    "100 m": ("100 м", "100 m"),
+    "50 m": ("50 м", "50 m"),
+    "Titan": ("Титан", "Titanium"),
+    "Gradient": ("Градиент", "Gradient"),
+    "UV400": ("UV400", "UV400"),
+    "Bir tekis": ("Однотонные", "Solid"),
 }
 
 
@@ -163,6 +206,11 @@ CATEGORIES: dict[str, tuple[tuple[str, str], tuple[str, str] | None]] = {
     "quloqchinlar": (("Наушники", "Headphones"), None),
     "quvvat-aksessuar": (("Зарядки и аксессуары", "Chargers and accessories"), None),
     "yoruglik": (("Освещение", "Lighting"), None),
+    "aksessuar": (("Аксессуары", "Accessories"),
+                  ("Часы, очки, украшения", "Watches, eyewear, jewellery")),
+    "polo": (("Поло", "Polo shirts"), None),
+    "soatlar": (("Наручные часы", "Wristwatches"), None),
+    "kozoynaklar": (("Солнцезащитные очки", "Sunglasses"), None),
 }
 
 SECTIONS: dict[str, tuple[tuple[str, str], tuple[str, str]]] = {
@@ -215,6 +263,23 @@ TITLES: dict[str, tuple[str, str]] = {
     "MB-4002": ("Классическая футболка, зелёная", "Classic T-shirt, green"),
     "MB-4003": ("Платье, красное", "Dress, red"),
     "MB-5001": ("Парфюмерный набор, 7 предметов", "Perfume set, 7 pieces"),
+    "MB-1006": ("Nike Air Force 1 '07, бело-розовые",
+                "Nike Air Force 1 '07, white and pink"),
+    "MB-1007": ("Air Jordan 1 Low, полностью белые", "Air Jordan 1 Low, all white"),
+    "MB-1008": ("Nike Air Force 1, полностью чёрные", "Nike Air Force 1, all black"),
+    "MB-4004": ("Классическая футболка, белая", "Classic T-shirt, white"),
+    "MB-4005": ("Классическая футболка, тёмно-синяя", "Classic T-shirt, navy"),
+    "MB-4006": ("Поло, бордовое", "Polo shirt, burgundy"),
+    "MB-4007": ("Поло в сине-белую полоску", "Polo shirt, blue and white stripes"),
+    "MB-6001": ("Rolex Datejust 41, синий циферблат", "Rolex Datejust 41, blue dial"),
+    "MB-6002": ("Rolex Datejust 41, зелёный циферблат", "Rolex Datejust 41, green dial"),
+    "MB-6003": ("Rolex Datejust 41, чёрный циферблат", "Rolex Datejust 41, black dial"),
+    "MB-6004": ("Rolex Datejust 41, браслет Oyster", "Rolex Datejust 41, Oyster bracelet"),
+    "MB-6005": ("Gucci G-Timeless, зелёный циферблат", "Gucci G-Timeless, green dial"),
+    "MB-7001": ("Солнцезащитные очки DITA, золото и чёрный",
+                "DITA sunglasses, gold and black"),
+    "MB-7002": ("Очки без оправы, синие линзы", "Rimless sunglasses, blue lenses"),
+    "MB-7003": ("DITA авиаторы, чёрные", "DITA aviators, black"),
 }
 
 DESCRIPTIONS: dict[str, tuple[str, str]] = {
@@ -266,6 +331,46 @@ DESCRIPTIONS: dict[str, tuple[str, str]] = {
                 "A light summer dress in breathable fabric."),
     "MB-5001": ("Подарочный набор из семи предметов в коробке.",
                 "A seven-piece gift set in a presentation box."),
+    "MB-1006": (
+        "Женская модель в классическом силуэте AF1 — розовый swoosh и фиолетовая "
+        "подошва. Кожаный верх, амортизация Air.",
+        "A women's take on the classic AF1 silhouette — pink swoosh, purple sole. "
+        "Leather upper, Air cushioning.",
+    ),
+    "MB-1007": ("Однотонные белые Jordan 1 Low — подходят к чему угодно.",
+                "All-white Jordan 1 Lows — they go with anything."),
+    "MB-1008": ("Полностью чёрные AF1 с треугольной текстурой верха, на каждый день.",
+                "All-black AF1s with a triangle-textured upper, for everyday wear."),
+    "MB-4004": ("Мягкий хлопковый трикотаж, круглый вырез. Основа гардероба.",
+                "Soft cotton jersey with a ribbed neck. A wardrobe staple."),
+    "MB-4005": ("Тёмно-синий вариант белой модели — та же ткань, тот же крой.",
+                "The navy version of the white one — same fabric, same fit."),
+    "MB-4006": ("Бордовое поло с белой отделкой воротника и рукавов. Ткань пике дышит.",
+                "A burgundy polo tipped in white at collar and cuff. Pique breathes."),
+    "MB-4007": ("Поло с однотонным верхом и широкой полоской по низу.",
+                "A polo with a solid top and broad stripes across the body."),
+    "MB-6001": (
+        "Корпус Oystersteel, браслет Jubilee и рифлёный безель. "
+        "Окошко даты, автоматический механизм.",
+        "An Oystersteel case, a Jubilee bracelet and a fluted bezel. "
+        "Date window, automatic movement.",
+    ),
+    "MB-6002": ("Datejust с мятно-зелёным циферблатом — редкий цвет.",
+                "A Datejust with a mint-green dial — an unusual colour."),
+    "MB-6003": ("Чёрный циферблат, браслет Jubilee — самый ходовой Datejust.",
+                "Black dial, Jubilee bracelet — the Datejust that sells most."),
+    "MB-6004": ("Гладкий безель и трёхзвенный браслет Oyster — вид построже.",
+                "A smooth bezel and a three-link Oyster bracelet — a plainer look."),
+    "MB-6005": ("Зелёный циферблат, малая секундная стрелка и рифлёный безель. "
+                "Швейцарская сборка.",
+                "A green dial, a small seconds hand and a fluted bezel. Swiss made."),
+    "MB-7001": ("Полуободковая прямоугольная модель, серые градиентные линзы, "
+                "титановые заушники.",
+                "A half-rim rectangular frame, grey gradient lenses, titanium temples."),
+    "MB-7002": ("Прямоугольные линзы без оправы, тонкие заушники золотого цвета.",
+                "Rimless rectangular lenses on slim gold-toned temples."),
+    "MB-7003": ("Авиаторы с двойным мостом, полностью чёрная оправа и градиентные линзы.",
+                "Double-bridge aviators with an all-black frame and gradient lenses."),
 }
 
 LEGAL: dict[str, dict[str, tuple[str, str]]] = {

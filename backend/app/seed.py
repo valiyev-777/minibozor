@@ -80,6 +80,9 @@ ROOT_CATEGORIES = [
     ("taom-yetkazish", "Taom yetkazish", "Restoran va kafelardan", "food", True, 0),
     ("chet-eldan", "Chet eldan", "Xalqaro yetkazish", "globe", True, 0),
     ("kundalik", "Kundalik", "Gigiyena, uy kimyosi", "bottle", True, 0),
+    # Not a quick link: the home grid is exactly 5x2, so an eleventh tile
+    # would break the row. Reachable from the catalogue tab.
+    ("aksessuar", "Aksessuar", "Soat, ko'zoynak, taqinchoq", "star", False, 0),
 ]
 
 SUBCATEGORIES = [
@@ -94,16 +97,23 @@ SUBCATEGORIES = [
     ("elektronika", "quloqchinlar", "Quloqchinlar", "products/airpods.png", 0),
     ("elektronika", "quvvat-aksessuar", "Quvvat va aksessuar", "products/powerbank.png", 0),
     ("uy-bog", "yoruglik", "Yoritish", "products/lamp.png", 0),
+    ("kiyim-poyabzal", "polo", "Polo ko'ylaklar", "products/polo-burgundy.png", 0),
+    ("aksessuar", "soatlar", "Qo'l soatlari", "products/rolex-datejust-blue.png", 0),
+    ("aksessuar", "kozoynaklar", "Quyosh ko'zoynaklari",
+     "products/sunglasses-aviator-black.png", 0),
 ]
 
 BRANDS = [
     ("nike", "Nike"), ("adidas", "adidas"), ("apple", "Apple"), ("ugreen", "UGREEN"),
     ("anker", "Anker"), ("zara", "Zara"), ("hm", "H&M"), ("puma", "Puma"),
     ("new-balance", "New Balance"), ("reebok", "Reebok"), ("mango", "Mango"),
+    ("jordan", "Jordan"), ("rolex", "Rolex"), ("gucci", "Gucci"), ("dita", "DITA"),
+    ("uniqlo", "UNIQLO"),
 ]
 
 SHOE_SIZES = ["39", "40", "41", "42", "43", "44", "45", "46"]
 TEE_SIZES = ["S", "M", "L", "XL", "XXL"]
+WATCH_SIZES = ["36 mm", "41 mm"]
 
 PRODUCTS = [
     dict(
@@ -259,6 +269,166 @@ PRODUCTS = [
         images=["products/cosmetics.png"],
         description="Yetti predmetli sovg'abop to'plam, hediya qutisi bilan.",
         specs=[("Predmetlar", "7 ta"), ("Qadoq", "Sovg'a qutisi")],
+    ),
+    # ---- added from photographs supplied by the shop ----
+    dict(
+        sku="MB-1006", title="Nike Air Force 1 '07, oq-pushti", subtitle="Oq · pushti swoosh",
+        category="kundalik-poyabzal", brand="nike", price=1_690_000, old_price=2_100_000,
+        rating=4.9, reviews_count=112, sold_count=780, badge="Yangi",
+        images=["products/af1-pink.png"], sizes=SHOE_SIZES,
+        colors=[("Oq-pushti", "#F3D4DC")],
+        warranty="Original kafolati",
+        description=(
+            "Klassik AF1 siluetidagi ayollar modeli — pushti swoosh va binafsha taglik. "
+            "Charm yuza, Air amortizatsiyasi."
+        ),
+        specs=[("Material", "Tabiiy charm"), ("Taglik", "Rezina, Air"),
+               ("Mavsum", "Butun yil"), ("Bichim", "Past")],
+    ),
+    dict(
+        sku="MB-1007", title="Air Jordan 1 Low, butunlay oq", subtitle="Oq · charm",
+        category="kundalik-poyabzal", brand="jordan", price=2_290_000, old_price=2_690_000,
+        rating=4.9, reviews_count=176, sold_count=1_430, badge="Bestseller",
+        images=["products/jordan1-low-white.png"], sizes=SHOE_SIZES,
+        colors=[("Oq", "#FFFFFF")],
+        warranty="Original kafolati",
+        description="Bir rangli oq Jordan 1 Low — har qanday kiyimga mos keladigan model.",
+        specs=[("Material", "Tabiiy charm"), ("Taglik", "Rezina"), ("Mavsum", "Butun yil")],
+    ),
+    dict(
+        sku="MB-1008", title="Nike Air Force 1, butunlay qora", subtitle="Qora · tekstura",
+        category="kundalik-poyabzal", brand="nike", price=1_590_000, old_price=1_990_000,
+        rating=4.7, reviews_count=94, sold_count=610,
+        images=["products/af1-black.png"], sizes=SHOE_SIZES,
+        colors=[("Qora", "#0E0F12")],
+        warranty="Original kafolati",
+        description="Butunlay qora AF1 — uch burchakli teksturali yuza, kunlik kiyish uchun.",
+        specs=[("Material", "Sun'iy charm"), ("Taglik", "Rezina, Air"), ("Mavsum", "Butun yil")],
+    ),
+    dict(
+        sku="MB-4004", title="Klassik futbolka, oq", subtitle="Oq · paxta",
+        category="futbolka-toplar", brand="uniqlo", price=189_000, old_price=239_000,
+        rating=4.7, reviews_count=64, sold_count=1_180,
+        images=["products/tshirt-white.png"], sizes=TEE_SIZES,
+        colors=[("Oq", "#FFFFFF")],
+        description="Yumshoq paxta trikotaj, tik yoqa. Kundalik kiyish uchun asos.",
+        specs=[("Material", "100% paxta"), ("Bichim", "Klassik"), ("Zichlik", "180 g/m²")],
+    ),
+    dict(
+        sku="MB-4005", title="Klassik futbolka, to'q ko'k", subtitle="To'q ko'k · paxta",
+        category="futbolka-toplar", brand="uniqlo", price=199_000, old_price=249_000,
+        rating=4.8, reviews_count=51, sold_count=870,
+        images=["products/tshirt-navy.png"], sizes=TEE_SIZES,
+        colors=[("To'q ko'k", "#141A2E")],
+        description="Oq modelning to'q ko'k varianti — bir xil mato, bir xil bichim.",
+        specs=[("Material", "100% paxta"), ("Bichim", "Klassik"), ("Zichlik", "180 g/m²")],
+    ),
+    dict(
+        sku="MB-4006", title="Polo ko'ylak, bordo", subtitle="Bordo · pike",
+        category="polo", brand="zara", price=449_000, old_price=599_000,
+        rating=4.8, reviews_count=42, sold_count=380, badge="Yangi",
+        images=["products/polo-burgundy.png"], sizes=TEE_SIZES,
+        colors=[("Bordo", "#6E1F35")],
+        description="Yoqasi va yengi oq chiziqli bordo polo. Pike to'qimasi nafas oladi.",
+        specs=[("Material", "100% paxta pike"), ("Yoqasi", "Chiziqli"), ("Bichim", "Klassik")],
+    ),
+    dict(
+        sku="MB-4007", title="Polo ko'ylak, ko'k-oq chiziqli", subtitle="Ko'k · chiziqli",
+        category="polo", brand="puma", price=289_000, old_price=379_000,
+        rating=4.5, reviews_count=29, sold_count=240,
+        images=["products/polo-striped.png"], sizes=TEE_SIZES,
+        colors=[("Ko'k", "#1B4FD8")],
+        description="Yuqori qismi bir rang, pastki qismi keng chiziqli polo.",
+        specs=[("Material", "Paxta aralashma"), ("Bichim", "Klassik")],
+    ),
+    dict(
+        sku="MB-6001", title="Rolex Datejust 41, ko'k siferblat", subtitle="Jubilee · po'lat",
+        category="soatlar", brand="rolex", price=168_000_000, old_price=185_000_000,
+        rating=5.0, reviews_count=8, sold_count=12, badge="Original",
+        images=["products/rolex-datejust-blue.png"], sizes=WATCH_SIZES,
+        colors=[("Ko'k", "#1C4E9C")],
+        warranty="Rasmiy kafolat 1 yil",
+        description=(
+            "Oysterste'l korpus, Jubilee brasleti va rifli bezel. "
+            "Sana oynasi, avtomatik mexanizm."
+        ),
+        specs=[("Korpus", "Po'lat 41 mm"), ("Braslet", "Jubilee"),
+               ("Mexanizm", "Avtomatik"), ("Suvga chidamlilik", "100 m")],
+    ),
+    dict(
+        sku="MB-6002", title="Rolex Datejust 41, yashil siferblat", subtitle="Jubilee · po'lat",
+        category="soatlar", brand="rolex", price=182_000_000,
+        rating=5.0, reviews_count=5, sold_count=6, badge="Original",
+        images=["products/rolex-datejust-green.png"], sizes=WATCH_SIZES,
+        colors=[("Yashil", "#1F5C3A")],
+        warranty="Rasmiy kafolat 1 yil",
+        description="Mint-yashil siferblatli Datejust — kamdan-kam uchraydigan rang.",
+        specs=[("Korpus", "Po'lat 41 mm"), ("Braslet", "Jubilee"),
+               ("Mexanizm", "Avtomatik"), ("Suvga chidamlilik", "100 m")],
+    ),
+    dict(
+        sku="MB-6003", title="Rolex Datejust 41, qora siferblat", subtitle="Jubilee · po'lat",
+        category="soatlar", brand="rolex", price=159_000_000, old_price=172_000_000,
+        rating=4.9, reviews_count=11, sold_count=15, badge="Original",
+        images=["products/rolex-datejust-black.png"], sizes=WATCH_SIZES,
+        colors=[("Qora", "#0E0F12")],
+        warranty="Rasmiy kafolat 1 yil",
+        description="Qora siferblat, Jubilee braslet — Datejust oilasining eng ko'p sotilgani.",
+        specs=[("Korpus", "Po'lat 41 mm"), ("Braslet", "Jubilee"),
+               ("Mexanizm", "Avtomatik"), ("Suvga chidamlilik", "100 m")],
+    ),
+    dict(
+        sku="MB-6004", title="Rolex Datejust 41, Oyster braslet", subtitle="Oyster · po'lat",
+        category="soatlar", brand="rolex", price=154_000_000,
+        rating=4.9, reviews_count=7, sold_count=9, badge="Original",
+        images=["products/rolex-datejust-oyster.png"], sizes=WATCH_SIZES,
+        colors=[("Qora", "#0E0F12")],
+        warranty="Rasmiy kafolat 1 yil",
+        description="Tekis bezel va uch bo'g'inli Oyster braslet — soddaroq ko'rinish.",
+        specs=[("Korpus", "Po'lat 41 mm"), ("Braslet", "Oyster"),
+               ("Mexanizm", "Avtomatik"), ("Suvga chidamlilik", "100 m")],
+    ),
+    dict(
+        sku="MB-6005", title="Gucci G-Timeless, yashil siferblat", subtitle="Po'lat · avtomatik",
+        category="soatlar", brand="gucci", price=21_500_000, old_price=25_900_000,
+        rating=4.8, reviews_count=14, sold_count=22,
+        images=["products/gucci-g-timeless.png"], sizes=["40 mm"],
+        colors=[("Yashil", "#1F5C3A")],
+        warranty="Rasmiy kafolat 1 yil",
+        description="Yashil siferblat, kichik soniya mili va rifli bezel. Shveysariya yig'uvi.",
+        specs=[("Korpus", "Po'lat 40 mm"), ("Mexanizm", "Avtomatik"),
+               ("Suvga chidamlilik", "50 m")],
+    ),
+    dict(
+        sku="MB-7001", title="DITA quyosh ko'zoynagi, oltin-qora",
+        subtitle="Gradient linza · titan",
+        category="kozoynaklar", brand="dita", price=6_900_000, old_price=8_200_000,
+        rating=4.9, reviews_count=16, sold_count=31, badge="Original",
+        images=["products/sunglasses-gold-gradient.png"],
+        colors=[("Oltin-qora", "#3A2E1C")],
+        warranty="Original kafolati",
+        description="Yarim ramkali to'rtburchak model, kulrang gradient linza, titan dastalar.",
+        specs=[("Ramka", "Titan"), ("Linza", "Gradient"), ("UV himoya", "UV400")],
+    ),
+    dict(
+        sku="MB-7002", title="Ramkasiz ko'zoynak, ko'k linza", subtitle="Ramkasiz · oltin",
+        category="kozoynaklar", brand="dita", price=5_400_000, old_price=6_400_000,
+        rating=4.7, reviews_count=9, sold_count=18,
+        images=["products/sunglasses-rimless-blue.png"],
+        colors=[("Ko'k", "#2C4A6E")],
+        warranty="Original kafolati",
+        description="Ramkasiz to'rtburchak linza, oltin rangli ingichka dastalar.",
+        specs=[("Ramka", "Ramkasiz"), ("Linza", "Bir tekis"), ("UV himoya", "UV400")],
+    ),
+    dict(
+        sku="MB-7003", title="DITA aviator, qora", subtitle="Aviator · qora",
+        category="kozoynaklar", brand="dita", price=7_200_000,
+        rating=4.9, reviews_count=21, sold_count=44, badge="Original",
+        images=["products/sunglasses-aviator-black.png"],
+        colors=[("Qora", "#0E0F12")],
+        warranty="Original kafolati",
+        description="Ikki ko'prikli aviator, butunlay qora ramka va gradient linza.",
+        specs=[("Ramka", "Titan"), ("Linza", "Gradient"), ("UV himoya", "UV400")],
     ),
 ]
 
