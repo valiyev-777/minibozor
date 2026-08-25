@@ -261,7 +261,6 @@ TITLES: dict[str, tuple[str, str]] = {
     "MB-3002": ("Детская настольная лампа, астронавт", "Kids' desk lamp, astronaut"),
     "MB-4001": ("Оверсайз футболка, 100% хлопок", "Oversize T-shirt, 100% cotton"),
     "MB-4002": ("Классическая футболка, зелёная", "Classic T-shirt, green"),
-    "MB-4003": ("Платье, красное", "Dress, red"),
     "MB-5001": ("Парфюмерный набор, 7 предметов", "Perfume set, 7 pieces"),
     "MB-1006": ("Nike Air Force 1 '07, бело-розовые",
                 "Nike Air Force 1 '07, white and pink"),
@@ -327,8 +326,6 @@ DESCRIPTIONS: dict[str, tuple[str, str]] = {
                 "Heavy cotton in an oversize fit. Keeps its colour after washing."),
     "MB-4002": ("Футболка классического кроя на каждый день.",
                 "A classic-fit T-shirt for everyday wear."),
-    "MB-4003": ("Лёгкое летнее платье из дышащей ткани.",
-                "A light summer dress in breathable fabric."),
     "MB-5001": ("Подарочный набор из семи предметов в коробке.",
                 "A seven-piece gift set in a presentation box."),
     "MB-1006": (

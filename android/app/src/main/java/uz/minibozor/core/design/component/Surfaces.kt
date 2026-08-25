@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +63,13 @@ fun MbTopBar(
     onBack: (() -> Unit)? = null,
     subtitle: String? = null,
     background: Color = MbTheme.colors.surface,
+    /**
+     * Fades the title in and out without relaying the row out. The product
+     * screen uses it to bring the product name up into the bar only once the
+     * gallery has scrolled away, and reads the value in the layer phase so the
+     * fade costs no recomposition.
+     */
+    titleAlpha: () -> Float = { 1f },
     action: @Composable (() -> Unit)? = null,
 ) {
     Column(
@@ -81,7 +89,12 @@ fun MbTopBar(
                 Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                MbText(title, MbTheme.type.title3, maxLines = 1)
+                MbText(
+                    title,
+                    MbTheme.type.title3,
+                    maxLines = 1,
+                    modifier = Modifier.graphicsLayer { alpha = titleAlpha() },
+                )
                 if (subtitle != null) {
                     MbText(subtitle, MbTheme.type.meta, MbTheme.colors.textQuaternary, maxLines = 1)
                 }

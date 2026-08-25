@@ -1,5 +1,12 @@
 package uz.minibozor.ui.home
 
+import kotlinx.coroutines.delay
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -113,6 +121,7 @@ fun HomeScreen(
                 state = state,
                 onRetry = viewModel::load,
                 modifier = Modifier.padding(padding),
+                loading = { HomeSkeleton(it) },
             ) { home ->
                 PullToRefreshBox(
                     isRefreshing = refreshing,
@@ -124,7 +133,23 @@ fun HomeScreen(
                         .fillMaxSize()
                         .padding(padding),
                 ) {
-                LazyColumn(Modifier.fillMaxSize()) {
+                // The payload has landed: fade and lift the whole screen in
+                // once, rather than having it appear fully formed. One
+                // animation for the lot, read in the layer phase, so it costs
+                // nothing per item.
+                val enter = remember { Animatable(0f) }
+                LaunchedEffect(Unit) {
+                    enter.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+                }
+
+                LazyColumn(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = enter.value
+                            translationY = (1f - enter.value) * 26.dp.toPx()
+                        }
+                ) {
                     item(contentType = "header") {
                         HomeHeader(
                             city = city,
@@ -266,13 +291,34 @@ private fun HomeHeader(
 @Composable
 private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Unit) {
     val pager = rememberPagerState(pageCount = { banners.size })
+
+    // Keyed on settledPage, so the wait restarts every time the carousel comes
+    // to rest — including after the customer swipes it themselves, which is
+    // what stops it yanking the page away from under their thumb.
+    LaunchedEffect(pager.settledPage, banners.size) {
+        if (banners.size < 2) return@LaunchedEffect
+        delay(4_500)
+        pager.animateScrollToPage(
+            page = (pager.settledPage + 1) % banners.size,
+            animationSpec = tween(700, easing = FastOutSlowInEasing),
+        )
+    }
+
     Column {
         HorizontalPager(
             state = pager,
             pageSpacing = 10.dp,
             contentPadding = PaddingValues(horizontal = 12.dp),
         ) { page ->
-            BannerCard(banners[page]) { onClick(banners[page]) }
+            // How far this page is from settled, -1..1. Drives a small drift so
+            // a swipe reads as depth rather than as a flat slide.
+            val drift = (pager.currentPage - page + pager.currentPageOffsetFraction)
+                .coerceIn(-1f, 1f)
+            BannerCard(
+                banner = banners[page],
+                drift = drift,
+                onClick = { onClick(banners[page]) },
+            )
         }
         Spacer(Modifier.height(10.dp))
         Row(
@@ -281,14 +327,22 @@ private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Uni
         ) {
             repeat(banners.size) { index ->
                 val active = index == pager.currentPage
+                val width by animateDpAsState(
+                    if (active) 14.dp else 3.5.dp,
+                    tween(260, easing = FastOutSlowInEasing),
+                    label = "dot",
+                )
+                val color by animateColorAsState(
+                    if (active) MbTheme.colors.accent else MbTheme.colors.hairlineStrong,
+                    tween(260),
+                    label = "dotColor",
+                )
                 Box(
                     Modifier
                         .padding(horizontal = 2.dp)
-                        .size(width = if (active) 14.dp else 3.5.dp, height = 3.5.dp)
+                        .size(width = width, height = 3.5.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(
-                            if (active) MbTheme.colors.accent else MbTheme.colors.hairlineStrong
-                        )
+                        .background(color)
                 )
             }
         }
@@ -296,7 +350,7 @@ private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Uni
 }
 
 @Composable
-private fun BannerCard(banner: BannerDto, onClick: () -> Unit) {
+private fun BannerCard(banner: BannerDto, drift: Float, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -333,7 +387,8 @@ private fun BannerCard(banner: BannerDto, onClick: () -> Unit) {
             banner.imageUrl,
             modifier = Modifier
                 .width(110.dp)
-                .fillMaxSize(),
+                .fillMaxSize()
+                .graphicsLayer { translationX = drift * 40.dp.toPx() },
             shape = MbTheme.shapes.tile,
             background = Color.White.copy(alpha = 0.08f),
             contentScale = ContentScale.Crop,

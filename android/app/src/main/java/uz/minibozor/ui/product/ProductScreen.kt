@@ -1,5 +1,12 @@
 package uz.minibozor.ui.product
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -107,20 +114,41 @@ fun ProductScreen(
         label = "cartPulse",
     )
 
+    // The whole screen's motion is driven by this rather than by entrances:
+    // the gallery drifts at a fraction of the scroll and the product name
+    // rises into the bar as the gallery leaves. Nothing plays on its own.
+    val product = state.product
+    val listState = rememberLazyListState()
+    val galleryOffset by remember {
+        derivedStateOf {
+            if (listState.firstVisibleItemIndex == 0) {
+                listState.firstVisibleItemScrollOffset.toFloat()
+            } else {
+                Float.MAX_VALUE
+            }
+        }
+    }
+
     MbScreen(
         topBar = {
             MbTopBar(
-                title = "",
+                title = product?.title.orEmpty(),
+                titleAlpha = {
+                    // Fully out while the gallery is on screen, fully in a
+                    // third of a screen later.
+                    val past = listState.firstVisibleItemIndex > 0
+                    if (past) 1f else (galleryOffset / 420f).coerceIn(0f, 1f)
+                },
                 onBack = onBack,
                 action = {
-                    state.product?.let { product ->
+                    product?.let { favourited ->
                         MbIcon(
                             "heart",
                             size = 22.dp,
-                            tint = if (product.isFavorite) MbTheme.colors.danger
+                            tint = if (favourited.isFavorite) MbTheme.colors.danger
                             else MbTheme.colors.ink,
                             strokeWidth = 1.9f,
-                            filled = product.isFavorite,
+                            filled = favourited.isFavorite,
                             modifier = Modifier.mbTap { viewModel.toggleFavorite() },
                         )
                     }
@@ -153,7 +181,6 @@ fun ProductScreen(
             )
         },
         bottomBar = {
-            val product = state.product
             if (product != null) {
                 MbBottomBar {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -186,10 +213,17 @@ fun ProductScreen(
                         Modifier
                             .fillMaxSize()
                             .padding(padding),
+                        state = listState,
                         contentPadding = PaddingValues(bottom = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        item { Gallery(product.images, product.badge) }
+                        item {
+                            Gallery(
+                                images = product.images,
+                                badge = product.badge,
+                                scrolled = { galleryOffset },
+                            )
+                        }
 
                         item {
                             MbCard(Modifier.padding(horizontal = 12.dp)) {
@@ -372,15 +406,32 @@ fun ProductScreen(
 }
 
 @Composable
-private fun Gallery(images: List<String>, badge: String?) {
+private fun Gallery(
+    images: List<String>,
+    badge: String?,
+    scrolled: () -> Float,
+) {
     val pager = rememberPagerState(pageCount = { maxOf(images.size, 1) })
     Box(Modifier.background(MbTheme.colors.surface)) {
         HorizontalPager(pager) { page ->
+            // Two motions, both driven by a gesture rather than a timer:
+            // the photo drifts at a third of the scroll as the gallery leaves,
+            // and an off-centre page sits slightly back.
+            val distance = ((pager.currentPage - page) + pager.currentPageOffsetFraction)
+                .coerceIn(-1f, 1f)
             MbProductImage(
                 images.getOrNull(page),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1f),
+                    .aspectRatio(1f)
+                    .graphicsLayer {
+                        val offset = scrolled()
+                        if (offset != Float.MAX_VALUE) translationY = offset * 0.32f
+                        val settled = 1f - kotlin.math.abs(distance)
+                        scaleX = 0.9f + 0.1f * settled
+                        scaleY = 0.9f + 0.1f * settled
+                        alpha = 0.55f + 0.45f * settled
+                    },
                 shape = RectangleShape,
                 background = MbTheme.colors.photoWarm,
             )
@@ -403,14 +454,22 @@ private fun Gallery(images: List<String>, badge: String?) {
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 repeat(images.size) { index ->
+                    val active = index == pager.currentPage
+                    val width by animateDpAsState(
+                        if (active) 18.dp else 6.dp,
+                        tween(240, easing = FastOutSlowInEasing),
+                        label = "galleryDot",
+                    )
+                    val color by animateColorAsState(
+                        if (active) MbTheme.colors.ink else MbTheme.colors.hairline,
+                        tween(240),
+                        label = "galleryDotColor",
+                    )
                     Box(
                         Modifier
-                            .size(if (index == pager.currentPage) 18.dp else 6.dp, 6.dp)
+                            .size(width, 6.dp)
                             .clip(CircleShape)
-                            .background(
-                                if (index == pager.currentPage) MbTheme.colors.ink
-                                else MbTheme.colors.hairline
-                            )
+                            .background(color)
                     )
                 }
             }
