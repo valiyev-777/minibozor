@@ -74,7 +74,7 @@ fun MbTabBar(
                     }
                 }
                 .border(1.dp, MbTheme.colors.border, pill)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 9.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             tabs.forEach { tab ->
@@ -110,7 +110,7 @@ private fun TabItem(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            MbIcon(tab.glyph, size = 27.dp, tint = tint, strokeWidth = 1.8f)
+            MbIcon(tab.glyph, size = 30.dp, tint = tint, strokeWidth = 1.8f)
             MbText(tab.label, MbTheme.type.label, tint, maxLines = 1)
         }
         if (tab.badge > 0) {

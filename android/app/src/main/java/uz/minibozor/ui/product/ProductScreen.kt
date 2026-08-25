@@ -102,28 +102,9 @@ fun ProductScreen(
     viewModel: ProductViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val cartCount by viewModel.cartCount.collectAsStateWithLifecycle()
     val cartLine by viewModel.cartLine.collectAsStateWithLifecycle()
     val toast = rememberToast()
     LaunchedEffect(productId) { viewModel.load(productId) }
-
-    // A short pulse on the header cart is the feedback that lets someone add and
-    // keep browsing without waiting for a toast at the far end of the screen.
-    var pulse by remember { mutableStateOf(false) }
-    var seenCount by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(cartCount) {
-        if (seenCount >= 0 && cartCount > seenCount) {
-            pulse = true
-            delay(320)
-            pulse = false
-        }
-        seenCount = cartCount
-    }
-    val cartScale by animateFloatAsState(
-        targetValue = if (pulse) 1.35f else 1f,
-        animationSpec = spring(dampingRatio = 0.35f, stiffness = 900f),
-        label = "cartPulse",
-    )
 
     // Every motion on this screen answers the scroll; nothing plays on its own.
     val product = state.product
@@ -142,6 +123,11 @@ fun ProductScreen(
                 (listState.firstVisibleItemScrollOffset / closePx).coerceIn(0f, 1f)
             }
         }
+    }
+
+    /** Once the header row is showing the price, the buy bar drops its own. */
+    val priceInHeader by remember {
+        derivedStateOf { closed > 0.6f }
     }
 
     /** The buy bar steps aside once the recommendations reach it. */
@@ -341,13 +327,10 @@ fun ProductScreen(
             // bar grows a surface under them, then the name and price arrive.
             ProductChrome(
                 product = product,
-                cartCount = cartCount,
-                cartScale = cartScale,
                 closed = { closed },
                 onBack = onBack,
                 onToggleFavorite = viewModel::toggleFavorite,
                 onShare = { product?.let { share(context, it) } },
-                onOpenCart = onOpenCart,
             )
 
             // Steps aside when the recommendations reach it, so the rail can
@@ -363,6 +346,7 @@ fun ProductScreen(
                         product = it,
                         adding = state.adding,
                         line = cartLine,
+                        showPrice = !priceInHeader,
                         onAdd = { viewModel.addToCart { message -> toast.value = message } },
                         onSetQuantity = viewModel::setCartQuantity,
                     )

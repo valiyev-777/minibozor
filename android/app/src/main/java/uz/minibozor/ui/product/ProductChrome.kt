@@ -4,6 +4,11 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -183,7 +188,7 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
 /**
  * The bar over the photo.
  *
- * The three buttons never move: they sit on the photo to begin with and stay in
+ * The buttons never move: they sit on the photo to begin with and stay in
  * exactly the same place once the bar has a surface behind it. What changes is
  * underneath them — the name and price slide down into the row the photo has
  * vacated, so nothing about the product is ever off screen.
@@ -191,13 +196,10 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
 @Composable
 fun ProductChrome(
     product: ProductDto?,
-    cartCount: Int,
-    cartScale: Float,
     closed: () -> Float,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
     onShare: () -> Unit,
-    onOpenCart: () -> Unit,
 ) {
     val surface = MbTheme.colors.surface
 
@@ -224,30 +226,6 @@ fun ProductChrome(
                 )
                 Spacer(Modifier.width(10.dp))
                 GlassButton("share", closed, onClick = onShare)
-                Spacer(Modifier.width(10.dp))
-                Box(contentAlignment = Alignment.TopEnd) {
-                    GlassButton(
-                        glyph = "cart",
-                        closed = closed,
-                        modifier = Modifier.graphicsLayer {
-                            scaleX = cartScale
-                            scaleY = cartScale
-                        },
-                        onClick = onOpenCart,
-                    )
-                    if (cartCount > 0) {
-                        MbText(
-                            if (cartCount > 99) "99+" else cartCount.toString(),
-                            MbTheme.type.micro.copy(fontSize = 8.5.sp),
-                            MbTheme.colors.onScrim,
-                            modifier = Modifier
-                                .size(15.dp)
-                                .clip(CircleShape)
-                                .background(MbTheme.colors.danger),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
             }
         }
 
@@ -267,7 +245,7 @@ fun ProductChrome(
             ) {
                 MbText(
                     product.title,
-                    MbTheme.type.title3,
+                    MbTheme.type.title2,
                     maxLines = 1,
                     modifier = Modifier.weight(1f),
                 )
@@ -325,6 +303,7 @@ fun BuyBar(
     product: ProductDto,
     adding: Boolean,
     line: CartItemDto?,
+    showPrice: Boolean,
     onAdd: () -> Unit,
     onSetQuantity: (itemId: Int, quantity: Int) -> Unit,
 ) {
@@ -336,10 +315,19 @@ fun BuyBar(
             .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                MbPriceRow(product.price, product.oldPrice, product.discountPercent)
+            // Once the page has scrolled the header shows the price, and two
+            // prices at once read as a mistake — this one bows out and the
+            // button stretches into the room it leaves.
+            AnimatedVisibility(
+                visible = showPrice,
+                enter = expandHorizontally() + fadeIn(),
+                exit = shrinkHorizontally() + fadeOut(),
+            ) {
+                Row {
+                    MbPriceRow(product.price, product.oldPrice, product.discountPercent)
+                    Spacer(Modifier.width(14.dp))
+                }
             }
-            Spacer(Modifier.width(14.dp))
             if (line == null) {
                 MbPrimaryButton(
                     text = stringResource(
@@ -348,10 +336,10 @@ fun BuyBar(
                     onClick = onAdd,
                     enabled = product.inStock,
                     loading = adding,
-                    modifier = Modifier.weight(1.2f),
+                    modifier = Modifier.weight(1f),
                 )
             } else {
-                Box(Modifier.weight(1.2f), contentAlignment = Alignment.CenterEnd) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                     MbQuantityStepper(
                         quantity = line.quantity,
                         onChange = { onSetQuantity(line.id, it) },
