@@ -17,6 +17,7 @@ import uz.minibozor.data.remote.dto.SettingsDto
 import uz.minibozor.data.remote.dto.SettingsRequest
 import uz.minibozor.data.repository.AuthRepository
 import uz.minibozor.data.repository.ContentRepository
+import uz.minibozor.data.local.AppPrefs
 import uz.minibozor.data.repository.ProfileRepository
 import javax.inject.Inject
 
@@ -33,6 +34,7 @@ data class SettingsState(
 class SettingsViewModel @Inject constructor(
     private val profile: ProfileRepository,
     private val content: ContentRepository,
+    private val prefs: AppPrefs,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsState())
@@ -63,7 +65,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setLocation(enabled: Boolean) = update(SettingsRequest(locationEnabled = enabled))
 
-    fun setNightMode(enabled: Boolean) = update(SettingsRequest(nightMode = enabled))
+    /**
+     * Written locally as well as to the account: the theme has to react on this
+     * device immediately, without waiting for a round trip.
+     */
+    fun setNightMode(enabled: Boolean) {
+        viewModelScope.launch { prefs.setNightMode(enabled) }
+        update(SettingsRequest(nightMode = enabled))
+    }
 
     fun setBiometrics(enabled: Boolean) {
         viewModelScope.launch {

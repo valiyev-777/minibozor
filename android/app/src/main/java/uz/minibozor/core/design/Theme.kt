@@ -82,6 +82,7 @@ fun MbText(
     style: TextStyle,
     color: Color = MbTheme.colors.ink,
     maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
     overflow: androidx.compose.ui.text.style.TextOverflow =
         androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -92,6 +93,7 @@ fun MbText(
         style = style,
         color = color,
         maxLines = maxLines,
+        minLines = minLines,
         overflow = overflow,
         textAlign = textAlign,
         modifier = modifier,

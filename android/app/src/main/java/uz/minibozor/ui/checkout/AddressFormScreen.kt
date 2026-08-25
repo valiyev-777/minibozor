@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,10 +44,13 @@ private val PRESETS = listOf(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddressFormScreen(
-    viewModel: CheckoutViewModel,
     onBack: () -> Unit,
     onSaved: () -> Unit,
+    viewModel: AddressFormViewModel = hiltViewModel(),
 ) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(state.savedId) { if (state.savedId != null) onSaved() }
+
     var preset by remember { mutableStateOf(PRESETS.first()) }
     var line by remember { mutableStateOf("") }
     var floor by remember { mutableStateOf("") }
@@ -60,8 +66,9 @@ fun AddressFormScreen(
                 MbPrimaryButton(
                     text = "Saqlash",
                     enabled = line.isNotBlank(),
+                    loading = state.saving,
                     onClick = {
-                        viewModel.createAddress(
+                        viewModel.save(
                             AddressRequest(
                                 title = preset.first,
                                 icon = preset.second,
@@ -72,8 +79,7 @@ fun AddressFormScreen(
                                 entranceCode = entranceCode.ifBlank { null },
                                 comment = comment.ifBlank { null },
                                 isDefault = isDefault,
-                            ),
-                            onDone = onSaved,
+                            )
                         )
                     },
                 )
@@ -142,6 +148,15 @@ fun AddressFormScreen(
                     imeAction = ImeAction.Done,
                     singleLine = false,
                     minHeight = 80.dp,
+                )
+            }
+
+            if (state.error != null) {
+                uz.minibozor.core.design.MbText(
+                    state.error!!,
+                    uz.minibozor.core.design.MbTheme.type.caption,
+                    uz.minibozor.core.design.MbTheme.colors.danger,
+                    modifier = Modifier.padding(horizontal = 6.dp),
                 )
             }
 

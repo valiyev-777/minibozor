@@ -174,13 +174,22 @@ private val GLYPHS: Map<String, List<String>> = mapOf(
 object MbIcons {
     val names: Set<String> get() = GLYPHS.keys
 
+    /**
+     * Path data is parsed once per glyph variant and kept.
+     *
+     * A list scroll rebuilds icons constantly; re-parsing the same strings on
+     * every new composition is exactly the kind of small repeated cost that
+     * reads as stutter.
+     */
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, ImageVector>()
+
     fun vector(
         name: String,
         strokeWidth: Float = 1.6f,
         filled: Boolean = false,
-    ): ImageVector {
+    ): ImageVector = cache.getOrPut("$name|$strokeWidth|$filled") {
         val paths = GLYPHS[name] ?: GLYPHS.getValue("box")
-        return ImageVector.Builder(
+        ImageVector.Builder(
             name = if (filled) "$name-filled" else name,
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,

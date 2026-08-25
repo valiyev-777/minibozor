@@ -1,10 +1,12 @@
 package uz.minibozor.data.remote.dto
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 // --------------------------------------------------------------------- shared
 
+@Immutable
 @Serializable
 data class PageDto<T>(
     val items: List<T>,
@@ -14,14 +16,17 @@ data class PageDto<T>(
     @SerialName("has_more") val hasMore: Boolean,
 )
 
+@Immutable
 @Serializable
 data class MessageDto(val ok: Boolean = true, val message: String = "")
 
 // ----------------------------------------------------------------------- auth
 
+@Immutable
 @Serializable
 data class PhoneRequest(val phone: String)
 
+@Immutable
 @Serializable
 data class OtpRequestedDto(
     val phone: String,
@@ -30,9 +35,11 @@ data class OtpRequestedDto(
     @SerialName("dev_code") val devCode: String? = null,
 )
 
+@Immutable
 @Serializable
 data class OtpVerifyRequest(val phone: String, val code: String)
 
+@Immutable
 @Serializable
 data class TokenPairDto(
     @SerialName("access_token") val accessToken: String,
@@ -41,12 +48,15 @@ data class TokenPairDto(
     @SerialName("is_new_user") val isNewUser: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class RefreshRequest(@SerialName("refresh_token") val refreshToken: String)
 
+@Immutable
 @Serializable
 data class PinRequest(val pin: String)
 
+@Immutable
 @Serializable
 data class PinChangeRequest(
     @SerialName("current_pin") val currentPin: String? = null,
@@ -55,6 +65,7 @@ data class PinChangeRequest(
 
 // ----------------------------------------------------------------------- user
 
+@Immutable
 @Serializable
 data class UserDto(
     val id: Int,
@@ -69,6 +80,7 @@ data class UserDto(
     @SerialName("biometrics_enabled") val biometricsEnabled: Boolean,
 )
 
+@Immutable
 @Serializable
 data class UserUpdateRequest(
     @SerialName("full_name") val fullName: String? = null,
@@ -77,6 +89,7 @@ data class UserUpdateRequest(
     val gender: String? = null,
 )
 
+@Immutable
 @Serializable
 data class SettingsDto(
     val language: String,
@@ -84,6 +97,7 @@ data class SettingsDto(
     @SerialName("night_mode") val nightMode: Boolean,
 )
 
+@Immutable
 @Serializable
 data class SettingsRequest(
     val language: String? = null,
@@ -91,6 +105,7 @@ data class SettingsRequest(
     @SerialName("night_mode") val nightMode: Boolean? = null,
 )
 
+@Immutable
 @Serializable
 data class NotificationPrefsDto(
     @SerialName("order_status") val orderStatus: Boolean,
@@ -100,6 +115,7 @@ data class NotificationPrefsDto(
     val sms: Boolean,
 )
 
+@Immutable
 @Serializable
 data class NotificationPrefsRequest(
     @SerialName("order_status") val orderStatus: Boolean? = null,
@@ -109,6 +125,7 @@ data class NotificationPrefsRequest(
     val sms: Boolean? = null,
 )
 
+@Immutable
 @Serializable
 data class ProfileOverviewDto(
     val user: UserDto,
@@ -122,6 +139,7 @@ data class ProfileOverviewDto(
 
 // -------------------------------------------------------------------- catalog
 
+@Immutable
 @Serializable
 data class CategoryDto(
     val id: Int,
@@ -134,6 +152,7 @@ data class CategoryDto(
     @SerialName("has_children") val hasChildren: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class BrandDto(
     val id: Int,
@@ -142,6 +161,7 @@ data class BrandDto(
     @SerialName("product_count") val productCount: Int = 0,
 )
 
+@Immutable
 @Serializable
 data class VariantDto(
     val id: Int,
@@ -151,9 +171,11 @@ data class VariantDto(
     @SerialName("in_stock") val inStock: Boolean,
 )
 
+@Immutable
 @Serializable
 data class SpecDto(val key: String, val value: String)
 
+@Immutable
 @Serializable
 data class ProductCardDto(
     val id: Int,
@@ -169,6 +191,7 @@ data class ProductCardDto(
     @SerialName("is_favorite") val isFavorite: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class ProductDto(
     val id: Int,
@@ -199,6 +222,7 @@ data class ProductDto(
     @SerialName("delivery_note") val deliveryNote: String = "",
 )
 
+@Immutable
 @Serializable
 data class BannerDto(
     val id: Int,
@@ -213,6 +237,7 @@ data class BannerDto(
     @SerialName("target_value") val targetValue: String,
 )
 
+@Immutable
 @Serializable
 data class SectionDto(
     val key: String,
@@ -223,6 +248,7 @@ data class SectionDto(
     val products: List<ProductCardDto> = emptyList(),
 )
 
+@Immutable
 @Serializable
 data class HomeDto(
     val city: String,
@@ -231,6 +257,7 @@ data class HomeDto(
     val sections: List<SectionDto>,
 )
 
+@Immutable
 @Serializable
 data class FilterFlagDto(
     val key: String,
@@ -239,6 +266,7 @@ data class FilterFlagDto(
     val count: Int = 0,
 )
 
+@Immutable
 @Serializable
 data class FiltersDto(
     @SerialName("price_min") val priceMin: Int,
@@ -250,6 +278,7 @@ data class FiltersDto(
     val sorts: List<Map<String, String>>,
 )
 
+@Immutable
 @Serializable
 data class SuggestionDto(
     @SerialName("product_id") val productId: Int,
@@ -258,14 +287,17 @@ data class SuggestionDto(
     @SerialName("image_url") val imageUrl: String? = null,
 )
 
+@Immutable
 @Serializable
 data class SearchLandingDto(val recent: List<String>, val popular: List<String>)
 
 // -------------------------------------------------------------------- reviews
 
+@Immutable
 @Serializable
 data class RatingBucketDto(val stars: Int, val count: Int, val percent: Int)
 
+@Immutable
 @Serializable
 data class ReviewSummaryDto(
     val rating: Double,
@@ -273,6 +305,7 @@ data class ReviewSummaryDto(
     val distribution: List<RatingBucketDto>,
 )
 
+@Immutable
 @Serializable
 data class ReviewDto(
     val id: Int,
@@ -290,6 +323,7 @@ data class ReviewDto(
     val product: ProductCardDto? = null,
 )
 
+@Immutable
 @Serializable
 data class ReviewCreateRequest(
     val rating: Int,
@@ -302,6 +336,7 @@ data class ReviewCreateRequest(
 
 // ----------------------------------------------------------------------- cart
 
+@Immutable
 @Serializable
 data class CartItemDto(
     val id: Int,
@@ -317,6 +352,7 @@ data class CartItemDto(
     @SerialName("line_total") val lineTotal: Int,
 )
 
+@Immutable
 @Serializable
 data class CartTotalsDto(
     @SerialName("items_count") val itemsCount: Int,
@@ -328,9 +364,11 @@ data class CartTotalsDto(
     @SerialName("promo_code") val promoCode: String? = null,
 )
 
+@Immutable
 @Serializable
 data class CartDto(val items: List<CartItemDto>, val totals: CartTotalsDto)
 
+@Immutable
 @Serializable
 data class CartAddRequest(
     @SerialName("product_id") val productId: Int,
@@ -338,14 +376,17 @@ data class CartAddRequest(
     val quantity: Int = 1,
 )
 
+@Immutable
 @Serializable
 data class CartUpdateRequest(val quantity: Int? = null, val selected: Boolean? = null)
 
+@Immutable
 @Serializable
 data class PromoRequest(val code: String)
 
 // ------------------------------------------------------------------- delivery
 
+@Immutable
 @Serializable
 data class AddressDto(
     val id: Int,
@@ -364,6 +405,7 @@ data class AddressDto(
     @SerialName("is_default") val isDefault: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class AddressRequest(
     val title: String = "Uy",
@@ -380,6 +422,7 @@ data class AddressRequest(
     @SerialName("is_default") val isDefault: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class PickupPointDto(
     val id: Int,
@@ -389,6 +432,7 @@ data class PickupPointDto(
     @SerialName("distance_km") val distanceKm: Double? = null,
 )
 
+@Immutable
 @Serializable
 data class SlotDto(
     val id: Int,
@@ -402,6 +446,7 @@ data class SlotDto(
     val available: Boolean = true,
 )
 
+@Immutable
 @Serializable
 data class SlotDayDto(
     val day: String,
@@ -413,6 +458,7 @@ data class SlotDayDto(
 
 // -------------------------------------------------------------------- payment
 
+@Immutable
 @Serializable
 data class CardDto(
     val id: Int,
@@ -424,6 +470,7 @@ data class CardDto(
     @SerialName("is_default") val isDefault: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class CardRequest(
     val brand: String,
@@ -437,6 +484,7 @@ data class CardRequest(
 
 // --------------------------------------------------------------------- orders
 
+@Immutable
 @Serializable
 data class OrderItemDto(
     val id: Int,
@@ -450,6 +498,7 @@ data class OrderItemDto(
     val reviewed: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class OrderEventDto(
     val status: String,
@@ -459,6 +508,7 @@ data class OrderEventDto(
     val done: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class OrderSummaryDto(
     val id: Int,
@@ -474,6 +524,7 @@ data class OrderSummaryDto(
     @SerialName("can_track") val canTrack: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class OrderDto(
     val id: Int,
@@ -505,6 +556,7 @@ data class OrderDto(
     val events: List<OrderEventDto> = emptyList(),
 )
 
+@Immutable
 @Serializable
 data class CheckoutRequest(
     @SerialName("address_id") val addressId: Int? = null,
@@ -518,6 +570,7 @@ data class CheckoutRequest(
     val comment: String = "",
 )
 
+@Immutable
 @Serializable
 data class CheckoutPreviewDto(
     val items: List<CartItemDto>,
@@ -528,6 +581,7 @@ data class CheckoutPreviewDto(
     val totals: CartTotalsDto,
 )
 
+@Immutable
 @Serializable
 data class ReasonDto(
     val id: Int,
@@ -535,6 +589,7 @@ data class ReasonDto(
     @SerialName("requires_comment") val requiresComment: Boolean = false,
 )
 
+@Immutable
 @Serializable
 data class CancelRequest(
     @SerialName("reason_id") val reasonId: Int? = null,
@@ -542,6 +597,7 @@ data class CancelRequest(
     val comment: String = "",
 )
 
+@Immutable
 @Serializable
 data class ReturnRequestBody(
     @SerialName("order_item_id") val orderItemId: Int? = null,
@@ -551,6 +607,7 @@ data class ReturnRequestBody(
     val photos: List<String> = emptyList(),
 )
 
+@Immutable
 @Serializable
 data class ReturnDto(
     val id: Int,
@@ -563,6 +620,7 @@ data class ReturnDto(
 
 // ----------------------------------------------------------------------- misc
 
+@Immutable
 @Serializable
 data class NotificationDto(
     val id: Int,
@@ -575,12 +633,15 @@ data class NotificationDto(
     @SerialName("created_at") val createdAt: String,
 )
 
+@Immutable
 @Serializable
 data class NotificationGroupDto(val label: String, val items: List<NotificationDto>)
 
+@Immutable
 @Serializable
 data class FaqDto(val id: Int, val question: String, val answer: String = "")
 
+@Immutable
 @Serializable
 data class LegalDocDto(
     val slug: String,
@@ -589,6 +650,7 @@ data class LegalDocDto(
     val meta: String = "",
 )
 
+@Immutable
 @Serializable
 data class LegalDocFullDto(
     val slug: String,

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
@@ -50,8 +51,17 @@ fun CartScreen(
     onStartShopping: () -> Unit,
     viewModel: CartViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val cart = state.cart
+    val cartState by viewModel.cart.collectAsStateWithLifecycle()
+    // A plain val, so the null checks below smart-cast.
+    val cart = cartState
+    val loading by viewModel.loading.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
+
+    // Re-reads whenever the tab comes forward, so a server-side change lands too.
+    LifecycleResumeEffect(Unit) {
+        viewModel.refresh()
+        onPauseOrDispose {}
+    }
 
     MbScreen { padding ->
         Column(
@@ -78,9 +88,8 @@ fun CartScreen(
             }
 
             when {
-                state.loading && cart == null -> MbLoading()
-                state.error != null && cart == null ->
-                    MbErrorState(state.error!!, viewModel::refresh)
+                loading && cart == null -> MbLoading()
+                error != null && cart == null -> MbErrorState(error!!, viewModel::refresh)
                 cart == null || cart.items.isEmpty() -> MbEmptyState(
                     glyph = "cart",
                     title = "Savat bo'sh",
@@ -146,34 +155,6 @@ fun CartScreen(
                         }
                     }
 
-                    item {
-                        MbCard {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                MbTextField(
-                                    value = state.promoInput,
-                                    onValueChange = viewModel::onPromoChange,
-                                    placeholder = "Promokod",
-                                    leadingGlyph = "ticket",
-                                    error = state.promoError,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Spacer(Modifier.size(10.dp))
-                                Box(
-                                    Modifier
-                                        .clip(MbTheme.shapes.field)
-                                        .background(MbTheme.colors.ink)
-                                        .clickable(onClick = viewModel::applyPromo)
-                                        .padding(horizontal = 18.dp, vertical = 14.dp)
-                                ) {
-                                    MbText(
-                                        "Qo'llash",
-                                        MbTheme.type.label,
-                                        androidx.compose.ui.graphics.Color.White,
-                                    )
-                                }
-                            }
-                        }
-                    }
 
                     item {
                         MbCard {

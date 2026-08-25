@@ -30,6 +30,7 @@ import uz.minibozor.ui.catalog.CatalogScreen
 import uz.minibozor.ui.catalog.ListingScreen
 import uz.minibozor.ui.catalog.SubcategoryScreen
 import uz.minibozor.ui.checkout.AddressFormScreen
+import uz.minibozor.ui.checkout.AddressPickerScreen
 import uz.minibozor.ui.checkout.CheckoutScreen
 import uz.minibozor.ui.checkout.CheckoutViewModel
 import uz.minibozor.ui.checkout.ConfirmScreen
@@ -294,21 +295,18 @@ fun MiniBozorNavHost(
                 CheckoutScreen(
                     viewModel = vm,
                     onBack = { navController.popBackStack() },
-                    onEditAddress = { navController.navigate(Routes.addressForm()) },
+                    onEditAddress = { navController.navigate(Routes.ADDRESS_PICKER) },
                     onEditTime = { navController.navigate(Routes.DELIVERY_TIME) },
                     onEditPayment = { navController.navigate(Routes.PAYMENT_METHOD) },
                     onConfirm = { navController.navigate(Routes.CONFIRM) },
                 )
             }
 
-            composable(
-                Routes.ADDRESS_FORM,
-                arguments = listOf(navArgument(Args.ID) { defaultValue = "-1" }),
-            ) { entry ->
-                AddressFormScreen(
+            composable(Routes.ADDRESS_PICKER) { entry ->
+                AddressPickerScreen(
                     viewModel = entry.checkoutViewModel(navController),
                     onBack = { navController.popBackStack() },
-                    onSaved = { navController.popBackStack() },
+                    onAddNew = { navController.navigate(Routes.ADDRESS_FORM) },
                 )
             }
 
@@ -432,7 +430,14 @@ fun MiniBozorNavHost(
         composable(Routes.ADDRESSES) {
             AddressesScreen(
                 onBack = { navController.popBackStack() },
-                onAddAddress = { navController.navigate(CHECKOUT_GRAPH) },
+                onAddAddress = { navController.navigate(Routes.ADDRESS_FORM) },
+            )
+        }
+
+        composable(Routes.ADDRESS_FORM) {
+            AddressFormScreen(
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
             )
         }
 

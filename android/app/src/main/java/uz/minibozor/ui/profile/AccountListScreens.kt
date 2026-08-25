@@ -180,6 +180,11 @@ fun AddressesScreen(
 ) {
     val addresses by viewModel.addresses.collectAsStateWithLifecycle()
 
+    LifecycleResumeEffect(Unit) {
+        viewModel.load()
+        onPauseOrDispose {}
+    }
+
     MbScreen(topBar = { MbTopBar("Manzillarim", onBack = onBack) }) { padding ->
         LazyColumn(
             Modifier

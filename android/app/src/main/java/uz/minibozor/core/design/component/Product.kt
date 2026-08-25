@@ -174,7 +174,9 @@ fun MbProductTile(
             }
         }
         MbPriceRow(price, oldPrice, discountPercent)
-        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2)
+        // Two lines always, so every tile in a row is the same height and no
+        // title ends up pressed against the card edge.
+        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
         MbRating(rating, reviewsCount)
         if (onAddToCart != null) {
             Spacer(Modifier.height(3.dp))
@@ -226,7 +228,7 @@ fun MbRailTile(
                 MbText("−$discountPercent%", MbTheme.type.micro, MbTheme.colors.danger)
             }
         }
-        MbText(title, MbTheme.type.meta, MbTheme.colors.inkSoft, maxLines = 2)
+        MbText(title, MbTheme.type.meta, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
     }
 }
 
@@ -265,7 +267,9 @@ fun MbDealTile(
             }
         }
         MbPriceRow(price, oldPrice, null)
-        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2)
+        // Two lines always, so every tile in a row is the same height and no
+        // title ends up pressed against the card edge.
+        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
     }
 }
 
@@ -318,7 +322,9 @@ fun MbLineItem(
             shape = MbTheme.shapes.tileSmall,
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2)
+            // Two lines always, so every tile in a row is the same height and no
+        // title ends up pressed against the card edge.
+        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
             if (meta.isNotBlank()) {
                 MbText(meta, MbTheme.type.meta, MbTheme.colors.icon, maxLines = 1)
             }
