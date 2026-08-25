@@ -7,7 +7,6 @@ from datetime import UTC, date, datetime, timedelta
 from sqlmodel import Session, col, func, select
 
 from app import schemas as s
-from app.core.config import settings
 from app.models import (
     Address,
     Brand,
@@ -65,11 +64,18 @@ ORDER_EVENT_TITLES = {
 
 
 def media_url(path: str | None) -> str | None:
+    """Media paths stay relative — e.g. ``products/gazelle.png``.
+
+    The server has no idea how a client reaches it: an emulator uses 10.0.2.2, a
+    USB-attached phone uses its own localhost through `adb reverse`, a simulator
+    uses localhost, production uses a CDN. Each app prefixes its own base URL, so
+    the same response works everywhere.
+    """
     if not path:
         return None
     if path.startswith(("http://", "https://")):
         return path
-    return f"{settings.media_base_url.rstrip('/')}/{path.lstrip('/')}"
+    return path.lstrip("/")
 
 
 def uz_date(d: date) -> str:
@@ -143,6 +149,34 @@ def product_cards(
     return [product_card(session, p, favs) for p in products]
 
 
+def category_tree_ids(session: Session, root_id: int) -> list[int]:
+    """A category and every descendant, so counts and listings agree."""
+    ids = [root_id]
+    frontier = [root_id]
+    while frontier:
+        children = session.exec(
+            select(Category.id).where(col(Category.parent_id).in_(frontier))
+        ).all()
+        if not children:
+            break
+        ids.extend(children)
+        frontier = list(children)
+    return ids
+
+
+def category_product_count(session: Session, category_id: int) -> int:
+    """Counted, never stored.
+
+    A hand-maintained number drifts the moment stock changes, and showing
+    "12 400 tovar" over an empty category is worse than showing nothing.
+    """
+    return session.exec(
+        select(func.count())
+        .select_from(Product)
+        .where(col(Product.category_id).in_(category_tree_ids(session, category_id)))
+    ).one()
+
+
 def category_out(session: Session, c: Category) -> s.CategoryOut:
     has_children = session.exec(
         select(func.count()).select_from(Category).where(Category.parent_id == c.id)
@@ -154,7 +188,7 @@ def category_out(session: Session, c: Category) -> s.CategoryOut:
         subtitle=c.subtitle,
         icon=c.icon,
         image_url=media_url(c.image_url),
-        product_count=c.product_count,
+        product_count=category_product_count(session, c.id),
         has_children=has_children,
     )
 

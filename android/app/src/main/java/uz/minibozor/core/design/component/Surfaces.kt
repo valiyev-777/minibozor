@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -72,7 +73,7 @@ fun MbTopBar(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (onBack != null) {
-                CircleIconButton(glyph = "ret", onClick = onBack)
+                CircleIconButton(glyph = "arrow-left", onClick = onBack)
             } else {
                 Spacer(Modifier.size(36.dp))
             }
@@ -85,7 +86,11 @@ fun MbTopBar(
                     MbText(subtitle, MbTheme.type.meta, MbTheme.colors.textQuaternary, maxLines = 1)
                 }
             }
-            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+            Row(
+                Modifier.defaultMinSize(minWidth = 36.dp, minHeight = 36.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 action?.invoke()
             }
         }
@@ -119,6 +124,7 @@ fun MbCard(
     modifier: Modifier = Modifier,
     padding: Dp = 16.dp,
     background: Color = MbTheme.colors.surface,
+    onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -126,6 +132,7 @@ fun MbCard(
             .fillMaxWidth()
             .clip(MbTheme.shapes.card)
             .background(background)
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .padding(padding),
         content = content,
     )

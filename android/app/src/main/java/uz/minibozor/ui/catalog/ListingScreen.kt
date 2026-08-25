@@ -39,6 +39,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbClickable
 import uz.minibozor.core.design.component.MbChip
 import uz.minibozor.core.design.component.MbEmptyState
 import uz.minibozor.core.design.component.MbErrorState
@@ -95,10 +96,9 @@ fun ListingScreen(
                 .padding(padding)
         ) {
             Toolbar(
-                sorts = state.filters?.sorts.orEmpty(),
-                currentSort = state.query.sort,
+                total = state.total,
+                sortLabel = sortLabel(state.filters?.sorts, state.query.sort),
                 filterCount = state.query.activeFilterCount,
-                onSort = viewModel::setSort,
                 onOpenFilters = { showFilters = true },
             )
 
@@ -106,13 +106,29 @@ fun ListingScreen(
                 when {
                     state.loading -> MbLoading()
                     state.error != null -> MbErrorState(state.error!!, viewModel::reload)
-                    state.items.isEmpty() -> MbEmptyState(
-                        glyph = "search",
-                        title = "Hech narsa topilmadi",
-                        message = "Filtrlarni yumshatib yoki boshqa so'z bilan qidirib ko'ring.",
-                        actionLabel = if (state.query.activeFilterCount > 0) "Filtrlarni tozalash" else null,
-                        onAction = { viewModel.apply(state.query.cleared()) },
-                    )
+                    state.items.isEmpty() -> {
+                        val filtered = state.query.activeFilterCount > 0 ||
+                            !state.query.text.isNullOrBlank()
+                        if (filtered) {
+                            MbEmptyState(
+                                glyph = "search",
+                                title = "Hech narsa topilmadi",
+                                message = "Filtrlarni yumshatib yoki boshqa so'z bilan qidirib ko'ring.",
+                                actionLabel = "Filtrlarni tozalash",
+                                onAction = { viewModel.apply(state.query.cleared()) },
+                            )
+                        } else {
+                            // The category exists but has no stock yet.
+                            MbEmptyState(
+                                glyph = "box",
+                                title = "Tovarlar tez orada qo'shiladi",
+                                message = "Bu turkumni to'ldirib borayapmiz. " +
+                                    "Tez kunda birinchi tovarlar paydo bo'ladi.",
+                                actionLabel = "Boshqa turkumlarni ko'rish",
+                                onAction = onBack,
+                            )
+                        }
+                    }
                     else -> LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         state = gridState,
@@ -166,43 +182,32 @@ fun ListingScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Toolbar(
-    sorts: List<Map<String, String>>,
-    currentSort: String,
+    total: Int,
+    sortLabel: String,
     filterCount: Int,
-    onSort: (String) -> Unit,
     onOpenFilters: () -> Unit,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .background(MbTheme.colors.surface)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            Modifier
-                .weight(1f)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            sorts.forEach { option ->
-                val key = option["key"].orEmpty()
-                MbChip(
-                    label = option["label"].orEmpty(),
-                    selected = key == currentSort,
-                    onClick = { onSort(key) },
-                )
-            }
+        Column(Modifier.weight(1f)) {
+            MbText(
+                if (total > 0) "${total.grouped()} ta tovar" else "Tovarlar",
+                MbTheme.type.label,
+                MbTheme.colors.ink,
+            )
+            MbText(sortLabel, MbTheme.type.meta, MbTheme.colors.icon, maxLines = 1)
         }
         Row(
             Modifier
-                .clip(MbTheme.shapes.chip)
+                .mbClickable(MbTheme.shapes.chip, onClick = onOpenFilters)
                 .background(if (filterCount > 0) MbTheme.colors.ink else MbTheme.colors.fill)
-                .clickable(onClick = onOpenFilters)
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -210,8 +215,7 @@ private fun Toolbar(
             MbIcon(
                 "gear",
                 size = 14.dp,
-                tint = if (filterCount > 0) Color.White
-                else MbTheme.colors.ink,
+                tint = if (filterCount > 0) Color.White else MbTheme.colors.ink,
             )
             MbText(
                 if (filterCount > 0) "Filtr · $filterCount" else "Filtr",
@@ -221,3 +225,7 @@ private fun Toolbar(
         }
     }
 }
+
+/** "Ommabop", "Avval arzoni" … shown as a subtitle instead of a chip row. */
+private fun sortLabel(sorts: List<Map<String, String>>?, current: String): String =
+    sorts?.firstOrNull { it["key"] == current }?.get("label") ?: "Saralash"

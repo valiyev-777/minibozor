@@ -26,7 +26,8 @@ class AppPrefs @Inject constructor(@ApplicationContext private val context: Cont
     val city: Flow<String> =
         context.dataStore.data.map { it[CITY] ?: "Toshkent" }
 
-    suspend fun setOnboardingSeen() = context.dataStore.edit { it[ONBOARDING_SEEN] = true }
+    suspend fun setOnboardingSeen(seen: Boolean = true) =
+        context.dataStore.edit { it[ONBOARDING_SEEN] = seen }
 
     suspend fun setPinLock(enabled: Boolean) = context.dataStore.edit { it[PIN_LOCK] = enabled }
 

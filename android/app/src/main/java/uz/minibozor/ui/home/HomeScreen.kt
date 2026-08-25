@@ -15,11 +15,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.font.FontWeight
+import uz.minibozor.core.design.component.MbDivider
+import uz.minibozor.core.design.component.MbRadioRow
+import uz.minibozor.core.design.mbClickable
+import uz.minibozor.core.util.UZ_REGIONS
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,10 +67,12 @@ import uz.minibozor.ui.common.rememberToast
  * Screen 07. One request fills the whole page: banners, the 5x2 category grid,
  * a deals pair, a two-column recommendation grid and two horizontal rails.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onOpenSearch: () -> Unit,
-    onOpenCategory: (String) -> Unit,
+    onOpenCategory: (CategoryDto) -> Unit,
+    onOpenBanner: (BannerDto) -> Unit,
     onOpenProduct: (Int) -> Unit,
     onOpenListing: (category: String?, title: String) -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
@@ -66,6 +80,8 @@ fun HomeScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val city by viewModel.city.collectAsStateWithLifecycle()
     val toast = rememberToast()
+    var showRegions by remember { mutableStateOf(false) }
+    var refreshing by remember { mutableStateOf(false) }
 
     MbScreen { padding ->
         Box(Modifier.fillMaxSize()) {
@@ -74,22 +90,36 @@ fun HomeScreen(
                 onRetry = viewModel::load,
                 modifier = Modifier.padding(padding),
             ) { home ->
-                LazyColumn(
-                    Modifier
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = {
+                        refreshing = true
+                        viewModel.refresh { refreshing = false }
+                    },
+                    modifier = Modifier
                         .fillMaxSize()
                         .padding(padding),
+                ) {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    item { HomeHeader(city = city, onOpenSearch = onOpenSearch) }
+                    item {
+                        HomeHeader(
+                            city = city,
+                            onOpenSearch = onOpenSearch,
+                            onPickRegion = { showRegions = true },
+                        )
+                    }
 
                     if (home.banners.isNotEmpty()) {
-                        item { BannerCarousel(home.banners) { onOpenCategory(it.targetValue) } }
+                        item { BannerCarousel(home.banners, onOpenBanner) }
                     }
 
                     item {
                         CategoryGrid(
                             categories = home.categories,
-                            onClick = { onOpenCategory(it.slug) },
+                            onClick = onOpenCategory,
                             modifier = Modifier.padding(horizontal = 12.dp),
                         )
                     }
@@ -110,24 +140,88 @@ fun HomeScreen(
 
                     item { MbTabBarSpacer() }
                 }
+                }
             }
             MbToastHost(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp))
+        }
+    }
+
+    if (showRegions) {
+        RegionPicker(
+            current = city,
+            onPick = {
+                viewModel.setCity(it)
+                showRegions = false
+            },
+            onDismiss = { showRegions = false },
+        )
+    }
+}
+
+/** The 14 delivery regions, as a sheet off the location row. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RegionPicker(
+    current: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MbTheme.colors.surface,
+        shape = MbTheme.shapes.sheet,
+    ) {
+        Column(Modifier.padding(horizontal = 20.dp)) {
+            MbText("Hududni tanlang", MbTheme.type.title2)
+            Spacer(Modifier.height(4.dp))
+            MbText(
+                "Yetkazish muddati va narxi hududga qarab o'zgaradi",
+                MbTheme.type.meta,
+                MbTheme.colors.icon,
+            )
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(Modifier.fillMaxWidth()) {
+                items(UZ_REGIONS, key = { it }) { region ->
+                    MbRadioRow(
+                        label = region,
+                        selected = region == current,
+                        onSelect = { onPick(region) },
+                        leading = {
+                            MbIcon("pin", size = 18.dp, tint = MbTheme.colors.icon)
+                        },
+                    )
+                    MbDivider(inset = 30.dp)
+                }
+                item { Spacer(Modifier.height(24.dp)) }
+            }
         }
     }
 }
 
 @Composable
-private fun HomeHeader(city: String, onOpenSearch: () -> Unit) {
+private fun HomeHeader(
+    city: String,
+    onOpenSearch: () -> Unit,
+    onPickRegion: () -> Unit,
+) {
     Column(Modifier.background(MbTheme.colors.surface)) {
         Row(
-            Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 10.dp),
+            Modifier
+                .padding(start = 14.dp, end = 20.dp, top = 6.dp, bottom = 8.dp)
+                .mbClickable(MbTheme.shapes.chip, onClick = onPickRegion)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            MbIcon("pin", size = 15.dp, tint = MbTheme.colors.accent, strokeWidth = 1.9f)
-            MbText(city, MbTheme.type.body.copy(
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
-            MbText("▾", MbTheme.type.micro, MbTheme.colors.hairlineStrong)
+            MbIcon("pin", size = 16.dp, tint = MbTheme.colors.accent, strokeWidth = 1.9f)
+            MbText(city, MbTheme.type.body.copy(fontWeight = FontWeight.Bold))
+            MbIcon(
+                "chevron-down",
+                size = 18.dp,
+                tint = MbTheme.colors.textSecondary,
+                strokeWidth = 2f,
+            )
         }
         Box(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 14.dp)) {
             MbSearchPill("Mahsulot va turkumlar qidirish", onOpenSearch)

@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -37,6 +41,11 @@ class ProductViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(ProductState())
     val state = _state.asStateFlow()
+
+    /** Drives the badge and the pulse on the header cart button. */
+    val cartCount: StateFlow<Int> = cart.cart
+        .map { it?.totals?.itemsCount ?: 0 }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     private var productId: Int = 0
 

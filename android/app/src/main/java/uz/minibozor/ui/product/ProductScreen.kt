@@ -23,6 +23,18 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -35,6 +47,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbTap
 import uz.minibozor.core.design.component.MbBottomBar
 import uz.minibozor.core.design.component.MbCard
 import uz.minibozor.core.design.component.MbDivider
@@ -69,8 +82,27 @@ fun ProductScreen(
     viewModel: ProductViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val cartCount by viewModel.cartCount.collectAsStateWithLifecycle()
     val toast = rememberToast()
     LaunchedEffect(productId) { viewModel.load(productId) }
+
+    // A short pulse on the header cart is the feedback that lets someone add and
+    // keep browsing without waiting for a toast at the far end of the screen.
+    var pulse by remember { mutableStateOf(false) }
+    var seenCount by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(cartCount) {
+        if (seenCount >= 0 && cartCount > seenCount) {
+            pulse = true
+            delay(320)
+            pulse = false
+        }
+        seenCount = cartCount
+    }
+    val cartScale by animateFloatAsState(
+        targetValue = if (pulse) 1.35f else 1f,
+        animationSpec = spring(dampingRatio = 0.35f, stiffness = 900f),
+        label = "cartPulse",
+    )
 
     MbScreen(
         topBar = {
@@ -81,12 +113,38 @@ fun ProductScreen(
                     state.product?.let { product ->
                         MbIcon(
                             "heart",
-                            size = 20.dp,
+                            size = 22.dp,
                             tint = if (product.isFavorite) MbTheme.colors.danger
                             else MbTheme.colors.ink,
                             strokeWidth = 1.9f,
-                            modifier = Modifier.clickable { viewModel.toggleFavorite() },
+                            filled = product.isFavorite,
+                            modifier = Modifier.mbTap { viewModel.toggleFavorite() },
                         )
+                    }
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        MbIcon(
+                            "cart",
+                            size = 22.dp,
+                            tint = MbTheme.colors.ink,
+                            strokeWidth = 1.9f,
+                            modifier = Modifier
+                                .scale(cartScale)
+                                .mbTap(onClick = onOpenCart),
+                        )
+                        if (cartCount > 0) {
+                            MbText(
+                                if (cartCount > 99) "99+" else cartCount.toString(),
+                                MbTheme.type.micro.copy(fontSize = 8.5.sp),
+                                Color.White,
+                                modifier = Modifier
+                                    .offset(x = 7.dp, y = (-6).dp)
+                                    .defaultMinSize(minWidth = 15.dp)
+                                    .clip(CircleShape)
+                                    .background(MbTheme.colors.danger)
+                                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
                 },
             )

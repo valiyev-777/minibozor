@@ -156,15 +156,32 @@ private val GLYPHS: Map<String, List<String>> = mapOf(
         "M13.4 5.6a2.2 2.2 0 0 1 2.2-2.2h2.8a2.2 2.2 0 0 1 2.2 2.2v2.8a2.2 2.2 0 0 1-2.2 2.2h-2.8a2.2 2.2 0 0 1-2.2-2.2zM3.4 15.6a2.2 2.2 0 0 1 2.2-2.2h2.8a2.2 2.2 0 0 1 2.2 2.2v2.8a2.2 2.2 0 0 1-2.2 2.2H5.6a2.2 2.2 0 0 1-2.2-2.2z",
         "M13.4 15.6a2.2 2.2 0 0 1 2.2-2.2h2.8a2.2 2.2 0 0 1 2.2 2.2v2.8a2.2 2.2 0 0 1-2.2 2.2h-2.8a2.2 2.2 0 0 1-2.2-2.2z",
     ),
+    "arrow-left" to listOf(
+        "M14.5 5.5 8 12l6.5 6.5",
+    ),
+    "chevron-down" to listOf(
+        "M7 10.2l5 5 5-5",
+    ),
+    "chevron-right" to listOf(
+        "M10 7l5 5-5 5",
+    ),
+    "close" to listOf(
+        "M6.6 6.6l10.8 10.8",
+        "M17.4 6.6 6.6 17.4",
+    ),
 )
 
 object MbIcons {
     val names: Set<String> get() = GLYPHS.keys
 
-    fun vector(name: String, strokeWidth: Float = 1.6f): ImageVector {
+    fun vector(
+        name: String,
+        strokeWidth: Float = 1.6f,
+        filled: Boolean = false,
+    ): ImageVector {
         val paths = GLYPHS[name] ?: GLYPHS.getValue("box")
         return ImageVector.Builder(
-            name = name,
+            name = if (filled) "$name-filled" else name,
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,
             viewportWidth = 24f,
@@ -173,7 +190,9 @@ object MbIcons {
             paths.forEach { data ->
                 addPath(
                     pathData = addPathNodes(data),
-                    fill = null,
+                    // A filled glyph keeps its stroke too, so the silhouette
+                    // stays the same size whether it is on or off.
+                    fill = if (filled) SolidColor(Color.Black) else null,
                     stroke = SolidColor(Color.Black),
                     strokeLineWidth = strokeWidth,
                     strokeLineCap = StrokeCap.Round,
@@ -195,8 +214,11 @@ fun MbIcon(
     size: Dp = 20.dp,
     tint: Color = MbTheme.colors.ink,
     strokeWidth: Float = 1.6f,
+    filled: Boolean = false,
 ) {
-    val vector = remember(name, strokeWidth) { MbIcons.vector(name, strokeWidth) }
+    val vector = remember(name, strokeWidth, filled) {
+        MbIcons.vector(name, strokeWidth, filled)
+    }
     Image(
         painter = rememberVectorPainter(vector),
         contentDescription = null,

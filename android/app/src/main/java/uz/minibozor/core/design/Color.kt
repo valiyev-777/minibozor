@@ -48,4 +48,60 @@ data class MbColors(
 
     val heroFrom: Color = Color(0xFF14162A),
     val cardFrom: Color = Color(0xFF1F2444),
-)
+
+    /** Translucent slab behind the floating tab bar. */
+    val glass: Color = Color(0xF0FFFFFF),
+    val isDark: Boolean = false,
+) {
+    companion object {
+        /**
+         * The design ships a single light appearance, so the dark palette is
+         * derived from it: the neutral ramp is inverted, the accent is lifted a
+         * little to keep contrast on dark ground, and the semantic colours keep
+         * their hue with darker tinted backgrounds.
+         */
+        fun dark() = MbColors(
+            accent = Color(0xFF3E97FF),
+            accentTint = Color(0xFF20243A),
+
+            ink = Color(0xFFF3F5F8),
+            inkSoft = Color(0xFFC9CEDA),
+            inkMuted = Color(0xFFB2B8C6),
+            textSecondary = Color(0xFF9AA1B0),
+            textTertiary = Color(0xFF8A90A0),
+            textQuaternary = Color(0xFF7A8090),
+            icon = Color(0xFF868D9C),
+            placeholder = Color(0xFF6E7481),
+            disabled = Color(0xFF3A3F4A),
+
+            hairlineStrong = Color(0xFF454B57),
+            hairline = Color(0xFF343A45),
+            divider = Color(0xFF2C313B),
+            border = Color(0xFF262B34),
+
+            surface = Color(0xFF171A20),
+            surfaceAlt = Color(0xFF1B1F26),
+            canvas = Color(0xFF0F1116),
+            fill = Color(0xFF20242C),
+            fillCool = Color(0xFF1E222A),
+            photoWarm = Color(0xFF23262C),
+            photoWarmAlt = Color(0xFF212429),
+            onboardRing = Color(0xFF1E222A),
+
+            danger = Color(0xFFFF5C86),
+            dangerBg = Color(0xFF33202A),
+            dangerBorder = Color(0xFF4A2B37),
+            success = Color(0xFF49BE7C),
+            successBg = Color(0xFF1B2C24),
+            warning = Color(0xFFD8A93F),
+            warningBg = Color(0xFF2E2718),
+            star = Color(0xFFF0B44A),
+
+            heroFrom = Color(0xFF10121C),
+            cardFrom = Color(0xFF1A1E33),
+
+            glass = Color(0xF01B1F26),
+            isDark = true,
+        )
+    }
+}

@@ -85,7 +85,26 @@ fun FiltersSheet(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
         ) {
-            Spacer(Modifier.height(16.dp))
+            if (!filters?.sorts.isNullOrEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                SectionHeader("Saralash")
+                Spacer(Modifier.height(10.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    filters!!.sorts.forEach { option ->
+                        val key = option["key"].orEmpty()
+                        MbChip(
+                            label = option["label"].orEmpty(),
+                            selected = draft.sort == key,
+                            onClick = { draft = draft.copy(sort = key) },
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(22.dp))
             SectionHeader("Narx", "so'm")
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

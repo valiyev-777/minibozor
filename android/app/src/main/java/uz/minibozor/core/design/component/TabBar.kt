@@ -61,8 +61,8 @@ fun MbTabBar(
                 .fillMaxWidth()
                 .shadow(18.dp, MbTheme.shapes.tabBar, clip = false)
                 .clip(MbTheme.shapes.tabBar)
-                .background(Color.White.copy(alpha = 0.94f))
-                .border(1.dp, Color.White.copy(alpha = 0.8f), MbTheme.shapes.tabBar)
+                .background(MbTheme.colors.glass)
+                .border(1.dp, MbTheme.colors.border, MbTheme.shapes.tabBar)
                 .padding(horizontal = 6.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {

@@ -30,8 +30,10 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbClickable
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.util.grouped
+import uz.minibozor.core.util.mediaUrl
 import uz.minibozor.core.util.ratingText
 
 /** Photo with the design's warm neutral backdrop showing through while it loads. */
@@ -48,9 +50,10 @@ fun MbProductImage(
             .clip(shape)
             .background(background)
     ) {
-        if (url != null) {
+        val resolved = url.mediaUrl()
+        if (resolved != null) {
             AsyncImage(
-                model = url,
+                model = resolved,
                 contentDescription = null,
                 contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
@@ -142,7 +145,7 @@ fun MbProductTile(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.clickable(onClick = onClick),
+        modifier.mbClickable(MbTheme.shapes.tile, onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Box {
@@ -203,7 +206,7 @@ fun MbRailTile(
     Column(
         modifier
             .width(MbTheme.dimens.railTileWidth)
-            .clickable(onClick = onClick),
+            .mbClickable(MbTheme.shapes.tileSmall, onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         MbProductImage(
@@ -239,7 +242,7 @@ fun MbDealTile(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.clickable(onClick = onClick),
+        modifier.mbClickable(MbTheme.shapes.tileSmall, onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Box {
@@ -283,9 +286,10 @@ fun FavoriteBubble(
     ) {
         MbIcon(
             "heart",
-            size = size * 0.5f,
+            size = size * 0.52f,
             tint = if (isFavorite) MbTheme.colors.danger else MbTheme.colors.textSecondary,
             strokeWidth = 2f,
+            filled = isFavorite,
         )
     }
 }

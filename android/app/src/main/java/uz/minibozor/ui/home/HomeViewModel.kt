@@ -22,7 +22,7 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val catalog: CatalogRepository,
     private val cart: CartRepository,
-    prefs: AppPrefs,
+    private val prefs: AppPrefs,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<UiState<HomeDto>>(UiState.Loading)
@@ -47,6 +47,27 @@ class HomeViewModel @Inject constructor(
                 is Outcome.Success -> UiState.Ready(result.data)
                 is Outcome.Failure -> UiState.Error(result.message)
             }
+        }
+    }
+
+    /** Pull-to-refresh: reload without blanking the page first. */
+    fun refresh(onDone: () -> Unit) {
+        viewModelScope.launch {
+            when (val result = catalog.home(city.value)) {
+                is Outcome.Success -> _state.value = UiState.Ready(result.data)
+                is Outcome.Failure -> if (_state.value !is UiState.Ready) {
+                    _state.value = UiState.Error(result.message)
+                }
+            }
+            cart.refresh()
+            onDone()
+        }
+    }
+
+    fun setCity(value: String) {
+        viewModelScope.launch {
+            prefs.setCity(value)
+            load()
         }
     }
 

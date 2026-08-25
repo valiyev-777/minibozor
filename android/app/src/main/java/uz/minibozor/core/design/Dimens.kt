@@ -41,7 +41,7 @@ data class MbDimens(
     val tabBarBottom: Dp = 16.dp,
 
     val tileImageHeight: Dp = 148.dp,
-    val railTileWidth: Dp = 112.dp,
+    val railTileWidth: Dp = 100.dp,
     val dealImageHeight: Dp = 104.dp,
     val categoryTile: Dp = 44.dp,
 )

@@ -64,34 +64,34 @@ def _at(day_offset: int, hh: int, mm: int) -> datetime:
 # --------------------------------------------------------------------------- catalogue
 
 ROOT_CATEGORIES = [
-    # slug, name, subtitle, icon, quick_link, product_count
-    ("elektronika", "Elektronika", "Smartfon, noutbuk, aksessuar", "phone", True, 12_400),
-    ("kiyim-poyabzal", "Kiyim va poyabzal", "Ayollar, erkaklar, bolalar", "shirt", True, 21_800),
-    ("maishiy-texnika", "Maishiy texnika", "Kir mashina, muzlatgich", "washer", True, 6_200),
-    ("uy-bog", "Uy va bog'", "Mebel, dekor, asboblar", "sofa", True, 9_800),
-    ("oyinchoqlar", "O'yinchoqlar", "Bolalar uchun hammasi", "gift", True, 4_300),
-    ("gozallik", "Go'zallik", "Parfyumeriya, kosmetika", "lipstick", False, 5_600),
-    ("oziq-ovqat", "Oziq-ovqat", "Kundalik mahsulotlar", "basket", False, 3_100),
-    ("avto", "Avto tovarlar", "Ehtiyot qism, aksessuar", "car", True, 7_400),
-    ("sport", "Sport", "Trenajyor, kiyim, jihoz", "ball", False, 2_900),
-    ("maktab-bozori", "Maktab bozori", "Sumka, daftar, forma", "backpack", True, 1_800),
-    ("taom-yetkazish", "Taom yetkazish", "Restoran va kafelardan", "food", True, 940),
-    ("chet-eldan", "Chet eldan", "Xalqaro yetkazish", "globe", True, 2_200),
-    ("kundalik", "Kundalik", "Gigiyena, uy kimyosi", "bottle", True, 3_600),
+    # slug, name, subtitle, icon, quick_link, product_count (counted at read time)
+    ("elektronika", "Elektronika", "Smartfon, noutbuk, aksessuar", "phone", True, 0),
+    ("kiyim-poyabzal", "Kiyim va poyabzal", "Ayollar, erkaklar, bolalar", "shirt", True, 0),
+    ("maishiy-texnika", "Maishiy texnika", "Kir mashina, muzlatgich", "washer", True, 0),
+    ("uy-bog", "Uy va bog'", "Mebel, dekor, asboblar", "sofa", True, 0),
+    ("oyinchoqlar", "O'yinchoqlar", "Bolalar uchun hammasi", "gift", True, 0),
+    ("gozallik", "Go'zallik", "Parfyumeriya, kosmetika", "lipstick", False, 0),
+    ("oziq-ovqat", "Oziq-ovqat", "Kundalik mahsulotlar", "basket", False, 0),
+    ("avto", "Avto tovarlar", "Ehtiyot qism, aksessuar", "car", True, 0),
+    ("sport", "Sport", "Trenajyor, kiyim, jihoz", "ball", False, 0),
+    ("maktab-bozori", "Maktab bozori", "Sumka, daftar, forma", "backpack", True, 0),
+    ("taom-yetkazish", "Taom yetkazish", "Restoran va kafelardan", "food", True, 0),
+    ("chet-eldan", "Chet eldan", "Xalqaro yetkazish", "globe", True, 0),
+    ("kundalik", "Kundalik", "Gigiyena, uy kimyosi", "bottle", True, 0),
 ]
 
 SUBCATEGORIES = [
-    # parent, slug, name, image, product_count
+    # parent, slug, name, image, product_count (counted at read time)
     ("kiyim-poyabzal", "futbolka-toplar", "Futbolka va toplar",
      "products/tshirt-black.png", 2_140),
-    ("kiyim-poyabzal", "krossovkalar", "Krossovkalar", "products/gazelle.png", 1_860),
-    ("kiyim-poyabzal", "koylak-libos", "Ko'ylak va libos", "products/tshirt-red.png", 980),
+    ("kiyim-poyabzal", "krossovkalar", "Krossovkalar", "products/gazelle.png", 0),
+    ("kiyim-poyabzal", "koylak-libos", "Ko'ylak va libos", "products/tshirt-red.png", 0),
     ("kiyim-poyabzal", "kundalik-poyabzal", "Kundalik poyabzal", "products/af1.png", 1_240),
-    ("kiyim-poyabzal", "sport-kiyim", "Sport kiyim", "products/tshirt-green.png", 760),
-    ("kiyim-poyabzal", "bolalar-poyabzali", "Bolalar poyabzali", "products/adidas-black.png", 430),
-    ("elektronika", "quloqchinlar", "Quloqchinlar", "products/airpods.png", 1_420),
-    ("elektronika", "quvvat-aksessuar", "Quvvat va aksessuar", "products/powerbank.png", 2_060),
-    ("uy-bog", "yoruglik", "Yoritish", "products/lamp.png", 880),
+    ("kiyim-poyabzal", "sport-kiyim", "Sport kiyim", "products/tshirt-green.png", 0),
+    ("kiyim-poyabzal", "bolalar-poyabzali", "Bolalar poyabzali", "products/adidas-black.png", 0),
+    ("elektronika", "quloqchinlar", "Quloqchinlar", "products/airpods.png", 0),
+    ("elektronika", "quvvat-aksessuar", "Quvvat va aksessuar", "products/powerbank.png", 0),
+    ("uy-bog", "yoruglik", "Yoritish", "products/lamp.png", 0),
 ]
 
 BRANDS = [

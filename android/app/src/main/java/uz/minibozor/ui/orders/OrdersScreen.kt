@@ -102,7 +102,7 @@ private fun OrderCard(
     onOpen: (Int) -> Unit,
     onTrack: (Int) -> Unit,
 ) {
-    MbCard(Modifier.clickable { onOpen(order.id) }) {
+    MbCard(onClick = { onOpen(order.id) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             MbStatusPill(
                 label = order.statusLabel,

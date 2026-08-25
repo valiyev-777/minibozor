@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     otp_dev_code: str = "123456"
 
-    media_base_url: str = "http://10.0.2.2:8000/media"
     cors_origins: str = "*"
 
     @property

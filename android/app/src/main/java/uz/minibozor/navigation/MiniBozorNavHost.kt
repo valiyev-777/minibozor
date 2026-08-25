@@ -104,14 +104,16 @@ fun MiniBozorNavHost(
         // ---------------------------------------------------------- 01-06
 
         composable(Routes.ONBOARDING) {
+            val toLogin: () -> Unit = {
+                startViewModel.markOnboardingSeen()
+                navController.navigate(Routes.LOGIN) {
+                    popUpTo(Routes.ONBOARDING) { inclusive = true }
+                }
+            }
             OnboardingScreen(
                 mediaBase = BuildConfig.MEDIA_BASE_URL,
-                onFinished = {
-                    startViewModel.markOnboardingSeen()
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.ONBOARDING) { inclusive = true }
-                    }
-                },
+                onFinished = toLogin,
+                onSignIn = toLogin,
             )
         }
 
@@ -143,7 +145,22 @@ fun MiniBozorNavHost(
             MainScaffold(currentRoute, ::switchTab) {
                 HomeScreen(
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
-                    onOpenCategory = { slug -> navController.navigate(Routes.subcategory(slug)) },
+                    // A leaf category has nothing to drill into, so go straight
+                    // to its listing rather than an empty subcategory page.
+                    onOpenCategory = { category ->
+                        if (category.hasChildren) {
+                            navController.navigate(Routes.subcategory(category.slug))
+                        } else {
+                            navController.navigate(
+                                Routes.listing(category = category.slug, title = category.name)
+                            )
+                        }
+                    },
+                    onOpenBanner = { banner ->
+                        navController.navigate(
+                            Routes.listing(category = banner.targetValue, title = banner.title)
+                        )
+                    },
                     onOpenProduct = { id -> navController.navigate(Routes.product(id)) },
                     onOpenListing = { category, title ->
                         navController.navigate(Routes.listing(category = category, title = title))
