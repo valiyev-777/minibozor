@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
@@ -52,6 +53,12 @@ fun CardsScreen(
     viewModel: CardsViewModel = hiltViewModel(),
 ) {
     val cards by viewModel.cards.collectAsStateWithLifecycle()
+
+    // Re-reads on every return, so a card added on the next screen appears here.
+    LifecycleResumeEffect(Unit) {
+        viewModel.load()
+        onPauseOrDispose {}
+    }
 
     MbScreen(topBar = { MbTopBar("To'lov kartalari", onBack = onBack) }) { padding ->
         LazyColumn(

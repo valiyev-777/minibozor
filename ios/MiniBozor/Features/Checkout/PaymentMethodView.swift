@@ -30,6 +30,7 @@ struct PaymentMethodView: View {
             }
         }
         .navigationBarBackButtonHidden()
+        .onAppear { Task { await model.reloadCards() } }
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
                 MBPrimaryButton(

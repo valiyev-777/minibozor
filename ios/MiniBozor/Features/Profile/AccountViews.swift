@@ -163,7 +163,8 @@ struct CardsView: View {
             }
         }
         .navigationBarBackButtonHidden()
-        .task { await model.load() }
+        // Re-reads on every return, so a card added on the next screen shows up.
+        .onAppear { Task { await model.load() } }
     }
 
     private func cardTile(_ card: CardDTO) -> some View {
@@ -220,65 +221,171 @@ struct CardsView: View {
     }
 }
 
-/// Adding a card.
+/// Screen 32 — "Yangi karta qo'shish".
 ///
-/// The card number is deliberately **not** collected here. The processor's own
-/// SDK or 3-D Secure webview takes the PAN and returns a token, which is the
-/// only thing `POST /payment-cards` accepts — so the app stays out of PCI scope.
+/// A live preview of the card above the form, the same gradient tile the saved
+/// cards use. The number stays on the device: only the brand, the last four
+/// digits and the expiry are sent — see `AddCardModel`.
 struct AddCardView: View {
     @Environment(Router.self) var router
+    @State var model = AddCardModel()
 
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
                 MBTopBar("Karta qo'shish", onBack: { router.pop() })
-                VStack(spacing: 0) {
-                    Spacer().frame(height: 24)
-                    MBIcon("card", size: 36, tint: MB.color.accent, lineWidth: 1.6)
-                        .frame(width: 88, height: 88)
-                        .background(MB.color.accentTint)
-                        .clipShape(Circle())
-                    Spacer().frame(height: 20)
-                    Text("Karta ma'lumotlari himoyalangan")
-                        .mbFont(MB.type.title3)
-                        .foregroundStyle(MB.color.ink)
-                        .multilineTextAlignment(.center)
-                    Spacer().frame(height: 8)
-                    Text("Karta raqamini to'lov tizimining xavfsiz oynasida kiritasiz. "
-                         + "Mini Bozor faqat kartaning oxirgi 4 raqamini saqlaydi.")
-                        .mbFont(MB.type.bodySmall)
-                        .foregroundStyle(MB.color.textTertiary)
-                        .multilineTextAlignment(.center)
-                    Spacer().frame(height: 24)
-                    MBCard(padding: 6) {
-                        MBListRow(
-                            "Humo va UzCard",
-                            glyph: "card",
-                            subtitle: "Milliy to'lov tizimlari",
-                            showChevron: false
-                        )
-                        .padding(.horizontal, 10)
-                        MBListRow(
-                            "Visa va Mastercard",
-                            glyph: "globe",
-                            subtitle: "Xalqaro kartalar",
-                            showChevron: false
-                        )
-                        .padding(.horizontal, 10)
+                ScrollView {
+                    VStack(spacing: 12) {
+                        CardPreview(model: model)
+                        formCard
+                        defaultCard
+
+                        if let error = model.errorMessage {
+                            Text(error)
+                                .mbFont(MB.type.caption)
+                                .foregroundStyle(MB.color.danger)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 6)
+                        }
+
+                        HStack(alignment: .top, spacing: 8) {
+                            MBIcon("gear", size: 16, tint: MB.color.icon)
+                            Text("Karta raqami qurilmadan chiqmaydi — serverda faqat oxirgi "
+                                 + "4 raqam va muddati saqlanadi.")
+                                .mbFont(MB.type.caption)
+                                .foregroundStyle(MB.color.textQuaternary)
+                        }
+                        .padding(.horizontal, 6)
                     }
-                    Spacer()
+                    .padding(12)
                 }
-                .padding(12)
             }
         }
         .navigationBarBackButtonHidden()
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
-                MBPrimaryButton("Xavfsiz oynani ochish", leadingGlyph: "card") {
-                    // Present the processor's SDK here, then POST the token.
-                    router.pop()
+                MBPrimaryButton(
+                    "Kartani saqlash",
+                    enabled: model.canSave,
+                    loading: model.saving
+                ) {
+                    Task { await model.save() }
                 }
             }
         }
+        .onChange(of: model.done) { _, done in
+            if done { router.pop() }
+        }
+    }
+
+    private var formCard: some View {
+        MBCard {
+            MBTextField(
+                placeholder: "8600 0000 0000 0000",
+                text: Binding(
+                    get: { CardFormat.number(model.number) },
+                    set: { model.setNumber($0) }
+                ),
+                label: "Karta raqami",
+                keyboard: .numberPad,
+                leadingGlyph: "card",
+                error: model.numberError
+            )
+            Spacer().frame(height: 14)
+            HStack(spacing: 12) {
+                MBTextField(
+                    placeholder: "MM/YY",
+                    text: Binding(
+                        get: { CardFormat.expiry(model.expiry) },
+                        set: { model.setExpiry($0) }
+                    ),
+                    label: "Amal qilish muddati",
+                    keyboard: .numberPad
+                )
+                MBTextField(
+                    placeholder: "",
+                    text: .constant(model.brand.label),
+                    label: "To'lov tizimi",
+                    disabled: true
+                )
+            }
+            Spacer().frame(height: 14)
+            MBTextField(
+                placeholder: "AZIZ TOSHMATOV",
+                text: Binding(
+                    get: { model.holder },
+                    set: { model.setHolder($0) }
+                ),
+                label: "Karta egasi"
+            )
+        }
+    }
+
+    private var defaultCard: some View {
+        MBCard(padding: 6) {
+            MBToggleRow(
+                label: "Asosiy karta",
+                subtitle: "Buyurtma berishda avtomatik tanlanadi",
+                glyph: "card",
+                isOn: Binding(
+                    get: { model.makeDefault },
+                    set: { model.makeDefault = $0 }
+                )
+            )
+            .padding(.horizontal, 10)
+        }
+    }
+}
+
+/// The gradient tile from screen 32, filled in as the user types.
+private struct CardPreview: View {
+    let model: AddCardModel
+
+    private var maskedNumber: String {
+        let digits = Array(model.number.padding(toLength: 16, withPad: "\u{2022}", startingAt: 0))
+        var out = ""
+        for (index, character) in digits.enumerated() {
+            if index > 0 && index % 4 == 0 { out += "  " }
+            // Only the last four digits are ever shown back.
+            out.append(index < 12 && character != "\u{2022}" ? "\u{2022}" : character)
+        }
+        return out
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(model.brand == .unknown ? "Yangi karta" : model.brand.label)
+                    .mbFont(MB.type.label)
+                    .foregroundStyle(.white)
+                Spacer()
+                if model.makeDefault {
+                    MBStatusPill("ASOSIY", background: .white.opacity(0.2), contentColor: .white)
+                }
+            }
+            Spacer()
+            Text(maskedNumber).mbFont(MB.type.title3).foregroundStyle(.white)
+            Spacer().frame(height: 10)
+            HStack {
+                Text(model.holder.isEmpty ? "KARTA EGASI" : model.holder)
+                    .mbFont(MB.type.caption)
+                    .foregroundStyle(.white.opacity(0.75))
+                Spacer()
+                Text(model.expiry.count == 4 ? CardFormat.expiry(model.expiry) : "MM/YY")
+                    .mbFont(MB.type.caption)
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+        }
+        .padding(20)
+        .frame(height: 180)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(
+                colors: [MB.color.cardFrom, MB.color.accent],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: MB.metric.radiusXXL, style: .continuous))
     }
 }

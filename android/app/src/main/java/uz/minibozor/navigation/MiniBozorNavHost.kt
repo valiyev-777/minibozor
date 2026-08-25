@@ -408,7 +408,7 @@ fun MiniBozorNavHost(
         composable("add_card") {
             AddCardScreen(
                 onBack = { navController.popBackStack() },
-                onLaunchProvider = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
             )
         }
 

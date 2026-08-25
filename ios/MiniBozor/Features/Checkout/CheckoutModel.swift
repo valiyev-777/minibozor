@@ -65,6 +65,17 @@ final class CheckoutModel {
         await refreshPreview()
     }
 
+    /// Called when returning from "add card", so a new card shows up at once.
+    @MainActor
+    func reloadCards() async {
+        cards = (await orders.cards()).value ?? []
+        if !cards.contains(where: { $0.id == cardId }) {
+            cardId = cards.first { $0.isDefault && !$0.isExpired }?.id
+                ?? cards.first { !$0.isExpired }?.id
+        }
+        await refreshPreview()
+    }
+
     @MainActor func selectAddress(_ id: Int) async {
         addressId = id
         pickupPointId = nil

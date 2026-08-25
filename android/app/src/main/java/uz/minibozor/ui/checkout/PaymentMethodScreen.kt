@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
@@ -44,6 +45,11 @@ fun PaymentMethodScreen(
     onDone: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    LifecycleResumeEffect(Unit) {
+        viewModel.reloadCards()
+        onPauseOrDispose {}
+    }
 
     MbScreen(
         topBar = { MbTopBar("To'lov usuli", onBack = onBack) },

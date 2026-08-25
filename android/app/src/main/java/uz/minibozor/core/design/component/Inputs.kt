@@ -52,6 +52,8 @@ fun MbTextField(
     leadingGlyph: String? = null,
     trailing: @Composable (() -> Unit)? = null,
     error: String? = null,
+    readOnly: Boolean = false,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     Column(modifier) {
         if (label != null) {
@@ -84,7 +86,11 @@ fun MbTextField(
                     value = value,
                     onValueChange = onValueChange,
                     singleLine = singleLine,
-                    textStyle = MbTheme.type.bodySmall.copy(color = MbTheme.colors.ink),
+                    readOnly = readOnly,
+                    visualTransformation = visualTransformation,
+                    textStyle = MbTheme.type.bodySmall.copy(
+                        color = if (readOnly) MbTheme.colors.textSecondary else MbTheme.colors.ink
+                    ),
                     cursorBrush = SolidColor(MbTheme.colors.accent),
                     keyboardOptions = KeyboardOptions(
                         keyboardType = keyboardType,

@@ -140,6 +140,24 @@ class CheckoutViewModel @Inject constructor(
         }
     }
 
+    /** Called when returning from "add card", so a new card shows up at once. */
+    fun reloadCards() {
+        viewModelScope.launch {
+            val cards = (orders.cards() as? Outcome.Success)?.data.orEmpty()
+            _state.update { state ->
+                val stillThere = cards.any { it.id == state.cardId }
+                state.copy(
+                    cards = cards,
+                    cardId = if (stillThere) state.cardId else {
+                        cards.firstOrNull { it.isDefault && it.status == "active" }?.id
+                            ?: cards.firstOrNull { it.status == "active" }?.id
+                    },
+                )
+            }
+            refreshPreview()
+        }
+    }
+
     fun place() {
         val current = _state.value
         if (!current.ready || current.placing) return
