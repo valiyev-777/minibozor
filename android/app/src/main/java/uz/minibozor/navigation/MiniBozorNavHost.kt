@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.navDeepLink
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -251,6 +252,9 @@ fun MiniBozorNavHost(
         composable(
             Routes.PRODUCT,
             arguments = listOf(navArgument(Args.ID) { type = NavType.IntType }),
+            // Makes the link the share sheet hands out actually open the
+            // product, rather than dropping the recipient on the home screen.
+            deepLinks = listOf(navDeepLink { uriPattern = "minibozor://product/{id}" }),
         ) { entry ->
             ProductScreen(
                 productId = entry.arguments?.getInt(Args.ID) ?: 0,

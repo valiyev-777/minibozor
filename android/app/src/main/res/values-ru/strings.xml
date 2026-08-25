@@ -357,4 +357,8 @@
     <!-- Variant picker sheet -->
     <string name="xususiyatlarni_tanlang">Выберите характеристики</string>
     <string name="otish">Перейти</string>
+
+    <!-- Recommendation chips -->
+    <string name="oxshash">Похожие</string>
+    <string name="ommabop">Популярные</string>
 </resources>

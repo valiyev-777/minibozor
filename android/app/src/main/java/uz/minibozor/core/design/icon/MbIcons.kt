@@ -170,6 +170,11 @@ private val GLYPHS: Map<String, List<String>> = mapOf(
     "chevron-right" to listOf(
         "M10 7l5 5-5 5",
     ),
+    "share" to listOf(
+        "M12 4v10.4",
+        "M8.4 7.6 12 4l3.6 3.6",
+        "M5.6 13v5.4a1.8 1.8 0 0 0 1.8 1.8h9.2a1.8 1.8 0 0 0 1.8-1.8V13",
+    ),
     "close" to listOf(
         "M6.6 6.6l10.8 10.8",
         "M17.4 6.6 6.6 17.4",

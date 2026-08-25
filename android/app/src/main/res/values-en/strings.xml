@@ -347,4 +347,8 @@
     <!-- Variant picker sheet -->
     <string name="xususiyatlarni_tanlang">Choose options</string>
     <string name="otish">Go to cart</string>
+
+    <!-- Recommendation chips -->
+    <string name="oxshash">Similar</string>
+    <string name="ommabop">Popular</string>
 </resources>

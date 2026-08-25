@@ -1,5 +1,15 @@
 package uz.minibozor.ui.product
 
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -93,6 +103,7 @@ fun ProductScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val cartCount by viewModel.cartCount.collectAsStateWithLifecycle()
+    val cartLine by viewModel.cartLine.collectAsStateWithLifecycle()
     val toast = rememberToast()
     LaunchedEffect(productId) { viewModel.load(productId) }
 
@@ -114,127 +125,70 @@ fun ProductScreen(
         label = "cartPulse",
     )
 
-    // The whole screen's motion is driven by this rather than by entrances:
-    // the gallery drifts at a fraction of the scroll and the product name
-    // rises into the bar as the gallery leaves. Nothing plays on its own.
+    // Every motion on this screen answers the scroll; nothing plays on its own.
     val product = state.product
     val listState = rememberLazyListState()
-    val galleryOffset by remember {
+
+    val density = LocalDensity.current
+    val heroHeight = heroHeight()
+    val closePx = with(density) { heroHeight.toPx() * 0.55f }
+
+    /** 0 while the photo fills the top, 1 once it has closed away behind. */
+    val closed by remember {
         derivedStateOf {
-            if (listState.firstVisibleItemIndex == 0) {
-                listState.firstVisibleItemScrollOffset.toFloat()
+            if (listState.firstVisibleItemIndex > 0) {
+                1f
             } else {
-                Float.MAX_VALUE
+                (listState.firstVisibleItemScrollOffset / closePx).coerceIn(0f, 1f)
             }
         }
     }
 
-    MbScreen(
-        topBar = {
-            MbTopBar(
-                title = product?.title.orEmpty(),
-                titleAlpha = {
-                    // Fully out while the gallery is on screen, fully in a
-                    // third of a screen later.
-                    val past = listState.firstVisibleItemIndex > 0
-                    if (past) 1f else (galleryOffset / 420f).coerceIn(0f, 1f)
-                },
-                onBack = onBack,
-                action = {
-                    product?.let { favourited ->
-                        MbIcon(
-                            "heart",
-                            size = 22.dp,
-                            tint = if (favourited.isFavorite) MbTheme.colors.danger
-                            else MbTheme.colors.ink,
-                            strokeWidth = 1.9f,
-                            filled = favourited.isFavorite,
-                            modifier = Modifier.mbTap { viewModel.toggleFavorite() },
-                        )
-                    }
-                    Box(contentAlignment = Alignment.TopEnd) {
-                        MbIcon(
-                            "cart",
-                            size = 22.dp,
-                            tint = MbTheme.colors.ink,
-                            strokeWidth = 1.9f,
-                            modifier = Modifier
-                                .scale(cartScale)
-                                .mbTap(onClick = onOpenCart),
-                        )
-                        if (cartCount > 0) {
-                            MbText(
-                                if (cartCount > 99) "99+" else cartCount.toString(),
-                                MbTheme.type.micro.copy(fontSize = 8.5.sp),
-                                Color.White,
-                                modifier = Modifier
-                                    .offset(x = 7.dp, y = (-6).dp)
-                                    .defaultMinSize(minWidth = 15.dp)
-                                    .clip(CircleShape)
-                                    .background(MbTheme.colors.danger)
-                                    .padding(horizontal = 4.dp, vertical = 1.dp),
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
-                },
-            )
-        },
-        bottomBar = {
-            if (product != null) {
-                MbBottomBar {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            MbPriceRow(product.price, product.oldPrice, product.discountPercent)
-                        }
-                        Spacer(Modifier.size(14.dp))
-                        MbPrimaryButton(
-                            text = if (product.inStock) stringResource(R.string.savatga) else stringResource(R.string.mavjud_emas),
-                            onClick = {
-                                viewModel.addToCart { message ->
-                                    toast.value = message
-                                }
-                            },
-                            enabled = product.inStock,
-                            loading = state.adding,
-                            modifier = Modifier.weight(1.2f),
-                        )
-                    }
-                }
-            }
-        },
-    ) { padding ->
-        Box(Modifier.fillMaxSize()) {
+    /** The buy bar steps aside once the recommendations reach it. */
+    val atRecommendations by remember {
+        derivedStateOf {
+            listState.layoutInfo.visibleItemsInfo.any { it.key == RecommendationsKey }
+        }
+    }
+
+    val context = LocalContext.current
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MbTheme.colors.canvas)
+    ) {
             when {
-                state.loading -> MbLoading(Modifier.padding(padding))
-                state.error != null -> MbErrorState(state.error!!, viewModel::retry, Modifier.padding(padding))
-                else -> state.product?.let { product ->
+                state.loading -> ProductSkeleton()
+                state.error != null -> MbErrorState(
+                    state.error!!,
+                    viewModel::retry,
+                    Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                )
+                else -> product?.let { product ->
                     LazyColumn(
-                        Modifier
-                            .fillMaxSize()
-                            .padding(padding),
+                        Modifier.fillMaxSize(),
                         state = listState,
-                        contentPadding = PaddingValues(bottom = 20.dp),
+                        // Room at the bottom for the buy bar to float over.
+                        contentPadding = PaddingValues(bottom = 108.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        item {
-                            Gallery(
+                        // The photo runs edge to edge under the status bar and
+                        // closes away behind the content as you scroll past it.
+                        item(key = "hero") {
+                            Hero(
                                 images = product.images,
                                 badge = product.badge,
-                                scrolled = { galleryOffset },
+                                closed = { closed },
                             )
                         }
 
                         item {
                             MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                MbPriceRow(
-                                    product.price,
-                                    product.oldPrice,
-                                    product.discountPercent,
-                                    priceStyle = MbTheme.type.display,
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                MbText(product.title, MbTheme.type.title3)
+                                // No price here: it is in the buy bar a thumb's
+                                // reach away and in the bar once the photo
+                                // closes, so a third copy is just noise.
+                                MbText(product.title, MbTheme.type.title2)
                                 if (product.subtitle.isNotBlank()) {
                                     Spacer(Modifier.height(4.dp))
                                     MbText(
@@ -256,6 +210,20 @@ fun ProductScreen(
                                             MbTheme.colors.success,
                                         )
                                     }
+                                }
+                            }
+                        }
+
+                        if (product.description.isNotBlank()) {
+                            item {
+                                MbCard(Modifier.padding(horizontal = 12.dp)) {
+                                    SectionHeader(stringResource(R.string.tavsif))
+                                    Spacer(Modifier.height(10.dp))
+                                    MbText(
+                                        product.description,
+                                        MbTheme.type.bodySmall,
+                                        MbTheme.colors.inkSoft,
+                                    )
                                 }
                             }
                         }
@@ -325,20 +293,6 @@ fun ProductScreen(
                             }
                         }
 
-                        if (product.description.isNotBlank()) {
-                            item {
-                                MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                    SectionHeader(stringResource(R.string.tavsif))
-                                    Spacer(Modifier.height(10.dp))
-                                    MbText(
-                                        product.description,
-                                        MbTheme.type.bodySmall,
-                                        MbTheme.colors.inkSoft,
-                                    )
-                                }
-                            }
-                        }
-
                         if (product.specs.isNotEmpty()) {
                             item {
                                 MbCard(Modifier.padding(horizontal = 12.dp)) {
@@ -373,108 +327,50 @@ fun ProductScreen(
                         }
 
                         if (state.similar.isNotEmpty()) {
-                            item {
-                                MbCard(Modifier.padding(horizontal = 12.dp), padding = 0.dp) {
-                                    SectionHeader(
-                                        stringResource(R.string.oxshash_tovarlar),
-                                        modifier = Modifier.padding(16.dp),
-                                    )
-                                    LazyRow(
-                                        contentPadding = PaddingValues(horizontal = 16.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        modifier = Modifier.padding(bottom = 16.dp),
-                                    ) {
-                                        items(state.similar, key = { it.id }) { item ->
-                                            MbRailTile(
-                                                title = item.title,
-                                                price = item.price,
-                                                discountPercent = item.discountPercent,
-                                                imageUrl = item.imageUrl,
-                                                onClick = { onOpenProduct(item.id) },
-                                            )
-                                        }
-                                    }
-                                }
+                            item(key = RecommendationsKey) {
+                                Recommendations(
+                                    products = state.similar,
+                                    onOpenProduct = onOpenProduct,
+                                )
                             }
                         }
                     }
                 }
             }
-            MbToastHost(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 90.dp))
-        }
-    }
-}
+            // Over the photo: three circular buttons that stay put while the
+            // bar grows a surface under them, then the name and price arrive.
+            ProductChrome(
+                product = product,
+                cartCount = cartCount,
+                cartScale = cartScale,
+                closed = { closed },
+                onBack = onBack,
+                onToggleFavorite = viewModel::toggleFavorite,
+                onShare = { product?.let { share(context, it) } },
+                onOpenCart = onOpenCart,
+            )
 
-@Composable
-private fun Gallery(
-    images: List<String>,
-    badge: String?,
-    scrolled: () -> Float,
-) {
-    val pager = rememberPagerState(pageCount = { maxOf(images.size, 1) })
-    Box(Modifier.background(MbTheme.colors.surface)) {
-        HorizontalPager(pager) { page ->
-            // Two motions, both driven by a gesture rather than a timer:
-            // the photo drifts at a third of the scroll as the gallery leaves,
-            // and an off-centre page sits slightly back.
-            val distance = ((pager.currentPage - page) + pager.currentPageOffsetFraction)
-                .coerceIn(-1f, 1f)
-            MbProductImage(
-                images.getOrNull(page),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .graphicsLayer {
-                        val offset = scrolled()
-                        if (offset != Float.MAX_VALUE) translationY = offset * 0.32f
-                        val settled = 1f - kotlin.math.abs(distance)
-                        scaleX = 0.9f + 0.1f * settled
-                        scaleY = 0.9f + 0.1f * settled
-                        alpha = 0.55f + 0.45f * settled
-                    },
-                shape = RectangleShape,
-                background = MbTheme.colors.photoWarm,
-            )
-        }
-        if (badge != null) {
-            MbStatusPill(
-                badge,
-                MbTheme.colors.scrim,
-                MbTheme.colors.onScrim,
-                Modifier
-                    .align(Alignment.TopStart)
-                    .padding(14.dp),
-            )
-        }
-        if (images.size > 1) {
-            Row(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            // Steps aside when the recommendations reach it, so the rail can
+            // take the width the price was using.
+            AnimatedVisibility(
+                visible = product != null && !atRecommendations,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter),
             ) {
-                repeat(images.size) { index ->
-                    val active = index == pager.currentPage
-                    val width by animateDpAsState(
-                        if (active) 18.dp else 6.dp,
-                        tween(240, easing = FastOutSlowInEasing),
-                        label = "galleryDot",
-                    )
-                    val color by animateColorAsState(
-                        if (active) MbTheme.colors.ink else MbTheme.colors.hairline,
-                        tween(240),
-                        label = "galleryDotColor",
-                    )
-                    Box(
-                        Modifier
-                            .size(width, 6.dp)
-                            .clip(CircleShape)
-                            .background(color)
+                product?.let {
+                    BuyBar(
+                        product = it,
+                        adding = state.adding,
+                        line = cartLine,
+                        onAdd = { viewModel.addToCart { message -> toast.value = message } },
+                        onSetQuantity = viewModel::setCartQuantity,
                     )
                 }
             }
+
+            MbToastHost(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp))
         }
-    }
 }
 
 @Composable

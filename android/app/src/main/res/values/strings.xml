@@ -369,4 +369,8 @@
     <!-- Variant picker sheet -->
     <string name="xususiyatlarni_tanlang">Xususiyatlarni tanlang</string>
     <string name="otish">O\'tish</string>
+
+    <!-- Recommendation chips -->
+    <string name="oxshash">O\'xshash</string>
+    <string name="ommabop">Ommabop</string>
 </resources>

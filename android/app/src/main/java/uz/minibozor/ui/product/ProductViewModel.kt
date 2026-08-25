@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.minibozor.core.util.Outcome
+import uz.minibozor.data.remote.dto.CartItemDto
 import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.ProductDto
 import uz.minibozor.data.remote.dto.ReviewDto
@@ -101,9 +102,21 @@ class ProductViewModel @Inject constructor(
         }
     }
 
+    /**
+     * The cart line for this product, if it is already in the cart. The buy bar
+     * swaps its button for a quantity stepper off this, which is also what
+     * stops a burst of taps from piling copies into the cart.
+     */
+    val cartLine: StateFlow<CartItemDto?> = cart.cart
+        .map { c -> c?.items?.lastOrNull { it.productId == productId } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     fun addToCart(onDone: (String) -> Unit) {
         val current = _state.value
         val product = current.product ?: return
+        // One request at a time: taps landing while this one is in flight are
+        // dropped instead of queueing more adds.
+        if (current.adding) return
         _state.update { it.copy(adding = true) }
         viewModelScope.launch {
             val variantId = current.selectedSizeId ?: current.selectedColorId
@@ -115,6 +128,16 @@ class ProductViewModel @Inject constructor(
                     is Outcome.Failure -> result.message
                 }
             )
+        }
+    }
+
+    /** Stepper on the buy bar; zero removes the line and brings the button back. */
+    fun setCartQuantity(itemId: Int, quantity: Int) {
+        if (_state.value.adding) return
+        _state.update { it.copy(adding = true) }
+        viewModelScope.launch {
+            if (quantity <= 0) cart.remove(itemId) else cart.setQuantity(itemId, quantity)
+            _state.update { it.copy(adding = false) }
         }
     }
 }
