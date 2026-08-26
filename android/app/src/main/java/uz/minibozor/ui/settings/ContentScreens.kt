@@ -65,14 +65,14 @@ fun HelpScreen(
                         subtitle = state.support["hours"],
                         glyph = "headset",
                         meta = state.support["phone"],
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                     MbDivider(inset = 60.dp)
                     MbListRow(
                         label = stringResource(R.string.telegram_orqali_yozish),
                         subtitle = stringResource(R.string.odatda_5_daqiqada_javob_beramiz),
                         glyph = "phone",
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                 }
             }
@@ -153,7 +153,7 @@ fun LegalScreen(
                         subtitle = doc.meta.ifBlank { null },
                         glyph = doc.icon,
                         onClick = { onOpenDoc(doc.slug) },
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                     if (index != state.docs.lastIndex) MbDivider(inset = 60.dp)
                 }

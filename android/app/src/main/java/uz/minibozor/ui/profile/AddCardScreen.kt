@@ -139,7 +139,7 @@ fun AddCardScreen(
                     glyph = "card",
                     checked = state.makeDefault,
                     onCheckedChange = viewModel::onDefaultChange,
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    contentPadding = 10.dp,
                 )
             }
 

@@ -39,6 +39,13 @@ data class MbDimens(
     val tabBarInset: Dp = 14.dp,
     /** Gap below the floating bar, per the design. */
     val tabBarBottom: Dp = 16.dp,
+    /**
+     * Lifted clear of the gesture handle by this much on top of whatever the
+     * system asks for. Added rather than folded into [tabBarBottom] so it
+     * still applies on a three-button device, where the system inset is the
+     * larger of the two and would otherwise swallow it.
+     */
+    val tabBarLift: Dp = 8.dp,
 
     val railTileWidth: Dp = 100.dp,
     val categoryTile: Dp = 44.dp,

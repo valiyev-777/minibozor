@@ -163,7 +163,7 @@ fun ProfileScreen(
                             glyph = row.first,
                             meta = row.third.ifBlank { null },
                             onClick = { onNavigate(route) },
-                            modifier = Modifier.padding(horizontal = 10.dp),
+                            contentPadding = 10.dp,
                         )
                         if (index != rows.lastIndex) MbDivider(inset = 60.dp)
                     }
@@ -178,7 +178,7 @@ fun ProfileScreen(
                         tint = MbTheme.colors.danger,
                         showChevron = false,
                         onClick = { confirmSignOut = true },
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                 }
             }

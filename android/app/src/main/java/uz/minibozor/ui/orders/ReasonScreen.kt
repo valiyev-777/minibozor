@@ -106,7 +106,7 @@ fun ReasonScreen(
                             label = reason.label,
                             selected = reason.id == state.selectedReasonId,
                             onSelect = { viewModel.selectReason(reason.id) },
-                            modifier = Modifier.padding(horizontal = 10.dp),
+                            contentPadding = 10.dp,
                         )
                         if (index != state.reasons.lastIndex) MbDivider()
                     }

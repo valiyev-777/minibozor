@@ -178,6 +178,60 @@ def test_promo_code(client: TestClient, auth: dict[str, str]) -> None:
     assert bad.status_code == 400
 
 
+def test_a_free_slot_does_not_make_delivery_free(
+    client: TestClient, auth: dict[str, str]
+) -> None:
+    """A slot's price is a surcharge, not the whole fee.
+
+    Picking a daytime slot, which costs nothing extra, used to replace the
+    standard fee with that nothing — so a small order shipped free and the
+    confirm screen showed no delivery line at all.
+    """
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(f"{API}/products", params={"sort": "price_asc"}).json()["items"][0]
+    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+
+    cart = client.get(f"{API}/cart", headers=auth).json()
+    base = cart["totals"]["delivery_fee"]
+    assert base > 0, "a cheap order should not already qualify for free delivery"
+
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    days = client.get(f"{API}/delivery/slots", headers=auth).json()
+    free = next(
+        s for day in days for s in day["slots"] if s["price"] == 0 and s["available"]
+    )
+
+    totals = client.post(
+        f"{API}/checkout/preview",
+        json={"address_id": address["id"], "slot_id": free["id"]},
+        headers=auth,
+    ).json()["totals"]
+
+    assert totals["delivery_fee"] == base
+    assert totals["total"] == totals["subtotal"] - totals["discount"] + base
+
+
+def test_a_paid_slot_adds_to_the_standard_fee(
+    client: TestClient, auth: dict[str, str]
+) -> None:
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(f"{API}/products", params={"sort": "price_asc"}).json()["items"][0]
+    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+
+    base = client.get(f"{API}/cart", headers=auth).json()["totals"]["delivery_fee"]
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    days = client.get(f"{API}/delivery/slots", headers=auth).json()
+    paid = next(s for day in days for s in day["slots"] if s["price"] > 0 and s["available"])
+
+    totals = client.post(
+        f"{API}/checkout/preview",
+        json={"address_id": address["id"], "slot_id": paid["id"]},
+        headers=auth,
+    ).json()["totals"]
+
+    assert totals["delivery_fee"] == base + paid["price"]
+
+
 def test_checkout_places_an_order(client: TestClient, auth: dict[str, str]) -> None:
     client.delete(f"{API}/cart", headers=auth)
     product = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]

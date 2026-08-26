@@ -61,9 +61,14 @@ data class MbColors(
     val onInverse: Color = Color(0xFFFFFFFF),
 
     /**
-     * The ground a product photograph sits on. Catalogue shots come on a light
-     * studio backdrop, so this stays light in both themes — a dark one would
-     * put a hard seam where a letterboxed photo ends and the frame begins.
+     * The ground a product photograph sits on — the detail page's hero, and the
+     * opaque base its bar hands over from.
+     *
+     * Most of the catalogue is cut out rather than shot on a backdrop, so this
+     * follows the theme the way the grid tiles already do. Holding it white on
+     * the dark theme left the tallest thing on the page glowing, and took the
+     * hero's active dot with it: that dot is drawn in [ink], which is white
+     * there, so it vanished into the ground.
      */
     val photoStudio: Color = Color(0xFFFFFFFF),
 
@@ -110,6 +115,7 @@ data class MbColors(
             fillCool = Color(0xFF1E222A),
             photoWarm = Color(0xFF23262C),
             photoWarmAlt = Color(0xFF212429),
+            photoStudio = Color(0xFF23262C),
             onboardRing = Color(0xFF1E222A),
 
             danger = Color(0xFFFF5C86),
@@ -126,8 +132,9 @@ data class MbColors(
 
             inverse = Color(0xFFF3F5F8),
             onInverse = Color(0xFF0E0F12),
-            // scrim and onScrim keep their defaults: a photo is light in
-            // either theme, so the label on top of it does not flip.
+            // scrim and onScrim keep their defaults. The pill is darker than
+            // the hero it sits on in either theme, so white on it stays
+            // readable without a second pair of colours to maintain.
 
             glass = Color(0xF01B1F26),
             isDark = true,

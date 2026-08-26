@@ -91,7 +91,7 @@ fun AddressPickerScreen(
                                 selected = state.addressId == address.id,
                                 onSelect = { viewModel.selectAddress(address.id) },
                                 leading = { MbIcon(address.icon, size = 18.dp) },
-                                modifier = Modifier.padding(horizontal = 10.dp),
+                                contentPadding = 10.dp,
                             )
                             if (index != state.addresses.lastIndex) MbDivider(inset = 42.dp)
                         }
@@ -121,7 +121,7 @@ fun AddressPickerScreen(
                                 selected = state.pickupPointId == point.id,
                                 onSelect = { viewModel.selectPickup(point.id) },
                                 leading = { MbIcon("box", size = 18.dp) },
-                                modifier = Modifier.padding(horizontal = 10.dp),
+                                contentPadding = 10.dp,
                             )
                             if (index != state.pickupPoints.lastIndex) MbDivider(inset = 42.dp)
                         }
@@ -136,7 +136,7 @@ fun AddressPickerScreen(
                         glyph = "pin",
                         tint = MbTheme.colors.accent,
                         onClick = onAddNew,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                 }
             }

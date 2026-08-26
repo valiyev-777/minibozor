@@ -2,11 +2,6 @@ package uz.minibozor.ui.product
 
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.core.view.WindowCompat
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.DisposableEffect
-import android.app.Activity
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -172,31 +167,16 @@ fun ProductScreen(
         }
     }
 
+    val heroPager = rememberPagerState(
+        pageCount = { maxOf(product?.images?.size ?: 1, 1) },
+    )
+
     /** Once the bar is showing the price, the buy bar drops its own. */
     val priceInHeader by remember { derivedStateOf { handover > 0.6f } }
 
-    // While the photo is behind the bar the bar's ground is the white it was
-    // shot on, so the system clock has to be drawn dark over it — the app's own
-    // theme would have it light, and light on white is nothing at all. Handed
-    // back to the theme when the screen goes away.
-    val view = LocalView.current
-    val darkTheme = MbTheme.colors.isDark
-    val lightGround by remember { derivedStateOf { handover < 0.5f } }
-
-    DisposableEffect(view, darkTheme) {
-        onDispose {
-            (view.context as? Activity)?.window?.let { window ->
-                WindowCompat.getInsetsController(window, view)
-                    .isAppearanceLightStatusBars = !darkTheme
-            }
-        }
-    }
-    SideEffect {
-        (view.context as? Activity)?.window?.let { window ->
-            WindowCompat.getInsetsController(window, view)
-                .isAppearanceLightStatusBars = lightGround || !darkTheme
-        }
-    }
+    // The hero's ground follows the theme now, so the system clock needs no
+    // special handling here: it used to be forced dark because the hero was
+    // white even on the dark theme.
 
     val context = LocalContext.current
 
@@ -225,8 +205,8 @@ fun ProductScreen(
                         item(key = "hero") {
                             Hero(
                                 images = product.images,
-                                badge = product.badge,
                                 closed = { closed },
+                                pager = heroPager,
                             )
                         }
 

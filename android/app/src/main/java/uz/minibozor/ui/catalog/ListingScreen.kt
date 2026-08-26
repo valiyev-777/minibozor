@@ -156,7 +156,6 @@ fun ListingScreen(
                                 imageUrl = product.imageUrl,
                                 rating = product.rating,
                                 reviewsCount = product.reviewsCount,
-                                badge = product.badge,
                                 isFavorite = product.isFavorite,
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { viewModel.toggleFavorite(product) },

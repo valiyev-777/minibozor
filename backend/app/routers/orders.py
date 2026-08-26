@@ -48,7 +48,10 @@ def checkout_preview(
     slot = session.get(DeliverySlot, payload.slot_id) if payload.slot_id else None
     card = _resolve_card(session, user.id, payload.payment_card_id, payload.payment_method)
 
-    delivery_fee = 0 if pickup else (slot.price if slot else cart.totals.delivery_fee)
+    # A slot's price is a surcharge — the picker shows it as "+9 000" — so it
+    # adds to the standard fee rather than replacing it. Replacing it made every
+    # daytime slot, priced at nothing, deliver the whole order free.
+    delivery_fee = 0 if pickup else cart.totals.delivery_fee + (slot.price if slot else 0)
     totals = sv.cart_totals(
         selected,
         discount=cart.totals.discount,

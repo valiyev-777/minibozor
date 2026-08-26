@@ -50,7 +50,11 @@ private data class OnboardingPage(
 
 /**
  * Screens 01–04. Copy and imagery come from the design; the illustration is a
- * product photo inset in a soft circle with a floating chip. The last page
+ * product photo inset in a soft circle with a floating chip.
+ *
+ * Every photograph here is one of the cut-out ones. The shots that carry their
+ * own studio backdrop drew a bright rectangle inside the ring, which on the
+ * dark theme was the only light thing on the page. The last page
  * swaps the skip/next pair for a single "Boshlash" plus a sign-in link.
  */
 @Composable
@@ -58,25 +62,25 @@ private fun pages(mediaBase: String) = listOf(
     OnboardingPage(
         title = stringResource(R.string.onboarding_1_title),
         body = stringResource(R.string.onboarding_1_body),
-        image = "$mediaBase/products/jordan1-low-white.png",
+        image = "$mediaBase/products/af1-pink.png",
         chip = stringResource(R.string.onboarding_1_chip),
     ),
     OnboardingPage(
         title = stringResource(R.string.onboarding_2_title),
         body = stringResource(R.string.onboarding_2_body),
-        image = "$mediaBase/products/gazelle.png",
+        image = "$mediaBase/products/gucci-g-timeless.png",
         chip = stringResource(R.string.onboarding_2_chip),
     ),
     OnboardingPage(
         title = stringResource(R.string.onboarding_3_title),
         body = stringResource(R.string.onboarding_3_body),
-        image = "$mediaBase/products/airpods.png",
+        image = "$mediaBase/products/headphones.png",
         chip = stringResource(R.string.onboarding_3_chip),
     ),
     OnboardingPage(
         title = stringResource(R.string.onboarding_4_title),
         body = stringResource(R.string.onboarding_4_body),
-        image = "$mediaBase/products/lamp.png",
+        image = "$mediaBase/products/cosmetics.png",
         chip = stringResource(R.string.onboarding_4_chip),
     ),
 )

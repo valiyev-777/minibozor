@@ -97,7 +97,7 @@ fun PaymentMethodScreen(
                                         )
                                 )
                             },
-                            modifier = Modifier.padding(horizontal = 10.dp),
+                            contentPadding = 10.dp,
                         )
                         if (index != state.cards.lastIndex) MbDivider(inset = 68.dp)
                     }
@@ -118,7 +118,7 @@ fun PaymentMethodScreen(
                                 MbIcon("basket", size = 16.dp, tint = MbTheme.colors.success)
                             }
                         },
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                 }
             }
@@ -131,7 +131,7 @@ fun PaymentMethodScreen(
                         subtitle = stringResource(R.string.humo_uzcard_visa),
                         onClick = onAddCard,
                         tint = MbTheme.colors.accent,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                 }
             }

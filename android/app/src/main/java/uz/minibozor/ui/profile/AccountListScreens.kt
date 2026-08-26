@@ -154,7 +154,7 @@ fun CardsScreen(
                         subtitle = stringResource(R.string.humo_uzcard_visa),
                         tint = MbTheme.colors.accent,
                         onClick = onAddCard,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                 }
             }
@@ -246,7 +246,7 @@ fun AddressesScreen(
                         glyph = "pin",
                         tint = MbTheme.colors.accent,
                         onClick = onAddAddress,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                 }
             }
@@ -363,7 +363,6 @@ fun FavoritesScreen(
                             imageUrl = product.imageUrl,
                             rating = product.rating,
                             reviewsCount = product.reviewsCount,
-                            badge = product.badge,
                             isFavorite = true,
                             onClick = { onOpenProduct(product.id) },
                             onToggleFavorite = { viewModel.remove(product.id) },

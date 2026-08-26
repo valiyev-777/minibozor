@@ -34,7 +34,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -68,7 +68,6 @@ import uz.minibozor.core.design.component.MbQuantityStepper
 import uz.minibozor.core.design.component.MbProductImage
 import uz.minibozor.core.design.component.MbRailTile
 import uz.minibozor.core.design.component.MbSkeleton
-import uz.minibozor.core.design.component.MbStatusPill
 import uz.minibozor.core.design.component.SectionHeader
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.data.remote.dto.CartItemDto
@@ -106,16 +105,17 @@ const val RecommendationsKey = "recommendations"
  * behind the content rather than being pushed off the top.
  */
 @Composable
-fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
-    val pager = rememberPagerState(pageCount = { maxOf(images.size, 1) })
-
+fun Hero(
+    images: List<String>,
+    closed: () -> Float,
+    /** Hoisted, so the bar above shares the page the photo is showing. */
+    pager: PagerState,
+) {
     Box(
         Modifier
             .fillMaxWidth()
             .height(heroHeight())
-            // Light in both themes, and the same white the photographs are
-            // shot on, so the inset below reads as breathing room rather than
-            // as a panel with edges.
+            // The theme's photo ground, the same one the grid tiles use.
             .background(MbTheme.colors.photoStudio)
     ) {
         // Below the bar, not under it: the frame is a square of photo plus the
@@ -130,10 +130,6 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
                 images.getOrNull(page),
                 modifier = Modifier
                     .fillMaxSize()
-                    // Keeps the product off the screen edges. Invisible as a
-                    // boundary: the photographs' own studio backdrop is
-                    // transparent, so the frame is all there is behind them.
-                    .padding(horizontal = 18.dp, vertical = 10.dp)
                     .graphicsLayer {
                         // Both the swipe offset and the scroll are read here,
                         // in the layer phase. Reading the pager during
@@ -150,22 +146,13 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
                         scaleY = scale
                     },
                 shape = RectangleShape,
-                background = MbTheme.colors.photoStudio,
+                // Keeps a cut-out product off the screen edges. A photograph
+                // that brought its own backdrop ignores this and fills the
+                // frame, so no ground shows beside it.
+                photoInset = 16.dp,
                 // The whole product, uncropped: the taller frame exists so the
                 // photo can be seen in full, so a crop would defeat it.
                 contentScale = ContentScale.Fit,
-            )
-        }
-
-        if (badge != null) {
-            MbStatusPill(
-                badge,
-                MbTheme.colors.scrim,
-                MbTheme.colors.onScrim,
-                Modifier
-                    .align(Alignment.TopStart)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(start = 16.dp, top = 62.dp),
             )
         }
 
@@ -220,19 +207,27 @@ fun ProductChrome(
     Column(
         Modifier
             .fillMaxWidth()
-            // Crossfades from the white the photographs are shot on to the
-            // page's surface, rather than fading a dark surface up from
-            // nothing: half-opaque dark over a white photo is grey, and a grey
-            // band sliding down the picture is what this looked like. Read in
-            // the draw phase, so following the scroll invalidates drawing only.
+            // Crossfades from the hero's own ground to the page's surface,
+            // rather than fading the surface up from nothing: half-opaque over
+            // a photo is a grey band sliding down the picture, which is what
+            // this looked like. Read in the draw phase, so following the
+            // scroll invalidates drawing only.
             .drawBehind {
-                // An opaque ground first, then the page's surface faded over
-                // it. Cross-fading two translucent rects never adds up to
-                // opaque in between — at halfway the pair covers 0.75, so a
-                // quarter of the card behind showed through, which is how the
+                // An opaque ground, then the page's surface faded over it.
+                // Cross-fading two translucent rects never adds up to opaque
+                // in between — at halfway the pair covers 0.75, so a quarter
+                // of the card behind showed through, which is how the
                 // product's name kept appearing twice.
-                drawRect(onPhoto)
-                drawRect(surface, alpha = handover())
+                //
+                // The ground itself comes up steeply rather than being there
+                // from the start: painted flat over an untouched photo it put
+                // a band across the picture, since a blurred backdrop has no
+                // one colour to match. Full strength by an eighth of the
+                // handover, which is a few pixels of the name — long before
+                // any of it could read through.
+                val h = handover()
+                drawRect(onPhoto, alpha = (h * 8f).coerceAtMost(1f))
+                drawRect(surface, alpha = h)
             }
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 14.dp, vertical = 10.dp)

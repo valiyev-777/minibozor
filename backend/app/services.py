@@ -33,7 +33,11 @@ from app.models import (
     User,
 )
 
-FREE_DELIVERY_THRESHOLD = 250_000
+# Above the median basket, so delivery is a real line on a typical order and
+# free on a large one. At 250 000 it was under a quarter of the median price in
+# the catalogue, so all but the cheapest orders shipped free and the fee never
+# appeared at all.
+FREE_DELIVERY_THRESHOLD = 3_000_000
 STANDARD_DELIVERY_FEE = 19_000
 
 UZ_MONTHS = [

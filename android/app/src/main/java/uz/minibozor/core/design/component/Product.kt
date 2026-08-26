@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,13 +58,26 @@ fun MbProductImage(
     url: String?,
     modifier: Modifier = Modifier,
     shape: Shape = MbTheme.shapes.tile,
-    background: Color = MbTheme.colors.photoWarmAlt,
+    /** The theme's photo ground unless overridden. See [PhotoFraming]. */
+    background: Color = Color.Unspecified,
     contentScale: ContentScale = ContentScale.Fit,
+    /**
+     * Room left between a cut-out photograph and the frame's edge.
+     *
+     * Applied inside rather than by the caller padding this composable, so the
+     * ground still reaches the frame's edge. Ignored for a photograph that
+     * brought its own backdrop: that one fills the frame instead, which is
+     * what keeps a white studio shot from sitting as a bright block inside a
+     * dark tile.
+     */
+    photoInset: Dp = 0.dp,
 ) {
+    val framing = rememberPhotoFraming(url)
+    val fills = framing == PhotoFraming.Backdrop
     Box(
         modifier
             .clip(shape)
-            .background(background),
+            .background(if (background == Color.Unspecified) MbTheme.colors.photoWarmAlt else background),
         contentAlignment = Alignment.Center,
     ) {
         val resolved = url.mediaUrl()
@@ -71,8 +85,13 @@ fun MbProductImage(
             AsyncImage(
                 model = resolved,
                 contentDescription = null,
-                contentScale = contentScale,
-                modifier = Modifier.fillMaxSize(),
+                // Cropped when it brought its own backdrop, so that backdrop
+                // covers the frame rather than showing as a rectangle inside
+                // it. Fitted otherwise, since a cut-out has nothing to spare.
+                contentScale = if (fills) ContentScale.Crop else contentScale,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(if (fills) 0.dp else photoInset),
             )
         } else {
             // No photo yet. A muted glyph reads as "none supplied" where an
@@ -160,7 +179,7 @@ fun MbStars(rating: Int, modifier: Modifier = Modifier, size: Dp = 13.dp) {
 
 /**
  * The two-per-row grid tile from the home screen and search results: photo,
- * favourite toggle, badge, price, title, rating and an add-to-cart button.
+ * favourite toggle, price, title, rating and an add-to-cart button.
  */
 @Composable
 fun MbProductTile(
@@ -171,7 +190,6 @@ fun MbProductTile(
     imageUrl: String?,
     rating: Double,
     reviewsCount: Int,
-    badge: String?,
     isFavorite: Boolean,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -201,16 +219,6 @@ fun MbProductTile(
                     .align(Alignment.TopEnd)
                     .padding(6.dp),
             )
-            if (!badge.isNullOrBlank()) {
-                MbStatusPill(
-                    label = badge,
-                    background = MbTheme.colors.scrim,
-                    contentColor = MbTheme.colors.onScrim,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(6.dp),
-                )
-            }
         }
         MbPriceRow(price, oldPrice, discountPercent)
         // Two lines always, so every tile in a row is the same height and no
@@ -297,18 +305,8 @@ fun MbDealTile(
                     .aspectRatio(1f),
                 shape = MbTheme.shapes.tileSmall,
             )
-            if (discountPercent != null) {
-                MbStatusPill(
-                    label = "−$discountPercent%",
-                    background = MbTheme.colors.danger,
-                    contentColor = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp),
-                )
-            }
         }
-        MbPriceRow(price, oldPrice, null)
+        MbPriceRow(price, oldPrice, discountPercent)
         // Two lines always, so every tile in a row is the same height and no
         // title ends up pressed against the card edge.
         MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)

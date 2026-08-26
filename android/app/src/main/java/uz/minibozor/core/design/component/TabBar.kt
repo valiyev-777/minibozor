@@ -55,7 +55,10 @@ fun MbTabBar(
         modifier
             .fillMaxWidth()
             .padding(horizontal = MbTheme.dimens.tabBarInset)
-            .padding(top = 10.dp, bottom = maxOf(navBottom, MbTheme.dimens.tabBarBottom))
+            .padding(
+                top = 10.dp,
+                bottom = maxOf(navBottom, MbTheme.dimens.tabBarBottom) + MbTheme.dimens.tabBarLift,
+            )
     ) {
         Row(
             Modifier
@@ -134,5 +137,9 @@ private fun TabItem(
     }
 }
 
+/** Room a scrolling screen leaves so its last row clears the floating bar. */
 @Composable
-fun MbTabBarSpacer() = Spacer(Modifier.size(MbTheme.dimens.tabBarHeight + 26.dp))
+fun MbTabBarSpacer() = Spacer(
+    // Tracks the lift, or raising the bar would park it over the last row.
+    Modifier.size(MbTheme.dimens.tabBarHeight + 26.dp + MbTheme.dimens.tabBarLift)
+)

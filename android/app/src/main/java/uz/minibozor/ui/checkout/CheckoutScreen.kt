@@ -89,7 +89,7 @@ fun CheckoutScreen(
                         glyph = "pin",
                         subtitle = preview.address?.line ?: preview.pickupPoint?.address,
                         onClick = onEditAddress,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                     MbDivider(inset = 62.dp)
                     MbListRow(
@@ -99,7 +99,7 @@ fun CheckoutScreen(
                         glyph = "clock",
                         subtitle = preview.slot?.note,
                         onClick = onEditTime,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                     MbDivider(inset = 62.dp)
                     MbListRow(
@@ -113,7 +113,7 @@ fun CheckoutScreen(
                             stringResource(R.string.kuryerga_topshirishda)
                         } else preview.card?.brand,
                         onClick = onEditPayment,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                 }
             }
