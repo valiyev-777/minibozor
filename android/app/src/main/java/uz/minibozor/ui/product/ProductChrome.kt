@@ -104,14 +104,17 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
             .background(MbTheme.colors.photoWarm)
     ) {
         HorizontalPager(pager, Modifier.fillMaxSize()) { page ->
-            // Distance from settled, -1..1: a half-swiped page sits back.
-            val distance = ((pager.currentPage - page) + pager.currentPageOffsetFraction)
-                .coerceIn(-1f, 1f)
             MbProductImage(
                 images.getOrNull(page),
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
+                        // Both the swipe offset and the scroll are read here,
+                        // in the layer phase. Reading the pager during
+                        // composition instead recomposed every page on every
+                        // frame of a swipe, which is what made it stutter.
+                        val distance = ((pager.currentPage - page) +
+                            pager.currentPageOffsetFraction).coerceIn(-1f, 1f)
                         val progress = closed()
                         translationY = progress * size.height * 0.30f
                         alpha = 1f - progress

@@ -55,12 +55,12 @@ fun MbTabBar(
         modifier
             .fillMaxWidth()
             .padding(horizontal = MbTheme.dimens.tabBarInset)
-            .padding(top = 12.dp, bottom = maxOf(navBottom, MbTheme.dimens.tabBarBottom))
+            .padding(top = 10.dp, bottom = maxOf(navBottom, MbTheme.dimens.tabBarBottom))
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .shadow(22.dp, pill, clip = false)
+                .shadow(18.dp, pill, clip = false)
                 .clip(pill)
                 .let { row ->
                     if (backdrop != null) {
@@ -74,7 +74,7 @@ fun MbTabBar(
                     }
                 }
                 .border(1.dp, MbTheme.colors.border, pill)
-                .padding(horizontal = 10.dp, vertical = 9.dp),
+                .padding(horizontal = 10.dp, vertical = 7.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             tabs.forEach { tab ->
@@ -105,20 +105,20 @@ private fun TabItem(
                     if (selected) MbTheme.colors.accent.copy(alpha = 0.12f) else Color.Transparent
                 )
                 .clickable(onClick = onClick)
-                .padding(vertical = 8.dp)
+                .padding(vertical = 6.dp)
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            MbIcon(tab.glyph, size = 30.dp, tint = tint, strokeWidth = 1.8f)
+            MbIcon(tab.glyph, size = 23.dp, tint = tint, strokeWidth = 1.8f)
             MbText(tab.label, MbTheme.type.label, tint, maxLines = 1)
         }
         if (tab.badge > 0) {
             Box(
                 Modifier
-                    .padding(start = 26.dp, top = 2.dp)
-                    .defaultMinSize(minWidth = 16.dp)
-                    .height(16.dp)
+                    .padding(start = 21.dp, top = 1.dp)
+                    .defaultMinSize(minWidth = 15.dp)
+                    .height(15.dp)
                     .clip(CircleShape)
                     .background(MbTheme.colors.danger)
                     .padding(horizontal = 4.dp),

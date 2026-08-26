@@ -310,13 +310,15 @@ private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Uni
             pageSpacing = 10.dp,
             contentPadding = PaddingValues(horizontal = 12.dp),
         ) { page ->
-            // How far this page is from settled, -1..1. Drives a small drift so
-            // a swipe reads as depth rather than as a flat slide.
-            val drift = (pager.currentPage - page + pager.currentPageOffsetFraction)
-                .coerceIn(-1f, 1f)
             BannerCard(
                 banner = banners[page],
-                drift = drift,
+                // A lambda, not a value: read as a value here the card would
+                // recompose on every frame of a swipe. Read inside the layer
+                // instead, only the drawing is invalidated.
+                drift = {
+                    (pager.currentPage - page + pager.currentPageOffsetFraction)
+                        .coerceIn(-1f, 1f)
+                },
                 onClick = { onClick(banners[page]) },
             )
         }
@@ -350,7 +352,7 @@ private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Uni
 }
 
 @Composable
-private fun BannerCard(banner: BannerDto, drift: Float, onClick: () -> Unit) {
+private fun BannerCard(banner: BannerDto, drift: () -> Float, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -388,7 +390,7 @@ private fun BannerCard(banner: BannerDto, drift: Float, onClick: () -> Unit) {
             modifier = Modifier
                 .width(110.dp)
                 .fillMaxSize()
-                .graphicsLayer { translationX = drift * 40.dp.toPx() },
+                .graphicsLayer { translationX = drift() * 40.dp.toPx() },
             shape = MbTheme.shapes.tile,
             background = Color.White.copy(alpha = 0.08f),
             contentScale = ContentScale.Crop,

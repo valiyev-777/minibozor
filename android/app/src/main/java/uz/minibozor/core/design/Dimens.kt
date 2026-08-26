@@ -35,7 +35,7 @@ data class MbDimens(
     val fieldHeight: Dp = 48.dp,
     val searchHeight: Dp = 38.dp,
     val bannerHeight: Dp = 146.dp,
-    val tabBarHeight: Dp = 88.dp,
+    val tabBarHeight: Dp = 74.dp,
     val tabBarInset: Dp = 14.dp,
     /** Gap below the floating bar, per the design. */
     val tabBarBottom: Dp = 16.dp,

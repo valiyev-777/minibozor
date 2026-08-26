@@ -130,10 +130,16 @@ fun ProductScreen(
         derivedStateOf { closed > 0.6f }
     }
 
-    /** The buy bar steps aside once the recommendations reach it. */
+    /**
+     * The buy bar steps aside once the recommendations reach it — but only
+     * after the page has actually been scrolled. On a product short enough to
+     * fit the screen the rail is visible from the start, and hiding the bar
+     * there left no way to add the thing to a cart at all.
+     */
     val atRecommendations by remember {
         derivedStateOf {
-            listState.layoutInfo.visibleItemsInfo.any { it.key == RecommendationsKey }
+            listState.canScrollBackward &&
+                listState.layoutInfo.visibleItemsInfo.any { it.key == RecommendationsKey }
         }
     }
 
