@@ -113,6 +113,7 @@ fun ProductScreen(
     val listState = rememberLazyListState()
 
     val density = LocalDensity.current
+    val statusBarPx = WindowInsets.statusBars.getTop(density).toFloat()
     val heroHeight = heroHeight()
     val closePx = with(density) { heroHeight.toPx() * 0.55f }
 
@@ -127,10 +128,33 @@ fun ProductScreen(
         }
     }
 
-    /** Once the header row is showing the price, the buy bar drops its own. */
-    val priceInHeader by remember {
-        derivedStateOf { closed > 0.6f }
+    // Where the bar's own bottom edge sits, and how far the card's title
+    // travels behind it before the bar takes the name over.
+    val barBottomPx = statusBarPx + with(density) { 56.dp.toPx() }
+    val handoverPx = with(density) { 44.dp.toPx() }
+
+    /**
+     * How far the name has been handed from the page to the bar, 0..1.
+     *
+     * Keyed on the card that holds the title rather than on the photo closing.
+     * A product with little to say is short enough that the photo can be gone
+     * while its title card is still in plain sight, and driving this from the
+     * photo put the same name on screen twice.
+     */
+    val handover by remember {
+        derivedStateOf {
+            val identity = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.key == "identity" }
+            if (identity == null) {
+                if (listState.firstVisibleItemIndex > 0) 1f else 0f
+            } else {
+                ((barBottomPx - identity.offset) / handoverPx).coerceIn(0f, 1f)
+            }
+        }
     }
+
+    /** Once the bar is showing the price, the buy bar drops its own. */
+    val priceInHeader by remember { derivedStateOf { handover > 0.6f } }
 
     /**
      * The buy bar steps aside once the recommendations reach it — but only
@@ -375,6 +399,7 @@ fun ProductScreen(
             ProductChrome(
                 product = product,
                 closed = { closed },
+                handover = { handover },
                 onBack = onBack,
                 onToggleFavorite = viewModel::toggleFavorite,
                 onShare = { product?.let { share(context, it) } },

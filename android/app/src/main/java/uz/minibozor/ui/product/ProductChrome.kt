@@ -212,6 +212,8 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
 fun ProductChrome(
     product: ProductDto?,
     closed: () -> Float,
+    /** How far the product's name has been handed from the page to this bar. */
+    handover: () -> Float,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
     onShare: () -> Unit,
@@ -251,7 +253,7 @@ fun ProductChrome(
                 Modifier
                     .fillMaxWidth()
                     .graphicsLayer {
-                        val progress = closed()
+                        val progress = handover()
                         alpha = progress
                         translationY = (progress - 1f) * 14.dp.toPx()
                     }
