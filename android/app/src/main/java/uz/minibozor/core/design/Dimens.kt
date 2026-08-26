@@ -34,7 +34,12 @@ data class MbDimens(
     val buttonHeight: Dp = 48.dp,
     val fieldHeight: Dp = 48.dp,
     val searchHeight: Dp = 38.dp,
-    val bannerHeight: Dp = 146.dp,
+    /**
+     * Tall enough for the panel's own content: kicker, two lines of title, a
+     * line of subtitle and the button under them come to about 123 dp, which
+     * did not fit inside 146 dp less its padding — the button lost its bottom.
+     */
+    val bannerHeight: Dp = 162.dp,
     val tabBarHeight: Dp = 74.dp,
     val tabBarInset: Dp = 14.dp,
     /** Gap below the floating bar, per the design. */
