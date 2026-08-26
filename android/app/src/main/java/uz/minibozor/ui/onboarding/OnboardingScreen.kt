@@ -1,5 +1,7 @@
 package uz.minibozor.ui.onboarding
 
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -276,16 +278,18 @@ private fun NextButton(onClick: () -> Unit) {
     }
 }
 
-/** Wordmark stand-in: the app's basket glyph in an accent tile. */
+/**
+ * The shop's mark.
+ *
+ * Drawn on whatever is behind it rather than in a tile of its own: the mark is
+ * already a shape on a transparent ground, and it appears on the dark
+ * onboarding page and the light sign-in page alike.
+ */
 @Composable
 fun BrandMark(size: androidx.compose.ui.unit.Dp = 26.dp) {
-    Box(
-        Modifier
-            .size(size)
-            .clip(RoundedCornerShape(size * 0.31f))
-            .background(MbTheme.colors.accent),
-        contentAlignment = Alignment.Center,
-    ) {
-        MbIcon("basket", size = size * 0.62f, tint = Color.White, strokeWidth = 2f)
-    }
+    Image(
+        painter = painterResource(R.drawable.logo_mark),
+        contentDescription = null,
+        modifier = Modifier.size(size),
+    )
 }
