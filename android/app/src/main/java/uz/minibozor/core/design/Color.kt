@@ -65,7 +65,7 @@ data class MbColors(
      * studio backdrop, so this stays light in both themes — a dark one would
      * put a hard seam where a letterboxed photo ends and the frame begins.
      */
-    val photoStudio: Color = Color(0xFFF4F3F1),
+    val photoStudio: Color = Color(0xFFFFFFFF),
 
     /**
      * For labels sitting on a photo. Product shots are light whatever the

@@ -74,11 +74,16 @@ import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.ProductDto
 
 /**
- * The photo owns the first ~62% of the screen: tall enough to read the whole
- * product without scrolling, short enough that the price bar stays on screen.
+ * The photo frame: square, matching the photographs.
+ *
+ * A frame taller than the photo is wide leaves a band of frame down each side
+ * of a fitted picture, and two near-identical lights with a seam between them
+ * read as a mistake rather than a margin. Every catalogue photo is 1:1, so a
+ * square frame has nothing left over to show — and it is short enough that the
+ * price bar stays on screen with it.
  */
 @Composable
-fun heroHeight(): Dp = (LocalConfiguration.current.screenHeightDp * 0.62f).dp
+fun heroHeight(): Dp = LocalConfiguration.current.screenWidthDp.dp
 
 /** Enough to sit behind the status bar and the row of buttons under it. */
 private val StatusScrimHeight = 108.dp
@@ -101,9 +106,9 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
         Modifier
             .fillMaxWidth()
             .height(heroHeight())
-            // Light in both themes. The photo is fitted rather than cropped, so
-            // whatever it does not cover is on show — and a dark frame around a
-            // shot taken on white reads as two mismatched blocks.
+            // Light in both themes, and the same white the photographs are
+            // shot on, so the inset below reads as breathing room rather than
+            // as a panel with edges.
             .background(MbTheme.colors.photoStudio)
     ) {
         HorizontalPager(pager, Modifier.fillMaxSize()) { page ->
@@ -111,6 +116,10 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
                 images.getOrNull(page),
                 modifier = Modifier
                     .fillMaxSize()
+                    // Keeps the product off the screen edges. Invisible as a
+                    // boundary because the frame and the backdrop are one
+                    // colour — padding without a division.
+                    .padding(horizontal = 18.dp)
                     .graphicsLayer {
                         // Both the swipe offset and the scroll are read here,
                         // in the layer phase. Reading the pager during
