@@ -21,7 +21,7 @@ struct RootView: View {
 struct ShopTabsView: View {
     @Environment(CartRepository.self) var cart
 
-    @State var selection = "home"
+    @State var tabSelection = TabSelection()
     /// One draft order shared by the six checkout steps.
     @State var checkout = CheckoutModel()
     @State var homeRouter = Router()
@@ -30,7 +30,7 @@ struct ShopTabsView: View {
     @State var profileRouter = Router()
 
     private var activeRouter: Router {
-        switch selection {
+        switch tabSelection.current {
         case "catalog": return catalogRouter
         case "cart": return cartRouter
         case "profile": return profileRouter
@@ -50,12 +50,12 @@ struct ShopTabsView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             Group {
-                switch selection {
+                switch tabSelection.current {
                 case "catalog":
                     RouterStack(router: catalogRouter) { CatalogView() }
                 case "cart":
                     RouterStack(router: cartRouter) {
-                        CartView(onStartShopping: { selection = "home" })
+                        CartView(onStartShopping: { tabSelection.select("home") })
                     }
                 case "profile":
                     RouterStack(router: profileRouter) { ProfileView() }
@@ -66,13 +66,14 @@ struct ShopTabsView: View {
             // The design only shows the bar on the four roots, so it hides as
             // soon as the active tab pushes a screen.
             if activeRouter.path.isEmpty {
-                MBTabBar(tabs: tabs, selection: $selection)
+                MBTabBar(tabs: tabs, selection: $tabSelection.current)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.easeOut(duration: 0.18), value: activeRouter.path.isEmpty)
         .ignoresSafeArea(.keyboard)
         .environment(checkout)
+        .environment(tabSelection)
         .task { await cart.refresh() }
     }
 }

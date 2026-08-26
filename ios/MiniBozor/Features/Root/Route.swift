@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Every push destination, numbered against the design's screens.
 enum Route: Hashable {
@@ -60,5 +61,20 @@ final class Router {
     /// used after placing an order.
     func replace(with route: Route) {
         path = [route]
+    }
+}
+
+
+/// Which of the four tabs is showing.
+///
+/// Held out here rather than as private state on the tab host, so a sheet deep
+/// inside one tab can hand the customer to another — the picker's "O'tish"
+/// being the reason.
+@Observable
+final class TabSelection {
+    var current = "home"
+
+    func select(_ id: String) {
+        current = id
     }
 }

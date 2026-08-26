@@ -86,6 +86,8 @@ struct ListingView: View {
     @State var model = ListingModel()
     @State var showFilters = false
     @State var toast: String?
+    @Environment(TabSelection.self) private var tabSelection
+    @State private var picking: ProductCardDTO?
 
     var body: some View {
         MBScreen {
@@ -104,6 +106,19 @@ struct ListingView: View {
         .navigationBarBackButtonHidden()
         .mbToast($toast)
         .task { await model.start(category: category, text: query) }
+        .sheet(item: $picking) { card in
+            VariantSheet(
+                card: card,
+                onDismiss: { picking = nil },
+                onOpenCart: {
+                    picking = nil
+                    tabSelection.select("cart")
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(MB.metric.radiusSheet)
+        }
         .sheet(isPresented: $showFilters) {
             FiltersSheet(
                 filters: model.filters,
@@ -182,9 +197,13 @@ struct ListingView: View {
                             onOpen: { router.push(.product(id: product.id)) },
                             onToggleFavorite: { Task { await model.toggleFavorite(product) } },
                             onAddToCart: {
-                                Task {
-                                    let outcome = await cart.add(productId: product.id)
-                                    toast = outcome.errorMessage ?? L("savatga_qoshildi")
+                                if product.hasVariants {
+                                    picking = product
+                                } else {
+                                    Task {
+                                        let outcome = await cart.add(productId: product.id)
+                                        toast = outcome.errorMessage ?? L("savatga_qoshildi")
+                                    }
                                 }
                             }
                         )

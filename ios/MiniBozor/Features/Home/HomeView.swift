@@ -35,6 +35,8 @@ struct HomeView: View {
 
     @State var model = HomeModel()
     @State var toast: String?
+    @Environment(TabSelection.self) private var tabSelection
+    @State private var picking: ProductCardDTO?
 
     var body: some View {
         MBScreen {
@@ -59,6 +61,19 @@ struct HomeView: View {
             }
         }
         .mbToast($toast)
+        .sheet(item: $picking) { card in
+            VariantSheet(
+                card: card,
+                onDismiss: { picking = nil },
+                onOpenCart: {
+                    picking = nil
+                    tabSelection.select("cart")
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(MB.metric.radiusSheet)
+        }
         .task { await model.load(city: session.city) }
     }
 
@@ -145,9 +160,15 @@ struct HomeView: View {
                 Task { await model.toggleFavorite(product, city: session.city) }
             },
             onAddToCart: {
-                Task {
-                    let outcome = await cart.add(productId: product.id)
-                    toast = outcome.errorMessage ?? L("savatga_qoshildi")
+                // A product that comes in sizes or colours opens the picker
+                // instead of being added with a variant we guessed.
+                if product.hasVariants {
+                    picking = product
+                } else {
+                    Task {
+                        let outcome = await cart.add(productId: product.id)
+                        toast = outcome.errorMessage ?? L("savatga_qoshildi")
+                    }
                 }
             }
         )
