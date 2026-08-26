@@ -75,6 +75,16 @@ struct ShopTabsView: View {
         .environment(checkout)
         .environment(tabSelection)
         .task { await cart.refresh() }
+        // Makes the link the share sheet hands out actually open the product,
+        // rather than dropping the recipient on the home screen.
+        .onOpenURL { url in
+            guard url.scheme == "minibozor" else { return }
+            let parts = ([url.host] + url.pathComponents.filter { $0 != "/" }).compactMap { $0 }
+            guard parts.first == "product", let id = parts.dropFirst().first.flatMap(Int.init)
+            else { return }
+            tabSelection.select("home")
+            homeRouter.push(.product(id: id))
+        }
     }
 }
 

@@ -154,15 +154,18 @@ struct OnboardingView: View {
     }
 }
 
-/// Wordmark: the basket glyph in an accent tile, drawn rather than shipped as
-/// an image so it stays sharp at every size.
+/// The shop's mark.
+///
+/// Drawn on whatever is behind it rather than in a tile of its own: the mark is
+/// already a shape on a transparent ground, and it appears on the intro and on
+/// the sign-in page alike.
 struct BrandMark: View {
     var size: CGFloat = 26
 
     var body: some View {
-        MBIcon("basket", size: size * 0.62, tint: .white, lineWidth: 2)
+        Image("LogoMark")
+            .resizable()
+            .scaledToFit()
             .frame(width: size, height: size)
-            .background(MB.color.accent)
-            .clipShape(RoundedRectangle(cornerRadius: size * 0.31, style: .continuous))
     }
 }

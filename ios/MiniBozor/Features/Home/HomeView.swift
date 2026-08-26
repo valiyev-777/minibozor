@@ -198,7 +198,19 @@ private struct BannerCarousel: View {
                     Capsule()
                         .fill(position == index ? MB.color.accent : MB.color.hairlineStrong)
                         .frame(width: position == index ? 14 : 3.5, height: 3.5)
+                        .animation(.easeInOut(duration: 0.26), value: index)
                 }
+            }
+        }
+        // Restarts on every settle, including after the customer swipes it
+        // themselves, which is what stops it yanking the page out from under a
+        // thumb rather than simply advancing on a timer.
+        .task(id: index) {
+            guard banners.count > 1 else { return }
+            try? await Task.sleep(for: .seconds(4.5))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.7)) {
+                index = (index + 1) % banners.count
             }
         }
     }
@@ -276,10 +288,29 @@ private struct CategoryGrid: View {
                         onTap(category)
                     } label: {
                         VStack(spacing: 6) {
-                            MBIcon(category.icon, size: 20)
-                                .frame(width: MB.metric.categoryTile, height: MB.metric.categoryTile)
-                                .background(MB.color.fill)
-                                .clipShape(RoundedRectangle(cornerRadius: MB.metric.radiusXL, style: .continuous))
+                            // A photograph where the shop supplied one, the
+                            // line glyph where it did not — the grid holds both
+                            // without looking mixed because the tile behind
+                            // them is the same.
+                            Group {
+                                if let image = category.imageUrl,
+                                   let parsed = AppConfig.media(image) {
+                                    AsyncImage(url: parsed) { phase in
+                                        if let picture = phase.image {
+                                            picture.resizable().scaledToFit()
+                                        } else {
+                                            Color.clear
+                                        }
+                                    }
+                                    .padding(MB.metric.categoryTile * 0.14)
+                                } else {
+                                    MBIcon(category.icon, size: 20)
+                                }
+                            }
+                            .frame(width: MB.metric.categoryTile, height: MB.metric.categoryTile)
+                            .background(MB.color.fill)
+                            .clipShape(RoundedRectangle(cornerRadius: MB.metric.radiusXL,
+                                                        style: .continuous))
                             Text(category.name)
                                 .mbFont(MB.type.micro)
                                 .fontWeight(.semibold)

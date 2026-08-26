@@ -41,6 +41,7 @@ struct CatalogView: View {
                                 MBListRow(
                                     category.name,
                                     glyph: category.icon,
+                                    imageUrl: category.imageUrl,
                                     subtitle: category.subtitle.isEmpty ? nil : category.subtitle,
                                     meta: category.productCount > 0
                                         ? LPlural("n_products", count: category.productCount,
