@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uz.minibozor.core.design.MbText
@@ -137,13 +138,18 @@ fun MbCard(
     modifier: Modifier = Modifier,
     padding: Dp = 16.dp,
     background: Color = MbTheme.colors.surface,
+    /**
+     * Square it off for a section that runs edge to edge — rounded corners
+     * against the screen edge look like a card that did not fit.
+     */
+    shape: Shape = MbTheme.shapes.card,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
         modifier
             .fillMaxWidth()
-            .clip(MbTheme.shapes.card)
+            .clip(shape)
             .background(background)
             .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .padding(padding),

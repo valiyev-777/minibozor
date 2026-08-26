@@ -184,7 +184,7 @@ fun ProductScreen(
                         // would just be a long box with no seams where the
                         // subject changes.
                         item(key = "identity") {
-                            MbCard(Modifier.padding(horizontal = 12.dp)) {
+                            MbCard(shape = RectangleShape) {
                                 // No price here: it is in the buy bar a thumb's
                                 // reach away and in the bar once the photo
                                 // closes, so a third copy is just noise.
@@ -226,7 +226,7 @@ fun ProductScreen(
                         val colors = product.variants.filter { it.kind == "color" }
                         if (sizes.isNotEmpty() || colors.isNotEmpty()) {
                             item(key = "options") {
-                                MbCard(Modifier.padding(horizontal = 12.dp)) {
+                                MbCard(shape = RectangleShape) {
                                     if (sizes.isNotEmpty()) {
                                         SectionHeader(
                                             stringResource(R.string.olcham),
@@ -271,7 +271,7 @@ fun ProductScreen(
                         }
 
                         item(key = "smallprint") {
-                            MbCard(Modifier.padding(horizontal = 12.dp)) {
+                            MbCard(shape = RectangleShape) {
                                 // Folded, but the delivery line rides on the
                                 // header: it is the one fact here that helps
                                 // someone decide, and hiding it to tidy the
@@ -337,7 +337,7 @@ fun ProductScreen(
                         }
 
                         item {
-                            MbCard(Modifier.padding(horizontal = 12.dp)) {
+                            MbCard(shape = RectangleShape) {
                                 SectionHeader(
                                     title = stringResource(R.string.sharhlar),
                                     subtitle = state.summary?.let { pluralStringResource(R.plurals.n_items, it.total, it.total) },
