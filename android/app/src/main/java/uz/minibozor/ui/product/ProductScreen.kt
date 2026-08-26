@@ -1,5 +1,7 @@
 package uz.minibozor.ui.product
 
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.SideEffect
@@ -133,18 +135,29 @@ fun ProductScreen(
         }
     }
 
-    // Where the bar's own bottom edge sits, and how far the card's title
-    // travels behind it before the bar takes the name over.
+    // Where the bar's own bottom edge sits, and how far past it the name
+    // travels before the bar has it entirely.
     val barBottomPx = statusBarPx + with(density) { 56.dp.toPx() }
-    val handoverPx = with(density) { 44.dp.toPx() }
+    val handoverPx = with(density) { 20.dp.toPx() }
+    val cardPaddingPx = with(density) { 16.dp.toPx() }
+
+    /**
+     * The height of the name where it sits on the page.
+     *
+     * Reported by the card rather than assumed, because a long name wraps to
+     * two lines and a short one does not — and this decides when the bar is
+     * allowed to show the name, so being a line out puts it on screen twice.
+     * onSizeChanged fires when the text rewraps, not on every scroll frame.
+     */
+    var titleHeightPx by remember { mutableFloatStateOf(0f) }
 
     /**
      * How far the name has been handed from the page to the bar, 0..1.
      *
-     * Keyed on the card that holds the title rather than on the photo closing.
-     * A product with little to say is short enough that the photo can be gone
-     * while its title card is still in plain sight, and driving this from the
-     * photo put the same name on screen twice.
+     * Measured against the name itself, not the card holding it. Keying it to
+     * the card's top edge handed the name over while the name was still in
+     * plain sight a padding's distance below the bar — which is the same fault
+     * as driving it from the photo, one step smaller.
      */
     val handover by remember {
         derivedStateOf {
@@ -153,7 +166,8 @@ fun ProductScreen(
             if (identity == null) {
                 if (listState.firstVisibleItemIndex > 0) 1f else 0f
             } else {
-                ((barBottomPx - identity.offset) / handoverPx).coerceIn(0f, 1f)
+                val nameBottom = identity.offset + cardPaddingPx + titleHeightPx
+                ((barBottomPx - nameBottom) / handoverPx).coerceIn(0f, 1f)
             }
         }
     }
@@ -227,7 +241,13 @@ fun ProductScreen(
                                 // No price here: it is in the buy bar a thumb's
                                 // reach away and in the bar once the photo
                                 // closes, so a third copy is just noise.
-                                MbText(product.title, MbTheme.type.title2)
+                                MbText(
+                                    product.title,
+                                    MbTheme.type.title2,
+                                    modifier = Modifier.onSizeChanged {
+                                        titleHeightPx = it.height.toFloat()
+                                    },
+                                )
                                 if (product.subtitle.isNotBlank()) {
                                     Spacer(Modifier.height(4.dp))
                                     MbText(
