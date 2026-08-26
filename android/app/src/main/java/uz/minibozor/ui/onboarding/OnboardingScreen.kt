@@ -56,7 +56,7 @@ private fun pages(mediaBase: String) = listOf(
     OnboardingPage(
         title = stringResource(R.string.onboarding_1_title),
         body = stringResource(R.string.onboarding_1_body),
-        image = "$mediaBase/products/nike-zoomx.png",
+        image = "$mediaBase/products/jordan1-low-white.png",
         chip = stringResource(R.string.onboarding_1_chip),
     ),
     OnboardingPage(
@@ -74,7 +74,7 @@ private fun pages(mediaBase: String) = listOf(
     OnboardingPage(
         title = stringResource(R.string.onboarding_4_title),
         body = stringResource(R.string.onboarding_4_body),
-        image = "$mediaBase/banners/lamp-room.png",
+        image = "$mediaBase/products/lamp.png",
         chip = stringResource(R.string.onboarding_4_chip),
     ),
 )

@@ -19,7 +19,7 @@ struct OnboardingView: View {
             title: "Ertaga yetib keladi",
             body: "Toshkent bo'ylab bir kunda, viloyatlarga 2–3 kunda. "
                 + "Kuryerni real vaqtda kuzatib boring.",
-            image: "products/nike-zoomx.png",
+            image: "products/jordan1-low-white.png",
             chip: "1 kunda yetkazish"
         ),
         OnboardingPage(
@@ -39,7 +39,7 @@ struct OnboardingView: View {
             title: "Xarid qilishni boshlang",
             body: "Kunlik yetkazish, oson qaytarish va bir marta kiritiladigan to'lov — "
                 + "hammasi bir ilovada.",
-            image: "banners/lamp-room.png",
+            image: "products/lamp.png",
             chip: nil
         ),
     ] }

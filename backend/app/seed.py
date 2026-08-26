@@ -77,6 +77,9 @@ CATEGORY_IMAGES = {
     "maktab-bozori": "categories/maktab-bozori.png",
     "sport": "categories/sport.png",
     "gozallik": "categories/gozallik.png",
+    "taom-yetkazish": "categories/taom-yetkazish.png",
+    "chet-eldan": "categories/chet-eldan.png",
+    "kundalik": "categories/kundalik.png",
 }
 
 ROOT_CATEGORIES = [
