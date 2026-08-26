@@ -146,8 +146,8 @@ struct HomeView: View {
             },
             onAddToCart: {
                 Task {
-                    let outcome = await cart.add(productId: product.id, variantId: nil)
-                    toast = outcome.errorMessage ?? "Savatga qo'shildi"
+                    let outcome = await cart.add(productId: product.id)
+                    toast = outcome.errorMessage ?? L("savatga_qoshildi")
                 }
             }
         )

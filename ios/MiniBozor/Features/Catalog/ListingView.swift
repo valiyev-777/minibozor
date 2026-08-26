@@ -181,8 +181,8 @@ struct ListingView: View {
                             onToggleFavorite: { Task { await model.toggleFavorite(product) } },
                             onAddToCart: {
                                 Task {
-                                    let outcome = await cart.add(productId: product.id, variantId: nil)
-                                    toast = outcome.errorMessage ?? "Savatga qo'shildi"
+                                    let outcome = await cart.add(productId: product.id)
+                                    toast = outcome.errorMessage ?? L("savatga_qoshildi")
                                 }
                             }
                         )

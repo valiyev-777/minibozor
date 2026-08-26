@@ -39,7 +39,11 @@ final class AppSession {
     func signOut() async {
         await auth.logout()
         CartRepository.shared.clearLocally()
-        phase = .signIn
+        // Back to the intro, not the sign-in form: the "seen it" flag is
+        // cleared too, so a relaunch would show the intro anyway and the two
+        // paths would disagree about what the same account sees.
+        defaults.set(false, forKey: onboardingKey)
+        phase = .onboarding
     }
 
     func setCity(_ value: String) {

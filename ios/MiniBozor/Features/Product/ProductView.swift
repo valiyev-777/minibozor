@@ -49,10 +49,16 @@ final class ProductModel {
     func addToCart(using cart: CartRepository) async -> String {
         guard let product else { return "" }
         adding = true
-        let variantId = selectedSizeId ?? selectedColorId
-        let outcome = await cart.add(productId: product.id, variantId: variantId)
+        // Both, not one of the two: a cart line carries a size *and* a colour,
+        // and sending only the size made the same shirt land as a second line
+        // with its colour lost.
+        let outcome = await cart.add(
+            productId: product.id,
+            variantId: selectedSizeId,
+            colorVariantId: selectedColorId
+        )
         adding = false
-        return outcome.errorMessage ?? "Savatga qo'shildi"
+        return outcome.errorMessage ?? L("savatga_qoshildi")
     }
 }
 

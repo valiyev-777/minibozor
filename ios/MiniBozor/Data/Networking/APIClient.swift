@@ -177,13 +177,17 @@ actor APIClient {
         )
         if !query.isEmpty { components?.queryItems = query }
         guard let url = components?.url else {
-            throw APIError(status: nil, detail: "Noto'g'ri manzil")
+            throw APIError(status: nil, detail: L("error_generic"))
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // Plenty of what the customer reads comes from the server — category
+        // names, order statuses, the FAQ — so it has to be told which language
+        // to answer in, or the app is translated around Uzbek content.
+        request.setValue(Localization.shared.code, forHTTPHeaderField: "Accept-Language")
 
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

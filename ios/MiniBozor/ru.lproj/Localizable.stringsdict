@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>n_found</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>Найден %2$@</string>
+			<key>few</key>
+			<string>Найдено %2$@</string>
+			<key>many</key>
+			<string>Найдено %2$@</string>
+			<key>other</key>
+			<string>Найдено %2$@</string>
+		</dict>
+	</dict>
+	<key>n_items</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%2$@ шт.</string>
+			<key>few</key>
+			<string>%2$@ шт.</string>
+			<key>many</key>
+			<string>%2$@ шт.</string>
+			<key>other</key>
+			<string>%2$@ шт.</string>
+		</dict>
+	</dict>
+	<key>n_products</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%2$@ товар</string>
+			<key>few</key>
+			<string>%2$@ товара</string>
+			<key>many</key>
+			<string>%2$@ товаров</string>
+			<key>other</key>
+			<string>%2$@ товара</string>
+		</dict>
+	</dict>
+	<key>n_reviews</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%2$@ отзыв</string>
+			<key>few</key>
+			<string>%2$@ отзыва</string>
+			<key>many</key>
+			<string>%2$@ отзывов</string>
+			<key>other</key>
+			<string>%2$@ отзыва</string>
+		</dict>
+	</dict>
+</dict>
+</plist>
