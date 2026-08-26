@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -263,17 +264,26 @@ fun ProductChrome(
                         alpha = progress
                         translationY = (progress - 1f) * 14.dp.toPx()
                     }
-                    .padding(top = 8.dp),
+                    .padding(top = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // The price is measured first, at whatever width its digits
+                // need, and the name takes what is left and ellipsises. That
+                // ordering is the guarantee, not the spacing: a name of any
+                // length cannot squeeze the price, and a price of any size
+                // cannot reach the name — the gap between them is fixed.
                 MbText(
                     product.title,
-                    MbTheme.type.title2,
+                    MbTheme.type.title1,
                     maxLines = 1,
                     modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.width(12.dp))
-                MbPriceRow(product.price, priceStyle = MbTheme.type.title3)
+                Spacer(Modifier.width(14.dp))
+                MbPriceRow(
+                    product.price,
+                    priceStyle = MbTheme.type.title2,
+                    modifier = Modifier.wrapContentWidth(),
+                )
             }
         }
     }
