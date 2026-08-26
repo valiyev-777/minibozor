@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import uz.minibozor.R
+import uz.minibozor.core.design.MbPressAlpha
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.mbPressable
@@ -41,7 +42,7 @@ import uz.minibozor.core.util.ratingText
 
 /** The soft ink wash a pressed tile is highlighted with. */
 @Composable
-private fun pressTint(): Color = MbTheme.colors.ink.copy(alpha = 0.06f)
+private fun pressTint(): Color = MbTheme.colors.ink.copy(alpha = MbPressAlpha)
 
 /**
  * Photo with the design's warm neutral backdrop showing through while it loads.

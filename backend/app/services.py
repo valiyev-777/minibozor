@@ -438,14 +438,17 @@ def pickup_out(p: PickupPoint) -> s.PickupPointOut:
 
 
 def slot_out(sl: DeliverySlot) -> s.SlotOut:
-    label = "2 soat ichida" if sl.express else f"{sl.start_time} – {sl.end_time}"
+    label = (
+        i18n.label("slot_express") if sl.express
+        else f"{sl.start_time} – {sl.end_time}"
+    )
     return s.SlotOut(
         id=sl.id,
         day=sl.day,
         start_time=sl.start_time,
         end_time=sl.end_time,
         label=label,
-        note=sl.note,
+        note=i18n.slot_note(sl.note),
         price=sl.price,
         express=sl.express,
         available=sl.capacity_left > 0,

@@ -1,6 +1,10 @@
 package uz.minibozor.core.design
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.ripple.RippleAlpha
+import androidx.compose.material3.LocalRippleConfiguration
+import androidx.compose.material3.RippleConfiguration
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -34,6 +38,7 @@ object MbTheme {
  * one from it. The palette follows the system setting, which is also what the
  * "Tungi rejim" row on screen 37 describes ("Tizim bilan moslashadi").
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MiniBozorTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -44,6 +49,19 @@ fun MiniBozorTheme(
 
     CompositionLocalProvider(
         LocalMbColors provides colors,
+        // Material's own ripple takes its colour from the content colour, which
+        // on a light theme is near-black — a tap on a white card flashed a dark
+        // disc across it. Same hue, a twentieth of the strength, and it inverts
+        // with the palette so a dark theme gets a pale one instead.
+        LocalRippleConfiguration provides RippleConfiguration(
+            color = colors.ink,
+            rippleAlpha = RippleAlpha(
+                draggedAlpha = MbPressAlpha,
+                focusedAlpha = MbPressAlpha,
+                hoveredAlpha = MbPressAlpha * 0.6f,
+                pressedAlpha = MbPressAlpha,
+            ),
+        ),
         LocalMbTypography provides typography,
         LocalMbDimens provides MbDimens(),
         LocalMbShapes provides MbShapes(),

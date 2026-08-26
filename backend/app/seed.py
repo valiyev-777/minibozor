@@ -536,12 +536,19 @@ PICKUP_POINTS = [
      "Har kuni 09:00–20:00", 7.8),
 ]
 
+# The windows a courier round covers, every day.
 TIME_SLOTS = [
-    ("09:00", "13:00", "Ertalabki yetkazish", 0, False),
-    ("14:00", "18:00", "Eng ko'p tanlanadigan oraliq", 0, False),
-    ("18:00", "22:00", "Ish kunidan keyin", 9_000, False),
-    ("10:00", "12:00", "Tezkor yetkazish · Toshkent markazi", 19_000, True),
+    ("09:00", "13:00", "Ertalabki yetkazish", 0),
+    ("14:00", "18:00", "Eng ko'p tanlanadigan oraliq", 0),
+    ("18:00", "22:00", "Ish kunidan keyin", 9_000),
 ]
+
+# Express is not a window in the day, it is "two hours from now" — so it only
+# exists today, and only while two hours still fit before the last round.
+EXPRESS_NOTE = "Tezkor yetkazish · Toshkent markazi"
+EXPRESS_PRICE = 19_000
+DAY_OPENS = time.fromisoformat("09:00")
+DAY_CLOSES = time.fromisoformat("22:00")
 
 
 # --------------------------------------------------------------------------- runner
@@ -719,16 +726,35 @@ def _seed_delivery(session: Session) -> None:
     today = date.today()
     for offset in range(7):
         day = today + timedelta(days=offset)
-        for start, end, note, price, express in TIME_SLOTS:
-            # Today's morning slot is already gone by the time anyone looks.
+        for start, end, note, price in TIME_SLOTS:
+            # A window that has already begun cannot be chosen.
             if offset == 0 and datetime.now().time() > time.fromisoformat(start):
                 continue
             session.add(
                 DeliverySlot(
                     day=day, start_time=start, end_time=end,
-                    note=note, price=price, express=express,
+                    note=note, price=price, express=False,
                 )
             )
+
+    # Today only, and only if two hours fit before the last round: an express
+    # slot on a future day would be offering "within two hours" tomorrow, which
+    # is what it used to do.
+    now = datetime.now()
+    start = (now + timedelta(minutes=30)).replace(second=0, microsecond=0)
+    start = start.replace(minute=start.minute - start.minute % 15)
+    end = start + timedelta(hours=2)
+    if start.time() >= DAY_OPENS and end.time() <= DAY_CLOSES and end.date() == today:
+        session.add(
+            DeliverySlot(
+                day=today,
+                start_time=start.strftime("%H:%M"),
+                end_time=end.strftime("%H:%M"),
+                note=EXPRESS_NOTE,
+                price=EXPRESS_PRICE,
+                express=True,
+            )
+        )
     session.commit()
 
 

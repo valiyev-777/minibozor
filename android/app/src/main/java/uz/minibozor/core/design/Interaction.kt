@@ -19,6 +19,17 @@ import androidx.compose.ui.node.DrawModifierNode
 import kotlinx.coroutines.launch
 
 /**
+ * How strongly a tap washes whatever it lands on.
+ *
+ * One value so the Material ripple under [mbClickable] and the highlight
+ * [mbPressable] draws agree — two numbers drifted apart once already. Kept
+ * low: the ripple takes its hue from the content colour, which on a light
+ * theme is near-black, and anything stronger flashed a dark disc across a
+ * white card.
+ */
+const val MbPressAlpha = 0.05f
+
+/**
  * A tap target whose press ripple follows [shape].
  *
  * `clickable` draws its indication inside the node's own bounds, so a rounded

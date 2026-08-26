@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, select
@@ -87,8 +87,13 @@ def delivery_slots(session: SessionDep, days: int = Query(3, ge=1, le=14)) -> li
         .order_by(col(DeliverySlot.day), col(DeliverySlot.start_time))
     ).all()
 
+    # A window that has already begun is not a choice. Filtered here rather
+    # than at seed time so the list stays right as the day goes on.
+    now = datetime.now().time()
     grouped: dict[date, list[DeliverySlot]] = {d: [] for d in window}
     for row in rows:
+        if row.day == today and time.fromisoformat(row.start_time) <= now:
+            continue
         grouped.setdefault(row.day, []).append(row)
 
     return [
@@ -96,7 +101,7 @@ def delivery_slots(session: SessionDep, days: int = Query(3, ge=1, le=14)) -> li
             day=day,
             weekday_label=sv.uz_weekday_label(day, today),
             day_label=str(day.day),
-            month_label=sv.UZ_MONTHS[day.month - 1],
+            month_label=i18n.month_name(day.month),
             slots=[sv.slot_out(sl) for sl in grouped[day]],
         )
         for day in window

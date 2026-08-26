@@ -225,6 +225,32 @@ LABELS: dict[str, dict[str, str]] = {
     "event_shipped": {"uz": "Kuryerga topshirildi", "ru": "Передан курьеру",
                       "en": "Handed to the courier"},
     "event_delivered": {"uz": "Yetkazildi", "ru": "Доставлен", "en": "Delivered"},
+    # delivery slots
+    "slot_express": {
+        "uz": "2 soat ichida",
+        "ru": "В течение 2 часов",
+        "en": "Within 2 hours",
+    },
+    "slot_note_morning": {
+        "uz": "Ertalabki yetkazish",
+        "ru": "Утренняя доставка",
+        "en": "Morning delivery",
+    },
+    "slot_note_popular": {
+        "uz": "Eng ko'p tanlanadigan oraliq",
+        "ru": "Самый популярный интервал",
+        "en": "The most-chosen window",
+    },
+    "slot_note_evening": {
+        "uz": "Ish kunidan keyin",
+        "ru": "После рабочего дня",
+        "en": "After work",
+    },
+    "slot_note_express": {
+        "uz": "Tezkor yetkazish · Toshkent markazi",
+        "ru": "Экспресс-доставка · центр Ташкента",
+        "en": "Express delivery · central Tashkent",
+    },
     # payment
     "cash_courier": {"uz": "Naqd pul · kuryerga", "ru": "Наличные · курьеру",
                      "en": "Cash · to the courier"},
@@ -283,6 +309,23 @@ WEEKDAYS: dict[str, list[str]] = {
 
 # Uzbek writes 22-avgust, Russian 22 августа, English 22 August.
 DATE_FORMAT = {"uz": "{day}-{month}", "ru": "{day} {month}", "en": "{day} {month}"}
+
+
+# The notes the seed writes on a slot, mapped to the labels above. Keyed on the
+# Uzbek text because a slot's id changes every time the week is re-seeded, so a
+# translation row keyed on the row would not survive.
+SLOT_NOTES: dict[str, str] = {
+    "Ertalabki yetkazish": "slot_note_morning",
+    "Eng ko'p tanlanadigan oraliq": "slot_note_popular",
+    "Ish kunidan keyin": "slot_note_evening",
+    "Tezkor yetkazish · Toshkent markazi": "slot_note_express",
+}
+
+
+def slot_note(note: str) -> str:
+    """A slot's note in the active language, or the note itself if unknown."""
+    key = SLOT_NOTES.get(note)
+    return label(key) if key else note
 
 
 def label(key: str, **fmt: object) -> str:
