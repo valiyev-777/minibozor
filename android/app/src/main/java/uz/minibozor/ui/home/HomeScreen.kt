@@ -393,7 +393,9 @@ private fun BannerCard(banner: BannerDto, drift: () -> Float, onClick: () -> Uni
                 .graphicsLayer { translationX = drift() * 40.dp.toPx() },
             shape = MbTheme.shapes.tile,
             background = Color.White.copy(alpha = 0.08f),
-            contentScale = ContentScale.Crop,
+            // Whole, not cropped to the panel's shape: this box is narrower
+            // than the photographs are, so cropping took the sides off them.
+            contentScale = ContentScale.Fit,
         )
     }
 }

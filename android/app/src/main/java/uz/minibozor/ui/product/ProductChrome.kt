@@ -146,10 +146,6 @@ fun Hero(
                         scaleY = scale
                     },
                 shape = RectangleShape,
-                // Keeps a cut-out product off the screen edges. A photograph
-                // that brought its own backdrop ignores this and fills the
-                // frame, so no ground shows beside it.
-                photoInset = 16.dp,
                 // The whole product, uncropped: the taller frame exists so the
                 // photo can be seen in full, so a crop would defeat it.
                 contentScale = ContentScale.Fit,

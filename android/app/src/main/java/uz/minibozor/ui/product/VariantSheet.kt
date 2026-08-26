@@ -183,10 +183,6 @@ private fun Summary(card: ProductCardDto) {
         )
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            if (!card.badge.isNullOrBlank()) {
-                MbStatusPill(card.badge, MbTheme.colors.successBg, MbTheme.colors.success)
-                Spacer(Modifier.height(6.dp))
-            }
             MbText(card.title, MbTheme.type.bodySmall, maxLines = 2)
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

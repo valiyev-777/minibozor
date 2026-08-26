@@ -58,22 +58,10 @@ fun MbProductImage(
     url: String?,
     modifier: Modifier = Modifier,
     shape: Shape = MbTheme.shapes.tile,
-    /** The theme's photo ground unless overridden. See [PhotoFraming]. */
+    /** The theme's photo ground unless overridden. */
     background: Color = Color.Unspecified,
     contentScale: ContentScale = ContentScale.Fit,
-    /**
-     * Room left between a cut-out photograph and the frame's edge.
-     *
-     * Applied inside rather than by the caller padding this composable, so the
-     * ground still reaches the frame's edge. Ignored for a photograph that
-     * brought its own backdrop: that one fills the frame instead, which is
-     * what keeps a white studio shot from sitting as a bright block inside a
-     * dark tile.
-     */
-    photoInset: Dp = 0.dp,
 ) {
-    val framing = rememberPhotoFraming(url)
-    val fills = framing == PhotoFraming.Backdrop
     Box(
         modifier
             .clip(shape)
@@ -85,13 +73,12 @@ fun MbProductImage(
             AsyncImage(
                 model = resolved,
                 contentDescription = null,
-                // Cropped when it brought its own backdrop, so that backdrop
-                // covers the frame rather than showing as a rectangle inside
-                // it. Fitted otherwise, since a cut-out has nothing to spare.
-                contentScale = if (fills) ContentScale.Crop else contentScale,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(if (fills) 0.dp else photoInset),
+                // Whatever was uploaded, shown whole and filling its frame.
+                // Cropping cut into the picture; insetting it left a ring of
+                // ground around a photograph that came with its own backdrop,
+                // which on the dark theme is a bright block with a dark border.
+                contentScale = contentScale,
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             // No photo yet. A muted glyph reads as "none supplied" where an
