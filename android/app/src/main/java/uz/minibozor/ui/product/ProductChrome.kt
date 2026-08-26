@@ -225,9 +225,13 @@ fun ProductChrome(
             // band sliding down the picture is what this looked like. Read in
             // the draw phase, so following the scroll invalidates drawing only.
             .drawBehind {
-                val progress = handover()
-                drawRect(onPhoto, alpha = 1f - progress)
-                drawRect(surface, alpha = progress)
+                // An opaque ground first, then the page's surface faded over
+                // it. Cross-fading two translucent rects never adds up to
+                // opaque in between — at halfway the pair covers 0.75, so a
+                // quarter of the card behind showed through, which is how the
+                // product's name kept appearing twice.
+                drawRect(onPhoto)
+                drawRect(surface, alpha = handover())
             }
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 14.dp, vertical = 10.dp)
@@ -288,17 +292,15 @@ private fun GlassButton(
     tint: Color? = null,
     onClick: () -> Unit,
 ) {
-    val onPhoto = MbTheme.colors.fill
-    val onBar = MbTheme.colors.fill
+    val ground = MbTheme.colors.fill
     Box(
         modifier
             .size(36.dp)
             .clip(CircleShape)
-            .drawBehind {
-                val progress = closed()
-                drawRect(onPhoto, alpha = 1f - progress)
-                drawRect(onBar, alpha = progress)
-            }
+            // One opaque fill. It used to cross-fade between two copies of this
+            // same colour, which left it translucent halfway through for no
+            // reason at all.
+            .background(ground)
             .mbTap(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
