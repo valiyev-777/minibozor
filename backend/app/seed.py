@@ -65,6 +65,20 @@ def _at(day_offset: int, hh: int, mm: int) -> datetime:
 
 # --------------------------------------------------------------------------- catalogue
 
+# Pictures the shop supplied for the tiles. A category without one keeps its
+# line glyph, which is what the rest of the list still uses.
+CATEGORY_IMAGES = {
+    "elektronika": "categories/elektronika.png",
+    "kiyim-poyabzal": "categories/kiyim-poyabzal.png",
+    "maishiy-texnika": "categories/maishiy-texnika.png",
+    "uy-bog": "categories/uy-bog.png",
+    "oyinchoqlar": "categories/oyinchoqlar.png",
+    "avto": "categories/avto.png",
+    "maktab-bozori": "categories/maktab-bozori.png",
+    "sport": "categories/sport.png",
+    "gozallik": "categories/gozallik.png",
+}
+
 ROOT_CATEGORIES = [
     # slug, name, subtitle, icon, quick_link, product_count (counted at read time)
     ("elektronika", "Elektronika", "Smartfon, noutbuk, aksessuar", "phone", True, 0),
@@ -559,8 +573,10 @@ def seed(session: Session) -> None:
 def _seed_categories(session: Session) -> dict[str, Category]:
     out: dict[str, Category] = {}
     for sort, (slug, name, subtitle, icon, quick, count) in enumerate(ROOT_CATEGORIES):
+        image = CATEGORY_IMAGES.get(slug)
         row = Category(
             slug=slug, name=name, subtitle=subtitle, icon=icon,
+            image_url=image if image is None or _image_exists(image) else None,
             is_quick_link=quick, product_count=count, sort=sort,
         )
         session.add(row)

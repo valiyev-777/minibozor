@@ -1,5 +1,8 @@
 package uz.minibozor.core.design.component
 
+import uz.minibozor.core.util.mediaUrl
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -39,6 +42,8 @@ fun MbListRow(
     label: String,
     modifier: Modifier = Modifier,
     glyph: String? = null,
+    /** A supplied picture for the leading square; falls back to [glyph]. */
+    imageUrl: String? = null,
     subtitle: String? = null,
     meta: String? = null,
     showChevron: Boolean = true,
@@ -54,7 +59,7 @@ fun MbListRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (glyph != null) {
+        if (imageUrl != null || glyph != null) {
             Box(
                 Modifier
                     .size(38.dp)
@@ -62,7 +67,16 @@ fun MbListRow(
                     .background(MbTheme.colors.fill),
                 contentAlignment = Alignment.Center,
             ) {
-                MbIcon(glyph, size = 18.dp, tint = tint)
+                if (imageUrl != null) {
+                    AsyncImage(
+                        model = imageUrl.mediaUrl(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(30.dp),
+                    )
+                } else {
+                    MbIcon(glyph!!, size = 18.dp, tint = tint)
+                }
             }
         }
         Column(Modifier.weight(1f)) {
@@ -92,6 +106,8 @@ fun MbToggleRow(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     glyph: String? = null,
+    /** A supplied picture for the leading square; falls back to [glyph]. */
+    imageUrl: String? = null,
     subtitle: String? = null,
 ) {
     MbListRow(

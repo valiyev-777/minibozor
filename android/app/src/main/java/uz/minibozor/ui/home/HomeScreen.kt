@@ -1,5 +1,7 @@
 package uz.minibozor.ui.home
 
+import uz.minibozor.core.util.mediaUrl
+import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
@@ -456,7 +458,20 @@ private fun CategoryCell(
                 .background(MbTheme.colors.fill),
             contentAlignment = Alignment.Center,
         ) {
-            MbIcon(category.icon, size = 20.dp)
+            // A photograph where the shop supplied one, the line glyph where
+            // it did not — the grid holds both without looking mixed because
+            // the tile behind them is the same.
+            val image = category.imageUrl
+            if (image != null) {
+                AsyncImage(
+                    model = image.mediaUrl(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(MbTheme.dimens.categoryTile * 0.72f),
+                )
+            } else {
+                MbIcon(category.icon, size = 20.dp)
+            }
         }
         MbText(
             category.name,

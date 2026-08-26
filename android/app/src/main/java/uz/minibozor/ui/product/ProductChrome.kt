@@ -309,6 +309,7 @@ fun BuyBar(
     showPrice: Boolean,
     onAdd: () -> Unit,
     onSetQuantity: (itemId: Int, quantity: Int) -> Unit,
+    onOpenCart: () -> Unit,
 ) {
     Column(
         Modifier
@@ -322,7 +323,9 @@ fun BuyBar(
             // prices at once read as a mistake — this one bows out and the
             // button stretches into the room it leaves.
             AnimatedVisibility(
-                visible = showPrice,
+                // Also stands down once the line exists: the stepper takes
+                // this side of the bar then.
+                visible = showPrice && line == null,
                 enter = expandHorizontally() + fadeIn(),
                 exit = shrinkHorizontally() + fadeOut(),
             ) {
@@ -342,14 +345,23 @@ fun BuyBar(
                     modifier = Modifier.weight(1f),
                 )
             } else {
-                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                    MbQuantityStepper(
-                        quantity = line.quantity,
-                        onChange = { onSetQuantity(line.id, it) },
-                        min = 0,
-                        size = 44.dp,
-                    )
-                }
+                // In the cart already: the stepper takes the left, and the rest
+                // of the bar becomes the way through to the cart. Leaving that
+                // half empty gave a full-width bar one small control in the
+                // corner and no way onward.
+                MbQuantityStepper(
+                    quantity = line.quantity,
+                    onChange = { onSetQuantity(line.id, it) },
+                    min = 0,
+                    size = 44.dp,
+                )
+                Spacer(Modifier.width(12.dp))
+                MbPrimaryButton(
+                    text = stringResource(R.string.otish),
+                    onClick = onOpenCart,
+                    leadingGlyph = "cart",
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }

@@ -355,6 +355,7 @@ fun ProductScreen(
                         showPrice = !priceInHeader,
                         onAdd = { viewModel.addToCart { message -> toast.value = message } },
                         onSetQuantity = viewModel::setCartQuantity,
+                        onOpenCart = onOpenCart,
                     )
                 }
             }

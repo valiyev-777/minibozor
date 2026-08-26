@@ -76,6 +76,7 @@ fun CatalogScreen(
                                 MbListRow(
                                     label = category.name,
                                     glyph = category.icon,
+                                    imageUrl = category.imageUrl,
                                     subtitle = category.subtitle.ifBlank { null },
                                     meta = if (category.productCount > 0) {
                                         pluralStringResource(
