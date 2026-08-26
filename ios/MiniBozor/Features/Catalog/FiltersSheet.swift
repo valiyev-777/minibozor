@@ -46,7 +46,9 @@ struct FiltersSheet: View {
             MBDivider()
             MBBottomBar {
                 MBPrimaryButton(
-                    resultCount > 0 ? "Ko'rsatish · \(Format.grouped(resultCount)) ta" : "Qo'llash"
+                    resultCount > 0
+                        ? L("korsatish_n", Format.grouped(resultCount))
+                        : L("qollash")
                 ) {
                     draft.minPrice = Int(minPrice)
                     draft.maxPrice = Int(maxPrice)
@@ -59,9 +61,9 @@ struct FiltersSheet: View {
 
     private var header: some View {
         HStack {
-            Text("Filtrlar").mbFont(MB.type.title2).foregroundStyle(MB.color.ink)
+            Text(L("filtrlar")).mbFont(MB.type.title2).foregroundStyle(MB.color.ink)
             Spacer()
-            Button("Tozalash") {
+            Button(L("tozalash")) {
                 draft = draft.cleared()
                 minPrice = ""
                 maxPrice = ""
@@ -76,7 +78,7 @@ struct FiltersSheet: View {
     private var priceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Spacer().frame(height: 16)
-            SectionHeader(title: "Narx", subtitle: "so'm")
+            SectionHeader(title: L("narx"), subtitle: L("som"))
             HStack(spacing: 12) {
                 MBTextField(
                     placeholder: filters.map { Format.grouped($0.priceMin) } ?? "0",
@@ -96,7 +98,7 @@ struct FiltersSheet: View {
     private var brandSection: some View {
         if let brands = filters?.brands, !brands.isEmpty {
             Spacer().frame(height: 22)
-            SectionHeader(title: "Brend")
+            SectionHeader(title: L("brend"))
             ForEach(brands) { brand in
                 MBCheckRow(
                     label: brand.name,
@@ -112,7 +114,7 @@ struct FiltersSheet: View {
     private var sizeSection: some View {
         if let sizes = filters?.sizes, !sizes.isEmpty {
             Spacer().frame(height: 22)
-            SectionHeader(title: "O'lcham")
+            SectionHeader(title: L("olcham"))
             Spacer().frame(height: 10)
             FlowLayout(spacing: 8) {
                 ForEach(sizes, id: \.self) { size in
@@ -127,10 +129,11 @@ struct FiltersSheet: View {
     private var ratingSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Spacer().frame(height: 22)
-            SectionHeader(title: "Reyting")
+            SectionHeader(title: L("reyting"))
             FlowLayout(spacing: 8) {
                 ForEach([4.5, 4.0], id: \.self) { value in
-                    MBChip("\(Format.rating(value)) ★ dan yuqori", selected: draft.minRating == value) {
+                    MBChip(L("rating_n_dan_yuqori", Format.rating(value)),
+                           selected: draft.minRating == value) {
                         draft.minRating = draft.minRating == value ? nil : value
                     }
                 }
@@ -142,7 +145,7 @@ struct FiltersSheet: View {
     private var flagSection: some View {
         if let flags = filters?.flags, !flags.isEmpty {
             Spacer().frame(height: 22)
-            SectionHeader(title: "Qo'shimcha")
+            SectionHeader(title: L("qoshimcha"))
             ForEach(flags) { flag in
                 MBCheckRow(
                     label: flag.label,

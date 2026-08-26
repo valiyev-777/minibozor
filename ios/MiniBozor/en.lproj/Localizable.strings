@@ -213,6 +213,7 @@
 "rang" = "Colour";
 "rating_4_0_dan_yuqori" = "Above 4.0 ★";
 "rating_4_5_dan_yuqori" = "Above 4.5 ★";
+"rating_n_dan_yuqori" = "Above %1$@ ★";
 "region_andijon" = "Andijan";
 "region_buxoro" = "Bukhara";
 "region_fargona" = "Fergana";

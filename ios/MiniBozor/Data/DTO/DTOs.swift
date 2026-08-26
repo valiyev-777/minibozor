@@ -367,11 +367,11 @@ struct AddressDTO: Decodable, Identifiable, Hashable {
 }
 
 struct AddressRequest: Encodable {
-    var title: String = "Uy"
+    var title: String = L("preset_uy")
     var icon: String = "pin"
     var badge: String?
     var line: String
-    var city: String = "Toshkent"
+    var city: String = L("region_toshkent")
     var floor: String?
     var apartment: String?
     var entranceCode: String?

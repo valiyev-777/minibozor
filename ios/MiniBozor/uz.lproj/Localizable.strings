@@ -213,6 +213,7 @@
 "rang" = "Rang";
 "rating_4_0_dan_yuqori" = "4.0 ★ dan yuqori";
 "rating_4_5_dan_yuqori" = "4.5 ★ dan yuqori";
+"rating_n_dan_yuqori" = "%1$@ ★ dan yuqori";
 "region_andijon" = "Andijon";
 "region_buxoro" = "Buxoro";
 "region_fargona" = "Farg'ona";

@@ -57,17 +57,17 @@ struct WriteReviewView: View {
     @State var model = WriteReviewModel()
 
     private var ratingWords: [String] {
-        ["", "Yomon", "O'rtacha", "Yaxshi", "Juda yaxshi", "Ajoyib"]
+        (0...5).map { LArray("rating_words", $0) }
     }
 
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Sharh yozish", onBack: { router.pop() })
+                MBTopBar(L("sharh_yozish"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         MBCard {
-                            Text("Mahsulotni qanday baholaysiz?")
+                            Text(L("mahsulotni_qanday_baholaysiz"))
                                 .mbFont(MB.type.title3)
                                 .foregroundStyle(MB.color.ink)
                                 .frame(maxWidth: .infinity)
@@ -98,7 +98,7 @@ struct WriteReviewView: View {
 
                         if !model.tags.isEmpty {
                             MBCard {
-                                SectionHeader(title: "Nimasi yoqdi?")
+                                SectionHeader(title: L("nimasi_yoqdi"))
                                 Spacer().frame(height: 12)
                                 FlowLayout(spacing: 8) {
                                     ForEach(model.tags, id: \.self) { tag in
@@ -111,10 +111,10 @@ struct WriteReviewView: View {
                         }
 
                         MBCard {
-                            SectionHeader(title: "Fikringiz", subtitle: "ixtiyoriy")
+                            SectionHeader(title: L("fikringiz"), subtitle: "ixtiyoriy")
                             Spacer().frame(height: 12)
                             MBTextField(
-                                placeholder: "Sifati, o'lchami, yetkazish haqida yozing…",
+                                placeholder: L("sifati_olchami_yetkazish_haqida_yozing"),
                                 text: Binding(get: { model.text }, set: { model.text = $0 }),
                                 multiline: true,
                                 minHeight: 120
@@ -125,7 +125,7 @@ struct WriteReviewView: View {
                             }
                         }
 
-                        Text("Sharh moderatsiyadan o'tgach e'lon qilinadi.")
+                        Text(L("sharh_moderatsiyadan_otgach_e_lon_qilinadi"))
                             .mbFont(MB.type.caption)
                             .foregroundStyle(MB.color.textQuaternary)
                             .multilineTextAlignment(.center)
@@ -137,7 +137,7 @@ struct WriteReviewView: View {
         .navigationBarBackButtonHidden()
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
-                MBPrimaryButton("Yuborish", loading: model.submitting) {
+                MBPrimaryButton(L("yuborish"), loading: model.submitting) {
                     Task { await model.submit(productId: productId, orderItemId: orderItemId) }
                 }
             }

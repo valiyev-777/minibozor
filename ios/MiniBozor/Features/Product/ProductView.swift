@@ -115,7 +115,7 @@ struct ProductView: View {
                             discountPercent: product.discountPercent
                         )
                         MBPrimaryButton(
-                            product.inStock ? "Savatga" : "Mavjud emas",
+                            product.inStock ? L("savatga") : L("mavjud_emas"),
                             enabled: product.inStock,
                             loading: model.adding
                         ) {
@@ -153,7 +153,7 @@ struct ProductView: View {
                         MBRating(rating: product.rating, reviewsCount: product.reviewsCount)
                         if product.isOriginal {
                             MBStatusPill(
-                                "ORIGINAL",
+                                L("original"),
                                 background: MB.color.successBg,
                                 contentColor: MB.color.success
                             )
@@ -164,7 +164,7 @@ struct ProductView: View {
 
                 if !product.sizes.isEmpty {
                     MBCard {
-                        SectionHeader(title: "O'lcham", subtitle: "o'lchamlar jadvali")
+                        SectionHeader(title: L("olcham"), subtitle: L("olchamlar_jadvali"))
                         Spacer().frame(height: 12)
                         FlowLayout(spacing: 8) {
                             ForEach(product.sizes) { variant in
@@ -183,7 +183,7 @@ struct ProductView: View {
 
                 if !product.colors.isEmpty {
                     MBCard {
-                        SectionHeader(title: "Rang")
+                        SectionHeader(title: L("rang"))
                         Spacer().frame(height: 12)
                         HStack(spacing: 10) {
                             ForEach(product.colors) { variant in
@@ -201,25 +201,25 @@ struct ProductView: View {
                 }
 
                 MBCard {
-                    InfoRow(glyph: "box", title: "Yetkazish", subtitle: product.deliveryNote)
+                    InfoRow(glyph: "box", title: L("yetkazish"), subtitle: product.deliveryNote)
                     MBDivider()
-                    InfoRow(glyph: "ret", title: "Qaytarish", subtitle: "14 kun ichida, qadoq butun bo'lsa")
+                    InfoRow(glyph: "ret", title: L("qaytarish"), subtitle: L("qaytarish_14_kun_ichida_qadoq_butun_bolsa"))
                     if let warranty = product.warranty {
                         MBDivider()
-                        InfoRow(glyph: "gear", title: "Kafolat", subtitle: warranty)
+                        InfoRow(glyph: "gear", title: L("kafolat"), subtitle: warranty)
                     }
                     MBDivider()
                     InfoRow(
                         glyph: "basket",
-                        title: "Sotuvchi",
-                        subtitle: "\(product.seller) · \(product.stockLeft) dona qoldi"
+                        title: L("sotuvchi"),
+                        subtitle: L("sotuvchi_va_qoldiq", product.seller, product.stockLeft)
                     )
                 }
                 .padding(.horizontal, 12)
 
                 if !product.description.isEmpty {
                     MBCard {
-                        SectionHeader(title: "Tavsif")
+                        SectionHeader(title: L("tavsif"))
                         Spacer().frame(height: 10)
                         Text(product.description)
                             .mbFont(MB.type.bodySmall)
@@ -230,7 +230,7 @@ struct ProductView: View {
 
                 if !product.specs.isEmpty {
                     MBCard {
-                        SectionHeader(title: "Xususiyatlari")
+                        SectionHeader(title: L("xususiyatlari"))
                         ForEach(product.specs, id: \.key) { spec in
                             MBKeyValueRow(key: spec.key, value: spec.value)
                         }
@@ -240,15 +240,15 @@ struct ProductView: View {
 
                 MBCard {
                     SectionHeader(
-                        title: "Sharhlar",
-                        subtitle: model.summary.map { "\($0.total) ta" },
-                        actionLabel: "Barchasi"
+                        title: L("sharhlar"),
+                        subtitle: model.summary.map { LPlural("n_items", count: $0.total, "\($0.total)") },
+                        actionLabel: L("barchasi")
                     ) {
                         router.push(.reviews(productId: product.id))
                     }
                     Spacer().frame(height: 12)
                     if model.topReviews.isEmpty {
-                        Text("Hali sharh yo'q — birinchi bo'ling.")
+                        Text(L("hali_sharh_yoq_birinchi_boling"))
                             .mbFont(MB.type.bodySmall)
                             .foregroundStyle(MB.color.icon)
                     } else {
@@ -262,7 +262,7 @@ struct ProductView: View {
 
                 if !model.similar.isEmpty {
                     MBCard(padding: 0) {
-                        SectionHeader(title: "O'xshash tovarlar").padding(16)
+                        SectionHeader(title: L("oxshash_tovarlar")).padding(16)
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(alignment: .top, spacing: 10) {
                                 ForEach(model.similar) { item in

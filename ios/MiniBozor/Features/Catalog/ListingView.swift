@@ -91,8 +91,10 @@ struct ListingView: View {
         MBScreen {
             VStack(spacing: 0) {
                 MBTopBar(
-                    title.isEmpty ? (query ?? "Tovarlar") : title,
-                    subtitle: model.total > 0 ? "\(Format.grouped(model.total)) ta topildi" : nil,
+                    title.isEmpty ? (query ?? L("tovarlar")) : title,
+                    subtitle: model.total > 0
+                        ? LPlural("n_found", count: model.total, Format.grouped(model.total))
+                        : nil,
                     onBack: { router.pop() }
                 )
                 toolbar
@@ -138,7 +140,7 @@ struct ListingView: View {
                 let count = model.query.activeFilterCount
                 HStack(spacing: 6) {
                     MBIcon("gear", size: 14, tint: count > 0 ? .white : MB.color.ink)
-                    Text(count > 0 ? "Filtr · \(count)" : "Filtr")
+                    Text(count > 0 ? L("filtr_n", count) : L("filtr"))
                         .mbFont(MB.type.caption)
                         .foregroundStyle(count > 0 ? .white : MB.color.ink)
                 }
@@ -163,9 +165,9 @@ struct ListingView: View {
         } else if model.items.isEmpty {
             MBEmptyState(
                 glyph: "search",
-                title: "Hech narsa topilmadi",
-                message: "Filtrlarni yumshatib yoki boshqa so'z bilan qidirib ko'ring.",
-                actionLabel: model.query.activeFilterCount > 0 ? "Filtrlarni tozalash" : nil,
+                title: L("hech_narsa_topilmadi"),
+                message: L("filtrlarni_yumshatib_yoki_boshqa_soz_bilan"),
+                actionLabel: model.query.activeFilterCount > 0 ? L("filtrlarni_tozalash") : nil,
                 onAction: { Task { await model.apply(model.query.cleared()) } }
             )
         } else {

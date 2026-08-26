@@ -24,8 +24,8 @@ struct CatalogView: View {
         MBScreen {
             VStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Katalog").mbFont(MB.type.title1).foregroundStyle(MB.color.ink)
-                    MBSearchPill(placeholder: "Turkum yoki mahsulot qidirish") {
+                    Text(L("katalog")).mbFont(MB.type.title1).foregroundStyle(MB.color.ink)
+                    MBSearchPill(placeholder: L("turkum_yoki_mahsulot_qidirish")) {
                         router.push(.search)
                     }
                 }
@@ -43,7 +43,9 @@ struct CatalogView: View {
                                     glyph: category.icon,
                                     subtitle: category.subtitle.isEmpty ? nil : category.subtitle,
                                     meta: category.productCount > 0
-                                        ? "\(Format.grouped(category.productCount)) tovar" : nil
+                                        ? LPlural("n_products", count: category.productCount,
+                                                  Format.grouped(category.productCount))
+                                        : nil
                                 ) {
                                     if category.hasChildren {
                                         router.push(.subcategory(slug: category.slug))
@@ -95,7 +97,7 @@ struct SubcategoryView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar(model.state.value?.0.name ?? "Turkum", onBack: { router.pop() })
+                MBTopBar(model.state.value?.0.name ?? L("turkum"), onBack: { router.pop() })
 
                 LoadStateView(state: model.state, onRetry: { Task { await model.load(slug: slug) } }) { pair in
                     let (parent, children) = pair
@@ -103,9 +105,10 @@ struct SubcategoryView: View {
                         VStack(spacing: 12) {
                             MBCard(padding: 8) {
                                 MBListRow(
-                                    "Barcha tovarlar",
+                                    L("barcha_tovarlar"),
                                     glyph: parent.icon,
-                                    meta: "\(Format.grouped(parent.productCount)) tovar"
+                                    meta: LPlural("n_products", count: parent.productCount,
+                                                  Format.grouped(parent.productCount))
                                 ) {
                                     router.push(
                                         .listing(category: parent.slug, query: nil, title: parent.name)
@@ -127,7 +130,8 @@ struct SubcategoryView: View {
                                             VStack(alignment: .leading, spacing: 3) {
                                                 Text(child.name).mbFont(MB.type.bodyBold)
                                                     .foregroundStyle(MB.color.ink)
-                                                Text("\(Format.grouped(child.productCount)) tovar")
+                                                Text(LPlural("n_products", count: child.productCount,
+                                                             Format.grouped(child.productCount)))
                                                     .mbFont(MB.type.meta)
                                                     .foregroundStyle(MB.color.icon)
                                             }

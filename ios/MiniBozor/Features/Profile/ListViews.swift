@@ -26,7 +26,7 @@ struct AddressesView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Manzillarim", onBack: { router.pop() })
+                MBTopBar(L("manzillarim"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         ForEach(model.addresses) { address in
@@ -46,7 +46,7 @@ struct AddressesView: View {
                                         )
                                     }
                                     Spacer()
-                                    Button("O'chirish") { Task { await model.delete(address.id) } }
+                                    Button(L("ochirish")) { Task { await model.delete(address.id) } }
                                         .mbFont(MB.type.caption)
                                         .foregroundStyle(MB.color.danger)
                                 }
@@ -62,7 +62,7 @@ struct AddressesView: View {
 
                         MBCard(padding: 6) {
                             MBListRow(
-                                "Yangi manzil qo'shish",
+                                L("yangi_manzil_qoshish"),
                                 glyph: "pin",
                                 tint: MB.color.accent
                             ) {
@@ -105,12 +105,12 @@ struct MyReviewsView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Sharhlarim", onBack: { router.pop() })
+                MBTopBar(L("sharhlarim"), onBack: { router.pop() })
                 if model.reviews.isEmpty {
                     MBEmptyState(
                         glyph: "star",
-                        title: "Hali sharh yozmagansiz",
-                        message: "Yetkazilgan tovarlarga sharh qoldiring — boshqalarga yordam beradi."
+                        title: L("hali_sharh_yozmagansiz"),
+                        message: L("yetkazilgan_tovarlarga_sharh_qoldiring")
                     )
                 } else {
                     ScrollView {
@@ -124,7 +124,7 @@ struct MyReviewsView: View {
                                                 .lineLimit(1)
                                             Spacer()
                                             MBStatusPill(
-                                                review.status == "published" ? "E'LON QILINDI" : "TEKSHIRILMOQDA",
+                                                review.status == "published" ? L("e_lon_qilindi") : L("tekshirilmoqda"),
                                                 background: review.status == "published"
                                                     ? MB.color.successBg : MB.color.warningBg,
                                                 contentColor: review.status == "published"
@@ -137,7 +137,7 @@ struct MyReviewsView: View {
                                     }
                                     ReviewRow(review: review, onLike: nil)
                                     Spacer().frame(height: 10)
-                                    Button("O'chirish") { Task { await model.delete(review.id) } }
+                                    Button(L("ochirish")) { Task { await model.delete(review.id) } }
                                         .mbFont(MB.type.caption)
                                         .foregroundStyle(MB.color.danger)
                                 }
@@ -185,15 +185,15 @@ struct FavoritesView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Sevimlilar", onBack: { router.pop() })
+                MBTopBar(L("sevimlilar"), onBack: { router.pop() })
                 if model.loading {
                     MBLoading()
                 } else if model.items.isEmpty {
                     MBEmptyState(
                         glyph: "heart",
-                        title: "Sevimlilar bo'sh",
-                        message: "Yoqqan tovarlarni belgilab qo'ying — narx tushganda xabar beramiz.",
-                        actionLabel: "Xaridni boshlash",
+                        title: L("sevimlilar_bosh"),
+                        message: L("yoqqan_tovarlarni_belgilab_qoying_narx"),
+                        actionLabel: L("xaridni_boshlash"),
                         onAction: { router.popToRoot() }
                     )
                 } else {

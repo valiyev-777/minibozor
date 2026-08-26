@@ -213,6 +213,7 @@
 "rang" = "Цвет";
 "rating_4_0_dan_yuqori" = "Выше 4.0 ★";
 "rating_4_5_dan_yuqori" = "Выше 4.5 ★";
+"rating_n_dan_yuqori" = "Выше %1$@ ★";
 "region_andijon" = "Андижан";
 "region_buxoro" = "Бухара";
 "region_fargona" = "Фергана";

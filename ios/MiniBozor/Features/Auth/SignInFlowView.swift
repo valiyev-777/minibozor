@@ -34,9 +34,9 @@ struct LoginView: View {
                     Spacer().frame(height: 28)
                     BrandMark(size: 46)
                     Spacer().frame(height: 20)
-                    Text("Mini Bozor").mbFont(MB.type.display).foregroundStyle(MB.color.ink)
+                    Text(L("app_name")).mbFont(MB.type.display).foregroundStyle(MB.color.ink)
                     Spacer().frame(height: 8)
-                    Text("Telefon raqamingizni kiriting — SMS kod yuboramiz")
+                    Text(L("telefon_raqamingizni_kiriting_sms_kod"))
                         .mbFont(MB.type.bodySmall)
                         .foregroundStyle(MB.color.textTertiary)
 
@@ -45,7 +45,7 @@ struct LoginView: View {
 
                     Spacer().frame(height: 18)
                     MBPrimaryButton(
-                        "Davom etish",
+                        L("davom_etish"),
                         enabled: model.phoneValid,
                         loading: model.sending
                     ) {
@@ -53,7 +53,7 @@ struct LoginView: View {
                     }
 
                     Spacer().frame(height: 14)
-                    Text("Menda referal-kod bor")
+                    Text(L("menda_referal_kod_bor"))
                         .mbFont(MB.type.label)
                         .foregroundStyle(MB.color.accent)
                         .frame(maxWidth: .infinity)
@@ -129,7 +129,7 @@ struct LoginView: View {
 
     private var socialRow: some View {
         HStack(spacing: 10) {
-            ForEach(["Apple", "Google", "OneID"], id: \.self) { provider in
+            ForEach([L("apple"), L("google"), L("oneid")], id: \.self) { provider in
                 Text(provider)
                     .mbFont(MB.type.label)
                     .foregroundStyle(MB.color.inkSoft)
@@ -143,12 +143,12 @@ struct LoginView: View {
 
     private var terms: some View {
         HStack(spacing: 0) {
-            Text("Kirish orqali ").mbFont(MB.type.caption)
+            Text(L("kirish_orqali")).mbFont(MB.type.caption)
                 .foregroundStyle(MB.color.textQuaternary)
-            Button("ommaviy oferta") { showTerms = true }
+            Button(L("ommaviy_oferta")) { showTerms = true }
                 .mbFont(MB.type.caption)
                 .foregroundStyle(MB.color.accent)
-            Text(" shartlariga rozilik bildirasiz").mbFont(MB.type.caption)
+            Text(L("shartlariga_rozilik_bildirasiz")).mbFont(MB.type.caption)
                 .foregroundStyle(MB.color.textQuaternary)
         }
         .frame(maxWidth: .infinity)
@@ -168,11 +168,11 @@ struct OtpView: View {
                 MBTopBar("", onBack: onBack)
 
                 Spacer().frame(height: 12)
-                Text("Tasdiqlash kodi")
+                Text(L("tasdiqlash_kodi"))
                     .mbFont(MB.type.display)
                     .foregroundStyle(MB.color.ink)
                 Spacer().frame(height: 10)
-                Text("\(Format.phone(model.phoneDigits)) raqamiga \(AuthModel.codeLength) xonali kod yubordik")
+                Text(L("otp_yuborildi", Format.phone(model.phoneDigits), AuthModel.codeLength))
                     .mbFont(MB.type.bodySmall)
                     .foregroundStyle(MB.color.textTertiary)
                     .multilineTextAlignment(.center)
@@ -190,7 +190,7 @@ struct OtpView: View {
                 }
                 if let devCode = model.devCode {
                     Spacer().frame(height: 12)
-                    Text("Dev rejim: kod \(devCode)")
+                    Text(L("dev_rejim_kod", devCode))
                         .mbFont(MB.type.caption)
                         .foregroundStyle(MB.color.textQuaternary)
                 }
@@ -200,7 +200,7 @@ struct OtpView: View {
 
                 Spacer().frame(height: 24)
                 MBPrimaryButton(
-                    "Tasdiqlash",
+                    L("tasdiqlash"),
                     enabled: model.codeValid,
                     loading: model.verifying
                 ) {
@@ -219,14 +219,14 @@ struct OtpView: View {
     private var resend: some View {
         Group {
             if model.canResend {
-                Button("Kodni qayta yuborish") {
+                Button(L("kodni_qayta_yuborish")) {
                     Task { await model.sendCode() }
                 }
                 .mbFont(MB.type.label)
                 .foregroundStyle(MB.color.accent)
             } else {
                 HStack(spacing: 0) {
-                    Text("Kodni qayta yuborish — ")
+                    Text(L("kodni_qayta_yuborish_2"))
                         .mbFont(MB.type.caption)
                         .foregroundStyle(MB.color.textQuaternary)
                     Text(clock(model.secondsLeft))
@@ -239,10 +239,10 @@ struct OtpView: View {
 
     private var footnotes: some View {
         VStack(spacing: 6) {
-            Text("Kod avtomatik o'qiladi — SMS kelishi bilan davom etamiz")
+            Text(L("kod_avtomatik_oqiladi_sms_kelishi_bilan"))
                 .mbFont(MB.type.caption)
                 .foregroundStyle(MB.color.textQuaternary)
-            Text("Kod kelmadimi? 1150 raqamiga qo'ng'iroq qiling — bepul")
+            Text(L("kod_kelmadimi_1150_raqamiga_qongiroq_qiling"))
                 .mbFont(MB.type.caption)
                 .foregroundStyle(MB.color.disabled)
         }

@@ -140,7 +140,7 @@ struct MBProductTile: View {
 
             if let onAddToCart {
                 Button(action: onAddToCart) {
-                    Text("Savatga")
+                    Text(L("savatga"))
                         .mbFont(MB.type.label)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)

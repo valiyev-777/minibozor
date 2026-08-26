@@ -57,10 +57,10 @@ struct ProfileView: View {
     @State var confirmSignOut = false
 
     private var quickActions: [QuickAction] { [
-        QuickAction(glyph: "box", label: "Buyurtmalar", route: .orders),
-        QuickAction(glyph: "heart", label: "Sevimlilar", route: .favorites),
-        QuickAction(glyph: "star", label: "Sharhlarim", route: .myReviews),
-        QuickAction(glyph: "ret", label: "Qaytarish", route: .orders),
+        QuickAction(glyph: "box", label: L("buyurtmalar"), route: .orders),
+        QuickAction(glyph: "heart", label: L("sevimlilar"), route: .favorites),
+        QuickAction(glyph: "star", label: L("sharhlarim"), route: .myReviews),
+        QuickAction(glyph: "ret", label: L("qaytarish"), route: .orders),
     ] }
 
     var body: some View {
@@ -77,14 +77,13 @@ struct ProfileView: View {
             }
         }
         .task { await model.load() }
-        .alert("Hisobdan chiqasizmi?", isPresented: $confirmSignOut) {
-            Button("Chiqish", role: .destructive) {
+        .alert(L("hisobdan_chiqasizmi"), isPresented: $confirmSignOut) {
+            Button(L("chiqish"), role: .destructive) {
                 Task { await session.signOut() }
             }
-            Button("Bekor qilish", role: .cancel) {}
+            Button(L("bekor_qilish"), role: .cancel) {}
         } message: {
-            Text("Savat va sevimlilar hisobingizda saqlanadi — "
-                 + "qaytib kirsangiz hammasi joyida bo'ladi.")
+            Text(L("savat_va_sevimlilar_hisobingizda_saqlanadi"))
         }
     }
 
@@ -102,7 +101,7 @@ struct ProfileView: View {
                         .foregroundStyle(MB.color.textTertiary)
                 }
                 Spacer()
-                Button("Tahrirlash") { router.push(.personal) }
+                Button(L("tahrirlash")) { router.push(.personal) }
                     .mbFont(MB.type.label)
                     .foregroundStyle(MB.color.accent)
             }
@@ -111,7 +110,7 @@ struct ProfileView: View {
 
     private var displayName: String {
         let name = model.overview?.user.fullName ?? ""
-        return name.isEmpty ? "Ismingizni kiriting" : name
+        return name.isEmpty ? L("ismingizni_kiriting") : name
     }
 
     private var quickRow: some View {
@@ -139,11 +138,14 @@ struct ProfileView: View {
     private var menuCard: some View {
         MBCard(padding: 6) {
             let rows: [(String, String, String, Route)] = [
-                ("card", "To'lov kartalari", "\(model.overview?.cardsCount ?? 0) ta", .cards),
-                ("pin", "Manzillarim", "\(model.overview?.addressesCount ?? 0) ta", .addresses),
-                ("star", "Sharhlarim", "\(model.overview?.reviewsCount ?? 0) ta", .myReviews),
-                ("bell", "Bildirishnomalar", unreadLabel, .notifications),
-                ("gear", "Sozlamalar", "", .settings),
+                ("card", L("tolov_kartalari"), LPlural("n_items", count: model.overview?.cardsCount ?? 0,
+                        "\(model.overview?.cardsCount ?? 0)"), .cards),
+                ("pin", L("manzillarim"), LPlural("n_items", count: model.overview?.addressesCount ?? 0,
+                        "\(model.overview?.addressesCount ?? 0)"), .addresses),
+                ("star", L("sharhlarim"), LPlural("n_items", count: model.overview?.reviewsCount ?? 0,
+                        "\(model.overview?.reviewsCount ?? 0)"), .myReviews),
+                ("bell", L("bildirishnomalar"), unreadLabel, .notifications),
+                ("gear", L("sozlamalar"), "", .settings),
             ]
             ForEach(Array(rows.enumerated()), id: \.offset) { offset, row in
                 MBListRow(
@@ -161,13 +163,13 @@ struct ProfileView: View {
 
     private var unreadLabel: String {
         let count = model.overview?.unreadNotifications ?? 0
-        return count > 0 ? "\(count) yangi" : ""
+        return count > 0 ? L("n_yangi", "\(count)") : ""
     }
 
     private var signOutCard: some View {
         MBCard(padding: 6) {
             MBListRow(
-                "Hisobdan chiqish",
+                L("hisobdan_chiqish"),
                 glyph: "ret",
                 showChevron: false,
                 tint: MB.color.danger

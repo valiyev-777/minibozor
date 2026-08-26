@@ -45,7 +45,7 @@ struct PinView: View {
                     Text(error).mbFont(MB.type.caption).foregroundStyle(MB.color.danger)
                 }
                 Spacer()
-                Text("Kodni hech kimga aytmang. Mini Bozor xodimlari PIN so'ramaydi.")
+                Text(L("kodni_hech_kimga_aytmang_mini_bozor"))
                     .mbFont(MB.type.caption)
                     .foregroundStyle(MB.color.disabled)
                     .multilineTextAlignment(.center)
@@ -64,9 +64,9 @@ struct PinView: View {
                     .background(MB.color.successBg)
                     .clipShape(Circle())
                 Spacer().frame(height: 22)
-                Text("PIN o'zgartirildi").mbFont(MB.type.title1).foregroundStyle(MB.color.ink)
+                Text(L("pin_ozgartirildi")).mbFont(MB.type.title1).foregroundStyle(MB.color.ink)
                 Spacer().frame(height: 8)
-                Text("Endi ilovaga kirishda yangi kod so'raladi.")
+                Text(L("endi_ilovaga_kirishda_yangi_kod_soraladi"))
                     .mbFont(MB.type.bodySmall)
                     .foregroundStyle(MB.color.textTertiary)
                     .multilineTextAlignment(.center)
@@ -76,24 +76,24 @@ struct PinView: View {
         }
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
-                MBPrimaryButton("Tayyor") { router.pop() }
+                MBPrimaryButton(L("tayyor")) { router.pop() }
             }
         }
     }
 
     private var title: String {
         switch model.step {
-        case 0: return "Joriy PIN kod"
-        case 1: return "Yangi PIN kod"
-        default: return "Kodni tasdiqlang"
+        case 0: return L("joriy_pin_kod")
+        case 1: return L("yangi_pin_kod")
+        default: return L("kodni_tasdiqlang")
         }
     }
 
     private var subtitle: String {
         switch model.step {
-        case 0: return "Xavfsizlik uchun avval joriy kodni kiriting"
-        case 1: return "4 xonali kod o'ylab toping"
-        default: return "Yangi kodni yana bir marta kiriting"
+        case 0: return L("xavfsizlik_uchun_avval_joriy_kodni_kiriting")
+        case 1: return L("pin_4_xonali_kod_oylab_toping")
+        default: return L("yangi_kodni_yana_bir_marta_kiriting")
         }
     }
 }

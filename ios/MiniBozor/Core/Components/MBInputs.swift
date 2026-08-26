@@ -82,7 +82,7 @@ struct MBSearchPill: View {
 /// The live search field on screen 08.
 struct MBSearchField: View {
     @Binding var text: String
-    var placeholder: String = "Mahsulot va turkumlar qidirish"
+    var placeholder: String = L("mahsulot_va_turkumlar_qidirish")
     var onSubmit: () -> Void = {}
     @FocusState var focused: Bool
 

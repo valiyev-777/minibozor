@@ -8,7 +8,7 @@ struct NotificationsView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar(title: "Bildirishnomalar", onBack: { router.pop() }) {
+                MBTopBar(title: L("bildirishnomalar"), onBack: { router.pop() }) {
                     Button {
                         Task { await model.markAllRead() }
                     } label: {
@@ -20,8 +20,8 @@ struct NotificationsView: View {
                 if model.groups.isEmpty {
                     MBEmptyState(
                         glyph: "bell",
-                        title: "Bildirishnoma yo'q",
-                        message: "Buyurtma holati va chegirmalar haqida shu yerda xabar beramiz."
+                        title: L("bildirishnoma_yoq"),
+                        message: L("buyurtma_holati_va_chegirmalar_haqida_shu")
                     )
                 } else {
                     ScrollView {
@@ -85,18 +85,19 @@ struct NotificationsView: View {
 
 /// Screen 37 — Sozlamalar.
 struct SettingsView: View {
+    @Environment(Appearance.self) var appearance
     @Environment(Router.self) var router
     @State var model = SettingsModel()
 
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Sozlamalar", onBack: { router.pop() })
+                MBTopBar(L("sozlamalar"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         menuCard
                         togglesCard
-                        Text("Mini Bozor · versiya 1.0")
+                        Text(L("mini_bozor_versiya_1_0"))
                             .mbFont(MB.type.caption)
                             .foregroundStyle(MB.color.disabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -113,11 +114,11 @@ struct SettingsView: View {
     private var menuCard: some View {
         MBCard(padding: 6) {
             let rows: [(String, String, String, Route)] = [
-                ("bell", "Bildirishnoma sozlamalari", "Push, SMS", .notificationSettings),
-                ("globe", "Ilova tili", model.languageLabel, .language),
-                ("gear", "Xavfsizlik", model.hasPin ? "PIN yoqilgan" : "PIN o'rnatilmagan", .security),
-                ("headset", "Yordam markazi", "1150", .help),
-                ("ret", "Shartlar va maxfiylik", "", .legal),
+                ("bell", L("bildirishnoma_sozlamalari"), L("push_sms"), .notificationSettings),
+                ("globe", L("ilova_tili"), model.languageLabel, .language),
+                ("gear", L("xavfsizlik"), model.hasPin ? L("pin_yoqilgan") : L("pin_ornatilmagan"), .security),
+                ("headset", L("yordam_markazi"), "1150", .help),
+                ("ret", L("shartlar_va_maxfiylik"), "", .legal),
             ]
             ForEach(Array(rows.enumerated()), id: \.offset) { offset, row in
                 MBListRow(row.1, glyph: row.0, meta: row.2.isEmpty ? nil : row.2) {
@@ -132,8 +133,8 @@ struct SettingsView: View {
     private var togglesCard: some View {
         MBCard(padding: 6) {
             MBToggleRow(
-                label: "Joylashuv",
-                subtitle: "Yaqin punktlarni ko'rsatish",
+                label: L("joylashuv"),
+                subtitle: L("yaqin_punktlarni_korsatish"),
                 glyph: "pin",
                 isOn: Binding(
                     get: { model.settings?.locationEnabled ?? true },
@@ -143,12 +144,18 @@ struct SettingsView: View {
             .padding(.horizontal, 10)
             MBDivider(inset: 60)
             MBToggleRow(
-                label: "Tungi rejim",
-                subtitle: "Tizim bilan moslashadi",
+                label: L("tungi_rejim"),
+                subtitle: L("tizim_bilan_moslashadi"),
                 glyph: "gear",
+                // Written to the device first, then mirrored to the account:
+                // the device is what the customer is looking at, and the round
+                // trip only keeps their other phones in step.
                 isOn: Binding(
-                    get: { model.settings?.nightMode ?? false },
-                    set: { value in Task { await model.setNightMode(value) } }
+                    get: { appearance.forceDark },
+                    set: { value in
+                        appearance.forceDark = value
+                        Task { await model.setNightMode(value) }
+                    }
                 )
             )
             .padding(.horizontal, 10)
@@ -164,36 +171,36 @@ struct NotificationSettingsView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Bildirishnomalar", onBack: { router.pop() })
+                MBTopBar(L("bildirishnomalar"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         MBCard(padding: 6) {
-                            toggle("Buyurtma holati", "Yig'ildi, yo'lda, yetkazildi", "box",
+                            toggle(L("buyurtma_holati"), L("yigildi_yolda_yetkazildi"), "box",
                                    value: model.prefs?.orderStatus ?? true) { value in
                                 await model.setPref(NotificationPrefsRequest(orderStatus: value))
                             }
                             MBDivider(inset: 60)
-                            toggle("Chegirma va aksiyalar", "Haftada 2 martadan ko'p emas", "gift",
+                            toggle(L("chegirma_va_aksiyalar"), L("haftada_2_martadan_kop_emas"), "gift",
                                    value: model.prefs?.promotions ?? true) { value in
                                 await model.setPref(NotificationPrefsRequest(promotions: value))
                             }
                             MBDivider(inset: 60)
-                            toggle("Sevimlilar narxi", "Narx tushganda xabar", "heart",
+                            toggle(L("sevimlilar_narxi"), L("narx_tushganda_xabar"), "heart",
                                    value: model.prefs?.priceDrop ?? true) { value in
                                 await model.setPref(NotificationPrefsRequest(priceDrop: value))
                             }
                         }
 
                         MBCard(padding: 6) {
-                            SectionHeader(title: "Kanallar")
+                            SectionHeader(title: L("kanallar"))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 8)
-                            toggle("Push bildirishnoma", nil, "bell",
+                            toggle(L("push_bildirishnoma"), nil, "bell",
                                    value: model.prefs?.push ?? true) { value in
                                 await model.setPref(NotificationPrefsRequest(push: value))
                             }
                             MBDivider(inset: 60)
-                            toggle("SMS", nil, "phone", value: model.prefs?.sms ?? true) { value in
+                            toggle(L("sms"), nil, "phone", value: model.prefs?.sms ?? true) { value in
                                 await model.setPref(NotificationPrefsRequest(sms: value))
                             }
                         }
@@ -225,13 +232,14 @@ struct NotificationSettingsView: View {
 
 /// Screen 39 — Til.
 struct LanguageView: View {
+    @Environment(Localization.self) var localization
     @Environment(Router.self) var router
     @State var model = SettingsModel()
 
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Ilova tili", onBack: { router.pop() })
+                MBTopBar(L("ilova_tili"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         MBCard(padding: 6) {
@@ -240,8 +248,14 @@ struct LanguageView: View {
                                 MBRadioRow(
                                     label: language["label"] ?? "",
                                     subtitle: language["native"],
-                                    selected: model.settings?.language == code,
-                                    onSelect: { Task { await model.setLanguage(code) } }
+                                    selected: localization.code == code,
+                                    onSelect: {
+                                        // Applied here first — the screen is
+                                        // what the customer is looking at —
+                                        // then mirrored to the account.
+                                        localization.apply(code)
+                                        Task { await model.setLanguage(code) }
+                                    }
                                 ) {
                                     Text(code.uppercased())
                                         .mbFont(MB.type.micro)
@@ -254,7 +268,7 @@ struct LanguageView: View {
                                 if offset != model.languages.count - 1 { MBDivider(inset: 60) }
                             }
                         }
-                        Text("Til o'zgarishi ilova qayta ishga tushganda to'liq qo'llanadi.")
+                        Text(L("tanlangan_til_darhol_qollanadi_turkum"))
                             .mbFont(MB.type.caption)
                             .foregroundStyle(MB.color.textQuaternary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -277,22 +291,22 @@ struct SecurityView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Xavfsizlik", onBack: { router.pop() })
+                MBTopBar(L("xavfsizlik"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         MBCard(padding: 6) {
                             MBListRow(
-                                model.hasPin ? "PIN kodni o'zgartirish" : "PIN kod o'rnatish",
+                                model.hasPin ? L("pin_kodni_ozgartirish") : L("pin_kod_ornatish"),
                                 glyph: "gear",
-                                subtitle: "Ilovaga kirishda so'raladi"
+                                subtitle: L("ilovaga_kirishda_soraladi")
                             ) {
                                 router.push(.pin(hasPin: model.hasPin))
                             }
                             .padding(.horizontal, 10)
                             MBDivider(inset: 60)
                             MBToggleRow(
-                                label: "Face ID / barmoq izi",
-                                subtitle: "PIN o'rniga biometrika",
+                                label: L("face_id_barmoq_izi"),
+                                subtitle: L("pin_orniga_biometrika"),
                                 glyph: "user",
                                 isOn: Binding(
                                     get: { model.biometrics },
@@ -302,8 +316,7 @@ struct SecurityView: View {
                             .padding(.horizontal, 10)
                         }
 
-                        Text("PIN kod ilovani ochishda so'raladi. Unutib qo'ysangiz — "
-                             + "hisobdan chiqib, SMS orqali qayta kiring.")
+                        Text(L("pin_kod_ilovani_ochishda_soraladi_unutib"))
                             .mbFont(MB.type.caption)
                             .foregroundStyle(MB.color.textQuaternary)
                             .frame(maxWidth: .infinity, alignment: .leading)

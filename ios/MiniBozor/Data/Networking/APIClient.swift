@@ -160,7 +160,7 @@ actor APIClient {
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
-            throw APIError(status: http.statusCode, detail: "Javobni o'qib bo'lmadi")
+            throw APIError(status: http.statusCode, detail: L("error_unexpected"))
         }
     }
 

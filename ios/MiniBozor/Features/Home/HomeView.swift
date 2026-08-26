@@ -70,7 +70,7 @@ struct HomeView: View {
                 Text("▾").mbFont(MB.type.micro).foregroundStyle(MB.color.hairlineStrong)
                 Spacer()
             }
-            MBSearchPill(placeholder: "Mahsulot va turkumlar qidirish") {
+            MBSearchPill(placeholder: L("mahsulot_va_turkumlar_qidirish")) {
                 router.push(.search)
             }
         }
@@ -115,7 +115,7 @@ struct HomeView: View {
                 SectionHeader(
                     title: section.title,
                     subtitle: section.subtitle,
-                    actionLabel: "Barchasi"
+                    actionLabel: L("barchasi")
                 ) {
                     router.push(
                         .listing(category: section.categorySlug, query: nil, title: section.title)

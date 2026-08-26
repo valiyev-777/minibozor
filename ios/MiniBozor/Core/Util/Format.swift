@@ -18,7 +18,7 @@ enum Format {
 
     /// `1090000` → `1 090 000 so'm`.
     static func sum(_ value: Int) -> String {
-        grouped(value) + groupSeparator + "so'm"
+        grouped(value) + groupSeparator + L("som")
     }
 
     static func rating(_ value: Double) -> String {
@@ -98,10 +98,10 @@ enum UzDate {
 
     /// `Bugun` / `Ertaga` / weekday name.
     static func dayLabel(_ date: Date, today: Date = Date()) -> String {
-        if calendar.isDate(date, inSameDayAs: today) { return "Bugun" }
+        if calendar.isDate(date, inSameDayAs: today) { return L("bugun") }
         if let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
            calendar.isDate(date, inSameDayAs: tomorrow) {
-            return "Ertaga"
+            return L("ertaga")
         }
         let weekday = calendar.component(.weekday, from: date)   // 1 = Sunday
         return weekdays[(weekday + 5) % 7]

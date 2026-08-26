@@ -19,7 +19,7 @@ final class AppSession {
     private let auth = AuthRepository()
 
     init() {
-        city = defaults.string(forKey: cityKey) ?? "Toshkent"
+        city = defaults.string(forKey: cityKey) ?? L("region_toshkent")
         if !defaults.bool(forKey: onboardingKey) {
             phase = .onboarding
         } else {

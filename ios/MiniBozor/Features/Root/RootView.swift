@@ -40,10 +40,10 @@ struct ShopTabsView: View {
 
     private var tabs: [MBTabItem] {
         [
-            MBTabItem(id: "home", glyph: "home", label: "Bosh sahifa"),
-            MBTabItem(id: "catalog", glyph: "grid", label: "Katalog"),
-            MBTabItem(id: "cart", glyph: "cart", label: "Savat", badge: cart.badgeCount),
-            MBTabItem(id: "profile", glyph: "user", label: "Profil"),
+            MBTabItem(id: "home", glyph: "home", label: L("tab_home")),
+            MBTabItem(id: "catalog", glyph: "grid", label: L("katalog")),
+            MBTabItem(id: "cart", glyph: "cart", label: L("savat"), badge: cart.badgeCount),
+            MBTabItem(id: "profile", glyph: "user", label: L("tab_profile")),
         ]
     }
 

@@ -26,10 +26,11 @@ struct CartView: View {
 
     private var header: some View {
         HStack {
-            Text("Savat").mbFont(MB.type.title1).foregroundStyle(MB.color.ink)
+            Text(L("savat")).mbFont(MB.type.title1).foregroundStyle(MB.color.ink)
             Spacer()
             if let items = cart.cart?.items, !items.isEmpty {
-                Text("\(items.count) tovar").mbFont(MB.type.caption)
+                Text(LPlural("n_products", count: items.count, "\(items.count)"))
+                    .mbFont(MB.type.caption)
                     .foregroundStyle(MB.color.icon)
             }
         }
@@ -57,9 +58,9 @@ struct CartView: View {
         } else {
             MBEmptyState(
                 glyph: "cart",
-                title: "Savat bo'sh",
-                message: "Yoqqan tovarlarni savatga qo'shing — keyin bir marta buyurtma berasiz.",
-                actionLabel: "Xaridni boshlash",
+                title: L("savat_bosh"),
+                message: L("yoqqan_tovarlarni_savatga_qoshing_keyin_bir"),
+                actionLabel: L("xaridni_boshlash"),
                 onAction: onStartShopping
             )
         }
@@ -103,7 +104,7 @@ struct CartView: View {
 
             if !item.inStock {
                 Spacer().frame(height: 8)
-                Text("Hozircha mavjud emas")
+                Text(L("hozircha_mavjud_emas"))
                     .mbFont(MB.type.caption)
                     .foregroundStyle(MB.color.danger)
             }
@@ -125,12 +126,12 @@ struct CartView: View {
                         promoError = outcome.errorMessage
                     }
                 } label: {
-                    Text("Qo'llash")
+                    Text(L("qollash"))
                         .mbFont(MB.type.label)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(MB.color.onInverse)
                         .padding(.horizontal, 18)
                         .padding(.vertical, 14)
-                        .background(MB.color.ink)
+                        .background(MB.color.inverse)
                         .clipShape(RoundedRectangle(cornerRadius: MB.metric.radiusM, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -141,31 +142,31 @@ struct CartView: View {
     private func totalsCard(_ totals: CartTotalsDTO) -> some View {
         MBCard {
             MBTotalRow(
-                label: "Tovarlar (\(totals.itemsCount))",
+                label: L("tovarlar_soni", totals.itemsCount),
                 value: Format.sum(totals.subtotal)
             )
             if totals.discount > 0 {
                 MBTotalRow(
-                    label: "Chegirma" + (totals.promoCode.map { " · \($0)" } ?? ""),
+                    label: L("chegirma") + (totals.promoCode.map { " · \($0)" } ?? ""),
                     value: "−\(Format.grouped(totals.discount))",
                     valueColor: MB.color.success
                 )
             }
             MBTotalRow(
-                label: "Yetkazish",
-                value: totals.deliveryFee == 0 ? "Bepul" : Format.sum(totals.deliveryFee),
+                label: L("yetkazish"),
+                value: totals.deliveryFee == 0 ? L("bepul") : Format.sum(totals.deliveryFee),
                 valueColor: totals.deliveryFee == 0 ? MB.color.success : MB.color.ink
             )
             if totals.deliveryFee > 0 {
                 let left = max(0, totals.freeDeliveryThreshold - totals.subtotal)
-                Text("Yana \(Format.sum(left)) qo'shsangiz — bepul yetkazish")
+                Text(L("bepul_yetkazishgacha", Format.sum(left)))
                     .mbFont(MB.type.caption)
                     .foregroundStyle(MB.color.textQuaternary)
             }
             MBDivider().padding(.vertical, 8)
-            MBTotalRow(label: "Jami", value: Format.sum(totals.total), strong: true)
+            MBTotalRow(label: L("jami"), value: Format.sum(totals.total), strong: true)
             Spacer().frame(height: 12)
-            MBPrimaryButton("Buyurtma berish", enabled: totals.itemsCount > 0) {
+            MBPrimaryButton(L("buyurtma_berish"), enabled: totals.itemsCount > 0) {
                 router.push(.checkout)
             }
         }

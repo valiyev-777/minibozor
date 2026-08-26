@@ -129,7 +129,7 @@ final class PinModel {
             step = 1
             first = ""
             confirm = ""
-            errorMessage = "Kodlar mos kelmadi"
+            errorMessage = L("kodlar_mos_kelmadi")
             return
         }
         submitting = true

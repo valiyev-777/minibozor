@@ -23,14 +23,14 @@ struct ReasonView: View {
         MBScreen {
             VStack(spacing: 0) {
                 MBTopBar(
-                    isReturn ? "Qaytarish arizasi" : "Buyurtmani bekor qilish",
+                    isReturn ? L("qaytarish_arizasi") : L("buyurtmani_bekor_qilish"),
                     onBack: { router.pop() }
                 )
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(isReturn
-                             ? "Tovarni nima uchun qaytarmoqchisiz?"
-                             : "Buyurtmani nima uchun bekor qilyapsiz?")
+                             ? L("tovarni_nima_uchun_qaytarmoqchisiz")
+                             : L("buyurtmani_nima_uchun_bekor_qilyapsiz"))
                             .mbFont(MB.type.title3)
                             .foregroundStyle(MB.color.ink)
                             .padding(.horizontal, 6)
@@ -50,12 +50,12 @@ struct ReasonView: View {
 
                         MBCard {
                             SectionHeader(
-                                title: "Izoh",
+                                title: L("izoh"),
                                 subtitle: needsComment ? "majburiy" : "ixtiyoriy"
                             )
                             Spacer().frame(height: 12)
                             MBTextField(
-                                placeholder: "Qisqacha yozib qoldiring…",
+                                placeholder: L("qisqacha_yozib_qoldiring"),
                                 text: Binding(get: { model.comment }, set: { model.comment = $0 }),
                                 multiline: true,
                                 minHeight: 100
@@ -69,8 +69,8 @@ struct ReasonView: View {
                         }
 
                         Text(isReturn
-                             ? "Ariza ko'rib chiqilgach SMS yuboramiz. Tovarni qadog'i bilan saqlang."
-                             : "To'langan summa 1–3 ish kunida kartangizga qaytariladi.")
+                             ? L("ariza_korib_chiqilgach_sms_yuboramiz")
+                             : L("tolangan_summa_1_3_ish_kunida_kartangizga"))
                             .mbFont(MB.type.caption)
                             .foregroundStyle(MB.color.textQuaternary)
                             .padding(.horizontal, 6)
@@ -83,11 +83,11 @@ struct ReasonView: View {
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
                 if isReturn {
-                    MBPrimaryButton("Ariza yuborish", enabled: canSubmit, loading: model.submitting) {
+                    MBPrimaryButton(L("ariza_yuborish"), enabled: canSubmit, loading: model.submitting) {
                         Task { await model.requestReturn() }
                     }
                 } else {
-                    MBDangerButton("Bekor qilishni tasdiqlash", loading: model.submitting) {
+                    MBDangerButton(L("bekor_qilishni_tasdiqlash"), loading: model.submitting) {
                         Task { await model.cancel() }
                     }
                 }

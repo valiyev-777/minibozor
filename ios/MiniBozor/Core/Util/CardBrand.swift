@@ -14,7 +14,7 @@ enum CardBrand: String, CaseIterable {
         case .uzcard: return "UzCard"
         case .visa: return "Visa"
         case .mastercard: return "Mastercard"
-        case .unknown: return "Karta"
+        case .unknown: return L("karta")
         }
     }
 

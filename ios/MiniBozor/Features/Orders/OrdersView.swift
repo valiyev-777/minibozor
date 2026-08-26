@@ -36,7 +36,7 @@ struct OrdersView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Buyurtmalarim", onBack: { router.pop() })
+                MBTopBar(L("buyurtmalarim"), onBack: { router.pop() })
                 segments
                 content
             }
@@ -47,10 +47,10 @@ struct OrdersView: View {
 
     private var segments: some View {
         HStack(spacing: 8) {
-            segment("Jarayonda", active: model.activeTab) {
+            segment(L("jarayonda"), active: model.activeTab) {
                 Task { await model.select(active: true) }
             }
-            segment("Tugagan", active: !model.activeTab) {
+            segment(L("tugagan"), active: !model.activeTab) {
                 Task { await model.select(active: false) }
             }
         }
@@ -81,8 +81,8 @@ struct OrdersView: View {
         } else if model.orders.isEmpty {
             MBEmptyState(
                 glyph: "box",
-                title: model.activeTab ? "Faol buyurtma yo'q" : "Tugagan buyurtma yo'q",
-                message: "Buyurtma bergach, holati shu yerda ko'rinadi."
+                title: model.activeTab ? L("faol_buyurtma_yoq") : L("tugagan_buyurtma_yoq"),
+                message: L("buyurtma_bergach_holati_shu_yerda_korinadi")
             )
         } else {
             ScrollView {
@@ -125,7 +125,7 @@ struct OrdersView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text("Jami").mbFont(MB.type.meta).foregroundStyle(MB.color.icon)
+                    Text(L("jami")).mbFont(MB.type.meta).foregroundStyle(MB.color.icon)
                     Text(Format.sum(order.total)).mbFont(MB.type.priceSmall)
                         .foregroundStyle(MB.color.ink)
                 }
@@ -139,7 +139,7 @@ struct OrdersView: View {
                     .foregroundStyle(MB.color.textSecondary)
                 Spacer()
                 if order.canTrack {
-                    MBSecondaryButton("Kuzatish") {
+                    MBSecondaryButton(L("kuzatish")) {
                         router.push(.tracking(orderId: order.id))
                     }
                     .frame(width: 120)
