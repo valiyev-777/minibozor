@@ -18,6 +18,9 @@ struct MBScreen<Content: View>: View {
 struct MBCard<Content: View>: View {
     var padding: CGFloat = 16
     var background: Color = MB.color.surface
+    /// Square it off for a section that runs edge to edge — rounded corners
+    /// against the screen edge look like a card that did not quite fit.
+    var cornerRadius: CGFloat = MB.metric.radiusXXL
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -27,7 +30,7 @@ struct MBCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(padding)
         .background(background)
-        .clipShape(RoundedRectangle(cornerRadius: MB.metric.radiusXXL, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
