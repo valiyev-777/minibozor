@@ -107,12 +107,14 @@ ROOT_CATEGORIES = [
 SUBCATEGORIES = [
     # parent, slug, name, image, product_count (counted at read time)
     ("kiyim-poyabzal", "futbolka-toplar", "Futbolka va toplar",
-     "products/tshirt-black.png", 2_140),
+     "products/tshirt-white.png", 2_140),
     ("kiyim-poyabzal", "krossovkalar", "Krossovkalar", "products/gazelle.png", 0),
-    ("kiyim-poyabzal", "koylak-libos", "Ko'ylak va libos", "products/tshirt-red.png", 0),
-    ("kiyim-poyabzal", "kundalik-poyabzal", "Kundalik poyabzal", "products/af1.png", 1_240),
+    ("kiyim-poyabzal", "koylak-libos", "Ko'ylak va libos", "products/polo-striped.png", 0),
+    ("kiyim-poyabzal", "kundalik-poyabzal", "Kundalik poyabzal",
+     "products/af1-black.png", 1_240),
     ("kiyim-poyabzal", "sport-kiyim", "Sport kiyim", "products/tshirt-green.png", 0),
-    ("kiyim-poyabzal", "bolalar-poyabzali", "Bolalar poyabzali", "products/adidas-black.png", 0),
+    ("kiyim-poyabzal", "bolalar-poyabzali", "Bolalar poyabzali",
+     "products/jordan1-low-white.png", 0),
     ("elektronika", "quloqchinlar", "Quloqchinlar", "products/airpods.png", 0),
     ("elektronika", "quvvat-aksessuar", "Quvvat va aksessuar", "products/powerbank.png", 0),
     ("uy-bog", "yoruglik", "Yoritish", "products/lamp.png", 0),
@@ -597,7 +599,10 @@ def _seed_categories(session: Session) -> dict[str, Category]:
 
     for sort, (parent, slug, name, image, count) in enumerate(SUBCATEGORIES):
         row = Category(
-            slug=slug, name=name, icon=out[parent].icon, image_url=image,
+            slug=slug, name=name, icon=out[parent].icon,
+            # Same guard as the roots: a thumbnail whose file is not there
+            # would render as an empty tile in the subcategory list.
+            image_url=image if _image_exists(image) else None,
             parent_id=out[parent].id, product_count=count, sort=sort,
         )
         session.add(row)

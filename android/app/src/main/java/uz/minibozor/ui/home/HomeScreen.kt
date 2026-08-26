@@ -131,9 +131,7 @@ fun HomeScreen(
                         refreshing = true
                         viewModel.refresh { refreshing = false }
                     },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
+                    modifier = Modifier.fillMaxSize(),
                 ) {
                 // The payload has landed: fade and lift the whole screen in
                 // once, rather than having it appear fully formed. One
