@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -83,7 +84,12 @@ import uz.minibozor.data.remote.dto.ProductDto
  * price bar stays on screen with it.
  */
 @Composable
-fun heroHeight(): Dp = LocalConfiguration.current.screenWidthDp.dp
+fun heroHeight(): Dp = LocalConfiguration.current.screenWidthDp.dp + chromeHeight()
+
+/** The bar: the status bar inset plus the row of buttons under it. */
+@Composable
+fun chromeHeight(): Dp =
+    WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp
 
 /** Enough to sit behind the status bar and the row of buttons under it. */
 private val StatusScrimHeight = 108.dp
@@ -111,15 +117,22 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
             // as a panel with edges.
             .background(MbTheme.colors.photoStudio)
     ) {
-        HorizontalPager(pager, Modifier.fillMaxSize()) { page ->
+        // Below the bar, not under it: the frame is a square of photo plus the
+        // bar's own height, so the whole picture is in the clear.
+        HorizontalPager(
+            pager,
+            Modifier
+                .fillMaxSize()
+                .padding(top = chromeHeight()),
+        ) { page ->
             MbProductImage(
                 images.getOrNull(page),
                 modifier = Modifier
                     .fillMaxSize()
                     // Keeps the product off the screen edges. Invisible as a
-                    // boundary because the frame and the backdrop are one
-                    // colour — padding without a division.
-                    .padding(horizontal = 18.dp)
+                    // boundary: the photographs' own studio backdrop is
+                    // transparent, so the frame is all there is behind them.
+                    .padding(horizontal = 18.dp, vertical = 10.dp)
                     .graphicsLayer {
                         // Both the swipe offset and the scroll are read here,
                         // in the layer phase. Reading the pager during
