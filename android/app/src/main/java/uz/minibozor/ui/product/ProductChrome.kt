@@ -94,7 +94,7 @@ fun chromeHeight(): Dp =
 /** Enough to sit behind the status bar and the row of buttons under it. */
 private val StatusScrimHeight = 108.dp
 
-/** Identifies the recommendations row so the buy bar knows when it arrives. */
+/** A stable key for the recommendations row. */
 const val RecommendationsKey = "recommendations"
 
 /**

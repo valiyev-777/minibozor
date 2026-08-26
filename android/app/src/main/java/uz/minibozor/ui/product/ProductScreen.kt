@@ -184,19 +184,6 @@ fun ProductScreen(
         }
     }
 
-    /**
-     * The buy bar steps aside once the recommendations reach it — but only
-     * after the page has actually been scrolled. On a product short enough to
-     * fit the screen the rail is visible from the start, and hiding the bar
-     * there left no way to add the thing to a cart at all.
-     */
-    val atRecommendations by remember {
-        derivedStateOf {
-            listState.canScrollBackward &&
-                listState.layoutInfo.visibleItemsInfo.any { it.key == RecommendationsKey }
-        }
-    }
-
     val context = LocalContext.current
 
     Box(
@@ -433,10 +420,11 @@ fun ProductScreen(
                 onShare = { product?.let { share(context, it) } },
             )
 
-            // Steps aside when the recommendations reach it, so the rail can
-            // take the width the price was using.
+            // Always there. The price inside it stands down once the bar at the
+            // top has taken it over, and the button widens into the room — but
+            // the way to buy the thing never leaves the screen.
             AnimatedVisibility(
-                visible = product != null && !atRecommendations,
+                visible = product != null,
                 enter = slideInVertically { it } + fadeIn(),
                 exit = slideOutVertically { it } + fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter),
