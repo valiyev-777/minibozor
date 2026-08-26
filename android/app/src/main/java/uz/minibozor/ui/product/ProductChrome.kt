@@ -143,24 +143,6 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
             )
         }
 
-        // The clock and signal icons are painted by the system in whatever
-        // colour the theme asked for, and a product photo can be any colour at
-        // all — the AirPods shot is nearly black. This keeps a readable ground
-        // under them without dimming the picture, and fades out once the bar
-        // has grown its own surface.
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(StatusScrimHeight)
-                .graphicsLayer { alpha = 1f - closed() }
-                .background(
-                    Brush.verticalGradient(
-                        listOf(MbTheme.colors.surface, Color.Transparent)
-                    )
-                )
-        )
-
         if (badge != null) {
             MbStatusPill(
                 badge,
@@ -219,14 +201,21 @@ fun ProductChrome(
     onShare: () -> Unit,
 ) {
     val surface = MbTheme.colors.surface
+    val onPhoto = MbTheme.colors.photoStudio
 
     Column(
         Modifier
             .fillMaxWidth()
-            // Grows the bar's own background in as the photo closes. Read in
-            // the draw phase, so following the scroll invalidates drawing only
-            // — no recomposition of the row and its four buttons.
-            .drawBehind { drawRect(surface, alpha = closed()) }
+            // Crossfades from the white the photographs are shot on to the
+            // page's surface, rather than fading a dark surface up from
+            // nothing: half-opaque dark over a white photo is grey, and a grey
+            // band sliding down the picture is what this looked like. Read in
+            // the draw phase, so following the scroll invalidates drawing only.
+            .drawBehind {
+                val progress = handover()
+                drawRect(onPhoto, alpha = 1f - progress)
+                drawRect(surface, alpha = progress)
+            }
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
@@ -286,7 +275,7 @@ private fun GlassButton(
     tint: Color? = null,
     onClick: () -> Unit,
 ) {
-    val onPhoto = MbTheme.colors.surface.copy(alpha = 0.88f)
+    val onPhoto = MbTheme.colors.fill
     val onBar = MbTheme.colors.fill
     Box(
         modifier
