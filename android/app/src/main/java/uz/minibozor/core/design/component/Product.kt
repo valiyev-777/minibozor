@@ -92,19 +92,33 @@ fun MbPriceRow(
 ) {
     Column(modifier) {
         Row(
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            MbText(price.grouped(), priceStyle)
+            MbText(price.grouped(), priceStyle, maxLines = 1)
             if (discountPercent != null) {
-                MbText("−$discountPercent%", MbTheme.type.micro, MbTheme.colors.danger)
+                // A pill rather than 9.5sp of red text beside a 15sp number:
+                // the saving is the reason someone stops on the row, and it was
+                // the smallest thing in it.
+                MbText(
+                    "−$discountPercent%",
+                    MbTheme.type.captionBold,
+                    MbTheme.colors.danger,
+                    modifier = Modifier
+                        .clip(MbTheme.shapes.badge)
+                        .background(MbTheme.colors.dangerBg)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    maxLines = 1,
+                )
             }
         }
         if (oldPrice != null && oldPrice > price) {
+            Spacer(Modifier.height(2.dp))
             MbText(
                 oldPrice.grouped(),
-                MbTheme.type.meta.copy(textDecoration = TextDecoration.LineThrough),
-                MbTheme.colors.placeholder,
+                MbTheme.type.caption.copy(textDecoration = TextDecoration.LineThrough),
+                MbTheme.colors.textQuaternary,
+                maxLines = 1,
             )
         }
     }

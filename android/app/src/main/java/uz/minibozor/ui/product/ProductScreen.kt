@@ -177,7 +177,13 @@ fun ProductScreen(
                             )
                         }
 
-                        item {
+                        // Grouped by what a section is for rather than one
+                        // card each: "what is this", "which one", "the small
+                        // print". Five floating panels between the photo and
+                        // the reviews read as clutter; one panel for the lot
+                        // would just be a long box with no seams where the
+                        // subject changes.
+                        item(key = "identity") {
                             MbCard(Modifier.padding(horizontal = 12.dp)) {
                                 // No price here: it is in the buy bar a thumb's
                                 // reach away and in the bar once the photo
@@ -205,12 +211,10 @@ fun ProductScreen(
                                         )
                                     }
                                 }
-                            }
-                        }
-
-                        if (product.description.isNotBlank()) {
-                            item {
-                                MbCard(Modifier.padding(horizontal = 12.dp)) {
+                                if (product.description.isNotBlank()) {
+                                    Spacer(Modifier.height(14.dp))
+                                    MbDivider()
+                                    Spacer(Modifier.height(14.dp))
                                     SectionHeader(stringResource(R.string.tavsif))
                                     Spacer(Modifier.height(10.dp))
                                     MbCollapsibleText(product.description)
@@ -219,73 +223,101 @@ fun ProductScreen(
                         }
 
                         val sizes = product.variants.filter { it.kind == "size" }
-                        if (sizes.isNotEmpty()) {
-                            item {
-                                MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                    SectionHeader(stringResource(R.string.olcham), stringResource(R.string.olchamlar_jadvali))
-                                    Spacer(Modifier.height(12.dp))
-                                    FlowRow(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        sizes.forEach { variant ->
-                                            MbSizeChip(
-                                                label = variant.label,
-                                                selected = variant.id == state.selectedSizeId,
-                                                enabled = variant.inStock,
-                                                onClick = { viewModel.selectSize(variant.id) },
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
                         val colors = product.variants.filter { it.kind == "color" }
-                        if (colors.isNotEmpty()) {
-                            item {
+                        if (sizes.isNotEmpty() || colors.isNotEmpty()) {
+                            item(key = "options") {
                                 MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                    SectionHeader(stringResource(R.string.rang))
-                                    Spacer(Modifier.height(12.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        colors.forEach { variant ->
-                                            ColorSwatch(
-                                                hex = variant.value,
-                                                label = variant.label,
-                                                selected = variant.id == state.selectedColorId,
-                                                onClick = { viewModel.selectColor(variant.id) },
-                                            )
+                                    if (sizes.isNotEmpty()) {
+                                        SectionHeader(
+                                            stringResource(R.string.olcham),
+                                            stringResource(R.string.olchamlar_jadvali),
+                                        )
+                                        Spacer(Modifier.height(12.dp))
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            sizes.forEach { variant ->
+                                                MbSizeChip(
+                                                    label = variant.label,
+                                                    selected = variant.id == state.selectedSizeId,
+                                                    enabled = variant.inStock,
+                                                    onClick = { viewModel.selectSize(variant.id) },
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (sizes.isNotEmpty() && colors.isNotEmpty()) {
+                                        Spacer(Modifier.height(14.dp))
+                                        MbDivider()
+                                        Spacer(Modifier.height(14.dp))
+                                    }
+                                    if (colors.isNotEmpty()) {
+                                        SectionHeader(stringResource(R.string.rang))
+                                        Spacer(Modifier.height(12.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            colors.forEach { variant ->
+                                                ColorSwatch(
+                                                    hex = variant.value,
+                                                    label = variant.label,
+                                                    selected = variant.id == state.selectedColorId,
+                                                    onClick = { viewModel.selectColor(variant.id) },
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
 
-                        item {
+                        item(key = "smallprint") {
                             MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                DeliveryRow("box", stringResource(R.string.yetkazish), product.deliveryNote)
-                                MbDivider()
-                                DeliveryRow(
-                                    "ret",
-                                    stringResource(R.string.qaytarish),
-                                    stringResource(R.string.qaytarish_14_kun_ichida_qadoq_butun_bolsa),
-                                )
-                                if (product.warranty != null) {
-                                    MbDivider()
-                                    DeliveryRow("gear", stringResource(R.string.kafolat), product.warranty)
+                                // Folded, but the delivery line rides on the
+                                // header: it is the one fact here that helps
+                                // someone decide, and hiding it to tidy the
+                                // page would be a poor trade.
+                                MbExpandableSection(
+                                    title = stringResource(R.string.yetkazish_va_kafolat),
+                                    subtitle = product.deliveryNote,
+                                ) {
+                                    Column {
+                                        DeliveryRow(
+                                            "box",
+                                            stringResource(R.string.yetkazish),
+                                            product.deliveryNote,
+                                        )
+                                        MbDivider()
+                                        DeliveryRow(
+                                            "ret",
+                                            stringResource(R.string.qaytarish),
+                                            stringResource(
+                                                R.string.qaytarish_14_kun_ichida_qadoq_butun_bolsa
+                                            ),
+                                        )
+                                        if (product.warranty != null) {
+                                            MbDivider()
+                                            DeliveryRow(
+                                                "gear",
+                                                stringResource(R.string.kafolat),
+                                                product.warranty,
+                                            )
+                                        }
+                                        MbDivider()
+                                        DeliveryRow(
+                                            "basket",
+                                            stringResource(R.string.sotuvchi),
+                                            stringResource(
+                                                R.string.sotuvchi_va_qoldiq,
+                                                product.seller,
+                                                product.stockLeft,
+                                            ),
+                                        )
+                                    }
                                 }
-                                MbDivider()
-                                DeliveryRow(
-                                    "basket",
-                                    stringResource(R.string.sotuvchi),
-                                    stringResource(R.string.sotuvchi_va_qoldiq, product.seller, product.stockLeft),
-                                )
-                            }
-                        }
-
-                        if (product.specs.isNotEmpty()) {
-                            item {
-                                MbCard(Modifier.padding(horizontal = 12.dp)) {
+                                if (product.specs.isNotEmpty()) {
+                                    Spacer(Modifier.height(14.dp))
+                                    MbDivider()
+                                    Spacer(Modifier.height(14.dp))
                                     MbExpandableSection(
                                         title = stringResource(R.string.xususiyatlari),
                                         subtitle = pluralStringResource(

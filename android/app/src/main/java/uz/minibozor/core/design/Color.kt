@@ -61,6 +61,13 @@ data class MbColors(
     val onInverse: Color = Color(0xFFFFFFFF),
 
     /**
+     * The ground a product photograph sits on. Catalogue shots come on a light
+     * studio backdrop, so this stays light in both themes — a dark one would
+     * put a hard seam where a letterboxed photo ends and the frame begins.
+     */
+    val photoStudio: Color = Color(0xFFF4F3F1),
+
+    /**
      * For labels sitting on a photo. Product shots are light whatever the
      * theme, so this pair stays dark-on-light in both.
      */

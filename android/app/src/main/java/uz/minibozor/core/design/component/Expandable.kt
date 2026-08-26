@@ -1,7 +1,11 @@
 package uz.minibozor.core.design.component
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -49,9 +53,11 @@ fun MbExpandableSection(
     content: @Composable () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(initiallyExpanded) }
+    // A spring, so the chevron settles rather than stopping dead on the frame
+    // the height animation is still finishing.
     val turn by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
-        animationSpec = tween(260, easing = FastOutSlowInEasing),
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 380f),
         label = "chevron",
     )
 
@@ -78,8 +84,16 @@ fun MbExpandableSection(
         }
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(tween(260, easing = FastOutSlowInEasing)) + fadeIn(),
-            exit = shrinkVertically(tween(220, easing = FastOutSlowInEasing)) + fadeOut(),
+            // The height leads and the text follows it in, rather than both
+            // starting together — fading up from nothing while the box is
+            // still a sliver is what makes an accordion look cheap. Closing
+            // is the reverse and quicker, since nobody watches a fold shut.
+            enter = expandVertically(
+                animationSpec = spring(dampingRatio = 0.9f, stiffness = 320f),
+            ) + fadeIn(tween(200, delayMillis = 90, easing = LinearOutSlowInEasing)),
+            exit = shrinkVertically(
+                animationSpec = spring(dampingRatio = 1f, stiffness = 420f),
+            ) + fadeOut(tween(110, easing = FastOutLinearInEasing)),
         ) {
             Column {
                 Spacer(Modifier.height(10.dp))
@@ -105,6 +119,11 @@ fun MbCollapsibleText(
 ) {
     var expanded by remember(text) { mutableStateOf(false) }
     var overflows by remember(text) { mutableStateOf(false) }
+    val turn by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 380f),
+        label = "moreChevron",
+    )
 
     Column(modifier.fillMaxWidth()) {
         MbText(
@@ -112,6 +131,10 @@ fun MbCollapsibleText(
             style,
             MbTheme.colors.inkSoft,
             maxLines = if (expanded) Int.MAX_VALUE else collapsedLines,
+            // The paragraph grows into its new height instead of jumping to it.
+            modifier = Modifier.animateContentSize(
+                animationSpec = spring(dampingRatio = 0.9f, stiffness = 320f),
+            ),
             onTextLayout = { result: TextLayoutResult ->
                 if (!expanded && result.hasVisualOverflow) overflows = true
             },
@@ -132,7 +155,7 @@ fun MbCollapsibleText(
                     "chevron-down",
                     size = 14.dp,
                     tint = MbTheme.colors.accent,
-                    modifier = Modifier.graphicsLayer { rotationZ = if (expanded) 180f else 0f },
+                    modifier = Modifier.graphicsLayer { rotationZ = turn },
                 )
             }
         }

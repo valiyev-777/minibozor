@@ -101,7 +101,10 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
         Modifier
             .fillMaxWidth()
             .height(heroHeight())
-            .background(MbTheme.colors.photoWarm)
+            // Light in both themes. The photo is fitted rather than cropped, so
+            // whatever it does not cover is on show — and a dark frame around a
+            // shot taken on white reads as two mismatched blocks.
+            .background(MbTheme.colors.photoStudio)
     ) {
         HorizontalPager(pager, Modifier.fillMaxSize()) { page ->
             MbProductImage(
@@ -124,7 +127,7 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
                         scaleY = scale
                     },
                 shape = RectangleShape,
-                background = MbTheme.colors.photoWarm,
+                background = MbTheme.colors.photoStudio,
                 // The whole product, uncropped: the taller frame exists so the
                 // photo can be seen in full, so a crop would defeat it.
                 contentScale = ContentScale.Fit,
@@ -330,7 +333,14 @@ fun BuyBar(
                 exit = shrinkHorizontally() + fadeOut(),
             ) {
                 Row {
-                    MbPriceRow(product.price, product.oldPrice, product.discountPercent)
+                    MbPriceRow(
+                        product.price,
+                        product.oldPrice,
+                        product.discountPercent,
+                        // The bar is where the decision gets made, so the
+                        // number carries more weight here than in a tile.
+                        priceStyle = MbTheme.type.title3,
+                    )
                     Spacer(Modifier.width(14.dp))
                 }
             }
