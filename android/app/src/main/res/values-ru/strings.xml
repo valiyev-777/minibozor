@@ -361,4 +361,8 @@
     <!-- Recommendation chips -->
     <string name="oxshash">Похожие</string>
     <string name="ommabop">Популярные</string>
+
+    <!-- Collapsible sections -->
+    <string name="batafsil">Подробнее</string>
+    <string name="yopish">Свернуть</string>
 </resources>

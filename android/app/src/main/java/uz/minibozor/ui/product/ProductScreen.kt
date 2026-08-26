@@ -68,6 +68,8 @@ import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.mbTap
+import uz.minibozor.core.design.component.MbExpandableSection
+import uz.minibozor.core.design.component.MbCollapsibleText
 import uz.minibozor.core.design.component.MbBottomBar
 import uz.minibozor.core.design.component.MbCard
 import uz.minibozor.core.design.component.MbDivider
@@ -211,11 +213,7 @@ fun ProductScreen(
                                 MbCard(Modifier.padding(horizontal = 12.dp)) {
                                     SectionHeader(stringResource(R.string.tavsif))
                                     Spacer(Modifier.height(10.dp))
-                                    MbText(
-                                        product.description,
-                                        MbTheme.type.bodySmall,
-                                        MbTheme.colors.inkSoft,
-                                    )
+                                    MbCollapsibleText(product.description)
                                 }
                             }
                         }
@@ -288,9 +286,20 @@ fun ProductScreen(
                         if (product.specs.isNotEmpty()) {
                             item {
                                 MbCard(Modifier.padding(horizontal = 12.dp)) {
-                                    SectionHeader(stringResource(R.string.xususiyatlari))
-                                    Spacer(Modifier.height(4.dp))
-                                    product.specs.forEach { MbKeyValueRow(it.key, it.value) }
+                                    MbExpandableSection(
+                                        title = stringResource(R.string.xususiyatlari),
+                                        subtitle = pluralStringResource(
+                                            R.plurals.n_items,
+                                            product.specs.size,
+                                            product.specs.size,
+                                        ),
+                                    ) {
+                                        Column {
+                                            product.specs.forEach {
+                                                MbKeyValueRow(it.key, it.value)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

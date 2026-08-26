@@ -373,4 +373,8 @@
     <!-- Recommendation chips -->
     <string name="oxshash">O\'xshash</string>
     <string name="ommabop">Ommabop</string>
+
+    <!-- Collapsible sections -->
+    <string name="batafsil">Batafsil</string>
+    <string name="yopish">Yopish</string>
 </resources>

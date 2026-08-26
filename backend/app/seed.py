@@ -80,6 +80,8 @@ CATEGORY_IMAGES = {
     "taom-yetkazish": "categories/taom-yetkazish.png",
     "chet-eldan": "categories/chet-eldan.png",
     "kundalik": "categories/kundalik.png",
+    "aksessuar": "categories/aksessuar.png",
+    "oziq-ovqat": "categories/oziq-ovqat.png",
 }
 
 ROOT_CATEGORIES = [

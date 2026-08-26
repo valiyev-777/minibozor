@@ -87,6 +87,8 @@ fun MbText(
     overflow: androidx.compose.ui.text.style.TextOverflow =
         androidx.compose.ui.text.style.TextOverflow.Ellipsis,
     textAlign: androidx.compose.ui.text.style.TextAlign? = null,
+    /** Lets a caller find out whether the text was actually clipped. */
+    onTextLayout: ((androidx.compose.ui.text.TextLayoutResult) -> Unit)? = null,
 ) {
     Text(
         text = text,
@@ -96,6 +98,7 @@ fun MbText(
         minLines = minLines,
         overflow = overflow,
         textAlign = textAlign,
+        onTextLayout = onTextLayout ?: {},
         modifier = modifier,
     )
 }

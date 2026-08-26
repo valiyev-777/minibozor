@@ -351,4 +351,8 @@
     <!-- Recommendation chips -->
     <string name="oxshash">Similar</string>
     <string name="ommabop">Popular</string>
+
+    <!-- Collapsible sections -->
+    <string name="batafsil">Read more</string>
+    <string name="yopish">Show less</string>
 </resources>
