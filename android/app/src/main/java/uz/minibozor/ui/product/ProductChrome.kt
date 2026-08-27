@@ -2,15 +2,15 @@ package uz.minibozor.ui.product
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,8 +29,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -57,16 +58,16 @@ import androidx.compose.ui.unit.dp
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
-import uz.minibozor.core.design.mbTap
 import uz.minibozor.core.design.component.MbChip
 import uz.minibozor.core.design.component.MbPriceRow
 import uz.minibozor.core.design.component.MbPrimaryButton
-import uz.minibozor.core.design.component.MbQuantityStepper
 import uz.minibozor.core.design.component.MbProductImage
+import uz.minibozor.core.design.component.MbQuantityStepper
 import uz.minibozor.core.design.component.MbRailTile
 import uz.minibozor.core.design.component.MbSkeleton
 import uz.minibozor.core.design.component.SectionHeader
 import uz.minibozor.core.design.icon.MbIcon
+import uz.minibozor.core.design.mbTap
 import uz.minibozor.data.remote.dto.CartItemDto
 import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.ProductDto
@@ -81,7 +82,16 @@ import uz.minibozor.data.remote.dto.ProductDto
  * price bar stays on screen with it.
  */
 @Composable
-fun heroHeight(): Dp = LocalConfiguration.current.screenWidthDp.dp + chromeHeight()
+fun heroHeight(): Dp = LocalConfiguration.current.screenWidthDp.dp
+
+/**
+ * How opaque the bar's own surface is, for a given handover.
+ *
+ * Shared with the screen, which hands the system's bar icons back to the theme
+ * at the moment this reaches 1. Before that they are held light, because what
+ * is behind them is the wash over the photograph.
+ */
+fun barCover(handover: Float): Float = (handover * 8f).coerceAtMost(1f)
 
 /** The bar: the status bar inset plus the row of buttons under it. */
 @Composable
@@ -142,18 +152,13 @@ fun Hero(
                 // The theme's photo ground, the same one the grid tiles use.
                 .background(MbTheme.colors.photoStudio)
         ) {
-        // Below the bar, not under it: the frame is a square of photo plus the
-        // bar's own height, so the whole picture is in the clear.
-        //
-        // The square comes from the measured width rather than from the frame
-        // less the bar. Both are rounded from dp independently, and they came
-        // out two pixels apart — enough for a fitted square photograph to
-        // leave a hairline of ground down each side. Any slack now falls at
-        // the top, behind the bar, where there is nothing to see.
+        // The whole frame, the strip behind the bar included. The frame used to
+        // be a square of photograph plus the bar's height, which left a band of
+        // plain ground across the top; the picture reaches the top of the
+        // screen now and the bar sits on it.
         HorizontalPager(
             pager,
             Modifier
-                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .aspectRatio(1f),
         ) { page ->
@@ -176,7 +181,13 @@ fun Hero(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 18.dp)
-                    .graphicsLayer { alpha = 1f - closed() },
+                    .graphicsLayer { alpha = 1f - closed() }
+                    // On a pill of their own. They sit on the photograph now,
+                    // and drawn in the theme's ink they went missing on every
+                    // picture that happened to be the same tone.
+                    .clip(CircleShape)
+                    .background(MbTheme.colors.scrim)
+                    .padding(horizontal = 9.dp, vertical = 7.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 repeat(images.size) { index ->
@@ -187,7 +198,8 @@ fun Hero(
                         label = "heroDot",
                     )
                     val color by animateColorAsState(
-                        if (active) MbTheme.colors.ink else MbTheme.colors.hairlineStrong,
+                        if (active) MbTheme.colors.onScrim
+                        else MbTheme.colors.onScrim.copy(alpha = 0.45f),
                         tween(240),
                         label = "heroDotColor",
                     )
@@ -217,7 +229,6 @@ fun ProductChrome(
     onShare: () -> Unit,
 ) {
     val surface = MbTheme.colors.surface
-    val onPhoto = MbTheme.colors.photoStudio
 
     Column(
         Modifier
@@ -228,21 +239,32 @@ fun ProductChrome(
             // this looked like. Read in the draw phase, so following the
             // scroll invalidates drawing only.
             .drawBehind {
-                // An opaque ground, then the page's surface faded over it.
-                // Cross-fading two translucent rects never adds up to opaque
-                // in between — at halfway the pair covers 0.75, so a quarter
-                // of the card behind showed through, which is how the
-                // product's name kept appearing twice.
+                // A wash first, then the page's surface over it.
                 //
-                // The ground itself comes up steeply rather than being there
-                // from the start: painted flat over an untouched photo it put
-                // a band across the picture, since a blurred backdrop has no
-                // one colour to match. Full strength by an eighth of the
-                // handover, which is a few pixels of the name — long before
-                // any of it could read through.
-                val h = handover()
-                drawRect(onPhoto, alpha = (h * 8f).coerceAtMost(1f))
-                drawRect(surface, alpha = h)
+                // The photograph runs to the top of the screen, so what is
+                // behind the system's own clock and battery is whatever the
+                // seller photographed. The wash is what makes them readable on
+                // any of it — strongest at the very edge and gone by the row of
+                // buttons, so it reads as the picture darkening rather than as
+                // a band laid across it. It belongs here, on the bar, which is
+                // pinned to the top of the screen: put on the frame instead it
+                // hung back with the picture and scrolled off, leaving the
+                // clock bare on whatever was underneath.
+                drawRect(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.55f),
+                        0.55f to Color.Black.copy(alpha = 0.18f),
+                        1f to Color.Transparent,
+                    )
+                )
+                // Brought up steeply, and it covers the wash as it arrives.
+                // Painted flat from the start it would band the picture, and
+                // cross-fading two grounds never adds up to opaque in between —
+                // at halfway a pair covers 0.75, which is how the product's
+                // name once appeared twice. Full strength by an eighth of the
+                // handover: a few pixels of the name, long before any of it
+                // could read through.
+                drawRect(surface, alpha = barCover(handover()))
             }
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 14.dp, vertical = 10.dp)

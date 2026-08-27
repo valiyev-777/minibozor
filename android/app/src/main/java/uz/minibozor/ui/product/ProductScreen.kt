@@ -1,20 +1,11 @@
 package uz.minibozor.ui.product
 
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.fadeIn
+import android.app.Activity
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,37 +16,51 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
-import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.res.stringResource
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
-import uz.minibozor.core.design.component.MbExpandableSection
-import uz.minibozor.core.design.component.MbCollapsibleText
 import uz.minibozor.core.design.component.MbCard
+import uz.minibozor.core.design.component.MbCollapsibleText
 import uz.minibozor.core.design.component.MbDivider
 import uz.minibozor.core.design.component.MbErrorState
+import uz.minibozor.core.design.component.MbExpandableSection
 import uz.minibozor.core.design.component.MbKeyValueRow
 import uz.minibozor.core.design.component.MbRating
 import uz.minibozor.core.design.component.MbSizeChip
@@ -156,6 +161,33 @@ fun ProductScreen(
                 val nameBottom = identity.offset + cardPaddingPx + titleHeightPx
                 ((barBottomPx - nameBottom) / handoverPx).coerceIn(0f, 1f)
             }
+        }
+    }
+
+    // The photograph runs to the top of the screen, so the system's own clock
+    // and battery are drawn on it. They are held light for as long as that is
+    // true — the wash under them is dark whatever the picture — and handed
+    // back to the theme once the bar has its own surface, and when the screen
+    // goes away.
+    val view = LocalView.current
+    val darkTheme = MbTheme.colors.isDark
+    // Light exactly while the wash is what is behind them: the bar's surface
+    // covers that wash the moment barCover reaches 1, and the icons change with
+    // it rather than at some threshold of their own.
+    val overPhoto by remember { derivedStateOf { barCover(handover) < 1f } }
+
+    DisposableEffect(view, darkTheme) {
+        onDispose {
+            (view.context as? Activity)?.window?.let { window ->
+                WindowCompat.getInsetsController(window, view)
+                    .isAppearanceLightStatusBars = !darkTheme
+            }
+        }
+    }
+    SideEffect {
+        (view.context as? Activity)?.window?.let { window ->
+            WindowCompat.getInsetsController(window, view)
+                .isAppearanceLightStatusBars = if (overPhoto) false else !darkTheme
         }
     }
 
