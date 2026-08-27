@@ -12,9 +12,9 @@ struct AddressFormView: View {
     @Environment(CheckoutModel.self) var model
 
     private var presets: [AddressPreset] { [
-        AddressPreset(title: "Uy", icon: "pin", badge: "ASOSIY"),
-        AddressPreset(title: "Ish", icon: "box", badge: "OFIS"),
-        AddressPreset(title: "Boshqa", icon: "star", badge: nil),
+        AddressPreset(title: L("preset_uy"), icon: "pin", badge: L("asosiy")),
+        AddressPreset(title: L("preset_ish"), icon: "box", badge: L("preset_badge_ofis")),
+        AddressPreset(title: L("preset_boshqa"), icon: "star", badge: nil),
     ] }
 
     @State var preset: AddressPreset
@@ -27,17 +27,17 @@ struct AddressFormView: View {
     @State var saving = false
 
     init() {
-        _preset = State(initialValue: AddressPreset(title: "Uy", icon: "pin", badge: "ASOSIY"))
+        _preset = State(initialValue: AddressPreset(title: L("preset_uy"), icon: "pin", badge: L("asosiy")))
     }
 
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Manzil qo'shish", onBack: { router.pop() })
+                MBTopBar(L("manzil_qoshish"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         MBCard {
-                            SectionHeader(title: "Manzil turi")
+                            SectionHeader(title: L("manzil_turi"))
                             Spacer().frame(height: 12)
                             FlowLayout(spacing: 8) {
                                 ForEach(presets, id: \.self) { option in
@@ -50,26 +50,26 @@ struct AddressFormView: View {
 
                         MBCard {
                             MBTextField(
-                                placeholder: "Toshkent, Amir Temur shoh ko'chasi 108",
+                                placeholder: L("toshkent_amir_temur_shoh_kochasi_108"),
                                 text: $line,
-                                label: "Ko'cha va uy raqami"
+                                label: L("kocha_va_uy_raqami")
                             )
                             Spacer().frame(height: 14)
                             HStack(spacing: 12) {
-                                MBTextField(placeholder: "12", text: $floor, label: "Qavat")
-                                MBTextField(placeholder: "45", text: $apartment, label: "Xona")
+                                MBTextField(placeholder: "12", text: $floor, label: L("qavat"))
+                                MBTextField(placeholder: "45", text: $apartment, label: L("xona"))
                             }
                             Spacer().frame(height: 14)
                             MBTextField(
                                 placeholder: "1245K",
                                 text: $entranceCode,
-                                label: "Kirish kodi"
+                                label: L("kirish_kodi")
                             )
                             Spacer().frame(height: 14)
                             MBTextField(
-                                placeholder: "Domofon ishlamaydi, qo'ng'iroq qiling",
+                                placeholder: L("domofon_ishlamaydi_qongiroq_qiling"),
                                 text: $comment,
-                                label: "Kuryerga izoh",
+                                label: L("kuryerga_izoh"),
                                 multiline: true,
                                 minHeight: 80
                             )
@@ -77,8 +77,8 @@ struct AddressFormView: View {
 
                         MBCard(padding: 6) {
                             MBToggleRow(
-                                label: "Asosiy manzil",
-                                subtitle: "Buyurtma berishda avtomatik tanlanadi",
+                                label: L("asosiy_manzil"),
+                                subtitle: L("buyurtma_berishda_avtomatik_tanlanadi"),
                                 glyph: "pin",
                                 isOn: $isDefault
                             )
@@ -92,7 +92,7 @@ struct AddressFormView: View {
         .navigationBarBackButtonHidden()
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
-                MBPrimaryButton("Saqlash", enabled: !line.isEmpty, loading: saving) {
+                MBPrimaryButton(L("saqlash"), enabled: !line.isEmpty, loading: saving) {
                     Task { await save() }
                 }
             }

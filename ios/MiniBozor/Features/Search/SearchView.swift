@@ -68,7 +68,7 @@ struct SearchView: View {
                         ),
                         onSubmit: { submit(model.query) }
                     )
-                    Button("Bekor") { router.pop() }
+                    Button(L("bekor")) { router.pop() }
                         .mbFont(MB.type.label)
                         .foregroundStyle(MB.color.accent)
                 }
@@ -121,7 +121,7 @@ struct SearchView: View {
             VStack(alignment: .leading, spacing: 0) {
                 if !model.recent.isEmpty {
                     Spacer().frame(height: 18)
-                    SectionHeader(title: "Oxirgi qidiruvlar", actionLabel: "Tozalash") {
+                    SectionHeader(title: L("oxirgi_qidiruvlar"), actionLabel: L("tozalash")) {
                         Task { await model.clearHistory() }
                     }
                     Spacer().frame(height: 12)
@@ -145,7 +145,7 @@ struct SearchView: View {
 
                 if !model.popular.isEmpty {
                     Spacer().frame(height: 22)
-                    SectionHeader(title: "Ommabop so'rovlar")
+                    SectionHeader(title: L("ommabop_sorovlar"))
                     Spacer().frame(height: 12)
                     FlowLayout(spacing: 8) {
                         ForEach(model.popular, id: \.self) { text in

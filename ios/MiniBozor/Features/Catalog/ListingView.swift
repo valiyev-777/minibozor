@@ -86,13 +86,17 @@ struct ListingView: View {
     @State var model = ListingModel()
     @State var showFilters = false
     @State var toast: String?
+    @Environment(TabSelection.self) private var tabSelection
+    @State private var picking: ProductCardDTO?
 
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
                 MBTopBar(
-                    title.isEmpty ? (query ?? "Tovarlar") : title,
-                    subtitle: model.total > 0 ? "\(Format.grouped(model.total)) ta topildi" : nil,
+                    title.isEmpty ? (query ?? L("tovarlar")) : title,
+                    subtitle: model.total > 0
+                        ? LPlural("n_found", count: model.total, Format.grouped(model.total))
+                        : nil,
                     onBack: { router.pop() }
                 )
                 toolbar
@@ -102,6 +106,19 @@ struct ListingView: View {
         .navigationBarBackButtonHidden()
         .mbToast($toast)
         .task { await model.start(category: category, text: query) }
+        .sheet(item: $picking) { card in
+            VariantSheet(
+                card: card,
+                onDismiss: { picking = nil },
+                onOpenCart: {
+                    picking = nil
+                    tabSelection.select("cart")
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(MB.metric.radiusSheet)
+        }
         .sheet(isPresented: $showFilters) {
             FiltersSheet(
                 filters: model.filters,
@@ -138,7 +155,7 @@ struct ListingView: View {
                 let count = model.query.activeFilterCount
                 HStack(spacing: 6) {
                     MBIcon("gear", size: 14, tint: count > 0 ? .white : MB.color.ink)
-                    Text(count > 0 ? "Filtr · \(count)" : "Filtr")
+                    Text(count > 0 ? L("filtr_n", count) : L("filtr"))
                         .mbFont(MB.type.caption)
                         .foregroundStyle(count > 0 ? .white : MB.color.ink)
                 }
@@ -163,9 +180,9 @@ struct ListingView: View {
         } else if model.items.isEmpty {
             MBEmptyState(
                 glyph: "search",
-                title: "Hech narsa topilmadi",
-                message: "Filtrlarni yumshatib yoki boshqa so'z bilan qidirib ko'ring.",
-                actionLabel: model.query.activeFilterCount > 0 ? "Filtrlarni tozalash" : nil,
+                title: L("hech_narsa_topilmadi"),
+                message: L("filtrlarni_yumshatib_yoki_boshqa_soz_bilan"),
+                actionLabel: model.query.activeFilterCount > 0 ? L("filtrlarni_tozalash") : nil,
                 onAction: { Task { await model.apply(model.query.cleared()) } }
             )
         } else {
@@ -180,9 +197,13 @@ struct ListingView: View {
                             onOpen: { router.push(.product(id: product.id)) },
                             onToggleFavorite: { Task { await model.toggleFavorite(product) } },
                             onAddToCart: {
-                                Task {
-                                    let outcome = await cart.add(productId: product.id, variantId: nil)
-                                    toast = outcome.errorMessage ?? "Savatga qo'shildi"
+                                if product.hasVariants {
+                                    picking = product
+                                } else {
+                                    Task {
+                                        let outcome = await cart.add(productId: product.id)
+                                        toast = outcome.errorMessage ?? L("savatga_qoshildi")
+                                    }
                                 }
                             }
                         )

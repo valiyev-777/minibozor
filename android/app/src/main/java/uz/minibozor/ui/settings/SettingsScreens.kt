@@ -196,7 +196,7 @@ fun SettingsScreen(
                             glyph = row.first,
                             meta = row.third.ifBlank { null },
                             onClick = { onNavigate(route) },
-                            modifier = Modifier.padding(horizontal = 10.dp),
+                            contentPadding = 10.dp,
                         )
                         if (index != rows.lastIndex) MbDivider(inset = 60.dp)
                     }
@@ -211,7 +211,7 @@ fun SettingsScreen(
                         glyph = "pin",
                         checked = state.settings?.locationEnabled ?: true,
                         onCheckedChange = viewModel::setLocation,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                     MbDivider(inset = 60.dp)
                     MbToggleRow(
@@ -220,7 +220,7 @@ fun SettingsScreen(
                         glyph = "gear",
                         checked = state.settings?.nightMode ?: false,
                         onCheckedChange = viewModel::setNightMode,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                 }
             }
@@ -261,7 +261,7 @@ fun NotificationSettingsScreen(
                     glyph = "box",
                     checked = prefs?.orderStatus ?: true,
                     onCheckedChange = { viewModel.setPref(NotificationPrefsRequest(orderStatus = it)) },
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    contentPadding = 10.dp,
                 )
                 MbDivider(inset = 60.dp)
                 MbToggleRow(
@@ -270,7 +270,7 @@ fun NotificationSettingsScreen(
                     glyph = "gift",
                     checked = prefs?.promotions ?: true,
                     onCheckedChange = { viewModel.setPref(NotificationPrefsRequest(promotions = it)) },
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    contentPadding = 10.dp,
                 )
                 MbDivider(inset = 60.dp)
                 MbToggleRow(
@@ -279,7 +279,7 @@ fun NotificationSettingsScreen(
                     glyph = "heart",
                     checked = prefs?.priceDrop ?: true,
                     onCheckedChange = { viewModel.setPref(NotificationPrefsRequest(priceDrop = it)) },
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    contentPadding = 10.dp,
                 )
             }
 
@@ -293,7 +293,7 @@ fun NotificationSettingsScreen(
                     glyph = "bell",
                     checked = prefs?.push ?: true,
                     onCheckedChange = { viewModel.setPref(NotificationPrefsRequest(push = it)) },
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    contentPadding = 10.dp,
                 )
                 MbDivider(inset = 60.dp)
                 MbToggleRow(
@@ -301,7 +301,7 @@ fun NotificationSettingsScreen(
                     glyph = "phone",
                     checked = prefs?.sms ?: true,
                     onCheckedChange = { viewModel.setPref(NotificationPrefsRequest(sms = it)) },
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    contentPadding = 10.dp,
                 )
             }
         }
@@ -346,7 +346,7 @@ fun LanguageScreen(
                                 )
                             }
                         },
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                     if (index != state.languages.lastIndex) MbDivider(inset = 60.dp)
                 }
@@ -385,7 +385,7 @@ fun SecurityScreen(
                     subtitle = stringResource(R.string.ilovaga_kirishda_soraladi),
                     glyph = "gear",
                     onClick = onChangePin,
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    contentPadding = 10.dp,
                 )
                 MbDivider(inset = 60.dp)
                 MbToggleRow(
@@ -394,7 +394,7 @@ fun SecurityScreen(
                     glyph = "user",
                     checked = state.biometrics,
                     onCheckedChange = viewModel::setBiometrics,
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    contentPadding = 10.dp,
                 )
             }
 

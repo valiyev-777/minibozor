@@ -24,11 +24,21 @@ final class CartRepository {
     }
 
     @discardableResult
-    func add(productId: Int, variantId: Int?, quantity: Int = 1) async -> Outcome<CartDTO> {
+    func add(
+        productId: Int,
+        variantId: Int? = nil,
+        colorVariantId: Int? = nil,
+        quantity: Int = 1
+    ) async -> Outcome<CartDTO> {
         await store {
             try await api.post(
                 "cart/items",
-                body: CartAddRequest(productId: productId, variantId: variantId, quantity: quantity)
+                body: CartAddRequest(
+                    productId: productId,
+                    variantId: variantId,
+                    colorVariantId: colorVariantId,
+                    quantity: quantity
+                )
             )
         }
     }

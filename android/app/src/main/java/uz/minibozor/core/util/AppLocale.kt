@@ -2,6 +2,7 @@ package uz.minibozor.core.util
 
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import java.util.Locale
 
 /**
  * The app's language.
@@ -19,12 +20,21 @@ object AppLocale {
 
     val SUPPORTED = listOf(DEFAULT, "ru", "en")
 
-    /** The active language tag, or [DEFAULT] when the user has never chosen. */
-    fun current(): String =
-        AppCompatDelegate.getApplicationLocales()[0]
-            ?.language
-            ?.takeIf { it in SUPPORTED }
-            ?: DEFAULT
+    /**
+     * The language the app is actually speaking.
+     *
+     * An explicit choice on screen 39 wins. Failing that it is whatever
+     * Android resolved the resources against — on a phone set to English the
+     * screens come back in English even though nobody picked a language, and
+     * answering "uz" here put Uzbek toasts under English headings and asked
+     * the server for Uzbek too.
+     */
+    fun current(): String {
+        val chosen = AppCompatDelegate.getApplicationLocales()[0]?.language
+        if (chosen != null && chosen in SUPPORTED) return chosen
+        val system = Locale.getDefault().language
+        return if (system in SUPPORTED) system else DEFAULT
+    }
 
     /**
      * Switches language. Android recreates the running activities to pick up

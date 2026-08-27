@@ -162,6 +162,8 @@ struct ProductCardDTO: Decodable, Identifiable, Hashable {
     let badge: String?
     let inStock: Bool
     var isFavorite: Bool
+    /// Whether tapping "Savatga" should open the picker sheet or add at once.
+    var hasVariants: Bool = false
 }
 
 struct ProductDTO: Decodable, Identifiable {
@@ -330,7 +332,9 @@ struct CartDTO: Decodable {
 
 struct CartAddRequest: Encodable {
     let productId: Int
+    /// The size. A cart line carries a size *and* a colour.
     let variantId: Int?
+    let colorVariantId: Int?
     let quantity: Int
 }
 
@@ -363,11 +367,11 @@ struct AddressDTO: Decodable, Identifiable, Hashable {
 }
 
 struct AddressRequest: Encodable {
-    var title: String = "Uy"
+    var title: String = L("preset_uy")
     var icon: String = "pin"
     var badge: String?
     var line: String
-    var city: String = "Toshkent"
+    var city: String = L("region_toshkent")
     var floor: String?
     var apartment: String?
     var entranceCode: String?

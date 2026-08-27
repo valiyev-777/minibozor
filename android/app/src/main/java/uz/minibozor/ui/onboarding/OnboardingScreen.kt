@@ -1,5 +1,7 @@
 package uz.minibozor.ui.onboarding
 
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,7 +50,11 @@ private data class OnboardingPage(
 
 /**
  * Screens 01–04. Copy and imagery come from the design; the illustration is a
- * product photo inset in a soft circle with a floating chip. The last page
+ * product photo inset in a soft circle with a floating chip.
+ *
+ * Every photograph here is one of the cut-out ones. The shots that carry their
+ * own studio backdrop drew a bright rectangle inside the ring, which on the
+ * dark theme was the only light thing on the page. The last page
  * swaps the skip/next pair for a single "Boshlash" plus a sign-in link.
  */
 @Composable
@@ -56,25 +62,25 @@ private fun pages(mediaBase: String) = listOf(
     OnboardingPage(
         title = stringResource(R.string.onboarding_1_title),
         body = stringResource(R.string.onboarding_1_body),
-        image = "$mediaBase/products/nike-zoomx.png",
+        image = "$mediaBase/products/af1-pink.png",
         chip = stringResource(R.string.onboarding_1_chip),
     ),
     OnboardingPage(
         title = stringResource(R.string.onboarding_2_title),
         body = stringResource(R.string.onboarding_2_body),
-        image = "$mediaBase/products/gazelle.png",
+        image = "$mediaBase/products/gucci-g-timeless.png",
         chip = stringResource(R.string.onboarding_2_chip),
     ),
     OnboardingPage(
         title = stringResource(R.string.onboarding_3_title),
         body = stringResource(R.string.onboarding_3_body),
-        image = "$mediaBase/products/airpods.png",
+        image = "$mediaBase/products/headphones.png",
         chip = stringResource(R.string.onboarding_3_chip),
     ),
     OnboardingPage(
         title = stringResource(R.string.onboarding_4_title),
         body = stringResource(R.string.onboarding_4_body),
-        image = "$mediaBase/banners/lamp-room.png",
+        image = "$mediaBase/products/cosmetics.png",
         chip = stringResource(R.string.onboarding_4_chip),
     ),
 )
@@ -276,16 +282,18 @@ private fun NextButton(onClick: () -> Unit) {
     }
 }
 
-/** Wordmark stand-in: the app's basket glyph in an accent tile. */
+/**
+ * The shop's mark.
+ *
+ * Drawn on whatever is behind it rather than in a tile of its own: the mark is
+ * already a shape on a transparent ground, and it appears on the dark
+ * onboarding page and the light sign-in page alike.
+ */
 @Composable
 fun BrandMark(size: androidx.compose.ui.unit.Dp = 26.dp) {
-    Box(
-        Modifier
-            .size(size)
-            .clip(RoundedCornerShape(size * 0.31f))
-            .background(MbTheme.colors.accent),
-        contentAlignment = Alignment.Center,
-    ) {
-        MbIcon("basket", size = size * 0.62f, tint = Color.White, strokeWidth = 2f)
-    }
+    Image(
+        painter = painterResource(R.drawable.logo_mark),
+        contentDescription = null,
+        modifier = Modifier.size(size),
+    )
 }

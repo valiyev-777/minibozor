@@ -8,7 +8,7 @@ struct CheckoutView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Buyurtma berish", onBack: { router.pop() })
+                MBTopBar(L("buyurtma_berish"), onBack: { router.pop() })
 
                 if let preview = model.preview {
                     ScrollView {
@@ -29,12 +29,12 @@ struct CheckoutView: View {
             MBBottomBar {
                 HStack(spacing: 14) {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Jami").mbFont(MB.type.meta).foregroundStyle(MB.color.icon)
+                        Text(L("jami")).mbFont(MB.type.meta).foregroundStyle(MB.color.icon)
                         Text(Format.grouped(model.preview?.totals.total ?? 0))
                             .mbFont(MB.type.price)
                             .foregroundStyle(MB.color.ink)
                     }
-                    MBPrimaryButton("Davom etish", enabled: model.ready) {
+                    MBPrimaryButton(L("davom_etish"), enabled: model.ready) {
                         router.push(.confirm)
                     }
                 }
@@ -49,7 +49,7 @@ struct CheckoutView: View {
     private func stepsCard(_ preview: CheckoutPreviewDTO) -> some View {
         MBCard(padding: 6) {
             MBListRow(
-                preview.address?.title ?? preview.pickupPoint?.name ?? "Manzilni tanlang",
+                preview.address?.title ?? preview.pickupPoint?.name ?? L("manzilni_tanlang"),
                 glyph: "pin",
                 subtitle: preview.address?.line ?? preview.pickupPoint?.address
             ) {
@@ -58,7 +58,7 @@ struct CheckoutView: View {
             .padding(.horizontal, 10)
             MBDivider(inset: 62)
             MBListRow(
-                preview.slot?.label ?? "Yetkazish vaqtini tanlang",
+                preview.slot?.label ?? L("yetkazish_vaqtini_tanlang"),
                 glyph: "clock",
                 subtitle: preview.slot?.note
             ) {
@@ -70,7 +70,7 @@ struct CheckoutView: View {
                 paymentTitle(preview),
                 glyph: "card",
                 subtitle: model.paymentMethod == "cash"
-                    ? "Kuryerga topshirishda" : preview.card?.brand
+                    ? L("kuryerga_topshirishda") : preview.card?.brand
             ) {
                 router.push(.paymentMethod)
             }
@@ -79,14 +79,14 @@ struct CheckoutView: View {
     }
 
     private func paymentTitle(_ preview: CheckoutPreviewDTO) -> String {
-        if model.paymentMethod == "cash" { return "Naqd pul" }
+        if model.paymentMethod == "cash" { return L("naqd_pul") }
         if let card = preview.card { return "Karta ···· \(card.last4)" }
-        return "To'lov usulini tanlang"
+        return L("tolov_usulini_tanlang")
     }
 
     private func basketCard(_ preview: CheckoutPreviewDTO) -> some View {
         MBCard {
-            SectionHeader(title: "Savat", subtitle: "\(preview.items.count) tovar")
+            SectionHeader(title: L("savat"), subtitle: "\(preview.items.count) tovar")
             Spacer().frame(height: 12)
             ForEach(Array(preview.items.enumerated()), id: \.element.id) { offset, item in
                 MBLineItem(
@@ -106,18 +106,18 @@ struct CheckoutView: View {
             MBTotalRow(label: "Tovarlar (\(totals.itemsCount))", value: Format.sum(totals.subtotal))
             if totals.discount > 0 {
                 MBTotalRow(
-                    label: "Chegirma",
+                    label: L("chegirma"),
                     value: "−\(Format.grouped(totals.discount))",
                     valueColor: MB.color.success
                 )
             }
             MBTotalRow(
-                label: "Yetkazish",
-                value: totals.deliveryFee == 0 ? "Bepul" : Format.sum(totals.deliveryFee),
+                label: L("yetkazish"),
+                value: totals.deliveryFee == 0 ? L("bepul") : Format.sum(totals.deliveryFee),
                 valueColor: totals.deliveryFee == 0 ? MB.color.success : MB.color.ink
             )
             MBDivider().padding(.vertical, 8)
-            MBTotalRow(label: "Jami", value: Format.sum(totals.total), strong: true)
+            MBTotalRow(label: L("jami"), value: Format.sum(totals.total), strong: true)
         }
     }
 }

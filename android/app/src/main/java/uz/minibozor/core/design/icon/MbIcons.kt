@@ -1,20 +1,21 @@
 package uz.minibozor.core.design.icon
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.addPathNodes
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.size
-import androidx.compose.ui.graphics.ColorFilter
 import uz.minibozor.core.design.MbTheme
 
 /**
@@ -185,46 +186,34 @@ object MbIcons {
     val names: Set<String> get() = GLYPHS.keys
 
     /**
-     * Path data is parsed once per glyph variant and kept.
+     * Path data is parsed once per glyph and kept.
      *
      * A list scroll rebuilds icons constantly; re-parsing the same strings on
      * every new composition is exactly the kind of small repeated cost that
      * reads as stutter.
      */
-    private val cache = java.util.concurrent.ConcurrentHashMap<String, ImageVector>()
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, List<Path>>()
 
-    fun vector(
-        name: String,
-        strokeWidth: Float = 1.6f,
-        filled: Boolean = false,
-    ): ImageVector = cache.getOrPut("$name|$strokeWidth|$filled") {
-        val paths = GLYPHS[name] ?: GLYPHS.getValue("box")
-        ImageVector.Builder(
-            name = if (filled) "$name-filled" else name,
-            defaultWidth = 24.dp,
-            defaultHeight = 24.dp,
-            viewportWidth = 24f,
-            viewportHeight = 24f,
-        ).apply {
-            paths.forEach { data ->
-                addPath(
-                    pathData = addPathNodes(data),
-                    // A filled glyph keeps its stroke too, so the silhouette
-                    // stays the same size whether it is on or off.
-                    fill = if (filled) SolidColor(Color.Black) else null,
-                    stroke = SolidColor(Color.Black),
-                    strokeLineWidth = strokeWidth,
-                    strokeLineCap = StrokeCap.Round,
-                    strokeLineJoin = StrokeJoin.Round,
-                )
-            }
-        }.build()
+    /** A glyph's outlines, on the 24x24 grid the design authors them on. */
+    fun paths(name: String): List<Path> = cache.getOrPut(name) {
+        (GLYPHS[name] ?: GLYPHS.getValue("box")).map { data ->
+            PathParser().parsePathString(data).toPath()
+        }
     }
 }
 
+/** The grid every glyph is authored on. */
+private const val GlyphGrid = 24f
+
 /**
- * Draws one glyph. [tint] recolours the stroke, which is why the vector itself
- * is built in black and tinted at draw time.
+ * Draws one glyph, stroked in [tint].
+ *
+ * The outlines go straight into this node's own draw rather than through an
+ * ImageVector: `rememberVectorPainter` stands a subcomposition up per icon, and
+ * a product feed has a dozen on screen at once — a heart on every tile, a glyph
+ * in every category cell, one in every empty photo frame — with a fling
+ * building more of them every frame. One layout node and a cached stroke is
+ * what three lines of path should cost.
  */
 @Composable
 fun MbIcon(
@@ -235,13 +224,31 @@ fun MbIcon(
     strokeWidth: Float = 1.6f,
     filled: Boolean = false,
 ) {
-    val vector = remember(name, strokeWidth, filled) {
-        MbIcons.vector(name, strokeWidth, filled)
-    }
-    Image(
-        painter = rememberVectorPainter(vector),
-        contentDescription = null,
-        colorFilter = ColorFilter.tint(tint),
-        modifier = modifier.size(size),
+    val paths = remember(name) { MbIcons.paths(name) }
+    Spacer(
+        modifier
+            .size(size)
+            .drawWithCache {
+                // The weight is quoted on the 24-unit grid, so the canvas scale
+                // below carries it — a 16 dp icon and a 44 dp one keep the same
+                // relative stroke, which is how the design draws them.
+                val stroke = Stroke(
+                    width = strokeWidth,
+                    cap = StrokeCap.Round,
+                    join = StrokeJoin.Round,
+                )
+                val grid = this.size.minDimension / GlyphGrid
+                onDrawBehind {
+                    scale(grid, grid, pivot = Offset.Zero) {
+                        paths.forEach { path ->
+                            // A filled glyph keeps its stroke too, so the
+                            // silhouette stays the same size whether it is on
+                            // or off.
+                            if (filled) drawPath(path, tint)
+                            drawPath(path, tint, style = stroke)
+                        }
+                    }
+                }
+            }
     )
 }

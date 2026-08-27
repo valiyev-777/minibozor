@@ -1,5 +1,8 @@
 package uz.minibozor.core.design.component
 
+import uz.minibozor.core.util.mediaUrl
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
@@ -39,22 +43,33 @@ fun MbListRow(
     label: String,
     modifier: Modifier = Modifier,
     glyph: String? = null,
+    /** A supplied picture for the leading square; falls back to [glyph]. */
+    imageUrl: String? = null,
     subtitle: String? = null,
     meta: String? = null,
     showChevron: Boolean = true,
     tint: Color = MbTheme.colors.ink,
     onClick: (() -> Unit)? = null,
+    /**
+     * Inset for the row's own content.
+     *
+     * Padding the row from the outside would shrink the tap target with it —
+     * the press highlight then drew as a smaller rounded block floating inside
+     * the card instead of washing the whole row. Passing the inset here keeps
+     * the target full-width and moves only the content in.
+     */
+    contentPadding: Dp = 0.dp,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
         modifier
             .fillMaxWidth()
             .let { if (onClick != null) it.mbClickable(MbTheme.shapes.field, onClick = onClick) else it }
-            .padding(vertical = 12.dp),
+            .padding(horizontal = contentPadding, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (glyph != null) {
+        if (imageUrl != null || glyph != null) {
             Box(
                 Modifier
                     .size(38.dp)
@@ -62,7 +77,16 @@ fun MbListRow(
                     .background(MbTheme.colors.fill),
                 contentAlignment = Alignment.Center,
             ) {
-                MbIcon(glyph, size = 18.dp, tint = tint)
+                if (imageUrl != null) {
+                    AsyncImage(
+                        model = imageUrl.mediaUrl(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(30.dp),
+                    )
+                } else {
+                    MbIcon(glyph!!, size = 18.dp, tint = tint)
+                }
             }
         }
         Column(Modifier.weight(1f)) {
@@ -92,7 +116,10 @@ fun MbToggleRow(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     glyph: String? = null,
+    /** A supplied picture for the leading square; falls back to [glyph]. */
+    imageUrl: String? = null,
     subtitle: String? = null,
+    contentPadding: Dp = 0.dp,
 ) {
     MbListRow(
         label = label,
@@ -100,6 +127,7 @@ fun MbToggleRow(
         subtitle = subtitle,
         showChevron = false,
         modifier = modifier,
+        contentPadding = contentPadding,
         onClick = { onCheckedChange(!checked) },
         trailing = { MbSwitch(checked = checked, onCheckedChange = onCheckedChange) },
     )
@@ -137,12 +165,21 @@ fun MbRadioRow(
     trailingLabel: String? = null,
     trailingColor: Color = MbTheme.colors.ink,
     leading: @Composable (() -> Unit)? = null,
+    /**
+     * Inset for the row's own content.
+     *
+     * Padding the row from the outside would shrink the tap target with it —
+     * the press highlight then drew as a smaller rounded block floating inside
+     * the card instead of washing the whole row. Passing the inset here keeps
+     * the target full-width and moves only the content in.
+     */
+    contentPadding: Dp = 0.dp,
 ) {
     Row(
         modifier
             .fillMaxWidth()
             .mbClickable(MbTheme.shapes.field, onClick = onSelect)
-            .padding(vertical = 13.dp),
+            .padding(horizontal = contentPadding, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -183,12 +220,21 @@ fun MbCheckRow(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     count: String? = null,
+    /**
+     * Inset for the row's own content.
+     *
+     * Padding the row from the outside would shrink the tap target with it —
+     * the press highlight then drew as a smaller rounded block floating inside
+     * the card instead of washing the whole row. Passing the inset here keeps
+     * the target full-width and moves only the content in.
+     */
+    contentPadding: Dp = 0.dp,
 ) {
     Row(
         modifier
             .fillMaxWidth()
             .mbClickable(MbTheme.shapes.field, onClick = onToggle)
-            .padding(vertical = 12.dp),
+            .padding(horizontal = contentPadding, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {

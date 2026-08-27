@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,11 +29,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -66,7 +68,6 @@ import uz.minibozor.core.design.component.MbQuantityStepper
 import uz.minibozor.core.design.component.MbProductImage
 import uz.minibozor.core.design.component.MbRailTile
 import uz.minibozor.core.design.component.MbSkeleton
-import uz.minibozor.core.design.component.MbStatusPill
 import uz.minibozor.core.design.component.SectionHeader
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.data.remote.dto.CartItemDto
@@ -74,16 +75,26 @@ import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.ProductDto
 
 /**
- * The photo owns the first ~62% of the screen: tall enough to read the whole
- * product without scrolling, short enough that the price bar stays on screen.
+ * The photo frame: square, matching the photographs.
+ *
+ * A frame taller than the photo is wide leaves a band of frame down each side
+ * of a fitted picture, and two near-identical lights with a seam between them
+ * read as a mistake rather than a margin. Every catalogue photo is 1:1, so a
+ * square frame has nothing left over to show — and it is short enough that the
+ * price bar stays on screen with it.
  */
 @Composable
-fun heroHeight(): Dp = (LocalConfiguration.current.screenHeightDp * 0.62f).dp
+fun heroHeight(): Dp = LocalConfiguration.current.screenWidthDp.dp + chromeHeight()
+
+/** The bar: the status bar inset plus the row of buttons under it. */
+@Composable
+fun chromeHeight(): Dp =
+    WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp
 
 /** Enough to sit behind the status bar and the row of buttons under it. */
 private val StatusScrimHeight = 108.dp
 
-/** Identifies the recommendations row so the buy bar knows when it arrives. */
+/** A stable key for the recommendations row. */
 const val RecommendationsKey = "recommendations"
 
 /**
@@ -94,24 +105,38 @@ const val RecommendationsKey = "recommendations"
  * behind the content rather than being pushed off the top.
  */
 @Composable
-fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
-    val pager = rememberPagerState(pageCount = { maxOf(images.size, 1) })
-
+fun Hero(
+    images: List<String>,
+    closed: () -> Float,
+    /** Hoisted, so the bar above shares the page the photo is showing. */
+    pager: PagerState,
+) {
     Box(
         Modifier
             .fillMaxWidth()
             .height(heroHeight())
-            .background(MbTheme.colors.photoWarm)
+            // The theme's photo ground, the same one the grid tiles use.
+            .background(MbTheme.colors.photoStudio)
     ) {
-        HorizontalPager(pager, Modifier.fillMaxSize()) { page ->
-            // Distance from settled, -1..1: a half-swiped page sits back.
-            val distance = ((pager.currentPage - page) + pager.currentPageOffsetFraction)
-                .coerceIn(-1f, 1f)
+        // Below the bar, not under it: the frame is a square of photo plus the
+        // bar's own height, so the whole picture is in the clear.
+        HorizontalPager(
+            pager,
+            Modifier
+                .fillMaxSize()
+                .padding(top = chromeHeight()),
+        ) { page ->
             MbProductImage(
                 images.getOrNull(page),
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
+                        // Both the swipe offset and the scroll are read here,
+                        // in the layer phase. Reading the pager during
+                        // composition instead recomposed every page on every
+                        // frame of a swipe, which is what made it stutter.
+                        val distance = ((pager.currentPage - page) +
+                            pager.currentPageOffsetFraction).coerceIn(-1f, 1f)
                         val progress = closed()
                         translationY = progress * size.height * 0.30f
                         alpha = 1f - progress
@@ -121,40 +146,9 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
                         scaleY = scale
                     },
                 shape = RectangleShape,
-                background = MbTheme.colors.photoWarm,
                 // The whole product, uncropped: the taller frame exists so the
                 // photo can be seen in full, so a crop would defeat it.
                 contentScale = ContentScale.Fit,
-            )
-        }
-
-        // The clock and signal icons are painted by the system in whatever
-        // colour the theme asked for, and a product photo can be any colour at
-        // all — the AirPods shot is nearly black. This keeps a readable ground
-        // under them without dimming the picture, and fades out once the bar
-        // has grown its own surface.
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(StatusScrimHeight)
-                .graphicsLayer { alpha = 1f - closed() }
-                .background(
-                    Brush.verticalGradient(
-                        listOf(MbTheme.colors.surface, Color.Transparent)
-                    )
-                )
-        )
-
-        if (badge != null) {
-            MbStatusPill(
-                badge,
-                MbTheme.colors.scrim,
-                MbTheme.colors.onScrim,
-                Modifier
-                    .align(Alignment.TopStart)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(start = 16.dp, top = 62.dp),
             )
         }
 
@@ -197,19 +191,40 @@ fun Hero(images: List<String>, badge: String?, closed: () -> Float) {
 fun ProductChrome(
     product: ProductDto?,
     closed: () -> Float,
+    /** How far the product's name has been handed from the page to this bar. */
+    handover: () -> Float,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
     onShare: () -> Unit,
 ) {
     val surface = MbTheme.colors.surface
+    val onPhoto = MbTheme.colors.photoStudio
 
     Column(
         Modifier
             .fillMaxWidth()
-            // Grows the bar's own background in as the photo closes. Read in
-            // the draw phase, so following the scroll invalidates drawing only
-            // — no recomposition of the row and its four buttons.
-            .drawBehind { drawRect(surface, alpha = closed()) }
+            // Crossfades from the hero's own ground to the page's surface,
+            // rather than fading the surface up from nothing: half-opaque over
+            // a photo is a grey band sliding down the picture, which is what
+            // this looked like. Read in the draw phase, so following the
+            // scroll invalidates drawing only.
+            .drawBehind {
+                // An opaque ground, then the page's surface faded over it.
+                // Cross-fading two translucent rects never adds up to opaque
+                // in between — at halfway the pair covers 0.75, so a quarter
+                // of the card behind showed through, which is how the
+                // product's name kept appearing twice.
+                //
+                // The ground itself comes up steeply rather than being there
+                // from the start: painted flat over an untouched photo it put
+                // a band across the picture, since a blurred backdrop has no
+                // one colour to match. Full strength by an eighth of the
+                // handover, which is a few pixels of the name — long before
+                // any of it could read through.
+                val h = handover()
+                drawRect(onPhoto, alpha = (h * 8f).coerceAtMost(1f))
+                drawRect(surface, alpha = h)
+            }
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
@@ -236,21 +251,30 @@ fun ProductChrome(
                 Modifier
                     .fillMaxWidth()
                     .graphicsLayer {
-                        val progress = closed()
+                        val progress = handover()
                         alpha = progress
                         translationY = (progress - 1f) * 14.dp.toPx()
                     }
-                    .padding(top = 8.dp),
+                    .padding(top = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // The price is measured first, at whatever width its digits
+                // need, and the name takes what is left and ellipsises. That
+                // ordering is the guarantee, not the spacing: a name of any
+                // length cannot squeeze the price, and a price of any size
+                // cannot reach the name — the gap between them is fixed.
                 MbText(
                     product.title,
-                    MbTheme.type.title2,
+                    MbTheme.type.title1,
                     maxLines = 1,
                     modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.width(12.dp))
-                MbPriceRow(product.price, priceStyle = MbTheme.type.title3)
+                Spacer(Modifier.width(14.dp))
+                MbPriceRow(
+                    product.price,
+                    priceStyle = MbTheme.type.title2,
+                    modifier = Modifier.wrapContentWidth(),
+                )
             }
         }
     }
@@ -269,17 +293,15 @@ private fun GlassButton(
     tint: Color? = null,
     onClick: () -> Unit,
 ) {
-    val onPhoto = MbTheme.colors.surface.copy(alpha = 0.88f)
-    val onBar = MbTheme.colors.fill
+    val ground = MbTheme.colors.fill
     Box(
         modifier
             .size(36.dp)
             .clip(CircleShape)
-            .drawBehind {
-                val progress = closed()
-                drawRect(onPhoto, alpha = 1f - progress)
-                drawRect(onBar, alpha = progress)
-            }
+            // One opaque fill. It used to cross-fade between two copies of this
+            // same colour, which left it translucent halfway through for no
+            // reason at all.
+            .background(ground)
             .mbTap(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -306,6 +328,7 @@ fun BuyBar(
     showPrice: Boolean,
     onAdd: () -> Unit,
     onSetQuantity: (itemId: Int, quantity: Int) -> Unit,
+    onOpenCart: () -> Unit,
 ) {
     Column(
         Modifier
@@ -319,12 +342,21 @@ fun BuyBar(
             // prices at once read as a mistake — this one bows out and the
             // button stretches into the room it leaves.
             AnimatedVisibility(
-                visible = showPrice,
+                // Also stands down once the line exists: the stepper takes
+                // this side of the bar then.
+                visible = showPrice && line == null,
                 enter = expandHorizontally() + fadeIn(),
                 exit = shrinkHorizontally() + fadeOut(),
             ) {
                 Row {
-                    MbPriceRow(product.price, product.oldPrice, product.discountPercent)
+                    MbPriceRow(
+                        product.price,
+                        product.oldPrice,
+                        product.discountPercent,
+                        // The bar is where the decision gets made, so the
+                        // number carries more weight here than in a tile.
+                        priceStyle = MbTheme.type.title3,
+                    )
                     Spacer(Modifier.width(14.dp))
                 }
             }
@@ -339,14 +371,23 @@ fun BuyBar(
                     modifier = Modifier.weight(1f),
                 )
             } else {
-                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                    MbQuantityStepper(
-                        quantity = line.quantity,
-                        onChange = { onSetQuantity(line.id, it) },
-                        min = 0,
-                        size = 44.dp,
-                    )
-                }
+                // In the cart already: the stepper takes the left, and the rest
+                // of the bar becomes the way through to the cart. Leaving that
+                // half empty gave a full-width bar one small control in the
+                // corner and no way onward.
+                MbQuantityStepper(
+                    quantity = line.quantity,
+                    onChange = { onSetQuantity(line.id, it) },
+                    min = 0,
+                    size = 44.dp,
+                )
+                Spacer(Modifier.width(12.dp))
+                MbPrimaryButton(
+                    text = stringResource(R.string.otish),
+                    onClick = onOpenCart,
+                    leadingGlyph = "cart",
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }

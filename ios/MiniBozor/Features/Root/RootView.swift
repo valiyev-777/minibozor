@@ -21,7 +21,7 @@ struct RootView: View {
 struct ShopTabsView: View {
     @Environment(CartRepository.self) var cart
 
-    @State var selection = "home"
+    @State var tabSelection = TabSelection()
     /// One draft order shared by the six checkout steps.
     @State var checkout = CheckoutModel()
     @State var homeRouter = Router()
@@ -30,7 +30,7 @@ struct ShopTabsView: View {
     @State var profileRouter = Router()
 
     private var activeRouter: Router {
-        switch selection {
+        switch tabSelection.current {
         case "catalog": return catalogRouter
         case "cart": return cartRouter
         case "profile": return profileRouter
@@ -40,22 +40,22 @@ struct ShopTabsView: View {
 
     private var tabs: [MBTabItem] {
         [
-            MBTabItem(id: "home", glyph: "home", label: "Bosh sahifa"),
-            MBTabItem(id: "catalog", glyph: "grid", label: "Katalog"),
-            MBTabItem(id: "cart", glyph: "cart", label: "Savat", badge: cart.badgeCount),
-            MBTabItem(id: "profile", glyph: "user", label: "Profil"),
+            MBTabItem(id: "home", glyph: "home", label: L("tab_home")),
+            MBTabItem(id: "catalog", glyph: "grid", label: L("katalog")),
+            MBTabItem(id: "cart", glyph: "cart", label: L("savat"), badge: cart.badgeCount),
+            MBTabItem(id: "profile", glyph: "user", label: L("tab_profile")),
         ]
     }
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Group {
-                switch selection {
+                switch tabSelection.current {
                 case "catalog":
                     RouterStack(router: catalogRouter) { CatalogView() }
                 case "cart":
                     RouterStack(router: cartRouter) {
-                        CartView(onStartShopping: { selection = "home" })
+                        CartView(onStartShopping: { tabSelection.select("home") })
                     }
                 case "profile":
                     RouterStack(router: profileRouter) { ProfileView() }
@@ -66,14 +66,25 @@ struct ShopTabsView: View {
             // The design only shows the bar on the four roots, so it hides as
             // soon as the active tab pushes a screen.
             if activeRouter.path.isEmpty {
-                MBTabBar(tabs: tabs, selection: $selection)
+                MBTabBar(tabs: tabs, selection: $tabSelection.current)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.easeOut(duration: 0.18), value: activeRouter.path.isEmpty)
         .ignoresSafeArea(.keyboard)
         .environment(checkout)
+        .environment(tabSelection)
         .task { await cart.refresh() }
+        // Makes the link the share sheet hands out actually open the product,
+        // rather than dropping the recipient on the home screen.
+        .onOpenURL { url in
+            guard url.scheme == "minibozor" else { return }
+            let parts = ([url.host] + url.pathComponents.filter { $0 != "/" }).compactMap { $0 }
+            guard parts.first == "product", let id = parts.dropFirst().first.flatMap(Int.init)
+            else { return }
+            tabSelection.select("home")
+            homeRouter.push(.product(id: id))
+        }
     }
 }
 

@@ -51,7 +51,7 @@ struct ReviewsView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Sharhlar", onBack: { router.pop() })
+                MBTopBar(L("sharhlar"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         if let summary = model.summary { histogram(summary) }
@@ -65,7 +65,7 @@ struct ReviewsView: View {
                         }
                         if model.reviews.isEmpty && !model.loading {
                             MBCard {
-                                Text("Bu filtr bo'yicha sharh topilmadi.")
+                                Text(L("bu_filtr_boyicha_sharh_topilmadi"))
                                     .mbFont(MB.type.bodySmall)
                                     .foregroundStyle(MB.color.icon)
                             }
@@ -78,7 +78,7 @@ struct ReviewsView: View {
         .navigationBarBackButtonHidden()
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
-                MBPrimaryButton("Sharh yozish", leadingGlyph: "star") {
+                MBPrimaryButton(L("sharh_yozish"), leadingGlyph: "star") {
                     router.push(.writeReview(productId: productId, orderItemId: nil))
                 }
             }
@@ -94,7 +94,7 @@ struct ReviewsView: View {
                         .mbFont(MB.type.display)
                         .foregroundStyle(MB.color.ink)
                     MBStars(rating: Int(summary.rating.rounded()))
-                    Text("\(summary.total) sharh")
+                    Text(LPlural("n_reviews", count: summary.total, "\(summary.total)"))
                         .mbFont(MB.type.meta)
                         .foregroundStyle(MB.color.icon)
                 }
@@ -124,7 +124,7 @@ struct ReviewsView: View {
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                MBChip("Hammasi", selected: model.stars == nil) {
+                MBChip(L("hammasi"), selected: model.stars == nil) {
                     Task { await model.filter(nil) }
                 }
                 ForEach((1...5).reversed(), id: \.self) { stars in

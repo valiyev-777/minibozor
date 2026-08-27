@@ -16,13 +16,13 @@ struct OrderPlacedView: View {
                     .background(MB.color.successBg)
                     .clipShape(Circle())
                 Spacer().frame(height: 22)
-                Text("Buyurtma qabul qilindi")
+                Text(L("buyurtma_qabul_qilindi"))
                     .mbFont(MB.type.title1)
                     .foregroundStyle(MB.color.ink)
                     .multilineTextAlignment(.center)
                 Spacer().frame(height: 8)
                 Text(model.order.map { "\($0.code) raqami bilan qabul qildik" }
-                     ?? "Tez orada yig'ishni boshlaymiz")
+                     ?? L("tez_orada_yigishni_boshlaymiz"))
                     .mbFont(MB.type.bodySmall)
                     .foregroundStyle(MB.color.textTertiary)
                     .multilineTextAlignment(.center)
@@ -30,13 +30,13 @@ struct OrderPlacedView: View {
                 if let order = model.order {
                     Spacer().frame(height: 26)
                     MBCard(background: MB.color.canvas) {
-                        MBKeyValueRow(key: "Buyurtma", value: order.code)
+                        MBKeyValueRow(key: L("buyurtma"), value: order.code)
                         if let created = UzDate.parseDateTime(order.createdAt) {
-                            MBKeyValueRow(key: "Sana", value: UzDate.dayTime(created))
+                            MBKeyValueRow(key: L("sana"), value: UzDate.dayTime(created))
                         }
-                        MBKeyValueRow(key: "Yetkazish", value: order.etaLabel)
-                        MBKeyValueRow(key: "To'lov", value: order.paymentLabel)
-                        MBKeyValueRow(key: "Jami", value: Format.sum(order.total))
+                        MBKeyValueRow(key: L("yetkazish"), value: order.etaLabel)
+                        MBKeyValueRow(key: L("tolov"), value: order.paymentLabel)
+                        MBKeyValueRow(key: L("jami"), value: Format.sum(order.total))
                     }
                 }
                 Spacer()
@@ -46,10 +46,10 @@ struct OrderPlacedView: View {
         .navigationBarBackButtonHidden()
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
-                MBPrimaryButton("Buyurtmani kuzatish", leadingGlyph: "box") {
+                MBPrimaryButton(L("buyurtmani_kuzatish"), leadingGlyph: "box") {
                     router.replace(with: .tracking(orderId: orderId))
                 }
-                MBSecondaryButton("Bosh sahifaga") { router.popToRoot() }
+                MBSecondaryButton(L("bosh_sahifaga")) { router.popToRoot() }
             }
         }
         .task { await model.load(id: orderId) }

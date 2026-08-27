@@ -41,7 +41,7 @@ struct MBTabBar: View {
             selection = tab.id
         } label: {
             VStack(spacing: 4) {
-                MBIcon(tab.glyph, size: 20, tint: tint, lineWidth: 1.7)
+                MBIcon(tab.glyph, size: 23, tint: tint, lineWidth: 1.8)
                 Text(tab.label).mbFont(MB.type.micro).foregroundStyle(tint).lineLimit(1)
             }
             .frame(maxWidth: .infinity)

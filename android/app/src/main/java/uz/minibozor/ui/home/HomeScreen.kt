@@ -1,5 +1,7 @@
 package uz.minibozor.ui.home
 
+import uz.minibozor.core.util.mediaUrl
+import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
@@ -25,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -123,15 +127,20 @@ fun HomeScreen(
                 modifier = Modifier.padding(padding),
                 loading = { HomeSkeleton(it) },
             ) { home ->
+                // Hoisted out of the lazy item that draws it. A pager built
+                // inside the list is torn down the moment the banners scroll
+                // off the top and stood back up — new pager, new page, new
+                // timer — when they come back, which is both a hitch in that
+                // frame and a lost place in the carousel.
+                val bannerPager = rememberPagerState(pageCount = { home.banners.size })
+
                 PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = {
                         refreshing = true
                         viewModel.refresh { refreshing = false }
                     },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding),
+                    modifier = Modifier.fillMaxSize(),
                 ) {
                 // The payload has landed: fade and lift the whole screen in
                 // once, rather than having it appear fully formed. One
@@ -148,9 +157,15 @@ fun HomeScreen(
                         .graphicsLayer {
                             alpha = enter.value
                             translationY = (1f - enter.value) * 26.dp.toPx()
+                            // Auto would put the whole feed through a
+                            // full-screen offscreen buffer for as long as alpha
+                            // is under 1 — during the very first flick, that
+                            // is. Modulating instead applies the fade per draw,
+                            // which for a fade from nothing looks the same.
+                            compositingStrategy = CompositingStrategy.ModulateAlpha
                         }
                 ) {
-                    item(contentType = "header") {
+                    item(key = "header", contentType = "header") {
                         HomeHeader(
                             city = city,
                             onOpenSearch = onOpenSearch,
@@ -159,9 +174,9 @@ fun HomeScreen(
                     }
 
                     if (home.banners.isNotEmpty()) {
-                        item(contentType = "banners") {
+                        item(key = "banners", contentType = "banners") {
                             Box(Modifier.padding(top = SectionGap)) {
-                                BannerCarousel(home.banners, onOpenBanner)
+                                BannerCarousel(home.banners, bannerPager, onOpenBanner)
                             }
                         }
                     }
@@ -184,7 +199,7 @@ fun HomeScreen(
                         )
                     }
 
-                    item(contentType = "spacer") { MbTabBarSpacer() }
+                    item(key = "tab-bar-spacer", contentType = "spacer") { MbTabBarSpacer() }
                 }
                 }
             }
@@ -289,9 +304,11 @@ private fun HomeHeader(
 }
 
 @Composable
-private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Unit) {
-    val pager = rememberPagerState(pageCount = { banners.size })
-
+private fun BannerCarousel(
+    banners: List<BannerDto>,
+    pager: PagerState,
+    onClick: (BannerDto) -> Unit,
+) {
     // Keyed on settledPage, so the wait restarts every time the carousel comes
     // to rest — including after the customer swipes it themselves, which is
     // what stops it yanking the page away from under their thumb.
@@ -310,13 +327,15 @@ private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Uni
             pageSpacing = 10.dp,
             contentPadding = PaddingValues(horizontal = 12.dp),
         ) { page ->
-            // How far this page is from settled, -1..1. Drives a small drift so
-            // a swipe reads as depth rather than as a flat slide.
-            val drift = (pager.currentPage - page + pager.currentPageOffsetFraction)
-                .coerceIn(-1f, 1f)
             BannerCard(
                 banner = banners[page],
-                drift = drift,
+                // A lambda, not a value: read as a value here the card would
+                // recompose on every frame of a swipe. Read inside the layer
+                // instead, only the drawing is invalidated.
+                drift = {
+                    (pager.currentPage - page + pager.currentPageOffsetFraction)
+                        .coerceIn(-1f, 1f)
+                },
                 onClick = { onClick(banners[page]) },
             )
         }
@@ -350,7 +369,7 @@ private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Uni
 }
 
 @Composable
-private fun BannerCard(banner: BannerDto, drift: Float, onClick: () -> Unit) {
+private fun BannerCard(banner: BannerDto, drift: () -> Float, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -388,10 +407,12 @@ private fun BannerCard(banner: BannerDto, drift: Float, onClick: () -> Unit) {
             modifier = Modifier
                 .width(110.dp)
                 .fillMaxSize()
-                .graphicsLayer { translationX = drift * 40.dp.toPx() },
+                .graphicsLayer { translationX = drift() * 40.dp.toPx() },
             shape = MbTheme.shapes.tile,
             background = Color.White.copy(alpha = 0.08f),
-            contentScale = ContentScale.Crop,
+            // Whole, not cropped to the panel's shape: this box is narrower
+            // than the photographs are, so cropping took the sides off them.
+            contentScale = ContentScale.Fit,
         )
     }
 }
@@ -454,7 +475,20 @@ private fun CategoryCell(
                 .background(MbTheme.colors.fill),
             contentAlignment = Alignment.Center,
         ) {
-            MbIcon(category.icon, size = 20.dp)
+            // A photograph where the shop supplied one, the line glyph where
+            // it did not — the grid holds both without looking mixed because
+            // the tile behind them is the same.
+            val image = category.imageUrl
+            if (image != null) {
+                AsyncImage(
+                    model = image.mediaUrl(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(MbTheme.dimens.categoryTile * 0.72f),
+                )
+            } else {
+                MbIcon(category.icon, size = 20.dp)
+            }
         }
         MbText(
             category.name,
@@ -545,7 +579,6 @@ private fun LazyListScope.homeSection(
                                 imageUrl = product.imageUrl,
                                 rating = product.rating,
                                 reviewsCount = product.reviewsCount,
-                                badge = product.badge,
                                 isFavorite = product.isFavorite,
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { onToggleFavorite(product) },

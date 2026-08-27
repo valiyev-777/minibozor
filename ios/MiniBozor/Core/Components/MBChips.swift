@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// Selectable pill: solid ink when selected, hairline outline when not.
+/// Selectable pill: filled with the inverse of the page when selected,
+/// hairline outline when not. Inverse rather than ink, because ink flips
+/// with the appearance and a fixed white on it becomes white on white.
 struct MBChip: View {
     let label: String
     let selected: Bool
@@ -30,12 +32,12 @@ struct MBChip: View {
 
     private var background: Color {
         if !enabled { return MB.color.fill }
-        return selected ? MB.color.ink : MB.color.surface
+        return selected ? MB.color.inverse : MB.color.surface
     }
 
     private var foreground: Color {
         if !enabled { return MB.color.disabled }
-        return selected ? .white : MB.color.inkSoft
+        return selected ? MB.color.onInverse : MB.color.inkSoft
     }
 
     init(_ label: String, selected: Bool, enabled: Bool = true, action: @escaping () -> Void) {
@@ -57,13 +59,20 @@ struct MBSizeChip: View {
         Button(action: action) {
             Text(label)
                 .mbFont(MB.type.label)
-                .foregroundStyle(enabled ? (selected ? .white : MB.color.textSecondary) : MB.color.disabled)
+                .foregroundStyle(
+                    enabled
+                        ? (selected ? MB.color.onInverse : MB.color.textSecondary)
+                        : MB.color.disabled
+                )
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
-                .background(selected ? MB.color.ink : MB.color.surface)
+                .background(selected ? MB.color.inverse : MB.color.surface)
                 .overlay(
                     RoundedRectangle(cornerRadius: MB.metric.radiusM, style: .continuous)
-                        .stroke(selected ? MB.color.ink : MB.color.border, lineWidth: selected ? 1.6 : 1)
+                        .stroke(
+                            selected ? MB.color.inverse : MB.color.border,
+                            lineWidth: selected ? 1.6 : 1
+                        )
                 )
                 .clipShape(RoundedRectangle(cornerRadius: MB.metric.radiusM, style: .continuous))
         }

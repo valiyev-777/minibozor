@@ -129,7 +129,7 @@ fun DeliveryTimeScreen(
                             trailingLabel = if (slot.price == 0) stringResource(R.string.bepul) else "+${slot.price.sum()}",
                             trailingColor = if (slot.price == 0) MbTheme.colors.success
                             else MbTheme.colors.ink,
-                            modifier = Modifier.padding(horizontal = 10.dp),
+                            contentPadding = 10.dp,
                         )
                         if (index != slots.lastIndex) MbDivider()
                     }

@@ -351,4 +351,10 @@
     <!-- Recommendation chips -->
     <string name="oxshash">Similar</string>
     <string name="ommabop">Popular</string>
+
+    <!-- Collapsible sections -->
+    <string name="batafsil">Read more</string>
+    <string name="yopish">Show less</string>
+    <string name="yetkazish_va_kafolat">Delivery and warranty</string>
+    <string name="rating_n_dan_yuqori">Above %1$s ★</string>
 </resources>

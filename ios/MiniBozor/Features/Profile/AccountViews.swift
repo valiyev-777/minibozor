@@ -15,41 +15,41 @@ struct PersonalView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Shaxsiy ma'lumotlar", onBack: { router.pop() })
+                MBTopBar(L("shaxsiy_ma_lumotlar"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         MBCard {
                             MBTextField(
-                                placeholder: "Aziz Toshmatov",
+                                placeholder: L("aziz_toshmatov_2"),
                                 text: $fullName,
-                                label: "Ism va familiya"
+                                label: L("ism_va_familiya")
                             )
                             Spacer().frame(height: 14)
                             MBTextField(
                                 placeholder: "",
                                 text: .constant(Format.phone(model.overview?.user.phone ?? "")),
-                                label: "Telefon",
+                                label: L("telefon"),
                                 disabled: true,
-                                trailingText: "O'zgartirib bo'lmaydi"
+                                trailingText: L("ozgartirib_bolmaydi")
                             )
                             Spacer().frame(height: 14)
                             MBTextField(
                                 placeholder: "siz@example.uz",
                                 text: $email,
-                                label: "Email",
+                                label: L("email"),
                                 keyboard: .emailAddress
                             )
                             Spacer().frame(height: 14)
                             MBTextField(
                                 placeholder: "1994-05-12",
                                 text: $birthDate,
-                                label: "Tug'ilgan sana",
+                                label: L("tugilgan_sana"),
                                 keyboard: .numbersAndPunctuation
                             )
                         }
 
                         MBCard {
-                            SectionHeader(title: "Jins")
+                            SectionHeader(title: L("jins"))
                             Spacer().frame(height: 12)
                             FlowLayout(spacing: 8) {
                                 ForEach(["erkak", "ayol"], id: \.self) { option in
@@ -74,7 +74,7 @@ struct PersonalView: View {
         .navigationBarBackButtonHidden()
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
-                MBPrimaryButton("Saqlash", enabled: !fullName.isEmpty, loading: model.saving) {
+                MBPrimaryButton(L("saqlash"), enabled: !fullName.isEmpty, loading: model.saving) {
                     Task {
                         await model.save(
                             fullName: fullName,
@@ -133,7 +133,7 @@ struct CardsView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("To'lov kartalari", onBack: { router.pop() })
+                MBTopBar(L("tolov_kartalari"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         ForEach(model.cards) { card in
@@ -141,9 +141,9 @@ struct CardsView: View {
                         }
                         MBCard(padding: 6) {
                             MBListRow(
-                                "Yangi karta qo'shish",
+                                L("yangi_karta_qoshish"),
                                 glyph: "card",
-                                subtitle: "Humo, UzCard, Visa",
+                                subtitle: L("humo_uzcard_visa"),
                                 tint: MB.color.accent
                             ) {
                                 router.push(.addCard)
@@ -151,7 +151,7 @@ struct CardsView: View {
                             .padding(.horizontal, 10)
                         }
                         if model.cards.isEmpty {
-                            Text("Karta qo'shsangiz — buyurtmani bir bosishda to'laysiz.")
+                            Text(L("karta_qoshsangiz_buyurtmani_bir_bosishda"))
                                 .mbFont(MB.type.caption)
                                 .foregroundStyle(MB.color.textQuaternary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -174,7 +174,7 @@ struct CardsView: View {
                     Text(card.brand).mbFont(MB.type.label).foregroundStyle(.white)
                     Spacer()
                     if card.isDefault {
-                        MBStatusPill("ASOSIY", background: .white.opacity(0.2), contentColor: .white)
+                        MBStatusPill(L("asosiy"), background: .white.opacity(0.2), contentColor: .white)
                     }
                 }
                 Spacer()
@@ -205,15 +205,15 @@ struct CardsView: View {
             Spacer().frame(height: 10)
             HStack {
                 if card.isExpired {
-                    Text("Muddati o'tgan").mbFont(MB.type.caption)
+                    Text(L("muddati_otgan")).mbFont(MB.type.caption)
                         .foregroundStyle(MB.color.danger)
                 } else if !card.isDefault {
-                    Button("Asosiy qilish") { Task { await model.makeDefault(card.id) } }
+                    Button(L("asosiy_qilish")) { Task { await model.makeDefault(card.id) } }
                         .mbFont(MB.type.label)
                         .foregroundStyle(MB.color.accent)
                 }
                 Spacer()
-                Button("O'chirish") { Task { await model.delete(card.id) } }
+                Button(L("ochirish")) { Task { await model.delete(card.id) } }
                     .mbFont(MB.type.label)
                     .foregroundStyle(MB.color.danger)
             }
@@ -233,7 +233,7 @@ struct AddCardView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Karta qo'shish", onBack: { router.pop() })
+                MBTopBar(L("karta_qoshish"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         CardPreview(model: model)
@@ -250,8 +250,7 @@ struct AddCardView: View {
 
                         HStack(alignment: .top, spacing: 8) {
                             MBIcon("gear", size: 16, tint: MB.color.icon)
-                            Text("Karta raqami qurilmadan chiqmaydi — serverda faqat oxirgi "
-                                 + "4 raqam va muddati saqlanadi.")
+                            Text(L("karta_raqami_qurilmadan_chiqmaydi_serverda"))
                                 .mbFont(MB.type.caption)
                                 .foregroundStyle(MB.color.textQuaternary)
                         }
@@ -265,7 +264,7 @@ struct AddCardView: View {
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
                 MBPrimaryButton(
-                    "Kartani saqlash",
+                    L("kartani_saqlash"),
                     enabled: model.canSave,
                     loading: model.saving
                 ) {
@@ -286,7 +285,7 @@ struct AddCardView: View {
                     get: { CardFormat.number(model.number) },
                     set: { model.setNumber($0) }
                 ),
-                label: "Karta raqami",
+                label: L("karta_raqami"),
                 keyboard: .numberPad,
                 leadingGlyph: "card",
                 error: model.numberError
@@ -294,29 +293,29 @@ struct AddCardView: View {
             Spacer().frame(height: 14)
             HStack(spacing: 12) {
                 MBTextField(
-                    placeholder: "MM/YY",
+                    placeholder: L("mm_yy"),
                     text: Binding(
                         get: { CardFormat.expiry(model.expiry) },
                         set: { model.setExpiry($0) }
                     ),
-                    label: "Amal qilish muddati",
+                    label: L("amal_qilish_muddati"),
                     keyboard: .numberPad
                 )
                 MBTextField(
                     placeholder: "",
                     text: .constant(model.brand.label),
-                    label: "To'lov tizimi",
+                    label: L("tolov_tizimi"),
                     disabled: true
                 )
             }
             Spacer().frame(height: 14)
             MBTextField(
-                placeholder: "AZIZ TOSHMATOV",
+                placeholder: L("aziz_toshmatov"),
                 text: Binding(
                     get: { model.holder },
                     set: { model.setHolder($0) }
                 ),
-                label: "Karta egasi"
+                label: L("karta_egasi")
             )
         }
     }
@@ -324,8 +323,8 @@ struct AddCardView: View {
     private var defaultCard: some View {
         MBCard(padding: 6) {
             MBToggleRow(
-                label: "Asosiy karta",
-                subtitle: "Buyurtma berishda avtomatik tanlanadi",
+                label: L("asosiy_karta"),
+                subtitle: L("buyurtma_berishda_avtomatik_tanlanadi"),
                 glyph: "card",
                 isOn: Binding(
                     get: { model.makeDefault },
@@ -355,23 +354,23 @@ private struct CardPreview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(model.brand == .unknown ? "Yangi karta" : model.brand.label)
+                Text(model.brand == .unknown ? L("yangi_karta") : model.brand.label)
                     .mbFont(MB.type.label)
                     .foregroundStyle(.white)
                 Spacer()
                 if model.makeDefault {
-                    MBStatusPill("ASOSIY", background: .white.opacity(0.2), contentColor: .white)
+                    MBStatusPill(L("asosiy"), background: .white.opacity(0.2), contentColor: .white)
                 }
             }
             Spacer()
             Text(maskedNumber).mbFont(MB.type.title3).foregroundStyle(.white)
             Spacer().frame(height: 10)
             HStack {
-                Text(model.holder.isEmpty ? "KARTA EGASI" : model.holder)
+                Text(model.holder.isEmpty ? L("karta_egasi_2") : model.holder)
                     .mbFont(MB.type.caption)
                     .foregroundStyle(.white.opacity(0.75))
                 Spacer()
-                Text(model.expiry.count == 4 ? CardFormat.expiry(model.expiry) : "MM/YY")
+                Text(model.expiry.count == 4 ? CardFormat.expiry(model.expiry) : L("mm_yy"))
                     .mbFont(MB.type.caption)
                     .foregroundStyle(.white.opacity(0.75))
             }

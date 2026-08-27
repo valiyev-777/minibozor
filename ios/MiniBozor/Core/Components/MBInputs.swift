@@ -82,7 +82,7 @@ struct MBSearchPill: View {
 /// The live search field on screen 08.
 struct MBSearchField: View {
     @Binding var text: String
-    var placeholder: String = "Mahsulot va turkumlar qidirish"
+    var placeholder: String = L("mahsulot_va_turkumlar_qidirish")
     var onSubmit: () -> Void = {}
     @FocusState var focused: Bool
 
@@ -185,15 +185,19 @@ struct MBQuantityStepper: View {
     let quantity: Int
     var minimum: Int = 1
     var maximum: Int = 99
+    /// The tap target at each end. Cart rows want the compact default; a
+    /// stepper standing next to a button wants that button's height, so the
+    /// two read as one bar.
+    var size: CGFloat = 34
     let onChange: (Int) -> Void
 
     var body: some View {
         HStack(spacing: 0) {
             stepButton("−", enabled: quantity > minimum) { onChange(quantity - 1) }
             Text("\(quantity)")
-                .mbFont(MB.type.label)
+                .mbFont(size >= 44 ? MB.type.title3 : MB.type.label)
                 .foregroundStyle(MB.color.ink)
-                .frame(width: 34)
+                .frame(width: size)
             stepButton("+", enabled: quantity < maximum) { onChange(quantity + 1) }
         }
         .background(MB.color.fill)
@@ -203,9 +207,9 @@ struct MBQuantityStepper: View {
     private func stepButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(symbol)
-                .mbFont(MB.type.title3)
+                .mbFont(size >= 44 ? MB.type.title2 : MB.type.title3)
                 .foregroundStyle(enabled ? MB.color.ink : MB.color.disabled)
-                .frame(width: 34, height: 34)
+                .frame(width: size, height: size)
         }
         .buttonStyle(.plain)
         .disabled(!enabled)

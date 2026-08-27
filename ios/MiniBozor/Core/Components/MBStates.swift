@@ -50,9 +50,9 @@ struct MBErrorState: View {
     var body: some View {
         MBEmptyState(
             glyph: "ret",
-            title: "Nimadir noto'g'ri ketdi",
+            title: L("nimadir_notogri_ketdi"),
             message: message,
-            actionLabel: "Qayta urinish",
+            actionLabel: L("qayta_urinish"),
             onAction: onRetry
         )
     }
@@ -85,10 +85,10 @@ struct MBToast: ViewModifier {
             if let message {
                 Text(message)
                     .mbFont(MB.type.caption)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(MB.color.onInverse)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 12)
-                    .background(MB.color.ink)
+                    .background(MB.color.inverse)
                     .clipShape(Capsule())
                     .padding(.bottom, 100)
                     .transition(.move(edge: .bottom).combined(with: .opacity))

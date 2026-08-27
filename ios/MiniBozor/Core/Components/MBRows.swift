@@ -4,6 +4,8 @@ import SwiftUI
 struct MBListRow<Trailing: View>: View {
     let label: String
     var glyph: String?
+    /// A supplied picture for the leading square; falls back to `glyph`.
+    var imageUrl: String?
     var subtitle: String?
     var meta: String?
     var showChevron: Bool = true
@@ -13,11 +15,24 @@ struct MBListRow<Trailing: View>: View {
 
     var body: some View {
         let row = HStack(spacing: 12) {
-            if let glyph {
-                MBIcon(glyph, size: 18, tint: tint)
-                    .frame(width: 38, height: 38)
-                    .background(MB.color.fill)
-                    .clipShape(RoundedRectangle(cornerRadius: MB.metric.radiusM, style: .continuous))
+            if imageUrl != nil || glyph != nil {
+                Group {
+                    if let imageUrl, let parsed = AppConfig.media(imageUrl) {
+                        AsyncImage(url: parsed) { phase in
+                            if let picture = phase.image {
+                                picture.resizable().scaledToFit()
+                            } else {
+                                Color.clear
+                            }
+                        }
+                        .padding(4)
+                    } else if let glyph {
+                        MBIcon(glyph, size: 18, tint: tint)
+                    }
+                }
+                .frame(width: 38, height: 38)
+                .background(MB.color.fill)
+                .clipShape(RoundedRectangle(cornerRadius: MB.metric.radiusM, style: .continuous))
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(label).mbFont(MB.type.bodyBold).foregroundStyle(tint).lineLimit(1)

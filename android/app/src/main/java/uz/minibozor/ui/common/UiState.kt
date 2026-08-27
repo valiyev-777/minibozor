@@ -1,5 +1,6 @@
 package uz.minibozor.ui.common
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import uz.minibozor.core.design.component.MbErrorState
@@ -32,6 +33,9 @@ fun <T> UiStateContent(
     when (state) {
         is UiState.Loading -> loading(modifier)
         is UiState.Error -> MbErrorState(state.message, onRetry, modifier)
-        is UiState.Ready -> content(state.data)
+        // The modifier reaches the happy path too. It carries the scaffold's
+        // content padding, and dropping it here let a screen's first row slide
+        // under its own top bar.
+        is UiState.Ready -> Box(modifier) { content(state.data) }
     }
 }

@@ -185,7 +185,7 @@ fun AddressFormScreen(
                     checked = isDefault,
                     onCheckedChange = { isDefault = it },
                     glyph = "pin",
-                    modifier = Modifier.padding(horizontal = 10.dp),
+                    contentPadding = 10.dp,
                 )
             }
         }

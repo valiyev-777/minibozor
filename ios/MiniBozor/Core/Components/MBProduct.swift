@@ -5,7 +5,10 @@ struct MBProductImage: View {
     let url: String?
     var cornerRadius: CGFloat = MB.metric.radiusXL
     var background: Color = MB.color.photoWarmAlt
-    var contentMode: ContentMode = .fill
+    /// Fit, not fill: catalogue photos are cut-outs in mixed ratios, and
+    /// filling a square tile with a 387x516 shoe shows its middle and neither
+    /// end. Scene photography — the home banner — asks for `.fill`.
+    var contentMode: ContentMode = .fit
 
     var body: some View {
         Rectangle()
@@ -19,6 +22,10 @@ struct MBProductImage: View {
                             Color.clear
                         }
                     }
+                } else {
+                    // No photo supplied. A muted glyph reads as "none" where an
+                    // empty warm rectangle just reads as broken.
+                    MBIcon("box", size: 26, tint: MB.color.hairlineStrong)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -33,18 +40,31 @@ struct MBPriceRow: View {
     var style: MBTypography.Style = MB.type.price
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(alignment: .lastTextBaseline, spacing: 6) {
-                Text(Format.grouped(price)).mbFont(style).foregroundStyle(MB.color.ink)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 7) {
+                Text(Format.grouped(price))
+                    .mbFont(style)
+                    .foregroundStyle(MB.color.ink)
+                    .lineLimit(1)
                 if let discountPercent {
-                    Text("−\(discountPercent)%").mbFont(MB.type.micro).foregroundStyle(MB.color.danger)
+                    // A pill rather than the smallest thing in the row: the
+                    // saving is the reason someone stops on it.
+                    Text("−\(discountPercent)%")
+                        .mbFont(MB.type.captionBold)
+                        .foregroundStyle(MB.color.danger)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(MB.color.dangerBg)
+                        .clipShape(RoundedRectangle(cornerRadius: MB.metric.radiusS,
+                                                    style: .continuous))
                 }
             }
             if let oldPrice, oldPrice > price {
                 Text(Format.grouped(oldPrice))
-                    .mbFont(MB.type.meta)
+                    .mbFont(MB.type.caption)
                     .strikethrough()
-                    .foregroundStyle(MB.color.placeholder)
+                    .foregroundStyle(MB.color.textQuaternary)
+                    .lineLimit(1)
             }
         }
     }
@@ -140,7 +160,7 @@ struct MBProductTile: View {
 
             if let onAddToCart {
                 Button(action: onAddToCart) {
-                    Text("Savatga")
+                    Text(L("savatga"))
                         .mbFont(MB.type.label)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)

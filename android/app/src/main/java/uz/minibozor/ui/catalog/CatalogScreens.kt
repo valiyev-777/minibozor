@@ -76,6 +76,7 @@ fun CatalogScreen(
                                 MbListRow(
                                     label = category.name,
                                     glyph = category.icon,
+                                    imageUrl = category.imageUrl,
                                     subtitle = category.subtitle.ifBlank { null },
                                     meta = if (category.productCount > 0) {
                                         pluralStringResource(
@@ -85,7 +86,7 @@ fun CatalogScreen(
                 )
                                     } else null,
                                     onClick = { onOpenCategory(category) },
-                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                    contentPadding = 12.dp,
                                 )
                                 if (index != categories.lastIndex) MbDivider(inset = 62.dp)
                             }
@@ -134,7 +135,7 @@ fun SubcategoryScreen(
                     parent.productCount.grouped(),
                 ),
                             onClick = { onOpenListing(parent.slug, parent.name) },
-                            modifier = Modifier.padding(horizontal = 8.dp),
+                            contentPadding = 8.dp,
                         )
                     }
                 }

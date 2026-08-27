@@ -51,16 +51,16 @@ struct APIError: LocalizedError {
 
     static func defaultMessage(for status: Int) -> String {
         switch status {
-        case 401: return "Sessiya tugadi. Qaytadan kiring."
-        case 404: return "Topilmadi"
-        case 409: return "Bu amalni bajarib bo'lmaydi"
-        case 500...599: return "Server javob bermayapti. Birozdan so'ng urinib ko'ring."
-        default: return "Xatolik yuz berdi"
+        case 401: return L("error_session_expired")
+        case 404: return L("error_not_found")
+        case 409: return L("error_conflict")
+        case 500...599: return L("error_server")
+        default: return L("error_generic")
         }
     }
 
     static let offline = APIError(
         status: nil,
-        detail: "Internetga ulanib bo'lmadi. Aloqani tekshiring."
+        detail: L("error_no_internet")
     )
 }

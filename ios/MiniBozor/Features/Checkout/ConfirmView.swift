@@ -8,7 +8,7 @@ struct ConfirmView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("To'lovni tasdiqlash", onBack: { router.pop() })
+                MBTopBar(L("tolovni_tasdiqlash"), onBack: { router.pop() })
 
                 if let preview = model.preview {
                     ScrollView {
@@ -22,7 +22,7 @@ struct ConfirmView: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 6)
                             }
-                            Text("Tugmani bosish orqali ommaviy oferta shartlariga rozilik bildirasiz.")
+                            Text(L("tugmani_bosish_orqali_ommaviy_oferta"))
                                 .mbFont(MB.type.caption)
                                 .foregroundStyle(MB.color.textQuaternary)
                                 .multilineTextAlignment(.center)
@@ -40,8 +40,8 @@ struct ConfirmView: View {
             MBBottomBar {
                 MBPrimaryButton(
                     model.paymentMethod == "cash"
-                        ? "Buyurtmani rasmiylashtirish"
-                        : "To'lash · \(Format.grouped(model.preview?.totals.total ?? 0))",
+                        ? L("buyurtmani_rasmiylashtirish")
+                        : L("tolash_n", Format.grouped(model.preview?.totals.total ?? 0)),
                     enabled: model.ready,
                     loading: model.placing
                 ) {
@@ -65,7 +65,7 @@ struct ConfirmView: View {
             .padding(.horizontal, 10)
             MBDivider(inset: 62)
             MBListRow(
-                preview.slot?.label ?? "Punktdan olish",
+                preview.slot?.label ?? L("punktdan_olish"),
                 glyph: "clock",
                 subtitle: preview.slot?.note,
                 showChevron: false
@@ -74,10 +74,10 @@ struct ConfirmView: View {
             MBDivider(inset: 62)
             MBListRow(
                 model.paymentMethod == "cash"
-                    ? "Naqd pul" : "Karta ···· \(preview.card?.last4 ?? "")",
+                    ? L("naqd_pul") : "Karta ···· \(preview.card?.last4 ?? "")",
                 glyph: "card",
                 subtitle: model.paymentMethod == "cash"
-                    ? "Kuryerga topshirishda" : preview.card?.brand,
+                    ? L("kuryerga_topshirishda") : preview.card?.brand,
                 showChevron: false
             )
             .padding(.horizontal, 10)
@@ -89,17 +89,17 @@ struct ConfirmView: View {
             MBTotalRow(label: "Tovarlar (\(totals.itemsCount))", value: Format.sum(totals.subtotal))
             if totals.discount > 0 {
                 MBTotalRow(
-                    label: "Chegirma",
+                    label: L("chegirma"),
                     value: "−\(Format.grouped(totals.discount))",
                     valueColor: MB.color.success
                 )
             }
             MBTotalRow(
-                label: "Yetkazish",
-                value: totals.deliveryFee == 0 ? "Bepul" : Format.sum(totals.deliveryFee)
+                label: L("yetkazish"),
+                value: totals.deliveryFee == 0 ? L("bepul") : Format.sum(totals.deliveryFee)
             )
             MBDivider().padding(.vertical, 8)
-            MBTotalRow(label: "To'lanadi", value: Format.sum(totals.total), strong: true)
+            MBTotalRow(label: L("tolanadi"), value: Format.sum(totals.total), strong: true)
         }
     }
 }

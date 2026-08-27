@@ -83,7 +83,7 @@ struct OrderDetailView: View {
         MBScreen {
             VStack(spacing: 0) {
                 MBTopBar(
-                    trackingOnly ? "Yetkazish holati" : "Buyurtma tafsilotlari",
+                    trackingOnly ? L("yetkazish_holati") : L("buyurtma_tafsilotlari"),
                     subtitle: model.order?.code,
                     onBack: { router.pop() }
                 )
@@ -122,7 +122,7 @@ struct OrderDetailView: View {
                 }
 
                 MBCard {
-                    SectionHeader(title: "Tovarlar", subtitle: "\(order.itemsCount) ta")
+                    SectionHeader(title: L("tovarlar"), subtitle: "\(order.itemsCount) ta")
                     Spacer().frame(height: 12)
                     ForEach(Array(order.items.enumerated()), id: \.element.id) { offset, item in
                         MBLineItem(
@@ -133,7 +133,7 @@ struct OrderDetailView: View {
                             quantity: item.quantity
                         ) {
                             if order.status == "delivered", !item.reviewed, let productId = item.productId {
-                                MBSecondaryButton("Sharh") {
+                                MBSecondaryButton(L("sharh")) {
                                     router.push(.writeReview(productId: productId, orderItemId: item.id))
                                 }
                                 .frame(width: 88)
@@ -145,47 +145,47 @@ struct OrderDetailView: View {
 
                 if !trackingOnly {
                     MBCard {
-                        SectionHeader(title: "Ma'lumot")
+                        SectionHeader(title: L("ma_lumot"))
                         if let created = UzDate.parseDateTime(order.createdAt) {
-                            MBKeyValueRow(key: "Buyurtma sanasi", value: UzDate.dayTime(created))
+                            MBKeyValueRow(key: L("buyurtma_sanasi"), value: UzDate.dayTime(created))
                         }
-                        MBKeyValueRow(key: "To'lov", value: order.paymentLabel)
+                        MBKeyValueRow(key: L("tolov"), value: order.paymentLabel)
                         MBKeyValueRow(
-                            key: "Manzil",
+                            key: L("manzil"),
                             value: [order.addressLine, order.addressMeta]
                                 .filter { !$0.isEmpty }
                                 .joined(separator: ", ")
                         )
                         MBKeyValueRow(
-                            key: "Qabul qiluvchi",
+                            key: L("qabul_qiluvchi"),
                             value: "\(order.recipientName), \(order.recipientPhone)"
                         )
                     }
 
                     MBCard {
-                        MBTotalRow(label: "Tovarlar", value: Format.sum(order.subtotal))
+                        MBTotalRow(label: L("tovarlar"), value: Format.sum(order.subtotal))
                         if order.discount > 0 {
                             MBTotalRow(
-                                label: "Chegirma",
+                                label: L("chegirma"),
                                 value: "−\(Format.grouped(order.discount))",
                                 valueColor: MB.color.success
                             )
                         }
                         MBTotalRow(
-                            label: "Yetkazish",
-                            value: order.deliveryFee == 0 ? "Bepul" : Format.sum(order.deliveryFee)
+                            label: L("yetkazish"),
+                            value: order.deliveryFee == 0 ? L("bepul") : Format.sum(order.deliveryFee)
                         )
                         MBDivider().padding(.vertical, 8)
-                        MBTotalRow(label: "Jami", value: Format.sum(order.total), strong: true)
+                        MBTotalRow(label: L("jami"), value: Format.sum(order.total), strong: true)
                     }
 
                     if order.canCancel {
-                        MBSecondaryButton("Buyurtmani bekor qilish", contentColor: MB.color.danger) {
+                        MBSecondaryButton(L("buyurtmani_bekor_qilish"), contentColor: MB.color.danger) {
                             router.push(.orderCancel(orderId: order.id))
                         }
                     }
                     if order.status == "delivered" {
-                        MBSecondaryButton("Qaytarish arizasi") {
+                        MBSecondaryButton(L("qaytarish_arizasi")) {
                             router.push(.orderReturn(orderId: order.id))
                         }
                     }
@@ -227,6 +227,6 @@ private struct TimelineRow: View {
         if let happenedAt = event.happenedAt, let date = UzDate.parseDateTime(happenedAt) {
             return UzDate.dayTime(date)
         }
-        return event.note.isEmpty ? "Kutilmoqda" : event.note
+        return event.note.isEmpty ? L("kutilmoqda") : event.note
     }
 }

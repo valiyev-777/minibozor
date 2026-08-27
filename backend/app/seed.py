@@ -65,6 +65,25 @@ def _at(day_offset: int, hh: int, mm: int) -> datetime:
 
 # --------------------------------------------------------------------------- catalogue
 
+# Pictures the shop supplied for the tiles. A category without one keeps its
+# line glyph, which is what the rest of the list still uses.
+CATEGORY_IMAGES = {
+    "elektronika": "categories/elektronika.png",
+    "kiyim-poyabzal": "categories/kiyim-poyabzal.png",
+    "maishiy-texnika": "categories/maishiy-texnika.png",
+    "uy-bog": "categories/uy-bog.png",
+    "oyinchoqlar": "categories/oyinchoqlar.png",
+    "avto": "categories/avto.png",
+    "maktab-bozori": "categories/maktab-bozori.png",
+    "sport": "categories/sport.png",
+    "gozallik": "categories/gozallik.png",
+    "taom-yetkazish": "categories/taom-yetkazish.png",
+    "chet-eldan": "categories/chet-eldan.png",
+    "kundalik": "categories/kundalik.png",
+    "aksessuar": "categories/aksessuar.png",
+    "oziq-ovqat": "categories/oziq-ovqat.png",
+}
+
 ROOT_CATEGORIES = [
     # slug, name, subtitle, icon, quick_link, product_count (counted at read time)
     ("elektronika", "Elektronika", "Smartfon, noutbuk, aksessuar", "phone", True, 0),
@@ -88,12 +107,14 @@ ROOT_CATEGORIES = [
 SUBCATEGORIES = [
     # parent, slug, name, image, product_count (counted at read time)
     ("kiyim-poyabzal", "futbolka-toplar", "Futbolka va toplar",
-     "products/tshirt-black.png", 2_140),
+     "products/tshirt-white.png", 2_140),
     ("kiyim-poyabzal", "krossovkalar", "Krossovkalar", "products/gazelle.png", 0),
-    ("kiyim-poyabzal", "koylak-libos", "Ko'ylak va libos", "products/tshirt-red.png", 0),
-    ("kiyim-poyabzal", "kundalik-poyabzal", "Kundalik poyabzal", "products/af1.png", 1_240),
+    ("kiyim-poyabzal", "koylak-libos", "Ko'ylak va libos", "products/polo-striped.png", 0),
+    ("kiyim-poyabzal", "kundalik-poyabzal", "Kundalik poyabzal",
+     "products/af1-black.png", 1_240),
     ("kiyim-poyabzal", "sport-kiyim", "Sport kiyim", "products/tshirt-green.png", 0),
-    ("kiyim-poyabzal", "bolalar-poyabzali", "Bolalar poyabzali", "products/adidas-black.png", 0),
+    ("kiyim-poyabzal", "bolalar-poyabzali", "Bolalar poyabzali",
+     "products/jordan1-low-white.png", 0),
     ("elektronika", "quloqchinlar", "Quloqchinlar", "products/airpods.png", 0),
     ("elektronika", "quvvat-aksessuar", "Quvvat va aksessuar", "products/powerbank.png", 0),
     ("uy-bog", "yoruglik", "Yoritish", "products/lamp.png", 0),
@@ -517,12 +538,19 @@ PICKUP_POINTS = [
      "Har kuni 09:00–20:00", 7.8),
 ]
 
+# The windows a courier round covers, every day.
 TIME_SLOTS = [
-    ("09:00", "13:00", "Ertalabki yetkazish", 0, False),
-    ("14:00", "18:00", "Eng ko'p tanlanadigan oraliq", 0, False),
-    ("18:00", "22:00", "Ish kunidan keyin", 9_000, False),
-    ("10:00", "12:00", "Tezkor yetkazish · Toshkent markazi", 19_000, True),
+    ("09:00", "13:00", "Ertalabki yetkazish", 0),
+    ("14:00", "18:00", "Eng ko'p tanlanadigan oraliq", 0),
+    ("18:00", "22:00", "Ish kunidan keyin", 9_000),
 ]
+
+# Express is not a window in the day, it is "two hours from now" — so it only
+# exists today, and only while two hours still fit before the last round.
+EXPRESS_NOTE = "Tezkor yetkazish · Toshkent markazi"
+EXPRESS_PRICE = 19_000
+DAY_OPENS = time.fromisoformat("09:00")
+DAY_CLOSES = time.fromisoformat("22:00")
 
 
 # --------------------------------------------------------------------------- runner
@@ -559,8 +587,10 @@ def seed(session: Session) -> None:
 def _seed_categories(session: Session) -> dict[str, Category]:
     out: dict[str, Category] = {}
     for sort, (slug, name, subtitle, icon, quick, count) in enumerate(ROOT_CATEGORIES):
+        image = CATEGORY_IMAGES.get(slug)
         row = Category(
             slug=slug, name=name, subtitle=subtitle, icon=icon,
+            image_url=image if image is None or _image_exists(image) else None,
             is_quick_link=quick, product_count=count, sort=sort,
         )
         session.add(row)
@@ -569,7 +599,10 @@ def _seed_categories(session: Session) -> dict[str, Category]:
 
     for sort, (parent, slug, name, image, count) in enumerate(SUBCATEGORIES):
         row = Category(
-            slug=slug, name=name, icon=out[parent].icon, image_url=image,
+            slug=slug, name=name, icon=out[parent].icon,
+            # Same guard as the roots: a thumbnail whose file is not there
+            # would render as an empty tile in the subcategory list.
+            image_url=image if _image_exists(image) else None,
             parent_id=out[parent].id, product_count=count, sort=sort,
         )
         session.add(row)
@@ -698,16 +731,35 @@ def _seed_delivery(session: Session) -> None:
     today = date.today()
     for offset in range(7):
         day = today + timedelta(days=offset)
-        for start, end, note, price, express in TIME_SLOTS:
-            # Today's morning slot is already gone by the time anyone looks.
+        for start, end, note, price in TIME_SLOTS:
+            # A window that has already begun cannot be chosen.
             if offset == 0 and datetime.now().time() > time.fromisoformat(start):
                 continue
             session.add(
                 DeliverySlot(
                     day=day, start_time=start, end_time=end,
-                    note=note, price=price, express=express,
+                    note=note, price=price, express=False,
                 )
             )
+
+    # Today only, and only if two hours fit before the last round: an express
+    # slot on a future day would be offering "within two hours" tomorrow, which
+    # is what it used to do.
+    now = datetime.now()
+    start = (now + timedelta(minutes=30)).replace(second=0, microsecond=0)
+    start = start.replace(minute=start.minute - start.minute % 15)
+    end = start + timedelta(hours=2)
+    if start.time() >= DAY_OPENS and end.time() <= DAY_CLOSES and end.date() == today:
+        session.add(
+            DeliverySlot(
+                day=today,
+                start_time=start.strftime("%H:%M"),
+                end_time=end.strftime("%H:%M"),
+                note=EXPRESS_NOTE,
+                price=EXPRESS_PRICE,
+                express=True,
+            )
+        )
     session.commit()
 
 

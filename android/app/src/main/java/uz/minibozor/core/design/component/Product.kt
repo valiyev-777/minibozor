@@ -16,7 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,13 +27,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import uz.minibozor.R
+import uz.minibozor.core.design.MbPressAlpha
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.mbPressable
@@ -41,7 +49,7 @@ import uz.minibozor.core.util.ratingText
 
 /** The soft ink wash a pressed tile is highlighted with. */
 @Composable
-private fun pressTint(): Color = MbTheme.colors.ink.copy(alpha = 0.06f)
+private fun pressTint(): Color = MbTheme.colors.ink.copy(alpha = MbPressAlpha)
 
 /**
  * Photo with the design's warm neutral backdrop showing through while it loads.
@@ -56,13 +64,14 @@ fun MbProductImage(
     url: String?,
     modifier: Modifier = Modifier,
     shape: Shape = MbTheme.shapes.tile,
-    background: Color = MbTheme.colors.photoWarmAlt,
+    /** The theme's photo ground unless overridden. */
+    background: Color = Color.Unspecified,
     contentScale: ContentScale = ContentScale.Fit,
 ) {
     Box(
         modifier
             .clip(shape)
-            .background(background),
+            .background(if (background == Color.Unspecified) MbTheme.colors.photoWarmAlt else background),
         contentAlignment = Alignment.Center,
     ) {
         val resolved = url.mediaUrl()
@@ -70,6 +79,10 @@ fun MbProductImage(
             AsyncImage(
                 model = resolved,
                 contentDescription = null,
+                // Whatever was uploaded, shown whole and filling its frame.
+                // Cropping cut into the picture; insetting it left a ring of
+                // ground around a photograph that came with its own backdrop,
+                // which on the dark theme is a bright block with a dark border.
                 contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -92,42 +105,79 @@ fun MbPriceRow(
 ) {
     Column(modifier) {
         Row(
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            MbText(price.grouped(), priceStyle)
+            MbText(price.grouped(), priceStyle, maxLines = 1)
             if (discountPercent != null) {
-                MbText("−$discountPercent%", MbTheme.type.micro, MbTheme.colors.danger)
+                // A pill rather than 9.5sp of red text beside a 15sp number:
+                // the saving is the reason someone stops on the row, and it was
+                // the smallest thing in it.
+                MbText(
+                    "−$discountPercent%",
+                    MbTheme.type.captionBold,
+                    MbTheme.colors.danger,
+                    modifier = Modifier
+                        .clip(MbTheme.shapes.badge)
+                        .background(MbTheme.colors.dangerBg)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    maxLines = 1,
+                )
             }
         }
         if (oldPrice != null && oldPrice > price) {
+            Spacer(Modifier.height(2.dp))
             MbText(
                 oldPrice.grouped(),
-                MbTheme.type.meta.copy(textDecoration = TextDecoration.LineThrough),
-                MbTheme.colors.placeholder,
+                MbTheme.type.caption.copy(textDecoration = TextDecoration.LineThrough),
+                MbTheme.colors.textQuaternary,
+                maxLines = 1,
             )
         }
     }
 }
 
+/**
+ * `★ 4.8 · 12 sharh` — one text node, coloured with spans.
+ *
+ * It was four MbTexts in a Row, which is four paragraph layouts per tile: the
+ * most expensive thing a product tile did, twice over in every grid row, for
+ * every row a fling brings into view. Spans give the star its gold and the
+ * separator its grey inside a single measure.
+ */
 @Composable
 fun MbRating(
     rating: Double,
     reviewsCount: Int,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        MbText("★", MbTheme.type.meta, MbTheme.colors.star)
-        MbText(ratingText(rating), MbTheme.type.meta, MbTheme.colors.icon)
-        if (reviewsCount > 0) {
-            MbText("·", MbTheme.type.meta, MbTheme.colors.hairlineStrong)
-            MbText(pluralStringResource(R.plurals.n_reviews, reviewsCount, reviewsCount), MbTheme.type.meta, MbTheme.colors.icon)
+    val star = MbTheme.colors.star
+    val ink = MbTheme.colors.icon
+    val faint = MbTheme.colors.hairlineStrong
+    val reviews = if (reviewsCount > 0) {
+        pluralStringResource(R.plurals.n_reviews, reviewsCount, reviewsCount)
+    } else {
+        null
+    }
+    val line = remember(rating, reviews, star, faint) {
+        buildAnnotatedString {
+            withStyle(SpanStyle(color = star)) { append("★") }
+            append(" ")
+            append(ratingText(rating))
+            if (reviews != null) {
+                withStyle(SpanStyle(color = faint)) { append(" · ") }
+                append(reviews)
+            }
         }
     }
+    Text(
+        line,
+        modifier = modifier,
+        style = MbTheme.type.meta,
+        color = ink,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
@@ -145,7 +195,7 @@ fun MbStars(rating: Int, modifier: Modifier = Modifier, size: Dp = 13.dp) {
 
 /**
  * The two-per-row grid tile from the home screen and search results: photo,
- * favourite toggle, badge, price, title, rating and an add-to-cart button.
+ * favourite toggle, price, title, rating and an add-to-cart button.
  */
 @Composable
 fun MbProductTile(
@@ -156,7 +206,6 @@ fun MbProductTile(
     imageUrl: String?,
     rating: Double,
     reviewsCount: Int,
-    badge: String?,
     isFavorite: Boolean,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -186,16 +235,6 @@ fun MbProductTile(
                     .align(Alignment.TopEnd)
                     .padding(6.dp),
             )
-            if (!badge.isNullOrBlank()) {
-                MbStatusPill(
-                    label = badge,
-                    background = MbTheme.colors.scrim,
-                    contentColor = MbTheme.colors.onScrim,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(6.dp),
-                )
-            }
         }
         MbPriceRow(price, oldPrice, discountPercent)
         // Two lines always, so every tile in a row is the same height and no
@@ -282,18 +321,8 @@ fun MbDealTile(
                     .aspectRatio(1f),
                 shape = MbTheme.shapes.tileSmall,
             )
-            if (discountPercent != null) {
-                MbStatusPill(
-                    label = "−$discountPercent%",
-                    background = MbTheme.colors.danger,
-                    contentColor = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp),
-                )
-            }
         }
-        MbPriceRow(price, oldPrice, null)
+        MbPriceRow(price, oldPrice, discountPercent)
         // Two lines always, so every tile in a row is the same height and no
         // title ends up pressed against the card edge.
         MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)

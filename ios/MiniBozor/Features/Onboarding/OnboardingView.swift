@@ -16,31 +16,28 @@ struct OnboardingView: View {
 
     private var pages: [OnboardingPage] { [
         OnboardingPage(
-            title: "Ertaga yetib keladi",
-            body: "Toshkent bo'ylab bir kunda, viloyatlarga 2–3 kunda. "
-                + "Kuryerni real vaqtda kuzatib boring.",
-            image: "products/nike-zoomx.png",
-            chip: "1 kunda yetkazish"
+            title: L("onboarding_1_title"),
+            body: L("onboarding_1_body"),
+            image: "products/jordan1-low-white.png",
+            chip: L("onboarding_1_chip")
         ),
         OnboardingPage(
-            title: "Faqat original brendlar",
-            body: "Har bir sotuvchi tekshiruvdan o'tadi. "
-                + "Original bo'lmasa — pulingizni to'liq qaytaramiz.",
+            title: L("onboarding_2_title"),
+            body: L("onboarding_2_body"),
             image: "products/gazelle.png",
-            chip: nil
+            chip: L("onboarding_2_chip")
         ),
         OnboardingPage(
-            title: "Narxni kuzatib turing",
-            body: "Sevimlilarga qo'shing — narx tushganda birinchi bo'lib xabar olasiz.",
+            title: L("onboarding_3_title"),
+            body: L("onboarding_3_body"),
             image: "products/airpods.png",
-            chip: nil
+            chip: L("onboarding_3_chip")
         ),
         OnboardingPage(
-            title: "Xarid qilishni boshlang",
-            body: "Kunlik yetkazish, oson qaytarish va bir marta kiritiladigan to'lov — "
-                + "hammasi bir ilovada.",
-            image: "banners/lamp-room.png",
-            chip: nil
+            title: L("onboarding_4_title"),
+            body: L("onboarding_4_body"),
+            image: "products/lamp.png",
+            chip: L("onboarding_4_chip")
         ),
     ] }
 
@@ -66,7 +63,7 @@ struct OnboardingView: View {
     private var header: some View {
         HStack(spacing: 8) {
             BrandMark(size: 26)
-            Text("Mini Bozor").mbFont(MB.type.bodyBold).foregroundStyle(MB.color.ink)
+            Text(L("app_name")).mbFont(MB.type.bodyBold).foregroundStyle(MB.color.ink)
             Spacer()
             Text("\(index + 1) / \(pages.count)")
                 .mbFont(MB.type.caption)
@@ -131,7 +128,7 @@ struct OnboardingView: View {
 
     private var footer: some View {
         HStack {
-            Button("O'tkazib yuborish", action: onFinished)
+            Button(L("otkazish"), action: onFinished)
                 .mbFont(MB.type.label)
                 .foregroundStyle(MB.color.textQuaternary)
             Spacer()
@@ -144,9 +141,9 @@ struct OnboardingView: View {
             } label: {
                 Text("→")
                     .mbFont(MB.type.title2)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(MB.color.onInverse)
                     .frame(width: 56, height: 56)
-                    .background(MB.color.ink)
+                    .background(MB.color.inverse)
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
@@ -157,15 +154,18 @@ struct OnboardingView: View {
     }
 }
 
-/// Wordmark: the basket glyph in an accent tile, drawn rather than shipped as
-/// an image so it stays sharp at every size.
+/// The shop's mark.
+///
+/// Drawn on whatever is behind it rather than in a tile of its own: the mark is
+/// already a shape on a transparent ground, and it appears on the intro and on
+/// the sign-in page alike.
 struct BrandMark: View {
     var size: CGFloat = 26
 
     var body: some View {
-        MBIcon("basket", size: size * 0.62, tint: .white, lineWidth: 2)
+        Image("LogoMark")
+            .resizable()
+            .scaledToFit()
             .frame(width: size, height: size)
-            .background(MB.color.accent)
-            .clipShape(RoundedRectangle(cornerRadius: size * 0.31, style: .continuous))
     }
 }

@@ -9,12 +9,12 @@ struct HelpView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Yordam markazi", onBack: { router.pop() })
+                MBTopBar(L("yordam_markazi"), onBack: { router.pop() })
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         MBCard(padding: 6) {
                             MBListRow(
-                                "Qo'ng'iroq qilish",
+                                L("qongiroq_qilish"),
                                 glyph: "headset",
                                 subtitle: model.support["hours"],
                                 meta: model.support["phone"]
@@ -22,14 +22,14 @@ struct HelpView: View {
                             .padding(.horizontal, 10)
                             MBDivider(inset: 60)
                             MBListRow(
-                                "Telegram orqali yozish",
+                                L("telegram_orqali_yozish"),
                                 glyph: "phone",
-                                subtitle: "Odatda 5 daqiqada javob beramiz"
+                                subtitle: L("odatda_5_daqiqada_javob_beramiz")
                             )
                             .padding(.horizontal, 10)
                         }
 
-                        Text("Ko'p so'raladigan savollar")
+                        Text(L("kop_soraladigan_savollar"))
                             .mbFont(MB.type.captionBold)
                             .foregroundStyle(MB.color.textSecondary)
                             .padding(.leading, 6)
@@ -79,7 +79,7 @@ struct LegalView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Shartlar va maxfiylik", onBack: { router.pop() })
+                MBTopBar(L("shartlar_va_maxfiylik"), onBack: { router.pop() })
                 ScrollView {
                     MBCard(padding: 6) {
                         ForEach(Array(model.docs.enumerated()), id: \.element.id) { offset, doc in
@@ -115,7 +115,7 @@ struct LegalDocView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar(model.doc?.title ?? "Hujjat", onBack: {
+                MBTopBar(model.doc?.title ?? L("hujjat"), onBack: {
                     if let router { router.pop() } else { dismiss() }
                 })
                 ScrollView {

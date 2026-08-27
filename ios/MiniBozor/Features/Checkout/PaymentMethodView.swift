@@ -8,15 +8,15 @@ struct PaymentMethodView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("To'lov usuli", onBack: { router.pop() })
+                MBTopBar(L("tolov_usuli"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         methodsCard
                         MBCard(padding: 6) {
                             MBListRow(
-                                "Yangi karta qo'shish",
+                                L("yangi_karta_qoshish"),
                                 glyph: "card",
-                                subtitle: "Humo, UzCard, Visa",
+                                subtitle: L("humo_uzcard_visa"),
                                 tint: MB.color.accent
                             ) {
                                 router.push(.addCard)
@@ -34,7 +34,7 @@ struct PaymentMethodView: View {
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
                 MBPrimaryButton(
-                    "Tanlash",
+                    L("tanlash"),
                     enabled: model.paymentMethod == "cash" || model.cardId != nil
                 ) {
                     router.pop()
@@ -48,7 +48,7 @@ struct PaymentMethodView: View {
             ForEach(Array(model.cards.enumerated()), id: \.element.id) { offset, card in
                 MBRadioRow(
                     label: "Karta ···· \(card.last4)",
-                    subtitle: card.isExpired ? "Muddati o'tgan" : card.brand,
+                    subtitle: card.isExpired ? L("muddati_otgan") : card.brand,
                     selected: model.paymentMethod == "card" && model.cardId == card.id,
                     onSelect: {
                         guard !card.isExpired else { return }
@@ -75,8 +75,8 @@ struct PaymentMethodView: View {
             if !model.cards.isEmpty { MBDivider(inset: 68) }
 
             MBRadioRow(
-                label: "Naqd pul",
-                subtitle: "Kuryerga topshirishda",
+                label: L("naqd_pul"),
+                subtitle: L("kuryerga_topshirishda"),
                 selected: model.paymentMethod == "cash",
                 onSelect: { Task { await model.selectCash() } }
             ) {
@@ -92,8 +92,7 @@ struct PaymentMethodView: View {
     private var note: some View {
         HStack(alignment: .top, spacing: 8) {
             MBIcon("gear", size: 16, tint: MB.color.icon)
-            Text("Karta ma'lumotlari to'lov provayderi tomonidan saqlanadi — "
-                 + "ilova karta raqamini ko'rmaydi.")
+            Text(L("karta_ma_lumotlari_tolov_provayderi"))
                 .mbFont(MB.type.caption)
                 .foregroundStyle(MB.color.textQuaternary)
         }

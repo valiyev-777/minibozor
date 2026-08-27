@@ -49,14 +49,24 @@ final class ProductModel {
     func addToCart(using cart: CartRepository) async -> String {
         guard let product else { return "" }
         adding = true
-        let variantId = selectedSizeId ?? selectedColorId
-        let outcome = await cart.add(productId: product.id, variantId: variantId)
+        // Both, not one of the two: a cart line carries a size *and* a colour,
+        // and sending only the size made the same shirt land as a second line
+        // with its colour lost.
+        let outcome = await cart.add(
+            productId: product.id,
+            variantId: selectedSizeId,
+            colorVariantId: selectedColorId
+        )
         adding = false
-        return outcome.errorMessage ?? "Savatga qo'shildi"
+        return outcome.errorMessage ?? L("savatga_qoshildi")
     }
 }
 
 /// Screen 14 — Mahsulot.
+///
+/// The photograph is the first thing the screen is about, so it runs the full
+/// width under the status bar and the page reads photo, name, description. Its
+/// motion answers the scroll: nothing here plays on its own.
 struct ProductView: View {
     let productId: Int
 
@@ -66,252 +76,277 @@ struct ProductView: View {
     @State var model = ProductModel()
     @State var toast: String?
 
-    var body: some View {
-        MBScreen {
-            VStack(spacing: 0) {
-                MBTopBar(
-                    title: "",
-                    onBack: { router.pop() }
-                ) {
-                    if let product = model.product {
-                        Button {
-                            Task { await model.toggleFavorite() }
-                        } label: {
-                            MBIcon(
-                                "heart",
-                                size: 20,
-                                tint: product.isFavorite ? MB.color.danger : MB.color.ink,
-                                lineWidth: 1.9
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+    /// How far the photo has closed away behind the page, 0…1.
+    @State private var closed: CGFloat = 0
+    /// Where the name on the page currently ends, in screen coordinates.
+    @State private var nameBottom: CGFloat = .greatestFiniteMagnitude
 
-                if model.loading {
-                    MBLoading()
-                } else if let error = model.errorMessage {
-                    MBErrorState(message: error) { Task { await model.load(id: productId) } }
-                } else if let product = model.product {
-                    detail(product)
-                }
+    /// How far the name has been handed from the page to the bar, 0…1.
+    ///
+    /// Measured against the name itself rather than the card holding it:
+    /// keying it to the card's top edge hands the name over while it is still
+    /// in plain sight a padding's distance below the bar.
+    private var handover: CGFloat {
+        let barBottom = ProductHero.chromeHeight
+        return min(max((barBottom - nameBottom) / 20, 0), 1)
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            MB.color.canvas.ignoresSafeArea()
+
+            if model.loading {
+                ProductSkeleton()
+            } else if let error = model.errorMessage {
+                MBErrorState(message: error) { Task { await model.load(id: productId) } }
+                    .padding(.top, ProductHero.chromeHeight)
+            } else if let product = model.product {
+                content(product)
             }
+
+            ProductChromeView(
+                product: model.product,
+                handover: handover,
+                onBack: { router.pop() },
+                onToggleFavorite: { Task { await model.toggleFavorite() } },
+                onShare: { share(model.product) }
+            )
         }
+        .ignoresSafeArea(edges: .top)
         .navigationBarBackButtonHidden()
         .mbToast($toast)
-        .safeAreaInset(edge: .bottom) {
-            if let product = model.product {
-                MBBottomBar {
-                    HStack(spacing: 14) {
-                        MBPriceRow(
-                            price: product.price,
-                            oldPrice: product.oldPrice,
-                            discountPercent: product.discountPercent
-                        )
-                        MBPrimaryButton(
-                            product.inStock ? "Savatga" : "Mavjud emas",
-                            enabled: product.inStock,
-                            loading: model.adding
-                        ) {
-                            Task { toast = await model.addToCart(using: cart) }
-                        }
-                        .frame(maxWidth: 190)
-                    }
-                }
-            }
-        }
+        .safeAreaInset(edge: .bottom) { buyBar }
         .task { await model.load(id: productId) }
     }
 
-    private func detail(_ product: ProductDTO) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                Gallery(images: product.images, badge: product.badge)
-
-                MBCard {
-                    MBPriceRow(
-                        price: product.price,
-                        oldPrice: product.oldPrice,
-                        discountPercent: product.discountPercent,
-                        style: MB.type.display
-                    )
-                    Spacer().frame(height: 8)
-                    Text(product.title).mbFont(MB.type.title3).foregroundStyle(MB.color.ink)
-                    if !product.subtitle.isEmpty {
-                        Spacer().frame(height: 4)
-                        Text(product.subtitle).mbFont(MB.type.bodySmall)
-                            .foregroundStyle(MB.color.textTertiary)
+    /// Always there. The price inside it stands down once the bar at the top
+    /// has taken it over, and the button widens into the room that leaves —
+    /// but the way to buy the thing never leaves the screen.
+    @ViewBuilder
+    private var buyBar: some View {
+        if let product = model.product {
+            MBBottomBar {
+                HStack(spacing: 14) {
+                    if handover < 0.6 {
+                        MBPriceRow(
+                            price: product.price,
+                            oldPrice: product.oldPrice,
+                            discountPercent: product.discountPercent,
+                            style: MB.type.title3
+                        )
+                        .transition(.opacity)
                     }
-                    Spacer().frame(height: 10)
-                    HStack(spacing: 12) {
-                        MBRating(rating: product.rating, reviewsCount: product.reviewsCount)
-                        if product.isOriginal {
-                            MBStatusPill(
-                                "ORIGINAL",
-                                background: MB.color.successBg,
-                                contentColor: MB.color.success
-                            )
-                        }
-                    }
-                }
-                .padding(.horizontal, 12)
-
-                if !product.sizes.isEmpty {
-                    MBCard {
-                        SectionHeader(title: "O'lcham", subtitle: "o'lchamlar jadvali")
-                        Spacer().frame(height: 12)
-                        FlowLayout(spacing: 8) {
-                            ForEach(product.sizes) { variant in
-                                MBSizeChip(
-                                    variant.label,
-                                    selected: variant.id == model.selectedSizeId,
-                                    enabled: variant.inStock
-                                ) {
-                                    model.selectedSizeId = variant.id
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                }
-
-                if !product.colors.isEmpty {
-                    MBCard {
-                        SectionHeader(title: "Rang")
-                        Spacer().frame(height: 12)
-                        HStack(spacing: 10) {
-                            ForEach(product.colors) { variant in
-                                ColorSwatch(
-                                    hex: variant.value,
-                                    label: variant.label,
-                                    selected: variant.id == model.selectedColorId
-                                ) {
-                                    model.selectedColorId = variant.id
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                }
-
-                MBCard {
-                    InfoRow(glyph: "box", title: "Yetkazish", subtitle: product.deliveryNote)
-                    MBDivider()
-                    InfoRow(glyph: "ret", title: "Qaytarish", subtitle: "14 kun ichida, qadoq butun bo'lsa")
-                    if let warranty = product.warranty {
-                        MBDivider()
-                        InfoRow(glyph: "gear", title: "Kafolat", subtitle: warranty)
-                    }
-                    MBDivider()
-                    InfoRow(
-                        glyph: "basket",
-                        title: "Sotuvchi",
-                        subtitle: "\(product.seller) · \(product.stockLeft) dona qoldi"
-                    )
-                }
-                .padding(.horizontal, 12)
-
-                if !product.description.isEmpty {
-                    MBCard {
-                        SectionHeader(title: "Tavsif")
-                        Spacer().frame(height: 10)
-                        Text(product.description)
-                            .mbFont(MB.type.bodySmall)
-                            .foregroundStyle(MB.color.inkSoft)
-                    }
-                    .padding(.horizontal, 12)
-                }
-
-                if !product.specs.isEmpty {
-                    MBCard {
-                        SectionHeader(title: "Xususiyatlari")
-                        ForEach(product.specs, id: \.key) { spec in
-                            MBKeyValueRow(key: spec.key, value: spec.value)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                }
-
-                MBCard {
-                    SectionHeader(
-                        title: "Sharhlar",
-                        subtitle: model.summary.map { "\($0.total) ta" },
-                        actionLabel: "Barchasi"
+                    MBPrimaryButton(
+                        product.inStock ? L("savatga") : L("mavjud_emas"),
+                        enabled: product.inStock,
+                        loading: model.adding
                     ) {
-                        router.push(.reviews(productId: product.id))
-                    }
-                    Spacer().frame(height: 12)
-                    if model.topReviews.isEmpty {
-                        Text("Hali sharh yo'q — birinchi bo'ling.")
-                            .mbFont(MB.type.bodySmall)
-                            .foregroundStyle(MB.color.icon)
-                    } else {
-                        ForEach(model.topReviews) { review in
-                            ReviewRow(review: review, onLike: nil)
-                            Spacer().frame(height: 12)
-                        }
+                        Task { toast = await model.addToCart(using: cart) }
                     }
                 }
-                .padding(.horizontal, 12)
-
-                if !model.similar.isEmpty {
-                    MBCard(padding: 0) {
-                        SectionHeader(title: "O'xshash tovarlar").padding(16)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .top, spacing: 10) {
-                                ForEach(model.similar) { item in
-                                    MBRailTile(product: item) {
-                                        router.push(.product(id: item.id))
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                        }
-                        .padding(.bottom, 16)
-                    }
-                    .padding(.horizontal, 12)
-                }
-
-                Spacer().frame(height: 20)
+                .animation(.easeInOut(duration: 0.2), value: handover < 0.6)
             }
         }
     }
-}
 
-private struct Gallery: View {
-    let images: [String]
-    let badge: String?
-    @State var index = 0
+    private func content(_ product: ProductDTO) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                ProductHeroView(images: product.images, badge: product.badge, closed: closed)
+                    .background {
+                        GeometryReader { geometry in
+                            Color.clear.onChange(of: geometry.frame(in: .global).minY,
+                                                 initial: true) { _, minY in
+                                let travel = ProductHero.height * 0.55
+                                closed = min(max(-minY / travel, 0), 1)
+                            }
+                        }
+                    }
 
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            TabView(selection: $index) {
-                ForEach(Array(images.enumerated()), id: \.offset) { offset, image in
-                    MBProductImage(url: image, cornerRadius: 0, background: MB.color.photoWarm)
-                        .tag(offset)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .aspectRatio(1, contentMode: .fit)
+                // Grouped by what a section is for rather than one card each:
+                // "what is this", "which one", "the small print". Five floating
+                // panels read as clutter; one panel for the lot would be a long
+                // box with no seams where the subject changes.
+                identity(product)
+                options(product)
+                smallPrint(product)
+                reviews(product)
 
-            if let badge {
-                MBStatusPill(badge, background: MB.color.ink.opacity(0.8), contentColor: .white)
-                    .padding(14)
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if images.count > 1 {
-                HStack(spacing: 5) {
-                    ForEach(0..<images.count, id: \.self) { position in
-                        Capsule()
-                            .fill(position == index ? MB.color.ink : MB.color.hairline)
-                            .frame(width: position == index ? 18 : 6, height: 6)
+                if !model.similar.isEmpty {
+                    MBCard(padding: 0, cornerRadius: 0) {
+                        RecommendationsRail(products: model.similar) { id in
+                            router.push(.product(id: id))
+                        }
+                        Spacer().frame(height: 16)
                     }
                 }
-                .padding(.bottom, 14)
+
+                Spacer().frame(height: 24)
             }
         }
-        .background(MB.color.surface)
+        .coordinateSpace(name: ProductHero.space)
+    }
+
+    private func identity(_ product: ProductDTO) -> some View {
+        MBCard(cornerRadius: 0) {
+            // No price here: it is in the buy bar a thumb's reach away and in
+            // the bar once the photo closes, so a third copy is just noise.
+            Text(product.title)
+                .mbFont(MB.type.title2)
+                .foregroundStyle(MB.color.ink)
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.onChange(of: geometry.frame(in: .global).maxY,
+                                             initial: true) { _, maxY in
+                            nameBottom = maxY
+                        }
+                    }
+                }
+            if !product.subtitle.isEmpty {
+                Spacer().frame(height: 4)
+                Text(product.subtitle)
+                    .mbFont(MB.type.bodySmall)
+                    .foregroundStyle(MB.color.textTertiary)
+            }
+            Spacer().frame(height: 10)
+            HStack(spacing: 12) {
+                MBRating(rating: product.rating, reviewsCount: product.reviewsCount)
+                if product.isOriginal {
+                    MBStatusPill(
+                        L("original"),
+                        background: MB.color.successBg,
+                        contentColor: MB.color.success
+                    )
+                }
+            }
+            if !product.description.isEmpty {
+                Spacer().frame(height: 14)
+                MBDivider()
+                Spacer().frame(height: 14)
+                SectionHeader(title: L("tavsif"))
+                Spacer().frame(height: 10)
+                MBCollapsibleText(text: product.description)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func options(_ product: ProductDTO) -> some View {
+        if !product.sizes.isEmpty || !product.colors.isEmpty {
+            MBCard(cornerRadius: 0) {
+                if !product.sizes.isEmpty {
+                    SectionHeader(title: L("olcham"), subtitle: L("olchamlar_jadvali"))
+                    Spacer().frame(height: 12)
+                    FlowLayout(spacing: 8) {
+                        ForEach(product.sizes) { variant in
+                            MBSizeChip(
+                                variant.label,
+                                selected: variant.id == model.selectedSizeId,
+                                enabled: variant.inStock
+                            ) {
+                                model.selectedSizeId = variant.id
+                            }
+                        }
+                    }
+                }
+                if !product.sizes.isEmpty && !product.colors.isEmpty {
+                    Spacer().frame(height: 14)
+                    MBDivider()
+                    Spacer().frame(height: 14)
+                }
+                if !product.colors.isEmpty {
+                    SectionHeader(title: L("rang"))
+                    Spacer().frame(height: 12)
+                    HStack(spacing: 10) {
+                        ForEach(product.colors) { variant in
+                            ColorSwatch(
+                                hex: variant.value,
+                                label: variant.label,
+                                selected: variant.id == model.selectedColorId
+                            ) {
+                                model.selectedColorId = variant.id
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func smallPrint(_ product: ProductDTO) -> some View {
+        MBCard(cornerRadius: 0) {
+            // Folded, but the delivery line rides on the header: it is the one
+            // fact here that helps someone decide, and hiding it to tidy the
+            // page would be a poor trade.
+            MBExpandableSection(L("yetkazish_va_kafolat"), subtitle: product.deliveryNote) {
+                InfoRow(glyph: "box", title: L("yetkazish"), subtitle: product.deliveryNote)
+                MBDivider()
+                InfoRow(
+                    glyph: "ret",
+                    title: L("qaytarish"),
+                    subtitle: L("qaytarish_14_kun_ichida_qadoq_butun_bolsa")
+                )
+                if let warranty = product.warranty {
+                    MBDivider()
+                    InfoRow(glyph: "gear", title: L("kafolat"), subtitle: warranty)
+                }
+                MBDivider()
+                InfoRow(
+                    glyph: "basket",
+                    title: L("sotuvchi"),
+                    subtitle: L("sotuvchi_va_qoldiq", product.seller, product.stockLeft)
+                )
+            }
+            if !product.specs.isEmpty {
+                Spacer().frame(height: 14)
+                MBDivider()
+                Spacer().frame(height: 14)
+                MBExpandableSection(
+                    L("xususiyatlari"),
+                    subtitle: LPlural("n_items", count: product.specs.count,
+                                      "\(product.specs.count)")
+                ) {
+                    ForEach(product.specs, id: \.key) { spec in
+                        MBKeyValueRow(key: spec.key, value: spec.value)
+                    }
+                }
+            }
+        }
+    }
+
+    private func reviews(_ product: ProductDTO) -> some View {
+        MBCard(cornerRadius: 0) {
+            SectionHeader(
+                title: L("sharhlar"),
+                subtitle: model.summary.map { LPlural("n_items", count: $0.total, "\($0.total)") },
+                actionLabel: L("barchasi")
+            ) {
+                router.push(.reviews(productId: product.id))
+            }
+            Spacer().frame(height: 12)
+            if model.topReviews.isEmpty {
+                Text(L("hali_sharh_yoq_birinchi_boling"))
+                    .mbFont(MB.type.bodySmall)
+                    .foregroundStyle(MB.color.icon)
+            } else {
+                ForEach(model.topReviews) { review in
+                    ReviewRow(review: review, onLike: nil)
+                    Spacer().frame(height: 12)
+                }
+            }
+        }
+    }
+
+    /// Hands the product to the system share sheet. The chooser is the
+    /// customer's — nothing leaves the phone until they pick a destination.
+    private func share(_ product: ProductDTO?) {
+        guard let product else { return }
+        let text = "\(product.title)\nminibozor://product/\(product.id)"
+        let sheet = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }
+            .first?
+            .present(sheet, animated: true)
     }
 }
 

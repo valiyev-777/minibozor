@@ -373,4 +373,10 @@
     <!-- Recommendation chips -->
     <string name="oxshash">O\'xshash</string>
     <string name="ommabop">Ommabop</string>
+
+    <!-- Collapsible sections -->
+    <string name="batafsil">Batafsil</string>
+    <string name="yopish">Yopish</string>
+    <string name="yetkazish_va_kafolat">Yetkazish va kafolat</string>
+    <string name="rating_n_dan_yuqori">%1$s ★ dan yuqori</string>
 </resources>

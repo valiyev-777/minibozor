@@ -9,12 +9,12 @@ struct DeliveryTimeView: View {
     var body: some View {
         MBScreen {
             VStack(spacing: 0) {
-                MBTopBar("Yetkazish vaqti", onBack: { router.pop() })
+                MBTopBar(L("yetkazish_vaqti"), onBack: { router.pop() })
                 ScrollView {
                     VStack(spacing: 12) {
                         dayChips
                         slotCard
-                        Text("Kuryer yetkazishdan 30 daqiqa oldin qo'ng'iroq qiladi.")
+                        Text(L("kuryer_yetkazishdan_30_daqiqa_oldin"))
                             .mbFont(MB.type.caption)
                             .foregroundStyle(MB.color.textQuaternary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -27,7 +27,7 @@ struct DeliveryTimeView: View {
         .navigationBarBackButtonHidden()
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
-                MBPrimaryButton("Tasdiqlash", enabled: model.slotId != nil) { router.pop() }
+                MBPrimaryButton(L("tasdiqlash"), enabled: model.slotId != nil) { router.pop() }
             }
         }
     }
@@ -68,7 +68,7 @@ struct DeliveryTimeView: View {
         MBCard(padding: 6) {
             let slots = model.slotDays.indices.contains(dayIndex) ? model.slotDays[dayIndex].slots : []
             if slots.isEmpty {
-                Text("Bu kunga bo'sh oraliq qolmadi.")
+                Text(L("bu_kunga_bosh_oraliq_qolmadi"))
                     .mbFont(MB.type.bodySmall)
                     .foregroundStyle(MB.color.icon)
                     .padding(16)
@@ -77,7 +77,7 @@ struct DeliveryTimeView: View {
                 MBRadioRow(
                     slot.label,
                     subtitle: slot.note.isEmpty ? nil : slot.note,
-                    trailingLabel: slot.price == 0 ? "Bepul" : "+\(Format.sum(slot.price))",
+                    trailingLabel: slot.price == 0 ? L("bepul") : "+\(Format.sum(slot.price))",
                     trailingColor: slot.price == 0 ? MB.color.success : MB.color.ink,
                     selected: slot.id == model.slotId
                 ) {

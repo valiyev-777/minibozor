@@ -49,7 +49,7 @@ final class AddCardModel {
     var canSave: Bool { numberValid && expiryValid && !saving }
 
     var numberError: String? {
-        numberComplete && !numberValid ? "Karta raqami noto'g'ri" : nil
+        numberComplete && !numberValid ? L("karta_raqami_notogri") : nil
     }
 
     // MARK: - Input
@@ -104,10 +104,10 @@ final class AddCardModel {
     }
 
     private var validationMessage: String {
-        if !numberComplete { return "Karta raqamini to'liq kiriting" }
-        if !numberValid { return "Karta raqami noto'g'ri" }
-        if expiry.count != 4 { return "Amal qilish muddatini kiriting" }
-        if expiryMonth == nil { return "Oy 01–12 oralig'ida bo'lishi kerak" }
-        return "Kartaning muddati o'tgan"
+        if !numberComplete { return L("karta_raqamini_toliq_kiriting") }
+        if !numberValid { return L("karta_raqami_notogri") }
+        if expiry.count != 4 { return L("amal_qilish_muddatini_kiriting") }
+        if expiryMonth == nil { return L("oy_01_12_oraligida_bolishi_kerak") }
+        return L("kartaning_muddati_otgan")
     }
 }

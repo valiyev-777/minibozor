@@ -95,8 +95,16 @@ fun MiniBozorNavHost(
         }
     }
 
+    /**
+     * Where signing out lands.
+     *
+     * Onboarding, not the sign-in form: signing out clears the "seen it" flag,
+     * so a fresh launch would show the intro anyway — going straight to the
+     * form meant the same account saw one or the other depending on whether it
+     * had restarted the app, which is not a decision the app should be making.
+     */
     fun toSignIn() {
-        navController.navigate(Routes.LOGIN) {
+        navController.navigate(Routes.ONBOARDING) {
             popUpTo(0) { inclusive = true }
         }
     }

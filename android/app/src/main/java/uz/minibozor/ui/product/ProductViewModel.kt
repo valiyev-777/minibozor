@@ -119,8 +119,15 @@ class ProductViewModel @Inject constructor(
         if (current.adding) return
         _state.update { it.copy(adding = true) }
         viewModelScope.launch {
-            val variantId = current.selectedSizeId ?: current.selectedColorId
-            val result = cart.add(product.id, variantId)
+            // Both, not one of the two: a cart line carries a size *and* a
+            // colour, and the picker sheet already sends both. Sending only the
+            // size here made the same shirt land as a second line with its
+            // colour lost.
+            val result = cart.add(
+                productId = product.id,
+                variantId = current.selectedSizeId,
+                colorVariantId = current.selectedColorId,
+            )
             _state.update { it.copy(adding = false) }
             onDone(
                 when (result) {

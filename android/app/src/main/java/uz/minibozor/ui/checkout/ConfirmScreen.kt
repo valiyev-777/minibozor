@@ -82,7 +82,7 @@ fun ConfirmScreen(
                         glyph = "pin",
                         subtitle = preview.address?.meta ?: preview.pickupPoint?.address,
                         showChevron = false,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                     MbDivider(inset = 62.dp)
                     MbListRow(
@@ -90,7 +90,7 @@ fun ConfirmScreen(
                         glyph = "clock",
                         subtitle = preview.slot?.note,
                         showChevron = false,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                     MbDivider(inset = 62.dp)
                     MbListRow(
@@ -101,7 +101,7 @@ fun ConfirmScreen(
                             stringResource(R.string.kuryerga_topshirishda)
                         } else preview.card?.brand,
                         showChevron = false,
-                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentPadding = 10.dp,
                     )
                 }
             }
