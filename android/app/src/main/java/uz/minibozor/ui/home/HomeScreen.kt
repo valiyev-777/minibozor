@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.LaunchedEffect
@@ -53,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -125,6 +127,13 @@ fun HomeScreen(
                 modifier = Modifier.padding(padding),
                 loading = { HomeSkeleton(it) },
             ) { home ->
+                // Hoisted out of the lazy item that draws it. A pager built
+                // inside the list is torn down the moment the banners scroll
+                // off the top and stood back up — new pager, new page, new
+                // timer — when they come back, which is both a hitch in that
+                // frame and a lost place in the carousel.
+                val bannerPager = rememberPagerState(pageCount = { home.banners.size })
+
                 PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = {
@@ -148,9 +157,15 @@ fun HomeScreen(
                         .graphicsLayer {
                             alpha = enter.value
                             translationY = (1f - enter.value) * 26.dp.toPx()
+                            // Auto would put the whole feed through a
+                            // full-screen offscreen buffer for as long as alpha
+                            // is under 1 — during the very first flick, that
+                            // is. Modulating instead applies the fade per draw,
+                            // which for a fade from nothing looks the same.
+                            compositingStrategy = CompositingStrategy.ModulateAlpha
                         }
                 ) {
-                    item(contentType = "header") {
+                    item(key = "header", contentType = "header") {
                         HomeHeader(
                             city = city,
                             onOpenSearch = onOpenSearch,
@@ -159,9 +174,9 @@ fun HomeScreen(
                     }
 
                     if (home.banners.isNotEmpty()) {
-                        item(contentType = "banners") {
+                        item(key = "banners", contentType = "banners") {
                             Box(Modifier.padding(top = SectionGap)) {
-                                BannerCarousel(home.banners, onOpenBanner)
+                                BannerCarousel(home.banners, bannerPager, onOpenBanner)
                             }
                         }
                     }
@@ -184,7 +199,7 @@ fun HomeScreen(
                         )
                     }
 
-                    item(contentType = "spacer") { MbTabBarSpacer() }
+                    item(key = "tab-bar-spacer", contentType = "spacer") { MbTabBarSpacer() }
                 }
                 }
             }
@@ -289,9 +304,11 @@ private fun HomeHeader(
 }
 
 @Composable
-private fun BannerCarousel(banners: List<BannerDto>, onClick: (BannerDto) -> Unit) {
-    val pager = rememberPagerState(pageCount = { banners.size })
-
+private fun BannerCarousel(
+    banners: List<BannerDto>,
+    pager: PagerState,
+    onClick: (BannerDto) -> Unit,
+) {
     // Keyed on settledPage, so the wait restarts every time the carousel comes
     // to rest — including after the customer swipes it themselves, which is
     // what stops it yanking the page away from under their thumb.

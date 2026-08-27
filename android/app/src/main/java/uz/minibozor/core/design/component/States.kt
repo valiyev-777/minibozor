@@ -90,17 +90,3 @@ fun MbErrorState(
     actionLabel = stringResource(R.string.qayta_urinish),
     onAction = onRetry,
 )
-
-/** Grey block used while a list is loading. */
-@Composable
-fun MbSkeleton(
-    modifier: Modifier = Modifier,
-    height: androidx.compose.ui.unit.Dp = 16.dp,
-) {
-    Box(
-        modifier
-            .height(height)
-            .clip(MbTheme.shapes.badge)
-            .background(MbTheme.colors.fill)
-    )
-}

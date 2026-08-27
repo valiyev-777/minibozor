@@ -24,6 +24,20 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
+ * Whether the floating bar blurs the live screen behind it.
+ *
+ * Off, and deliberately. A live backdrop costs, on every single frame: the whole
+ * screen recorded into an offscreen layer, that layer composited back over the
+ * real one, and a 22 dp Gaussian pass over the strip behind the bar. That tax
+ * lands on exactly the frames a scrolling product feed cannot spare, and the
+ * bar's own fill is 94% opaque — almost none of the blur was visible through it.
+ *
+ * The fallback below it is the translucent slab the bar shipped with. Flip this
+ * to true to compare; nothing else needs changing.
+ */
+val MbLiveGlass: Boolean = false
+
+/**
  * The pieces of a live "liquid glass" panel: [glassSource] records what a
  * screen draws, and [liquidGlass] replays that recording behind a panel,
  * blurred and tinted — so the bar genuinely refracts the content scrolling
