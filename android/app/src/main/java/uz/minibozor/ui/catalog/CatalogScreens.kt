@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.component.MbTabHeader
 import uz.minibozor.core.design.component.MbCard
 import uz.minibozor.core.design.component.MbDivider
 import uz.minibozor.core.design.component.MbListRow
@@ -54,16 +55,12 @@ fun CatalogScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MbTheme.colors.surface)
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-            ) {
-                MbText(stringResource(R.string.katalog), MbTheme.type.title1)
-                Spacer(Modifier.height(12.dp))
-                MbSearchPill(stringResource(R.string.turkum_yoki_mahsulot_qidirish), onOpenSearch)
-            }
+            MbTabHeader(
+                stringResource(R.string.katalog),
+                below = {
+                    MbSearchPill(stringResource(R.string.turkum_yoki_mahsulot_qidirish), onOpenSearch)
+                },
+            )
 
             UiStateContent(state, viewModel::load) { categories ->
                 LazyColumn(

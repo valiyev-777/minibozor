@@ -151,7 +151,12 @@ fun MiniBozorNavHost(
 
         // ---------------------------------------------------------- tabs
 
-        composable(Routes.HOME) {
+        // Each tab answers to a link of its own, so a notification can open
+        // the cart or an order straight off.
+        composable(
+            Routes.HOME,
+            deepLinks = listOf(navDeepLink { uriPattern = "minibozor://home" }),
+        ) {
             MainScaffold(currentRoute, ::switchTab) {
                 HomeScreen(
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
@@ -180,7 +185,10 @@ fun MiniBozorNavHost(
             }
         }
 
-        composable(Routes.CATALOG) {
+        composable(
+            Routes.CATALOG,
+            deepLinks = listOf(navDeepLink { uriPattern = "minibozor://catalog" }),
+        ) {
             MainScaffold(currentRoute, ::switchTab) {
                 CatalogScreen(
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
@@ -197,7 +205,10 @@ fun MiniBozorNavHost(
             }
         }
 
-        composable(Routes.CART) {
+        composable(
+            Routes.CART,
+            deepLinks = listOf(navDeepLink { uriPattern = "minibozor://cart" }),
+        ) {
             MainScaffold(currentRoute, ::switchTab) {
                 CartScreen(
                     onCheckout = { navController.navigate(CHECKOUT_GRAPH) },
@@ -207,7 +218,10 @@ fun MiniBozorNavHost(
             }
         }
 
-        composable(Routes.PROFILE) {
+        composable(
+            Routes.PROFILE,
+            deepLinks = listOf(navDeepLink { uriPattern = "minibozor://profile" }),
+        ) {
             MainScaffold(currentRoute, ::switchTab) {
                 ProfileScreen(
                     onNavigate = { route -> navController.navigate(route) },

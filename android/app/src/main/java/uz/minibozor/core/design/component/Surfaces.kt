@@ -55,6 +55,42 @@ fun MbScreen(
 }
 
 /**
+ * The header a tab's own screen wears: its name, and room for one note beside
+ * it.
+ *
+ * One component rather than each screen rolling its own row, because they had
+ * drifted — the cart's name sat two points lower than the catalogue's, and the
+ * profile had no header at all, so its first card began right under the clock.
+ * The status bar is already cleared by [MbScreen], so the padding here is the
+ * breathing room above the name and nothing else, which makes it the same
+ * distance from the clock on every phone.
+ */
+@Composable
+fun MbTabHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    trailing: @Composable (() -> Unit)? = null,
+    below: @Composable (() -> Unit)? = null,
+) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(MbTheme.colors.surface)
+            .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MbText(title, MbTheme.type.title1)
+            Spacer(Modifier.weight(1f))
+            trailing?.invoke()
+        }
+        if (below != null) {
+            Spacer(Modifier.height(12.dp))
+            below()
+        }
+    }
+}
+
+/**
  * The header used across the inner screens: a circular back button, a centred
  * title, and room for one trailing action.
  */
