@@ -110,11 +110,29 @@ fun Hero(
     closed: () -> Float,
     /** Hoisted, so the bar above shares the page the photo is showing. */
     pager: PagerState,
+    /**
+     * Pixels the photo hangs back from the scroll.
+     *
+     * The list moves everything up together; holding the photo back by a
+     * fraction of that lets the page's own panels climb over it, which is what
+     * puts them plainly in front rather than merely after it. Applied to the
+     * whole frame, ground included, or the picture would slide out of its own
+     * backdrop.
+     */
+    lag: () -> Float,
 ) {
     Box(
         Modifier
             .fillMaxWidth()
             .height(heroHeight())
+            // Read in the layer phase: following the scroll this way costs no
+            // recomposition, only a new transform.
+            .graphicsLayer {
+                translationY = lag()
+                // Held solid while the panels ride over it, so what is in
+                // front reads as being in front. Only then does it go.
+                alpha = 1f - ((closed() - 0.45f) / 0.55f).coerceIn(0f, 1f)
+            }
             // The theme's photo ground, the same one the grid tiles use.
             .background(MbTheme.colors.photoStudio)
     ) {
@@ -138,8 +156,6 @@ fun Hero(
                         val distance = ((pager.currentPage - page) +
                             pager.currentPageOffsetFraction).coerceIn(-1f, 1f)
                         val progress = closed()
-                        translationY = progress * size.height * 0.30f
-                        alpha = 1f - progress
                         val settled = 1f - kotlin.math.abs(distance)
                         val scale = (0.92f + 0.08f * settled) * (1f - 0.06f * progress)
                         scaleX = scale

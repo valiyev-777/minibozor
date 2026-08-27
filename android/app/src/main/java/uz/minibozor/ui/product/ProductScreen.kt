@@ -60,6 +60,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -93,6 +94,16 @@ import uz.minibozor.core.util.toColor
 import uz.minibozor.ui.common.MbToastHost
 import uz.minibozor.ui.common.rememberToast
 import uz.minibozor.ui.product.component.ReviewRow
+
+/**
+ * The share of the scroll the photograph sits out.
+ *
+ * Enough that the page's first panel is seen crossing over it — at nothing it
+ * simply follows the picture off the top, which is the same order of events
+ * without the sense of one being in front. Too much and the photo hangs about
+ * after everything has passed it.
+ */
+private const val HeroLag = 0.45f
 
 /** Screen 14 — Mahsulot. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -207,6 +218,13 @@ fun ProductScreen(
                                 images = product.images,
                                 closed = { closed },
                                 pager = heroPager,
+                                // Read here, in the lambda, so the scroll is
+                                // followed in the layer phase rather than
+                                // recomposing this item on every frame.
+                                lag = {
+                                    if (listState.firstVisibleItemIndex > 0) 0f
+                                    else listState.firstVisibleItemScrollOffset * HeroLag
+                                },
                             )
                         }
 
@@ -217,7 +235,11 @@ fun ProductScreen(
                         // would just be a long box with no seams where the
                         // subject changes.
                         item(key = "identity") {
-                            MbCard(shape = RectangleShape) {
+                            // Above the photo, and it overlaps it because the
+                            // photo hangs back — so the panel is seen crossing
+                            // in front of the picture rather than arriving
+                            // once the picture has gone.
+                            MbCard(shape = RectangleShape, modifier = Modifier.zIndex(1f)) {
                                 // No price here: it is in the buy bar a thumb's
                                 // reach away and in the bar once the photo
                                 // closes, so a third copy is just noise.
