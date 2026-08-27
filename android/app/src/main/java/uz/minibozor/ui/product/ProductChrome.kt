@@ -43,20 +43,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
@@ -91,9 +88,6 @@ fun heroHeight(): Dp = LocalConfiguration.current.screenWidthDp.dp + chromeHeigh
 fun chromeHeight(): Dp =
     WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 56.dp
 
-/** Enough to sit behind the status bar and the row of buttons under it. */
-private val StatusScrimHeight = 108.dp
-
 /** A stable key for the recommendations row. */
 const val RecommendationsKey = "recommendations"
 
@@ -125,42 +119,45 @@ fun Hero(
         Modifier
             .fillMaxWidth()
             .height(heroHeight())
+            // Behind every other section, whatever the scroll is doing. Held
+            // back it can reach past the panel in front of it, and a short one
+            // — a product with no subtitle and nothing said about it — is not
+            // long enough to hide the whole of it.
+            .zIndex(-1f)
             // Read in the layer phase: following the scroll this way costs no
             // recomposition, only a new transform.
-            .graphicsLayer {
-                translationY = lag()
-                // Held solid while the panels ride over it, so what is in
-                // front reads as being in front. Only then does it go.
-                alpha = 1f - ((closed() - 0.45f) / 0.55f).coerceIn(0f, 1f)
-            }
+            //
+            // Nothing fades here. Fading it left the top of the screen showing
+            // the page's own ground through a transparent photograph — a white
+            // band on the light theme, for the whole time the frame was still
+            // on screen and not yet covered. It leaves by being covered and by
+            // scrolling off, both of which are opaque the entire way.
+            .graphicsLayer { translationY = lag() }
             // The theme's photo ground, the same one the grid tiles use.
             .background(MbTheme.colors.photoStudio)
     ) {
         // Below the bar, not under it: the frame is a square of photo plus the
         // bar's own height, so the whole picture is in the clear.
+        //
+        // The square comes from the measured width rather than from the frame
+        // less the bar. Both are rounded from dp independently, and they came
+        // out two pixels apart — enough for a fitted square photograph to
+        // leave a hairline of ground down each side. Any slack now falls at
+        // the top, behind the bar, where there is nothing to see.
         HorizontalPager(
             pager,
             Modifier
-                .fillMaxSize()
-                .padding(top = chromeHeight()),
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .aspectRatio(1f),
         ) { page ->
             MbProductImage(
                 images.getOrNull(page),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        // Both the swipe offset and the scroll are read here,
-                        // in the layer phase. Reading the pager during
-                        // composition instead recomposed every page on every
-                        // frame of a swipe, which is what made it stutter.
-                        val distance = ((pager.currentPage - page) +
-                            pager.currentPageOffsetFraction).coerceIn(-1f, 1f)
-                        val progress = closed()
-                        val settled = 1f - kotlin.math.abs(distance)
-                        val scale = (0.92f + 0.08f * settled) * (1f - 0.06f * progress)
-                        scaleX = scale
-                        scaleY = scale
-                    },
+                modifier = Modifier.fillMaxSize(),
+                // No scaling. The photograph fills its frame exactly, so
+                // anything under full size pulls it off the edges and shows
+                // the frame's ground down both sides — which is the seam this
+                // page has spent long enough getting rid of.
                 shape = RectangleShape,
                 // The whole product, uncropped: the taller frame exists so the
                 // photo can be seen in full, so a crop would defeat it.
@@ -206,7 +203,6 @@ fun Hero(
 @Composable
 fun ProductChrome(
     product: ProductDto?,
-    closed: () -> Float,
     /** How far the product's name has been handed from the page to this bar. */
     handover: () -> Float,
     onBack: () -> Unit,
@@ -245,18 +241,17 @@ fun ProductChrome(
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            GlassButton("arrow-left", closed, onClick = onBack)
+            GlassButton("arrow-left", onClick = onBack)
             Spacer(Modifier.weight(1f))
             if (product != null) {
                 GlassButton(
                     glyph = "heart",
-                    closed = closed,
                     filled = product.isFavorite,
                     tint = if (product.isFavorite) MbTheme.colors.danger else null,
                     onClick = onToggleFavorite,
                 )
                 Spacer(Modifier.width(10.dp))
-                GlassButton("share", closed, onClick = onShare)
+                GlassButton("share", onClick = onShare)
             }
         }
 
@@ -297,13 +292,12 @@ fun ProductChrome(
 }
 
 /**
- * A circular button legible on a photo and on a plain surface alike: it starts
- * as a light scrim over the picture and dissolves into the bar's own fill.
+ * A circular button legible on a photograph and on a plain surface alike: the
+ * bar's own fill, which is a step off both.
  */
 @Composable
 private fun GlassButton(
     glyph: String,
-    closed: () -> Float,
     modifier: Modifier = Modifier,
     filled: Boolean = false,
     tint: Color? = null,
