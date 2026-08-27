@@ -43,8 +43,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -115,27 +115,33 @@ fun Hero(
      */
     lag: () -> Float,
 ) {
+    // Two boxes, and the clip between them is the point. The outer one keeps
+    // the frame's own bounds and scrolls with the list; the inner one holds
+    // back. Held back without the clip the picture reaches past the panel in
+    // front of it and turns up again in the seams between the panels below,
+    // sliding about in them. Clipped, it can only ever be seen in the band the
+    // panel has not yet reached.
     Box(
         Modifier
             .fillMaxWidth()
             .height(heroHeight())
-            // Behind every other section, whatever the scroll is doing. Held
-            // back it can reach past the panel in front of it, and a short one
-            // — a product with no subtitle and nothing said about it — is not
-            // long enough to hide the whole of it.
-            .zIndex(-1f)
-            // Read in the layer phase: following the scroll this way costs no
-            // recomposition, only a new transform.
-            //
-            // Nothing fades here. Fading it left the top of the screen showing
-            // the page's own ground through a transparent photograph — a white
-            // band on the light theme, for the whole time the frame was still
-            // on screen and not yet covered. It leaves by being covered and by
-            // scrolling off, both of which are opaque the entire way.
-            .graphicsLayer { translationY = lag() }
-            // The theme's photo ground, the same one the grid tiles use.
-            .background(MbTheme.colors.photoStudio)
+            .clipToBounds()
     ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                // Read in the layer phase: following the scroll this way costs
+                // no recomposition, only a new transform.
+                //
+                // Nothing fades here. Fading it left the top of the screen
+                // showing the page's own ground through a transparent
+                // photograph — a white band on the light theme, for the whole
+                // time the frame was still on screen and not yet covered. It
+                // leaves by being covered, which is opaque the entire way.
+                .graphicsLayer { translationY = lag() }
+                // The theme's photo ground, the same one the grid tiles use.
+                .background(MbTheme.colors.photoStudio)
+        ) {
         // Below the bar, not under it: the frame is a square of photo plus the
         // bar's own height, so the whole picture is in the clear.
         //
@@ -189,6 +195,7 @@ fun Hero(
                 }
             }
         }
+      }
     }
 }
 
@@ -411,13 +418,17 @@ fun BuyBar(
  * A genuine "recently viewed" needs a view history the app does not keep yet.
  */
 @Composable
-fun Recommendations(products: List<ProductCardDto>, onOpenProduct: (Int) -> Unit) {
+fun Recommendations(
+    products: List<ProductCardDto>,
+    onOpenProduct: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var tab by remember { mutableIntStateOf(0) }
     val ordered = remember(products, tab) {
         if (tab == 0) products else products.sortedByDescending { it.reviewsCount }
     }
 
-    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+    Column(modifier.fillMaxWidth().padding(top = 6.dp)) {
         SectionHeader(
             stringResource(R.string.oxshash_tovarlar),
             modifier = Modifier.padding(horizontal = 16.dp),

@@ -68,17 +68,22 @@ import uz.minibozor.ui.common.rememberToast
 import uz.minibozor.ui.product.component.ReviewRow
 
 /**
- * The share of the scroll the photograph sits out, at its strongest.
+ * The share of the scroll the photograph sits out.
  *
- * Enough that the page's first panel is seen crossing over it — at nothing it
- * simply follows the picture off the top, which is the same order of events
- * without the sense of one being in front.
+ * At 0.7 it climbs at three tenths of the page's pace, so seven tenths of what
+ * you scroll is the panel below travelling up over it. The picture barely
+ * leaves; it is covered where it stands.
  *
- * Tapered back to nothing by the time the frame's own bounds leave the screen,
- * because the list stops drawing it there: held back at that moment it would
- * still be part way down the screen and would vanish rather than leave.
+ * Held flat rather than tapered off. It used to ease back to nothing so the
+ * photograph would leave with its own bounds — but the panel now meets it with
+ * no gap between them, so by the time the list stops drawing the frame the
+ * panel has already covered the last of it, and there is nothing left to see
+ * go.
  */
-private const val HeroLag = 0.55f
+private const val HeroLag = 0.7f
+
+/** The seam between two sections, carried by the lower of the pair. */
+private val SectionGap = Modifier.padding(top = 12.dp)
 
 /** Screen 14 — Mahsulot. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -185,7 +190,11 @@ fun ProductScreen(
                         state = listState,
                         // Room at the bottom for the buy bar to float over.
                         contentPadding = PaddingValues(bottom = 108.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        // No blanket spacing: the first panel has to butt
+                        // straight up against the photograph, or the gap is
+                        // still uncovered at the moment the list stops drawing
+                        // the photograph and shows as a strip of bare page.
+                        // Every panel after it carries its own gap instead.
                     ) {
                         // The photo runs edge to edge under the status bar and
                         // closes away behind the content as you scroll past it.
@@ -198,15 +207,8 @@ fun ProductScreen(
                                 // followed in the layer phase rather than
                                 // recomposing this item on every frame.
                                 lag = {
-                                    if (listState.firstVisibleItemIndex > 0) {
-                                        0f
-                                    } else {
-                                        val scrolled =
-                                            listState.firstVisibleItemScrollOffset.toFloat()
-                                        val remaining =
-                                            (1f - scrolled / heroHeightPx).coerceIn(0f, 1f)
-                                        scrolled * HeroLag * remaining
-                                    }
+                                    if (listState.firstVisibleItemIndex > 0) 0f
+                                    else listState.firstVisibleItemScrollOffset * HeroLag
                                 },
                             )
                         }
@@ -270,7 +272,7 @@ fun ProductScreen(
                         val colors = product.variants.filter { it.kind == "color" }
                         if (sizes.isNotEmpty() || colors.isNotEmpty()) {
                             item(key = "options") {
-                                MbCard(shape = RectangleShape) {
+                                MbCard(shape = RectangleShape, modifier = SectionGap) {
                                     if (sizes.isNotEmpty()) {
                                         SectionHeader(
                                             stringResource(R.string.olcham),
@@ -315,7 +317,7 @@ fun ProductScreen(
                         }
 
                         item(key = "smallprint") {
-                            MbCard(shape = RectangleShape) {
+                            MbCard(shape = RectangleShape, modifier = SectionGap) {
                                 // Folded, but the delivery line rides on the
                                 // header: it is the one fact here that helps
                                 // someone decide, and hiding it to tidy the
@@ -381,7 +383,7 @@ fun ProductScreen(
                         }
 
                         item {
-                            MbCard(shape = RectangleShape) {
+                            MbCard(shape = RectangleShape, modifier = SectionGap) {
                                 SectionHeader(
                                     title = stringResource(R.string.sharhlar),
                                     subtitle = state.summary?.let { pluralStringResource(R.plurals.n_items, it.total, it.total) },
@@ -408,6 +410,7 @@ fun ProductScreen(
                                 Recommendations(
                                     products = state.similar,
                                     onOpenProduct = onOpenProduct,
+                                    modifier = SectionGap,
                                 )
                             }
                         }
