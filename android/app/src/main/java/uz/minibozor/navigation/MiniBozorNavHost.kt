@@ -159,7 +159,13 @@ fun MiniBozorNavHost(
 
         composable(Routes.LOGIN) { entry ->
             LoginScreen(
-                onCodeSent = { phone -> navController.navigate(Routes.otp(phone)) },
+                // Single top: the button that sends the code stays live while
+                // the request is in flight, and two quick taps pushed the code
+                // screen twice — so backing out of it landed on another copy of
+                // itself rather than on the phone number.
+                onCodeSent = { phone ->
+                    navController.navigate(Routes.otp(phone)) { launchSingleTop = true }
+                },
                 onOpenTerms = { navController.navigate(Routes.legalDoc("ommaviy-oferta")) },
                 viewModel = entry.sharedAuthViewModel(navController),
             )
