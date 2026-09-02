@@ -64,7 +64,13 @@ data class MbDimens(
 
     val buttonHeight: Dp = 48.dp,
     val fieldHeight: Dp = 48.dp,
-    val searchHeight: Dp = 38.dp,
+    /**
+     * 44, not 38. Search is the one thing on the home page that is reached for
+     * at any depth of the feed, and 38 dp is under what a fingertip is reliably
+     * given — it also read as a thin grey slot rather than a field once it was
+     * the only thing left at the top of a scrolled page.
+     */
+    val searchHeight: Dp = 44.dp,
     /**
      * Tall enough for the panel's own content: kicker, two lines of title, a
      * line of subtitle and the button under them come to about 123 dp, which

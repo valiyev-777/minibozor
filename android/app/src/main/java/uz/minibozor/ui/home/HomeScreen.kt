@@ -5,6 +5,8 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Size
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Animatable
@@ -23,7 +25,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.pager.HorizontalPager
@@ -61,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.minibozor.core.design.MbText
+import uz.minibozor.core.design.MbPressAlpha
+import uz.minibozor.core.design.mbPressable
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCard
 import uz.minibozor.core.design.component.MbDealTile
@@ -89,6 +98,9 @@ import uz.minibozor.ui.common.rememberToast
  * scroll hitch — so the top and bottom fragments each carry their half of the
  * card's rounding and the middle fragments draw a plain surface.
  */
+/** How many times the banners are repeated so the carousel can run on. */
+private const val BannerLoops = 1000
+
 /** What a rail spends before its first tile, and after its last. */
 private val RailEdge = 20.dp
 
@@ -102,7 +114,7 @@ private val SectionGap = 12.dp
  * Screen 07. One request fills the whole page: banners, the 5x2 category grid,
  * a deals pair, a two-column recommendation grid and two horizontal rails.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     onOpenSearch: () -> Unit,
@@ -135,7 +147,21 @@ fun HomeScreen(
                 // off the top and stood back up — new pager, new page, new
                 // timer — when they come back, which is both a hitch in that
                 // frame and a lost place in the carousel.
-                val bannerPager = rememberPagerState(pageCount = { home.banners.size })
+                // Far more pages than anyone will swipe, and started in the
+                // middle of them, so the carousel only ever moves forward.
+                // Counting the real banners meant the step after the last one
+                // was a scroll back to zero — three animating backwards past
+                // two to reach one, which is the carousel unwinding itself
+                // rather than coming round.
+                val feed = rememberLazyListState()
+                // True once the city row above the search has gone: the row is
+                // the list's first item, so anything else at the top means the
+                // search is standing on its own over the feed.
+                val stuck by remember { derivedStateOf { feed.firstVisibleItemIndex > 0 } }
+                val bannerPager = rememberPagerState(
+                    initialPage = if (home.banners.isEmpty()) 0 else BannerLoops / 2 * home.banners.size,
+                    pageCount = { if (home.banners.isEmpty()) 0 else home.banners.size * BannerLoops },
+                )
 
                 PullToRefreshBox(
                     isRefreshing = refreshing,
@@ -155,7 +181,8 @@ fun HomeScreen(
                 }
 
                 LazyColumn(
-                    Modifier
+                    state = feed,
+                    modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
                             alpha = enter.value
@@ -169,11 +196,16 @@ fun HomeScreen(
                         }
                 ) {
                     item(key = "header", contentType = "header") {
-                        HomeHeader(
-                            city = city,
-                            onOpenSearch = onOpenSearch,
-                            onPickRegion = { showRegions = true },
-                        )
+                        HomeCityRow(city = city, onPickRegion = { showRegions = true })
+                    }
+
+                    // Sticky, where the city above it is not. Searching is the
+                    // one thing a customer may want at any depth of the feed,
+                    // and the feed is long enough that finding it meant flinging
+                    // back to the top; where they are delivering to is a thing
+                    // they set once and read at the top.
+                    stickyHeader(key = "search", contentType = "search") {
+                        HomeSearchRow(onOpenSearch = onOpenSearch, stuck = stuck)
                     }
 
                     if (home.banners.isNotEmpty()) {
@@ -276,33 +308,75 @@ private fun RegionPicker(
 }
 
 @Composable
-private fun HomeHeader(
-    city: String,
-    onOpenSearch: () -> Unit,
-    onPickRegion: () -> Unit,
-) {
-    Column(Modifier.background(MbTheme.colors.surface)) {
-        Row(
-            Modifier
-                .padding(start = 14.dp, end = 20.dp, top = 6.dp, bottom = 8.dp)
-                .mbClickable(MbTheme.shapes.chip, onClick = onPickRegion)
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            MbIcon("pin", size = 16.dp, tint = MbTheme.colors.accent, strokeWidth = 1.9f)
-            // The stored city is always Uzbek; show it in the app language.
-            MbText(regionLabel(city), MbTheme.type.body.copy(fontWeight = FontWeight.Bold))
-            MbIcon(
-                "chevron-down",
-                size = 18.dp,
-                tint = MbTheme.colors.textSecondary,
-                strokeWidth = 2f,
-            )
-        }
-        Box(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 14.dp)) {
-            MbSearchPill(stringResource(R.string.mahsulot_va_turkumlar_qidirish), onOpenSearch)
-        }
+private fun HomeCityRow(city: String, onPickRegion: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MbTheme.colors.surface)
+            .padding(start = 14.dp, end = 20.dp, top = 6.dp, bottom = 8.dp)
+            .mbClickable(MbTheme.shapes.chip, onClick = onPickRegion)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        MbIcon("pin", size = 16.dp, tint = MbTheme.colors.accent, strokeWidth = 1.9f)
+        // The stored city is always Uzbek; show it in the app language.
+        MbText(regionLabel(city), MbTheme.type.body.copy(fontWeight = FontWeight.Bold))
+        MbIcon(
+            "chevron-down",
+            size = 18.dp,
+            tint = MbTheme.colors.textSecondary,
+            strokeWidth = 2f,
+        )
+    }
+}
+
+/**
+ * The search pill, which stays at the top while the feed runs under it.
+ *
+ * Opaque, and the full width of the window: a sticky header is drawn over the
+ * list rather than beside it, so anything see-through here shows the products
+ * sliding along behind the placeholder.
+ */
+@Composable
+private fun HomeSearchRow(onOpenSearch: () -> Unit, stuck: Boolean) {
+    // A shadow under the band rather than a rule, and none at all on the dark
+    // theme — the same two decisions a product card makes, for the same two
+    // reasons. A hairline is a drawn edge: the eye finds it whether or not it
+    // was looking, and this page keeps no edges anywhere else. A shadow is only
+    // found when looked for, which is all this has to do — say that the white
+    // above is in front of the white below. On the dark theme the band is a
+    // step lighter than the page already, and a black gradient over a near
+    // black canvas would be nothing but wasted drawing.
+    val lift = if (MbTheme.colors.isDark) 0f else 1f
+    val depth by animateFloatAsState(
+        if (stuck) lift else 0f,
+        tween(180, easing = FastOutSlowInEasing),
+        label = "searchLift",
+    )
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .drawBehind {
+                if (depth <= 0.01f) return@drawBehind
+                val fall = 9.dp.toPx()
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        listOf(Color.Black.copy(alpha = 0.085f * depth), Color.Transparent),
+                        startY = size.height,
+                        endY = size.height + fall,
+                    ),
+                    topLeft = Offset(0f, size.height),
+                    size = Size(size.width, fall),
+                )
+            }
+            .background(MbTheme.colors.surface)
+            // Even above and below: the pill used to take its top margin from
+            // the city row it followed, and splitting the two left it pressed
+            // against the top of its own band.
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+    ) {
+        MbSearchPill(stringResource(R.string.mahsulot_va_turkumlar_qidirish), onOpenSearch)
     }
 }
 
@@ -318,8 +392,10 @@ private fun BannerCarousel(
     LaunchedEffect(pager.settledPage, banners.size) {
         if (banners.size < 2) return@LaunchedEffect
         delay(4_500)
+        // Always the next page, never a modulo back to the first: the pages run
+        // far enough in both directions that forward is always available.
         pager.animateScrollToPage(
-            page = (pager.settledPage + 1) % banners.size,
+            page = pager.settledPage + 1,
             animationSpec = tween(700, easing = FastOutSlowInEasing),
         )
     }
@@ -331,7 +407,7 @@ private fun BannerCarousel(
             contentPadding = PaddingValues(horizontal = 12.dp),
         ) { page ->
             BannerCard(
-                banner = banners[page],
+                banner = banners[page % banners.size],
                 // A lambda, not a value: read as a value here the card would
                 // recompose on every frame of a swipe. Read inside the layer
                 // instead, only the drawing is invalidated.
@@ -339,7 +415,7 @@ private fun BannerCarousel(
                     (pager.currentPage - page + pager.currentPageOffsetFraction)
                         .coerceIn(-1f, 1f)
                 },
-                onClick = { onClick(banners[page]) },
+                onClick = { onClick(banners[page % banners.size]) },
             )
         }
         Spacer(Modifier.height(10.dp))
@@ -348,7 +424,7 @@ private fun BannerCarousel(
             horizontalArrangement = Arrangement.Center,
         ) {
             repeat(banners.size) { index ->
-                val active = index == pager.currentPage
+                val active = index == pager.currentPage % banners.size
                 val width by animateDpAsState(
                     if (active) 14.dp else 3.5.dp,
                     tween(260, easing = FastOutSlowInEasing),
@@ -467,7 +543,17 @@ private fun CategoryCell(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier.clickable { onClick(category) },
+        // A bare `clickable` presses in a hard rectangle the full width of the
+        // cell and the full height of tile plus label — a corner-to-corner slab
+        // under a 44 dp rounded tile. The highlight is drawn over the content
+        // rather than clipping it, which is what keeps the two-line names off
+        // the corner arcs.
+        modifier
+            .mbPressable(
+                MbTheme.shapes.tile,
+                MbTheme.colors.ink.copy(alpha = MbPressAlpha),
+            ) { onClick(category) }
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
