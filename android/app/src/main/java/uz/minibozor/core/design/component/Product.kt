@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
@@ -621,46 +622,80 @@ private fun ProductTileBody(
     }
 }
 
-/** The 112 dp tile used by the horizontal rails ("Poyabzal", "Elektronika"). */
+/**
+ * One product in a horizontal rail: the photograph, and what it costs under it.
+ *
+ * The tile used to be a picture inside a rounded box inside a rounded card, with
+ * 7 dp of warm ground showing between the two — three edges to read before the
+ * shoe, on a card narrow enough that the shoe was the smallest thing on it. The
+ * photograph runs to the card's own edges now and the card's clip rounds its top
+ * corners, so there is one edge and the picture is what the card is.
+ *
+ * The saving moved onto the photograph with it. It had been sitting under the
+ * price on a line of its own, which is a percentage placed as far from the
+ * picture as the card allows; on the photograph it is where the eye already is,
+ * and the line it left behind now carries the price it is a percentage of.
+ */
 @Composable
 fun MbRailTile(
     title: String,
     price: Int,
+    oldPrice: Int?,
     discountPercent: Int?,
     imageUrl: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val was = oldPrice?.takeIf { it > price }
     Column(
         modifier
             .width(MbTheme.dimens.railTileWidth)
             // A step less round than the grid tile: the same 18 dp corner on a
-            // 112 dp card is half its width in arcs.
-            .productCard(onClick = onClick, shape = MbTheme.shapes.tile)
-            .padding(7.dp),
+            // card this narrow is half its width in arcs.
+            .productCard(onClick = onClick, shape = MbTheme.shapes.tile),
     ) {
-        MbProductImage(
-            imageUrl,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f),
-            shape = MbTheme.shapes.tileSmall,
-            background = MbTheme.colors.photoWarm,
-        )
-        Spacer(Modifier.height(8.dp))
-        // The same block the grid tile uses, a size down. It used to be a row of
-        // its own making — the price and 9.5 sp of red text side by side — which
-        // on a 112 dp card meant a nine-figure price and a percentage fighting
-        // over 98 dp, and the price losing its last digits.
-        MbPriceRow(
-            price = price,
-            discountPercent = discountPercent,
-            priceStyle = MbTheme.type.priceSmall,
-        )
-        Spacer(Modifier.height(4.dp))
-        // A step up from meta: the rail is 112 dp wide, so a name gets two short
-        // lines and needs every one of them to be readable.
-        MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
+        Box {
+            MbProductImage(
+                imageUrl,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f),
+                // Square: the card is already clipped to its own corners, and a
+                // second rounding here would draw the picture's arcs inside them.
+                shape = RectangleShape,
+                background = MbTheme.colors.photoWarm,
+            )
+            if (discountPercent != null) {
+                MbDiscountPill(
+                    discountPercent,
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(7.dp),
+                )
+            }
+        }
+        Column(Modifier.padding(start = 10.dp, end = 10.dp, top = 9.dp, bottom = 11.dp)) {
+            MbText(price.grouped(), MbTheme.type.priceSmall, maxLines = 1)
+            // The line is held whether or not there is anything to put on it, so
+            // a discounted tile and a full-price one beside it end at the same
+            // height. A minimum rather than a fixed height, so it still has
+            // somewhere to go when the customer has turned their font size up.
+            Box(Modifier.defaultMinSize(minHeight = 15.dp)) {
+                if (was != null) {
+                    MbText(
+                        was.grouped(),
+                        MbTheme.type.strikePrice
+                            .copy(textDecoration = TextDecoration.LineThrough),
+                        MbTheme.colors.textQuaternary,
+                        maxLines = 1,
+                    )
+                }
+            }
+            Spacer(Modifier.height(3.dp))
+            // A step up from meta: the tile is the narrowest card in the app, so
+            // a name gets two short lines and needs both of them to be readable.
+            MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
+        }
     }
 }
 

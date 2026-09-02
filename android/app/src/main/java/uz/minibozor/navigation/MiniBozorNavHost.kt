@@ -47,6 +47,7 @@ import uz.minibozor.ui.checkout.PaymentMethodScreen
 import uz.minibozor.ui.home.HomeScreen
 import uz.minibozor.ui.onboarding.OnboardingScreen
 import uz.minibozor.ui.orders.OrderDetailScreen
+import uz.minibozor.ui.orders.ReturnsScreen
 import uz.minibozor.ui.orders.OrdersScreen
 import uz.minibozor.ui.orders.ReasonScreen
 import uz.minibozor.ui.product.ProductScreen
@@ -159,7 +160,13 @@ fun MiniBozorNavHost(
 
         composable(Routes.LOGIN) { entry ->
             LoginScreen(
-                onCodeSent = { phone -> navController.navigate(Routes.otp(phone)) },
+                // Single top: the button that sends the code stays live while
+                // the request is in flight, and two quick taps pushed the code
+                // screen twice — so backing out of it landed on another copy of
+                // itself rather than on the phone number.
+                onCodeSent = { phone ->
+                    navController.navigate(Routes.otp(phone)) { launchSingleTop = true }
+                },
                 onOpenTerms = { navController.navigate(Routes.legalDoc("ommaviy-oferta")) },
                 viewModel = entry.sharedAuthViewModel(navController),
             )
@@ -415,7 +422,7 @@ fun MiniBozorNavHost(
             OrderPlacedScreen(
                 orderId = orderId,
                 onTrack = { id ->
-                    navController.navigate(Routes.tracking(id)) {
+                    navController.navigate(Routes.orderDetail(id)) {
                         popUpTo(Routes.ORDER_PLACED) { inclusive = true }
                     }
                 },
@@ -427,18 +434,11 @@ fun MiniBozorNavHost(
 
         // ---------------------------------------------------------- 25-29
 
-        composable(
-            Routes.TRACKING,
-            arguments = listOf(navArgument(Args.ORDER_ID) { type = NavType.IntType }),
-        ) { entry ->
-            OrderScreenHost(entry, navController, trackingOnly = true)
-        }
-
         composable(Routes.ORDERS) {
             OrdersScreen(
                 onBack = { navController.popBackStack() },
                 onOpenOrder = { id -> navController.navigate(Routes.orderDetail(id)) },
-                onTrack = { id -> navController.navigate(Routes.tracking(id)) },
+                onTrack = { id -> navController.navigate(Routes.orderDetail(id)) },
                 onStartShopping = { switchTab(Routes.HOME) },
             )
         }
@@ -447,7 +447,7 @@ fun MiniBozorNavHost(
             Routes.ORDER_DETAIL,
             arguments = listOf(navArgument(Args.ORDER_ID) { type = NavType.IntType }),
         ) { entry ->
-            OrderScreenHost(entry, navController, trackingOnly = false)
+            OrderScreenHost(entry, navController)
         }
 
         composable(
@@ -472,6 +472,10 @@ fun MiniBozorNavHost(
                 onBack = { navController.popBackStack() },
                 onDone = { navController.popBackStack() },
             )
+        }
+
+        composable(Routes.RETURNS) {
+            ReturnsScreen(onBack = { navController.popBackStack() })
         }
 
         // ---------------------------------------------------------- 31-46
@@ -601,12 +605,10 @@ fun MiniBozorNavHost(
 private fun OrderScreenHost(
     entry: NavBackStackEntry,
     navController: NavHostController,
-    trackingOnly: Boolean,
 ) {
     val orderId = entry.arguments?.getInt(Args.ORDER_ID) ?: 0
     OrderDetailScreen(
         orderId = orderId,
-        trackingOnly = trackingOnly,
         onBack = { navController.popBackStack() },
         onCancel = { id -> navController.navigate(Routes.orderCancel(id)) },
         onReturn = { id -> navController.navigate(Routes.orderReturn(id)) },

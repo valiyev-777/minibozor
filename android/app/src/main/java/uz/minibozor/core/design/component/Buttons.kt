@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -161,7 +163,16 @@ fun MbBottomBar(
         modifier
             .fillMaxWidth()
             .background(MbTheme.colors.surface)
-            .windowInsetsPadding(WindowInsets.navigationBars)
+            // The keyboard as well as the navigation bar. The window is drawn
+            // edge to edge, which means it is not resized when the keyboard
+            // opens — so a footer that padded for the navigation bar alone sat
+            // underneath the keys, and the button that submits the form was the
+            // one thing the customer could not reach while filling it in.
+            //
+            // A union rather than both paddings in turn: the keyboard's inset
+            // already contains the navigation bar, and adding them would lift
+            // the bar twice as far as the keys are tall.
+            .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
             .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
         content()

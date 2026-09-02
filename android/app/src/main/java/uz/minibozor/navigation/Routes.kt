@@ -48,14 +48,14 @@ object Routes {
     fun orderPlaced(orderId: Int) = "order_placed/$orderId"
 
     // Orders
-    const val TRACKING = "tracking/{orderId}"              // 25
-    fun tracking(orderId: Int) = "tracking/$orderId"
     const val ORDERS = "orders"                            // 26
     const val ORDER_DETAIL = "order/{orderId}"             // 27
     fun orderDetail(orderId: Int) = "order/$orderId"
     const val ORDER_CANCEL = "order_cancel/{orderId}"      // 28
     fun orderCancel(orderId: Int) = "order_cancel/$orderId"
     const val ORDER_RETURN = "order_return/{orderId}"      // 29
+    /** Every return asked for, where ORDER_RETURN is the asking. */
+    const val RETURNS = "returns"
     fun orderReturn(orderId: Int) = "order_return/$orderId"
 
     // Account

@@ -518,13 +518,16 @@ fun Recommendations(
         }
         Spacer(Modifier.height(14.dp))
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            // The same edge the home page's rails keep, which is what the tile
+            // width is sized against.
+            contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(ordered, key = { it.id }) { item ->
                 MbRailTile(
                     title = item.title,
                     price = item.price,
+                    oldPrice = item.oldPrice,
                     discountPercent = item.discountPercent,
                     imageUrl = item.imageUrl,
                     onClick = { onOpenProduct(item.id) },
