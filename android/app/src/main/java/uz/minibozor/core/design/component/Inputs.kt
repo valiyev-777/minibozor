@@ -74,7 +74,12 @@ fun MbTextField(
                     shape = MbTheme.shapes.field,
                 )
                 .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            // Centred is right for the one-line field, where the text sits in a
+            // 48 dp pill and centring is what puts it on the pill's axis. It is
+            // wrong the moment the field is a box: a review field is 120 dp tall
+            // and holds one line to begin with, and centring started that line
+            // half way down the box with empty room above it.
+            verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (leadingGlyph != null) {
@@ -82,7 +87,15 @@ fun MbTextField(
             }
             Box(Modifier.weight(1f)) {
                 if (value.isEmpty()) {
-                    MbText(placeholder, MbTheme.type.bodySmall, MbTheme.colors.icon, maxLines = 1)
+                    // A one-line field has one line to say it in; a box has as
+                    // many as it takes, and the prompt that tells the customer
+                    // what to write about had been losing its last two words.
+                    MbText(
+                        placeholder,
+                        MbTheme.type.bodySmall,
+                        MbTheme.colors.icon,
+                        maxLines = if (singleLine) 1 else Int.MAX_VALUE,
+                    )
                 }
                 BasicTextField(
                     value = value,
