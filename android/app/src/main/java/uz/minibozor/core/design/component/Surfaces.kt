@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Scaffold
@@ -49,7 +50,13 @@ fun MbScreen(
         containerColor = background,
         topBar = topBar,
         bottomBar = bottomBar,
-        contentWindowInsets = WindowInsets.statusBars,
+        // System bars, not the status bar alone. The window is drawn edge to
+        // edge, so a screen with no bottom bar of its own ran its content to
+        // the physical bottom of the phone: the last thing on an order — the
+        // button that cancels it — sat on the gesture handle with 12 dp between
+        // them. A screen that does have a bottom bar is unaffected, since the
+        // Scaffold measures the bar itself for that edge.
+        contentWindowInsets = WindowInsets.systemBars,
         content = content,
     )
 }
