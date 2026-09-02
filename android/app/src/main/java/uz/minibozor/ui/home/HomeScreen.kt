@@ -89,6 +89,9 @@ import uz.minibozor.ui.common.rememberToast
  * scroll hitch — so the top and bottom fragments each carry their half of the
  * card's rounding and the middle fragments draw a plain surface.
  */
+/** What a rail spends before its first tile, and after its last. */
+private val RailEdge = 20.dp
+
 private val CardTopShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
 private val CardBottomShape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
 
@@ -591,13 +594,21 @@ private fun LazyListScope.homeSection(
         }
 
         else -> {
+            // No panel under a rail, unlike the grid and the deals pair.
+            //
+            // Those two are bounded: everything they hold is on the screen at
+            // once, and a surface drawn around them says where they stop. A rail
+            // does not stop — it runs off the side of the screen, and a box
+            // around something that leaves the box was the reason the third card
+            // read as a card that would not fit rather than as one more card
+            // along. So the heading sits on the page and the tiles run to the
+            // edges, which is also where the width they had been losing to two
+            // sets of padding went.
             item(key = "${section.key}:head", contentType = "rail-head") {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, top = SectionGap)
-                        .background(MbTheme.colors.surface, CardTopShape)
-                        .padding(start = 16.dp, end = 16.dp, top = 16.dp),
+                        .padding(start = RailEdge, end = RailEdge, top = SectionGap, bottom = 12.dp),
                 ) {
                     SectionHeader(
                         title = section.title,
@@ -611,16 +622,15 @@ private fun LazyListScope.homeSection(
                 LazyRow(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp)
-                        .background(MbTheme.colors.surface, CardBottomShape)
-                        .padding(top = 12.dp, bottom = 16.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
+                        .padding(bottom = 4.dp),
+                    contentPadding = PaddingValues(horizontal = RailEdge),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(section.products, key = { it.id }, contentType = { "rail-tile" }) { product ->
                         MbRailTile(
                             title = product.title,
                             price = product.price,
+                            oldPrice = product.oldPrice,
                             discountPercent = product.discountPercent,
                             imageUrl = product.imageUrl,
                             onClick = { onOpenProduct(product.id) },

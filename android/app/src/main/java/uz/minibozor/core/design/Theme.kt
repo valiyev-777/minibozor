@@ -50,6 +50,8 @@ fun MiniBozorTheme(
     val colors = if (darkTheme) MbColors.dark() else MbColors()
     val typography = MbTypography()
 
+    val railTileWidth = rememberRailTileWidth()
+    val dimens = remember(railTileWidth) { MbDimens(railTileWidth = railTileWidth) }
     CompositionLocalProvider(
         LocalMbColors provides colors,
         // Material 3 stopped supplying an indication of its own, and what
@@ -73,7 +75,7 @@ fun MiniBozorTheme(
             ),
         ),
         LocalMbTypography provides typography,
-        LocalMbDimens provides MbDimens(),
+        LocalMbDimens provides dimens,
         LocalMbShapes provides MbShapes(),
         LocalTextStyle provides typography.body.copy(color = colors.ink),
     ) {
