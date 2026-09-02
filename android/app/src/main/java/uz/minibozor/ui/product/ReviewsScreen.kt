@@ -73,7 +73,12 @@ fun ReviewsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 MbText(ratingText(summary.rating), MbTheme.type.display)
-                                MbStars(summary.rating.toInt())
+                                // The fractional stars, at the size the number
+                                // above them is set: a 4.5 shows four and a half
+                                // rather than rounding down to four, and at
+                                // 13 dp under a 27 dp figure they were a
+                                // footnote to it.
+                                MbStars(summary.rating, size = 17.dp)
                                 Spacer(Modifier.height(4.dp))
                                 MbText(
                                     pluralStringResource(R.plurals.n_reviews, summary.total, summary.total),

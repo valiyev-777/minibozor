@@ -43,10 +43,10 @@ struct CatalogView: View {
                                     glyph: category.icon,
                                     imageUrl: category.imageUrl,
                                     subtitle: category.subtitle.isEmpty ? nil : category.subtitle,
-                                    meta: category.productCount > 0
-                                        ? LPlural("n_products", count: category.productCount,
-                                                  Format.grouped(category.productCount))
-                                        : nil
+                                    // No stock count: nobody picks a category by
+                                    // how many things are in it, and the server
+                                    // no longer counts them.
+                                    meta: nil
                                 ) {
                                     if category.hasChildren {
                                         router.push(.subcategory(slug: category.slug))
@@ -107,9 +107,7 @@ struct SubcategoryView: View {
                             MBCard(padding: 8) {
                                 MBListRow(
                                     L("barcha_tovarlar"),
-                                    glyph: parent.icon,
-                                    meta: LPlural("n_products", count: parent.productCount,
-                                                  Format.grouped(parent.productCount))
+                                    glyph: parent.icon
                                 ) {
                                     router.push(
                                         .listing(category: parent.slug, query: nil, title: parent.name)
@@ -131,10 +129,11 @@ struct SubcategoryView: View {
                                             VStack(alignment: .leading, spacing: 3) {
                                                 Text(child.name).mbFont(MB.type.bodyBold)
                                                     .foregroundStyle(MB.color.ink)
-                                                Text(LPlural("n_products", count: child.productCount,
-                                                             Format.grouped(child.productCount)))
-                                                    .mbFont(MB.type.meta)
-                                                    .foregroundStyle(MB.color.icon)
+                                                if !child.subtitle.isEmpty {
+                                                    Text(child.subtitle)
+                                                        .mbFont(MB.type.meta)
+                                                        .foregroundStyle(MB.color.icon)
+                                                }
                                             }
                                             Spacer()
                                             Text("›").mbFont(MB.type.title3)

@@ -361,8 +361,6 @@ fun FavoritesScreen(
                             oldPrice = product.oldPrice,
                             discountPercent = product.discountPercent,
                             imageUrl = product.imageUrl,
-                            rating = product.rating,
-                            reviewsCount = product.reviewsCount,
                             isFavorite = true,
                             onClick = { onOpenProduct(product.id) },
                             onToggleFavorite = { viewModel.remove(product.id) },

@@ -142,6 +142,14 @@ struct VariantDTO: Decodable, Identifiable, Hashable {
     let kind: String
     let label: String
     let value: String
+    /// The product photographed in this colour, so the picker can show the
+    /// thing rather than ask the customer to imagine what `#0E0F12` looks like
+    /// on a shoe. None for sizes, and for a colour nobody photographed.
+    ///
+    /// Optional rather than defaulted: a synthesised `Decodable` only falls
+    /// back for optionals, so this is also what keeps an older backend from
+    /// failing the whole product page over one missing key.
+    let imageUrl: String?
     let inStock: Bool
 }
 
@@ -193,9 +201,13 @@ struct ProductDTO: Decodable, Identifiable {
     let freeDelivery: Bool
     let nextDayDelivery: Bool
     let deliveryNote: String
+    /// How many have been sold. The page prints it beside the rating, where
+    /// "2 010 ta buyurtma" is the strongest thing on the panel.
+    let soldCount: Int?
 
     var sizes: [VariantDTO] { variants.filter { $0.kind == "size" } }
     var colors: [VariantDTO] { variants.filter { $0.kind == "color" } }
+    var sold: Int { soldCount ?? 0 }
 }
 
 struct BannerDTO: Decodable, Identifiable, Hashable {
@@ -272,6 +284,13 @@ struct ReviewSummaryDTO: Decodable {
     let rating: Double
     let total: Int
     let distribution: [RatingBucketDTO]
+    /// A handful of customer photographs for the strip beside the rating, and
+    /// the full count so the last tile can say how many more there are.
+    let photos: [String]?
+    let photosTotal: Int?
+
+    var photoStrip: [String] { photos ?? [] }
+    var photoCount: Int { photosTotal ?? 0 }
 }
 
 struct ReviewDTO: Decodable, Identifiable {

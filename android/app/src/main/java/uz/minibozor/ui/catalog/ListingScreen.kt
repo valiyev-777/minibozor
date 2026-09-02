@@ -93,11 +93,18 @@ fun ListingScreen(
         topBar = {
             MbTopBar(
                 title = title.ifBlank { query.orEmpty().ifBlank { stringResource(R.string.tovarlar) } },
-                subtitle = if (state.total > 0) pluralStringResource(
-                    R.plurals.n_found,
-                    state.total,
-                    state.total.grouped(),
-                ) else null,
+                // Only for a search, where "how many matched" is the answer to
+                // what was typed. Browsing a category it was a stock figure
+                // nobody asked for.
+                subtitle = if (!query.isNullOrBlank() && state.total > 0) {
+                    pluralStringResource(
+                        R.plurals.n_found,
+                        state.total,
+                        state.total.grouped(),
+                    )
+                } else {
+                    null
+                },
                 onBack = onBack,
             )
         },
@@ -108,7 +115,6 @@ fun ListingScreen(
                 .padding(padding)
         ) {
             Toolbar(
-                total = state.total,
                 sortLabel = sortLabel(state.filters?.sorts, state.query.sort),
                 filterCount = state.query.activeFilterCount,
                 onOpenFilters = { showFilters = true },
@@ -154,8 +160,6 @@ fun ListingScreen(
                                 oldPrice = product.oldPrice,
                                 discountPercent = product.discountPercent,
                                 imageUrl = product.imageUrl,
-                                rating = product.rating,
-                                reviewsCount = product.reviewsCount,
                                 isFavorite = product.isFavorite,
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { viewModel.toggleFavorite(product) },
@@ -209,7 +213,6 @@ fun ListingScreen(
 
 @Composable
 private fun Toolbar(
-    total: Int,
     sortLabel: String,
     filterCount: Int,
     onOpenFilters: () -> Unit,
@@ -222,8 +225,11 @@ private fun Toolbar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
+            // The heading, not a tally. "1 240 tovar" told a shopper nothing
+            // they were going to act on, and reading it as stock left ("only
+            // 3 tovar!") is worse than not printing it.
             MbText(
-                if (total > 0) pluralStringResource(R.plurals.n_products, total, total.grouped()) else stringResource(R.string.tovarlar),
+                stringResource(R.string.tovarlar),
                 MbTheme.type.label,
                 MbTheme.colors.ink,
             )

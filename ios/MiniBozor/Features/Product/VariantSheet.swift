@@ -171,7 +171,8 @@ struct VariantSheet: View {
                     price: card.price,
                     oldPrice: card.oldPrice,
                     discountPercent: card.discountPercent,
-                    style: MB.type.title3
+                    style: MB.type.title3,
+                    reservesFootnote: false
                 )
             }
             Spacer(minLength: 0)
@@ -190,30 +191,42 @@ struct VariantSheet: View {
         }
     }
 
+    /// The colours, as photographs of the thing in that colour where the shop
+    /// supplied one — a hex square asks the customer to imagine what `#0E0F12`
+    /// looks like on a shoe, and the sheet is being asked to decide.
     private var colorRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(model.colors) { variant in
+                    let selected = variant.id == model.colorId
                     Button { model.colorId = variant.id } label: {
-                        RoundedRectangle(cornerRadius: MB.metric.radiusXS, style: .continuous)
-                            .fill(Color(hexString: variant.value, fallback: MB.color.fill))
-                            .frame(height: 42)
-                            .padding(5)
-                            .frame(width: 52, height: 52)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: MB.metric.radiusL,
+                        Group {
+                            if let photo = variant.imageUrl {
+                                MBProductImage(url: photo, cornerRadius: MB.metric.radiusS)
+                            } else {
+                                RoundedRectangle(cornerRadius: MB.metric.radiusS,
                                                  style: .continuous)
-                                    .stroke(
-                                        variant.id == model.colorId
-                                            ? MB.color.ink : MB.color.border,
-                                        lineWidth: variant.id == model.colorId ? 2 : 1
-                                    )
+                                    .fill(Color(hexString: variant.value,
+                                                fallback: MB.color.fill))
                             }
+                        }
+                        .padding(selected ? 4 : 3)
+                        .frame(width: 56, height: 56)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: MB.metric.radiusL,
+                                             style: .continuous)
+                                .stroke(
+                                    selected ? MB.color.ink : MB.color.border,
+                                    lineWidth: selected ? 2 : 1
+                                )
+                        }
+                        .opacity(variant.inStock ? 1 : 0.4)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MBCardPressStyle(pressedScale: 0.95))
                     .disabled(!variant.inStock)
                 }
             }
+            .padding(.vertical, 1)
         }
     }
 

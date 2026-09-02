@@ -133,7 +133,10 @@ fun LoginScreen(
                     stringResource(R.string.ommaviy_oferta),
                     MbTheme.type.caption,
                     MbTheme.colors.accent,
-                    modifier = Modifier.clickable(onClick = onOpenTerms),
+                    modifier = Modifier
+                        .clip(MbTheme.shapes.chip)
+                        .clickable(onClick = onOpenTerms)
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
                 )
                 MbText(stringResource(R.string.shartlariga_rozilik_bildirasiz), MbTheme.type.caption, MbTheme.colors.textQuaternary)
             }

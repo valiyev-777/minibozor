@@ -142,11 +142,43 @@ PRODUCTS = [
         category="krossovkalar", brand="adidas", price=1_090_000, old_price=1_540_000,
         rating=4.8, reviews_count=136, sold_count=1_240, badge="Original",
         images=["products/gazelle.png", "products/af1-black.png"],
-        sizes=SHOE_SIZES, colors=[("Ko'k", "#2F4B8F"), ("Qora", "#0E0F12")],
+        sizes=SHOE_SIZES,
+        colors=[
+            ("Ko'k", "#2F4B8F", "products/gazelle.png"),
+            ("Qora", "#0E0F12", "products/af1-black.png"),
+        ],
         warranty="Original kafolati",
+        # A full description, with the shop's own photographs inside it: the
+        # product page renders "## " as a heading, "- " as a bullet and
+        # "![alt](path)" as a picture, so a seller can write a page rather than
+        # a paragraph. Everything else is plain text.
         description=(
-            "Klassik adidas Gazelle — tabiiy zamshdan tikilgan, kundalik kiyish uchun. "
-            "Ichki qismi yumshoq, taglik mustahkam. Original, rasmiy distribyutordan."
+            "Klassik adidas Gazelle — tabiiy zamshdan tikilgan, kundalik kiyish "
+            "uchun. Ichki qismi yumshoq, taglik mustahkam. Original, rasmiy "
+            "distribyutordan.\n"
+            "\n"
+            "## Materiali va tikuvi\n"
+            "Yuza qismi butun bo'lak tabiiy zamshdan, choklar ikki qatlam ip "
+            "bilan tikilgan. Ichki astar to'qima mato — oyoq terlamaydi va "
+            "kun bo'yi kiyganda ham hidi qolmaydi.\n"
+            "\n"
+            "![Yon ko'rinish](products/gazelle.png)\n"
+            "\n"
+            "## Nimasi bilan yaxshi\n"
+            "- Tabiiy zamsh yuza, sun'iy emas\n"
+            "- Rezina taglik — asfaltda ham, zalda ham siljimaydi\n"
+            "- Ichki yumshoq ustki qism, tovonni ishqalamaydi\n"
+            "- Original quti va yorliq bilan yetkaziladi\n"
+            "\n"
+            "## O'lcham tanlash\n"
+            "Model o'lchamiga aynan mos keladi. Oyoq kengligi o'rtachadan "
+            "kattaroq bo'lsa, bir o'lcham kattasini olishni maslahat beramiz — "
+            "qaytarish 14 kun ichida bepul.\n"
+            "\n"
+            "![Qora varianti](products/af1-black.png)\n"
+            "\n"
+            "Rasmda ikkinchi rang varianti. Ikkala rang ham bir xil qutida, "
+            "bir xil kafolat bilan keladi."
         ),
         specs=[("Material", "Tabiiy zamsh"), ("Taglik", "Rezina"), ("Mavsum", "Bahor-kuz"),
                ("Ishlab chiqarilgan", "Vetnam")],
@@ -189,7 +221,11 @@ PRODUCTS = [
         category="quloqchinlar", brand="apple", price=2_190_000, old_price=2_890_000,
         rating=4.9, reviews_count=318, sold_count=1_890, badge="Original",
         images=["products/airpods.png", "products/airpods-dark.png"],
-        colors=[("Oq", "#FFFFFF")], warranty="Rasmiy kafolat 1 yil",
+        colors=[
+            ("Oq", "#FFFFFF", "products/airpods.png"),
+            ("Qora", "#0E0F12", "products/airpods-dark.png"),
+        ],
+        warranty="Rasmiy kafolat 1 yil",
         description=(
             "Faol shovqin bostirish, shaffof rejim va USB-C quvvatlash. "
             "Rasmiy kafolat bilan, seriya raqami tekshiriladi."
@@ -246,7 +282,8 @@ PRODUCTS = [
         category="yoruglik", price=189_000, old_price=320_000,
         rating=4.7, reviews_count=92, sold_count=780, badge="Kafolat 1 yil",
         images=["products/lamp.png"],
-        colors=[("Oq", "#FFFFFF"), ("Qora", "#0E0F12")], warranty="Kafolat 1 yil",
+        colors=[("Oq", "#FFFFFF", "products/lamp.png"), ("Qora", "#0E0F12")],
+        warranty="Kafolat 1 yil",
         description="Sensorli boshqaruv, uchta yorug'lik harorati va yorqinlikni sozlash.",
         specs=[("Quvvat", "9W"), ("Rejimlar", "3"), ("Ulanish", "USB-C")],
     ),
@@ -263,7 +300,10 @@ PRODUCTS = [
         category="futbolka-toplar", brand="zara", price=149_000, old_price=249_000,
         rating=5.0, reviews_count=38, sold_count=920, badge="Yangi",
         images=["products/tshirt-navy.png"], sizes=TEE_SIZES,
-        colors=[("Qora", "#0E0F12"), ("Oq", "#FFFFFF")],
+        colors=[
+            ("Qora", "#0E0F12", "products/tshirt-navy.png"),
+            ("Oq", "#FFFFFF", "products/tshirt-white.png"),
+        ],
         description="Qalin paxta mato, oversize bichim. Yuvishdan keyin rangi o'zgarmaydi.",
         specs=[("Material", "100% paxta"), ("Bichim", "Oversize"), ("Zichlik", "220 g/m²")],
     ),
@@ -674,11 +714,21 @@ def _seed_products(
                     label=label, value=label, sort=i,
                 )
             )
-        for i, (label, value) in enumerate(spec.get("colors", [])):
+        colors = spec.get("colors", [])
+        for i, color in enumerate(colors):
+            # ("Qora", "#0E0F12") or ("Qora", "#0E0F12", "products/af1-black.png").
+            label, value, *rest = color
+            image = rest[0] if rest else None
+            # A product photographed in one colour only *is* that colour's
+            # photograph — no point repeating the path in the row above.
+            if image is None and len(colors) == 1:
+                image = next(iter(spec.get("images", [])), None)
+            if image and not _image_exists(image):
+                image = None
             session.add(
                 ProductVariant(
                     product_id=product.id, kind=VariantKind.COLOR,
-                    label=label, value=value, sort=i,
+                    label=label, value=value, image_url=image, sort=i,
                 )
             )
         for i, (key, value) in enumerate(spec.get("specs", [])):
@@ -793,10 +843,10 @@ def _seed_reviews(
         ("MB-1001", "bekzod", 4, "Qora · 43",
          "Sifati yaxshi, lekin yetkazish bir kun kechikdi. Taglik mustahkam, "
          "kun bo'yi yurdim — oyoq charchamadi.",
-         ["Sifatli"], ["products/gazelle.png"], 5, -10),
+         ["Sifatli"], ["products/gazelle.png", "products/af1-black.png"], 5, -10),
         ("MB-1001", "demo", 5, "Ko'k · 42",
          "O'lcham aynan mos keldi, zamsh sifatli. Kuniga 8 soat kiyaman — oyoq charchamaydi.",
-         ["O'lcham mos", "Sifatli"], [], 14, -12),
+         ["O'lcham mos", "Sifatli"], ["products/gazelle.png"], 14, -12),
         ("MB-2001", "demo", 4, "Oq",
          "Original, shovqin bostirish zo'r. Faqat quti chizilib kelgan edi.",
          ["Tez yetkazildi"], [], 6, -20),

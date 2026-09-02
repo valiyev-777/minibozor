@@ -30,6 +30,8 @@ data class SettingsState(
     val languages: List<Map<String, String>> = emptyList(),
     /** The language actually in force on this device, not the account's copy. */
     val language: String = AppLocale.DEFAULT,
+    /** The dark-mode flag this device is actually themed from. */
+    val nightMode: Boolean = false,
     val hasPin: Boolean = false,
     val biometrics: Boolean = false,
 )
@@ -47,6 +49,20 @@ class SettingsViewModel @Inject constructor(
 
     init {
         _state.update { it.copy(language = AppLocale.current()) }
+        // The device's own flag, watched rather than read once.
+        //
+        // The switch used to show the account's copy, which is not what themes
+        // the app — that is the local one. The two can disagree the moment a
+        // customer signs in on a second phone, or the round trip fails, and
+        // then the row said "off" over a dark app and turning it on appeared to
+        // do nothing. The account's copy is still written, so the other phone
+        // learns about it; it just no longer has a vote on what this switch
+        // says.
+        viewModelScope.launch {
+            prefs.nightMode.collect { enabled ->
+                _state.update { it.copy(nightMode = enabled) }
+            }
+        }
         load()
     }
 

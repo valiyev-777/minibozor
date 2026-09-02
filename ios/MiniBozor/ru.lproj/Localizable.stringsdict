@@ -82,5 +82,45 @@
 			<string>%2$@ отзыва</string>
 		</dict>
 	</dict>
+	<key>n_orders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%2$@ заказ</string>
+			<key>few</key>
+			<string>%2$@ заказа</string>
+			<key>many</key>
+			<string>%2$@ заказов</string>
+			<key>other</key>
+			<string>%2$@ заказа</string>
+		</dict>
+	</dict>
+	<key>n_buyers</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%2$@ человек купил</string>
+			<key>few</key>
+			<string>%2$@ человека купили</string>
+			<key>many</key>
+			<string>%2$@ человек купили</string>
+			<key>other</key>
+			<string>%2$@ человека купили</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

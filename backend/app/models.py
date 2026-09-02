@@ -212,6 +212,10 @@ class ProductVariant(SQLModel, table=True):
     kind: VariantKind = Field(default=VariantKind.SIZE)
     label: str                      # "42", "Qora"
     value: str                      # "42", "#0E0F12"
+    # A colour is chosen by looking at the thing, not at a hex circle: the
+    # photograph of the product in that colour, when there is one. Sizes leave
+    # it empty, and a colour without a photo falls back to its hex.
+    image_url: str | None = None
     in_stock: bool = True
     sort: int = 0
 

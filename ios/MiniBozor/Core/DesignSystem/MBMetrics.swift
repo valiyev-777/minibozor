@@ -23,6 +23,12 @@ struct MBMetrics {
     let radiusXL: CGFloat = 14
     let radiusXXL: CGFloat = 20
     let radiusSheet: CGFloat = 24
+    /// The product card's own corner, a step rounder than `radiusXL`.
+    ///
+    /// Rounder reads as softer, which is the point of the card having lost its
+    /// border: 18 against the tile's 14 keeps the photograph inside it roughly
+    /// concentric at the card's 8 pt of padding.
+    let radiusTile: CGFloat = 18
 
     let buttonHeight: CGFloat = 48
     let fieldHeight: CGFloat = 48
@@ -31,10 +37,23 @@ struct MBMetrics {
     let tabBarHeight: CGFloat = 70
     let tabBarInset: CGFloat = 14
 
-    let tileImageHeight: CGFloat = 148
+    /// Product photographs are square everywhere.
+    ///
+    /// The catalogue is shot 1:1 with its own baked-in backdrop, so a tile of
+    /// any other ratio shows a letterboxed strip of its own ground down two
+    /// sides. The old fixed heights (148 for a grid tile, 104 for a deal tile)
+    /// did exactly that, and left the two kinds of card cropping differently.
     let railTileWidth: CGFloat = 112
-    let dealImageHeight: CGFloat = 104
     let categoryTile: CGFloat = 44
+
+    /// How far a product card is lifted off whatever it sits on.
+    ///
+    /// The cards used to be bare columns with nothing around them at all; a
+    /// shadow this shallow groups a card without drawing an edge, and reads on
+    /// the grey canvas of a listing and the white panel of the home page alike.
+    /// Nothing is drawn on the dark appearance, where the card is separated by
+    /// being a step lighter than its ground instead.
+    let cardLift: CGFloat = 3
 }
 
 /// One namespace for the whole design system, so screens read

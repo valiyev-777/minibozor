@@ -65,6 +65,7 @@ extension MBListRow where Trailing == EmptyView {
     init(
         _ label: String,
         glyph: String? = nil,
+        imageUrl: String? = nil,
         subtitle: String? = nil,
         meta: String? = nil,
         showChevron: Bool = true,
@@ -72,8 +73,8 @@ extension MBListRow where Trailing == EmptyView {
         onTap: (() -> Void)? = nil
     ) {
         self.init(
-            label: label, glyph: glyph, subtitle: subtitle, meta: meta,
-            showChevron: showChevron, tint: tint, onTap: onTap
+            label: label, glyph: glyph, imageUrl: imageUrl, subtitle: subtitle,
+            meta: meta, showChevron: showChevron, tint: tint, onTap: onTap
         ) { EmptyView() }
     }
 }

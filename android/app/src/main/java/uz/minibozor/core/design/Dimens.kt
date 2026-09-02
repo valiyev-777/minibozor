@@ -52,14 +52,43 @@ data class MbDimens(
      */
     val tabBarLift: Dp = 8.dp,
 
-    val railTileWidth: Dp = 100.dp,
+    /**
+     * 112, not 100: the rail tile is a bounded card now, and its 6 dp of inner
+     * padding came out of the photograph. This keeps the picture the size it
+     * always was and puts the card's edge outside it.
+     */
+    val railTileWidth: Dp = 112.dp,
     val categoryTile: Dp = 44.dp,
+
+    /**
+     * How far a product card is lifted off whatever it sits on.
+     *
+     * The cards used to be drawn with a hairline around them, which on a grid of
+     * eight tiles is eight boxes the eye has to read past to get to the
+     * photographs. A shadow groups a card just as plainly and draws nothing:
+     * 3 dp is enough to separate a white card from the grey canvas of a listing
+     * and from the white panel of the home page alike, and shallow enough not to
+     * look like a floating dialogue.
+     *
+     * On the dark theme it is dropped to nothing — a black shadow on a near
+     * black canvas is invisible, and the card is separated by being a step
+     * lighter than its ground instead.
+     */
+    val cardLift: Dp = 3.dp,
 )
 
 @Immutable
 data class MbShapes(
     val card: RoundedCornerShape = RoundedCornerShape(20.dp),
     val tile: RoundedCornerShape = RoundedCornerShape(14.dp),
+    /**
+     * The product card's own corner, a step rounder than [tile].
+     *
+     * Rounder reads as softer, which is the point of losing the border: 18 dp
+     * against the tile's 14 keeps the photograph inside it concentric at the
+     * card's 8 dp of padding.
+     */
+    val tileLarge: RoundedCornerShape = RoundedCornerShape(18.dp),
     val tileSmall: RoundedCornerShape = RoundedCornerShape(13.dp),
     val field: RoundedCornerShape = RoundedCornerShape(12.dp),
     val button: RoundedCornerShape = RoundedCornerShape(14.dp),

@@ -29,8 +29,10 @@ struct ShopTabsView: View {
     @State var cartRouter = Router()
     @State var profileRouter = Router()
 
-    private var activeRouter: Router {
-        switch tabSelection.current {
+    private var activeRouter: Router { router(for: tabSelection.current) }
+
+    private func router(for tab: String) -> Router {
+        switch tab {
         case "catalog": return catalogRouter
         case "cart": return cartRouter
         case "profile": return profileRouter
@@ -75,6 +77,21 @@ struct ShopTabsView: View {
         .environment(checkout)
         .environment(tabSelection)
         .task { await cart.refresh() }
+        // Where we are, kept somewhere a language switch cannot throw away, and
+        // put back once if that is what has just happened.
+        .onAppear {
+            if let resume = LocaleRestart.consume() {
+                tabSelection.select(resume.tab)
+                router(for: resume.tab).path = resume.path
+            }
+            LocaleRestart.remember(tab: tabSelection.current, path: activeRouter.path)
+        }
+        .onChange(of: tabSelection.current) { _, tab in
+            LocaleRestart.remember(tab: tab, path: router(for: tab).path)
+        }
+        .onChange(of: activeRouter.path) { _, path in
+            LocaleRestart.remember(tab: tabSelection.current, path: path)
+        }
         // Makes the link the share sheet hands out actually open the product,
         // rather than dropping the recipient on the home screen.
         .onOpenURL { url in

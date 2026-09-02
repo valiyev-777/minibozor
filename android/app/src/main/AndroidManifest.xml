@@ -17,9 +17,19 @@
         android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.MiniBozor">
 
+        <!--
+          locale|layoutDirection: the app takes a language change in its stride
+          instead of being torn down and rebuilt for it. The rebuild was what
+          put a black screen between the old language and the new one — the
+          system draws nothing while an activity restarts — and it also threw
+          away the screen the customer was on. Handling the config change keeps
+          the process, the back stack and the scroll position, and Compose
+          re-reads every string against the new configuration.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:configChanges="locale|layoutDirection"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.MiniBozor">
             <intent-filter>

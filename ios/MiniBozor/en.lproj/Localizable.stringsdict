@@ -66,5 +66,37 @@
 			<string>%2$@ reviews</string>
 		</dict>
 	</dict>
+	<key>n_orders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%2$@ order</string>
+			<key>other</key>
+			<string>%2$@ orders</string>
+		</dict>
+	</dict>
+	<key>n_buyers</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%2$@ person bought this</string>
+			<key>other</key>
+			<string>%2$@ people bought this</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

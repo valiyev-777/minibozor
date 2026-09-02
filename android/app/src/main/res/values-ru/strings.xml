@@ -367,4 +367,20 @@
     <string name="yopish">Свернуть</string>
     <string name="yetkazish_va_kafolat">Доставка и гарантия</string>
     <string name="rating_n_dan_yuqori">Выше %1$s ★</string>
+
+    <!-- Product page: rating panel, colour picker, description -->
+    <string name="tavsif_va_xususiyatlar">Описание и характеристики</string>
+    <string name="barcha_rasmlar">Все фото</string>
+    <plurals name="n_orders">
+        <item quantity="one">%1$s заказ</item>
+        <item quantity="few">%1$s заказа</item>
+        <item quantity="many">%1$s заказов</item>
+        <item quantity="other">%1$s заказа</item>
+    </plurals>
+    <plurals name="n_buyers">
+        <item quantity="one">%1$s человек купил</item>
+        <item quantity="few">%1$s человека купили</item>
+        <item quantity="many">%1$s человек купили</item>
+        <item quantity="other">%1$s человека купили</item>
+    </plurals>
 </resources>

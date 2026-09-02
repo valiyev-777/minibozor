@@ -161,6 +161,8 @@ fun CircleIconButton(
             .size(size)
             .clip(CircleShape)
             .background(background)
+            // Clipped first, so the press wash is a disc rather than a square
+            // in the button's corners.
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -216,7 +218,14 @@ fun SectionHeader(
                 actionLabel,
                 MbTheme.type.label,
                 MbTheme.colors.accent,
-                modifier = Modifier.clickable(onClick = onAction),
+                // A pill-shaped target with room around the word, rather than a
+                // bare clickable that flashes a rectangle the exact size of the
+                // glyphs. The padding is the tap area; the clip is what keeps
+                // the press round.
+                modifier = Modifier
+                    .clip(MbTheme.shapes.chip)
+                    .clickable(onClick = onAction)
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
             )
         }
     }

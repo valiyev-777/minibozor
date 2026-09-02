@@ -18,7 +18,11 @@ struct ReviewRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(review.authorName).mbFont(MB.type.bodyBold).foregroundStyle(MB.color.ink)
                     HStack(spacing: 6) {
-                        MBStars(rating: review.rating)
+                        // Bigger than the app's default cluster: at 13 pt
+                        // under a name set in bold the stars read as
+                        // punctuation, and they are the whole point of the row —
+                        // the verdict, before a word of the review is read.
+                        MBStars(rating: review.rating, size: 16)
                         if let date = UzDate.parseDateTime(review.createdAt) {
                             Text(UzDate.relative(date)).mbFont(MB.type.meta)
                                 .foregroundStyle(MB.color.icon)

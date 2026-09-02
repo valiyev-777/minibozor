@@ -41,6 +41,15 @@ fun MbPrimaryButton(
     enabled: Boolean = true,
     loading: Boolean = false,
     leadingGlyph: String? = null,
+    /**
+     * A second, quieter line under the label — the product page's "Ertaga
+     * yetkaziladi" under "Savatga".
+     *
+     * It belongs on the button because it is the promise the tap is accepting,
+     * and because the bar has no room for a line of its own once the price has
+     * moved to the top of the page.
+     */
+    subtitle: String? = null,
     container: Color = MbTheme.colors.accent,
     contentColor: Color = Color.White,
 ) {
@@ -52,7 +61,13 @@ fun MbPrimaryButton(
         modifier
             .fillMaxWidth()
             .scale(scale)
-            .height(MbTheme.dimens.buttonHeight)
+            .height(
+                if (subtitle.isNullOrBlank()) {
+                    MbTheme.dimens.buttonHeight
+                } else {
+                    MbTheme.dimens.buttonHeight + 10.dp
+                }
+            )
             .clip(MbTheme.shapes.button)
             .background(if (enabled) container else MbTheme.colors.disabled)
             .clickable(
@@ -75,7 +90,23 @@ fun MbPrimaryButton(
                 MbIcon(leadingGlyph, size = 18.dp, tint = contentColor, strokeWidth = 1.9f)
                 Box(Modifier.size(8.dp))
             }
-            MbText(text, MbTheme.type.label.copy(fontSize = MbTheme.type.body.fontSize), contentColor)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                MbText(
+                    text,
+                    MbTheme.type.label.copy(fontSize = MbTheme.type.body.fontSize),
+                    contentColor,
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    MbText(
+                        subtitle,
+                        MbTheme.type.caption,
+                        // The label's own colour, stepped back: a second white
+                        // line at full strength competes with the first.
+                        contentColor.copy(alpha = 0.78f),
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
 }

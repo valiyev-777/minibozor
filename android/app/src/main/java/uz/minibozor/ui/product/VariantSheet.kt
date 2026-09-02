@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -219,6 +220,13 @@ private fun Label(name: String, value: String) {
     }
 }
 
+/**
+ * The colours, as photographs where the shop supplied one.
+ *
+ * The same treatment as the product page's own picker: nobody knows what
+ * "#2F4B8F" looks like on a suede shoe, and the sheet is where the choice is
+ * actually made. A colour with no photograph keeps its swatch.
+ */
 @Composable
 private fun ColorRow(colors: List<VariantDto>, selectedId: Int?, onSelect: (Int) -> Unit) {
     Row(
@@ -229,25 +237,32 @@ private fun ColorRow(colors: List<VariantDto>, selectedId: Int?, onSelect: (Int)
             val selected = color.id == selectedId
             Box(
                 Modifier
-                    .size(52.dp)
-                    .clip(MbTheme.shapes.tileSmall)
+                    .size(62.dp)
+                    .clip(MbTheme.shapes.tile)
                     .border(
                         width = if (selected) 2.dp else 1.dp,
                         color = if (selected) MbTheme.colors.ink else MbTheme.colors.border,
-                        shape = MbTheme.shapes.tileSmall,
+                        shape = MbTheme.shapes.tile,
                     )
-                    .mbClickable(MbTheme.shapes.tileSmall, enabled = color.inStock) {
+                    .mbClickable(MbTheme.shapes.tile, enabled = color.inStock) {
                         onSelect(color.id)
                     }
-                    .padding(5.dp),
+                    .padding(if (selected) 4.dp else 3.dp),
             ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(42.dp)
-                        .clip(MbTheme.shapes.badge)
-                        .background(color.value.toColor(MbTheme.colors.fill))
-                )
+                if (color.imageUrl != null) {
+                    MbProductImage(
+                        color.imageUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        shape = MbTheme.shapes.tileSmall,
+                    )
+                } else {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .clip(MbTheme.shapes.tileSmall)
+                            .background(color.value.toColor(MbTheme.colors.fill))
+                    )
+                }
             }
         }
     }

@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -79,7 +80,13 @@ fun SearchScreen(
                     stringResource(R.string.bekor),
                     MbTheme.type.label,
                     MbTheme.colors.accent,
-                    modifier = Modifier.clickable(onClick = onBack),
+                    // A pill of tap area around the word, so the press reads
+                    // as a rounded highlight rather than a rectangle the size
+                    // of the text.
+                    modifier = Modifier
+                        .clip(MbTheme.shapes.chip)
+                        .clickable(onClick = onBack)
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
                 )
             }
 

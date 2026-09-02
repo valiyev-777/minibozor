@@ -60,7 +60,11 @@ fun ReviewRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    MbStars(review.rating)
+                    // Bigger than the app's default cluster: at 13 dp under a
+                    // name set in bold the stars read as punctuation, and they
+                    // are the whole point of the row — the verdict, before a
+                    // word of the review is read.
+                    MbStars(review.rating, size = 16.dp)
                     val date = review.createdAt.toLocalDateTimeOrNull()?.uzRelative().orEmpty()
                     MbText(date, MbTheme.type.meta, MbTheme.colors.icon)
                     if (review.variantLabel.isNotBlank()) {

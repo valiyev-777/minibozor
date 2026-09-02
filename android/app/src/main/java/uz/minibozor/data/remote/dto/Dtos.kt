@@ -168,6 +168,14 @@ data class VariantDto(
     val kind: String,
     val label: String,
     val value: String,
+    /**
+     * The product photographed in this colour, when the shop supplied one.
+     *
+     * A colour is chosen by looking at the thing rather than at a hex circle,
+     * so the picker draws this when it is there and falls back to [value] when
+     * it is not. Always null on a size.
+     */
+    @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("in_stock") val inStock: Boolean,
 )
 
@@ -222,6 +230,8 @@ data class ProductDto(
     @SerialName("free_delivery") val freeDelivery: Boolean = true,
     @SerialName("next_day_delivery") val nextDayDelivery: Boolean = true,
     @SerialName("delivery_note") val deliveryNote: String = "",
+    /** How many have been sold — printed beside the rating. */
+    @SerialName("sold_count") val soldCount: Int = 0,
 )
 
 @Immutable
@@ -305,6 +315,9 @@ data class ReviewSummaryDto(
     val rating: Double,
     val total: Int,
     val distribution: List<RatingBucketDto>,
+    /** A few customer photographs for the strip beside the rating. */
+    val photos: List<String> = emptyList(),
+    @SerialName("photos_total") val photosTotal: Int = 0,
 )
 
 @Immutable

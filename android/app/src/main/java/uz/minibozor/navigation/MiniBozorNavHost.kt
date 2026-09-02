@@ -1,5 +1,6 @@
 package uz.minibozor.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -22,6 +23,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.navigation
 import uz.minibozor.BuildConfig
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import uz.minibozor.core.design.MbMotion
+import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbLoading
 import uz.minibozor.ui.auth.AuthViewModel
 import uz.minibozor.ui.auth.LoginScreen
@@ -82,8 +88,32 @@ fun MiniBozorNavHost(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    // Where we are, kept somewhere the language switch cannot throw away, and
+    // put back once if that is what has just happened. Only from the home tab:
+    // a rebuild during onboarding or the sign-in flow has no screen worth
+    // returning to.
+    LaunchedEffect(backStackEntry) { LocaleRestart.remember(backStackEntry) }
+    LaunchedEffect(start) {
+        // Not before the start destination is known: consuming the memory
+        // while `start` is still null would spend it on a frame that has no
+        // graph to navigate in, and the restore would never happen.
+        val home = start == Routes.HOME
+        if (start == null) return@LaunchedEffect
+        val resume = LocaleRestart.consume() ?: return@LaunchedEffect
+        if (home && resume != Routes.HOME) {
+            runCatching { navController.navigate(resume) }
+        }
+    }
+
     if (start == null) {
-        Box(Modifier.fillMaxSize()) { MbLoading() }
+        // Painted, not left transparent: this is the frame between launch and
+        // knowing which screen to open, and a see-through box here showed
+        // whatever the window happened to be.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MbTheme.colors.canvas)
+        ) { MbLoading() }
         return
     }
 
@@ -277,6 +307,15 @@ fun MiniBozorNavHost(
             // Makes the link the share sheet hands out actually open the
             // product, rather than dropping the recipient on the home screen.
             deepLinks = listOf(navDeepLink { uriPattern = "minibozor://product/{id}" }),
+            // Short, because the page has choreography of its own: its blocks
+            // fade and rise into place staggered, and leave the same way in
+            // reverse. Navigation's own 700 ms crossfade ran straight over the
+            // top of that and turned it into a slow dissolve. A brief fade here
+            // hands the arrival and the departure to the page itself.
+            enterTransition = { fadeIn(tween(MbMotion.Quick, easing = MbMotion.EaseOut)) },
+            exitTransition = { fadeOut(tween(MbMotion.Quick, easing = MbMotion.EaseIn)) },
+            popEnterTransition = { fadeIn(tween(MbMotion.Quick, easing = MbMotion.EaseOut)) },
+            popExitTransition = { fadeOut(tween(MbMotion.Quick, easing = MbMotion.EaseIn)) },
         ) { entry ->
             ProductScreen(
                 productId = entry.arguments?.getInt(Args.ID) ?: 0,

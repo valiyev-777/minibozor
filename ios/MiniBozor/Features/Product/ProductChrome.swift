@@ -3,18 +3,24 @@ import SwiftUI
 /// The photo, and the bar that floats over it.
 ///
 /// Both are driven by the scroll rather than playing on their own: the picture
-/// closes away behind the page, and the bar takes the product's name over as
-/// the page lets go of it.
+/// is covered by the page climbing over it, and the bar grows its own surface at
+/// the moment the page reaches it.
 enum ProductHero {
-    /// Square, matching the photographs.
+    /// Square, matching the photographs, and running to the very top of the
+    /// screen.
     ///
-    /// A frame taller than the photo is wide leaves a band of frame down each
-    /// side of a fitted picture, and two near-identical lights with a seam
-    /// between them read as a mistake rather than a margin.
-    static var height: CGFloat { UIScreen.main.bounds.width + chromeHeight }
+    /// Every catalogue photo is 1:1, so a square frame has nothing left over to
+    /// show. It used to be a square *plus* the bar's height, which left a band
+    /// of plain ground across the top with the buttons floating on it; the
+    /// picture reaches the top of the screen now and the bar sits on it.
+    static var height: CGFloat { UIScreen.main.bounds.width }
 
     /// The bar: the status bar inset plus the row of buttons under it.
-    static var chromeHeight: CGFloat { statusBarInset + 56 }
+    ///
+    /// 64 is the row itself — a 44 pt button with 10 pt of air above and below.
+    /// Shared with the page, which decides when the panel has crossed under the
+    /// bar off the same number.
+    static var chromeHeight: CGFloat { statusBarInset + 64 }
 
     static var statusBarInset: CGFloat {
         UIApplication.shared.connectedScenes
@@ -24,40 +30,65 @@ enum ProductHero {
 
     /// The scroll coordinate space the hero and the bar measure themselves in.
     static let space = "product.scroll"
+
+    /// How opaque the bar's own surface is, for a given crossing of the page
+    /// under it.
+    ///
+    /// Brought up steeply, so it covers the wash as it arrives: cross-fading two
+    /// grounds never adds up to opaque in between — at halfway a pair covers
+    /// 0.75, and the wash showed through as a grey band sliding down the
+    /// picture.
+    static func barCover(_ crossing: CGFloat) -> CGFloat { min(crossing * 8, 1) }
 }
 
+/// The photograph at the top of the page.
+///
+/// It does not slide away as the page scrolls: it holds back at a fraction of
+/// the scroll and is covered by the panel climbing over it, so it reads as being
+/// covered where it stands rather than being pushed off the top. Nothing fades —
+/// a transparent photograph shows the page's own ground through it, which on the
+/// light appearance is a white band across the top of the screen.
 struct ProductHeroView: View {
     let images: [String]
     let badge: String?
-    /// 0 while the photo fills the top, 1 once it has closed away behind.
+    /// 0 while the photo fills the top, 1 once the page has covered it.
     let closed: CGFloat
+    /// Points the photo hangs back from the scroll, so the page's own panels are
+    /// seen crossing in front of it.
+    let lag: CGFloat
+    /// Tapping the photograph opens it full screen: the page being shown, and
+    /// the frame it is sitting in, so the full-screen view can grow out of it.
+    let onOpen: (Int, CGRect) -> Void
 
     @State private var page = 0
+    /// Where the live photograph sits on the screen, for the full-screen view to
+    /// grow out of.
+    @State private var frame: CGRect = .zero
+
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Light in both appearances, and the same white the photographs are
-            // shot on, so the inset below reads as breathing room rather than
-            // as a panel with edges.
-            MB.color.photoStudio
+            // The theme's photo ground, the same one the grid tiles use.
+            MB.color.photoWarmAlt
 
             TabView(selection: $page) {
                 ForEach(Array(images.enumerated()), id: \.offset) { offset, url in
-                    MBProductImage(url: url, cornerRadius: 0, background: MB.color.photoStudio)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
+                    MBProductImage(url: url, cornerRadius: 0, background: MB.color.photoWarmAlt)
                         .tag(offset)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            // Below the bar, not under it: the frame is a square of photo plus
-            // the bar's own height, so the whole picture is in the clear.
-            .padding(.top, ProductHero.chromeHeight)
-            .opacity(1 - closed)
-            .scaleEffect(1 - 0.06 * closed)
-            // Holds back at a third of the scroll, so it reads as closing
-            // behind the page rather than being pushed off the top.
-            .offset(y: closed * ProductHero.height * 0.30)
+            .background {
+                GeometryReader { geometry in
+                    Color.clear
+                        .onChange(of: geometry.frame(in: .global), initial: true) { _, value in
+                            frame = value
+                        }
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { onOpen(page, frame) }
 
             if let badge {
                 MBStatusPill(badge, background: MB.color.scrim, contentColor: MB.color.onScrim)
@@ -68,104 +99,126 @@ struct ProductHeroView: View {
             }
 
             if images.count > 1 {
+                // On a pill of their own: the dots sit on the photograph, and
+                // drawn in the theme's ink they went missing on every picture
+                // that happened to be the same tone.
                 HStack(spacing: 5) {
                     ForEach(images.indices, id: \.self) { index in
                         Capsule()
-                            .fill(index == page ? MB.color.ink : MB.color.hairlineStrong)
+                            .fill(index == page
+                                  ? MB.color.onScrim
+                                  : MB.color.onScrim.opacity(0.45))
                             .frame(width: index == page ? 18 : 6, height: 6)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: page)
+                            .animation(MBMotion.easeQuick, value: page)
                     }
                 }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
+                .background(MB.color.scrim)
+                .clipShape(Capsule())
                 .frame(maxHeight: .infinity, alignment: .bottom)
                 .padding(.bottom, 18)
                 .opacity(1 - closed)
             }
         }
+        // Applied to the whole frame, ground included, or the picture would
+        // slide out of its own backdrop.
+        .offset(y: lag)
         .frame(height: ProductHero.height)
         .clipped()
     }
 }
 
-/// The bar over the photo.
+/// The bar over the photo: three buttons, and a surface that arrives under them.
 ///
-/// The buttons never move: they sit on the picture to begin with and stay in
-/// exactly the same place once the bar has a surface behind it. What changes is
-/// underneath them — the name and price slide down into the row the photo has
-/// vacated, so nothing about the product is ever off screen.
+/// Nothing else. It used to collect the product's name and its price as the page
+/// scrolled, which meant the top of the screen carried a second copy of both —
+/// the panel below has them and the buy bar at the foot of the screen has the
+/// number, so a third set sliding into a bar that already holds three controls
+/// made the top of the page busiest exactly when the customer had scrolled past
+/// the part that needed explaining.
 struct ProductChromeView: View {
     let product: ProductDTO?
-    /// How far the name has been handed from the page to this bar, 0…1.
-    let handover: CGFloat
+    /// How far the page has covered the photograph behind this bar, 0…1.
+    let cover: CGFloat
     let onBack: () -> Void
     let onToggleFavorite: () -> Void
     let onShare: () -> Void
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                GlassButton(glyph: "arrow-left", action: onBack)
-                Spacer(minLength: 0)
-                if let product {
-                    GlassButton(
-                        glyph: "heart",
-                        tint: product.isFavorite ? MB.color.danger : MB.color.ink,
-                        action: onToggleFavorite
-                    )
-                    GlassButton(glyph: "share", action: onShare)
-                }
-            }
-            .frame(height: 36)
+    @Environment(\.colorScheme) private var scheme
 
+    var body: some View {
+        HStack(spacing: 6) {
+            GlassButton(glyph: "arrow-left", cover: cover, action: onBack)
+            Spacer(minLength: 0)
             if let product {
-                HStack(spacing: 14) {
-                    // The price is measured at whatever width its digits need
-                    // and the name takes what is left, so a name of any length
-                    // cannot squeeze the price and a price of any size cannot
-                    // reach the name.
-                    Text(product.title)
-                        .mbFont(MB.type.title1)
-                        .foregroundStyle(MB.color.ink)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    MBPriceRow(price: product.price, style: MB.type.title2)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                .padding(.top, 10)
-                .opacity(handover)
-                .offset(y: (handover - 1) * 14)
+                GlassButton(
+                    glyph: "heart",
+                    tint: product.isFavorite ? MB.color.danger : MB.color.ink,
+                    cover: cover,
+                    action: onToggleFavorite
+                )
+                GlassButton(glyph: "share", cover: cover, action: onShare)
             }
         }
+        .frame(height: 44)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .padding(.top, ProductHero.statusBarInset)
-        // An opaque ground first, then the page's surface faded over it.
-        // Cross-fading two translucent layers never adds up to opaque in
-        // between, and a quarter of the card behind would show through — which
-        // is how the product's name ends up on screen twice.
         .background {
             ZStack {
-                MB.color.photoStudio
-                MB.color.surface.opacity(handover)
+                // A wash first, then the page's surface over it.
+                //
+                // The photograph runs to the top of the screen, so what is
+                // behind the system's own clock and battery is whatever the
+                // seller photographed. iOS picks the colour of that clock from
+                // the appearance rather than from anything a SwiftUI view can
+                // say, so the wash goes the way the appearance already went:
+                // pale under dark text, dark under light text. Strongest at the
+                // very edge and gone by the row of buttons, so it reads as the
+                // picture lightening rather than as a band laid across it.
+                LinearGradient(
+                    stops: [
+                        .init(color: washColor.opacity(0.62), location: 0),
+                        .init(color: washColor.opacity(0.2), location: 0.55),
+                        .init(color: washColor.opacity(0), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                MB.color.surface.opacity(ProductHero.barCover(cover))
             }
             .ignoresSafeArea(edges: .top)
         }
     }
+
+    private var washColor: Color { scheme == .dark ? .black : .white }
 }
 
-/// A circular button legible on a photograph and on a plain surface alike.
+/// A circular button legible on a photograph and on a plain surface alike: the
+/// bar's own fill, which is a step off both.
+///
+/// Sized to be hit rather than to be tidy — 44 pt, which is what a thumb needs
+/// and what these three controls sitting on a photograph deserve, since a miss
+/// scrolls the page instead. The disc thins out as the bar grows its own
+/// surface: three grey circles on a plain bar are three more shapes than the row
+/// needs, so by then the glyphs are left standing on the bar as they are on
+/// every other screen's header.
 private struct GlassButton: View {
     let glyph: String
     var tint: Color = MB.color.ink
+    var cover: CGFloat = 0
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            MBIcon(glyph, size: 18, tint: tint, lineWidth: 1.9)
-                .frame(width: 36, height: 36)
-                .background(MB.color.fill)
+            MBIcon(glyph, size: 21, tint: tint, lineWidth: 1.9)
+                .frame(width: 44, height: 44)
+                .background(MB.color.fill.opacity(1 - ProductHero.barCover(cover)))
                 .clipShape(Circle())
+                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MBCardPressStyle(pressedScale: 0.92))
     }
 }
 
@@ -201,6 +254,7 @@ struct RecommendationsRail: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                .padding(.vertical, 2)
             }
         }
         .padding(.top, 6)
