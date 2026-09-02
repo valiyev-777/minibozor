@@ -391,4 +391,11 @@
         <item quantity="one">%1$s kishi sotib oldi</item>
         <item quantity="other">%1$s kishi sotib oldi</item>
     </plurals>
+    <string name="qaytarishlarim">Qaytarishlarim</string>
+    <string name="hali_qaytarish_arizasi_yubormagansiz">Hali qaytarish arizasi yubormagansiz</string>
+    <string name="yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin">Yetkazilgan buyurtmani 14 kun ichida qaytarish mumkin</string>
+    <string name="return_submitted">YUBORILDI</string>
+    <string name="return_approved">QABUL QILINDI</string>
+    <string name="return_rejected">RAD ETILDI</string>
+    <string name="return_refunded">PUL QAYTARILDI</string>
 </resources>

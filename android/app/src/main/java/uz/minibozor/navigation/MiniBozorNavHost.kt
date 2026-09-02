@@ -47,6 +47,7 @@ import uz.minibozor.ui.checkout.PaymentMethodScreen
 import uz.minibozor.ui.home.HomeScreen
 import uz.minibozor.ui.onboarding.OnboardingScreen
 import uz.minibozor.ui.orders.OrderDetailScreen
+import uz.minibozor.ui.orders.ReturnsScreen
 import uz.minibozor.ui.orders.OrdersScreen
 import uz.minibozor.ui.orders.ReasonScreen
 import uz.minibozor.ui.product.ProductScreen
@@ -471,6 +472,10 @@ fun MiniBozorNavHost(
                 onBack = { navController.popBackStack() },
                 onDone = { navController.popBackStack() },
             )
+        }
+
+        composable(Routes.RETURNS) {
+            ReturnsScreen(onBack = { navController.popBackStack() })
         }
 
         // ---------------------------------------------------------- 31-46

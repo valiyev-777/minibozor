@@ -60,7 +60,7 @@ fun ProfileScreen(
         QuickAction("box", stringResource(R.string.buyurtmalar), "orders"),
         QuickAction("heart", stringResource(R.string.sevimlilar), "favorites"),
         QuickAction("star", stringResource(R.string.sharhlarim), "my_reviews"),
-        QuickAction("ret", stringResource(R.string.qaytarish), "orders"),
+        QuickAction("ret", stringResource(R.string.qaytarish), "returns"),
     )
 
     MbScreen { padding ->

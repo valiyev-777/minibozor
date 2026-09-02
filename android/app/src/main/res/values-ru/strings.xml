@@ -383,4 +383,11 @@
         <item quantity="many">%1$s человек купили</item>
         <item quantity="other">%1$s человека купили</item>
     </plurals>
+    <string name="qaytarishlarim">Мои возвраты</string>
+    <string name="hali_qaytarish_arizasi_yubormagansiz">Вы ещё не отправляли заявку на возврат</string>
+    <string name="yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin">Доставленный заказ можно вернуть в течение 14 дней</string>
+    <string name="return_submitted">ОТПРАВЛЕНО</string>
+    <string name="return_approved">ОДОБРЕНО</string>
+    <string name="return_rejected">ОТКЛОНЕНО</string>
+    <string name="return_refunded">ДЕНЬГИ ВОЗВРАЩЕНЫ</string>
 </resources>
