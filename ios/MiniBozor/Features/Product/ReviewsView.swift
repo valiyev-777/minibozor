@@ -93,7 +93,11 @@ struct ReviewsView: View {
                     Text(Format.rating(summary.rating))
                         .mbFont(MB.type.display)
                         .foregroundStyle(MB.color.ink)
-                    MBStars(rating: Int(summary.rating.rounded()))
+                    // The fraction, at the size the number above it is set: a
+                    // 4.5 shows four and a half rather than rounding down to
+                    // four, and at 13 pt under a 27 pt figure the stars were a
+                    // footnote to it.
+                    MBFractionalStars(rating: summary.rating, size: 17)
                     Text(LPlural("n_reviews", count: summary.total, "\(summary.total)"))
                         .mbFont(MB.type.meta)
                         .foregroundStyle(MB.color.icon)

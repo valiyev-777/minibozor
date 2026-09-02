@@ -1,0 +1,5 @@
+# testflight.sh writes the archive, export and ExportOptions.plist here.
+build/
+*.xcarchive
+xcuserdata/
+*.xcuserstate

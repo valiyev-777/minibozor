@@ -1,6 +1,5 @@
 package uz.minibozor.ui.catalog
 
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.component.MbTabHeader
 import uz.minibozor.core.design.component.MbCard
 import uz.minibozor.core.design.component.MbDivider
 import uz.minibozor.core.design.component.MbListRow
@@ -34,7 +34,6 @@ import uz.minibozor.core.design.component.MbScreen
 import uz.minibozor.core.design.component.MbSearchPill
 import uz.minibozor.core.design.component.MbTabBarSpacer
 import uz.minibozor.core.design.component.MbTopBar
-import uz.minibozor.core.util.grouped
 import uz.minibozor.data.remote.dto.CategoryDto
 import uz.minibozor.ui.common.UiStateContent
 import uz.minibozor.ui.common.dataOrNull
@@ -54,16 +53,12 @@ fun CatalogScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MbTheme.colors.surface)
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
-            ) {
-                MbText(stringResource(R.string.katalog), MbTheme.type.title1)
-                Spacer(Modifier.height(12.dp))
-                MbSearchPill(stringResource(R.string.turkum_yoki_mahsulot_qidirish), onOpenSearch)
-            }
+            MbTabHeader(
+                stringResource(R.string.katalog),
+                below = {
+                    MbSearchPill(stringResource(R.string.turkum_yoki_mahsulot_qidirish), onOpenSearch)
+                },
+            )
 
             UiStateContent(state, viewModel::load) { categories ->
                 LazyColumn(
@@ -78,13 +73,12 @@ fun CatalogScreen(
                                     glyph = category.icon,
                                     imageUrl = category.imageUrl,
                                     subtitle = category.subtitle.ifBlank { null },
-                                    meta = if (category.productCount > 0) {
-                                        pluralStringResource(
-                    R.plurals.n_products,
-                    category.productCount,
-                    category.productCount.grouped(),
-                )
-                                    } else null,
+                                    // No stock count. Nobody chooses a category
+                                    // by how many things are in it, and the
+                                    // number cost the server a recursive count
+                                    // over the whole category tree on every
+                                    // catalogue open.
+                                    meta = null,
                                     onClick = { onOpenCategory(category) },
                                     contentPadding = 12.dp,
                                 )
@@ -129,11 +123,6 @@ fun SubcategoryScreen(
                         MbListRow(
                             label = stringResource(R.string.barcha_tovarlar),
                             glyph = parent.icon,
-                            meta = pluralStringResource(
-                    R.plurals.n_products,
-                    parent.productCount,
-                    parent.productCount.grouped(),
-                ),
                             onClick = { onOpenListing(parent.slug, parent.name) },
                             contentPadding = 8.dp,
                         )
@@ -159,15 +148,13 @@ fun SubcategoryScreen(
                                     MbTheme.type.body.copy(
                                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
                                 )
-                                MbText(
-                                    pluralStringResource(
-                    R.plurals.n_products,
-                    child.productCount,
-                    child.productCount.grouped(),
-                ),
-                                    MbTheme.type.meta,
-                                    MbTheme.colors.icon,
-                                )
+                                if (child.subtitle.isNotBlank()) {
+                                    MbText(
+                                        child.subtitle,
+                                        MbTheme.type.meta,
+                                        MbTheme.colors.icon,
+                                    )
+                                }
                             }
                             MbText("›", MbTheme.type.title3, MbTheme.colors.hairlineStrong)
                         }

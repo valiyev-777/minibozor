@@ -218,7 +218,7 @@ fun SettingsScreen(
                         label = stringResource(R.string.tungi_rejim),
                         subtitle = stringResource(R.string.tizim_bilan_moslashadi),
                         glyph = "gear",
-                        checked = state.settings?.nightMode ?: false,
+                        checked = state.nightMode,
                         onCheckedChange = viewModel::setNightMode,
                         contentPadding = 10.dp,
                     )

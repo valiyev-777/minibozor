@@ -19,7 +19,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchScreen</key>
@@ -50,6 +50,14 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Empty unless xcodebuild is given MB_API_BASE_URL / MB_MEDIA_BASE_URL;
+	     AppConfig treats blank as "use the compiled-in default". -->
+	<key>MBAPIBaseURL</key>
+	<string>$(MB_API_BASE_URL)</string>
+	<key>MBMediaBaseURL</key>
+	<string>$(MB_MEDIA_BASE_URL)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<!-- Debug builds talk to the FastAPI dev server over plain HTTP on the Mac.
 	     NSAllowsLocalNetworking exempts only local hostnames, so App Transport
 	     Security still applies to everything else. -->

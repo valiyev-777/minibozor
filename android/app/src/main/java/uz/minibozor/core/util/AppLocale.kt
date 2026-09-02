@@ -37,9 +37,11 @@ object AppLocale {
     }
 
     /**
-     * Switches language. Android recreates the running activities to pick up
-     * the new resources, so the screen rebuilds — that is the brief flicker on
-     * screen 39, not a bug.
+     * Switches language.
+     *
+     * The activity declares `locale` in its `configChanges`, so this arrives as
+     * a configuration change rather than a rebuild: the screen stays where it
+     * is and re-reads its text. See the note in the manifest.
      *
      * Must be called from the main thread.
      */

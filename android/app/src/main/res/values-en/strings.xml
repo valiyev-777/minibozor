@@ -357,4 +357,16 @@
     <string name="yopish">Show less</string>
     <string name="yetkazish_va_kafolat">Delivery and warranty</string>
     <string name="rating_n_dan_yuqori">Above %1$s ★</string>
+
+    <!-- Product page: rating panel, colour picker, description -->
+    <string name="tavsif_va_xususiyatlar">Description and specs</string>
+    <string name="barcha_rasmlar">All photos</string>
+    <plurals name="n_orders">
+        <item quantity="one">%1$s order</item>
+        <item quantity="other">%1$s orders</item>
+    </plurals>
+    <plurals name="n_buyers">
+        <item quantity="one">%1$s person bought this</item>
+        <item quantity="other">%1$s people bought this</item>
+    </plurals>
 </resources>

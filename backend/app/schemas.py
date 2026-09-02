@@ -169,6 +169,9 @@ class VariantOut(BaseModel):
     kind: VariantKind
     label: str
     value: str
+    # The product in this colour, so the picker can show photographs instead of
+    # hex swatches. None for sizes, and for a colour nobody photographed.
+    image_url: str | None = None
     in_stock: bool
 
 
@@ -212,6 +215,9 @@ class ProductOut(ProductCardOut):
     free_delivery: bool
     next_day_delivery: bool
     delivery_note: str = ""
+    # How many have been sold — the product page prints it beside the rating,
+    # where "2 010 ta buyurtma" is the strongest thing on the panel.
+    sold_count: int = 0
 
 
 class RatingBucket(BaseModel):
@@ -224,6 +230,10 @@ class ReviewSummaryOut(BaseModel):
     rating: float
     total: int
     distribution: list[RatingBucket]
+    # A handful of customer photographs for the strip beside the rating, and the
+    # full count so the last tile can say how many more there are.
+    photos: list[str] = []
+    photos_total: int = 0
 
 
 class ReviewOut(BaseModel):

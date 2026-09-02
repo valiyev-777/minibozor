@@ -2,6 +2,9 @@ package uz.minibozor.core.design
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.ripple.RippleAlpha
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.remember
 import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,10 +52,17 @@ fun MiniBozorTheme(
 
     CompositionLocalProvider(
         LocalMbColors provides colors,
-        // Material's own ripple takes its colour from the content colour, which
-        // on a light theme is near-black — a tap on a white card flashed a dark
-        // disc across it. Same hue, a twentieth of the strength, and it inverts
-        // with the palette so a dark theme gets a pale one instead.
+        // Material 3 stopped supplying an indication of its own, and what
+        // Foundation falls back to is a debugging one: flat black at nearly a
+        // third opacity. That is the dark block every tap left behind, and no
+        // amount of tuning the ripple below reached it, because nothing was
+        // asking for the ripple. Handing it over here covers every plain
+        // `clickable` in the app at once.
+        LocalIndication provides remember { ripple() },
+        // The ripple takes its colour from here rather than from the content
+        // colour, which on a light theme is near-black — a tap on a white card
+        // flashed a dark disc across it. Same hue, a twentieth of the strength,
+        // and it inverts with the palette so a dark theme gets a pale one.
         LocalRippleConfiguration provides RippleConfiguration(
             color = colors.ink,
             rippleAlpha = RippleAlpha(

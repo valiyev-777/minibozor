@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.component.MbTabHeader
 import uz.minibozor.core.design.component.MbCard
 import uz.minibozor.core.design.component.MbDivider
 import uz.minibozor.core.design.component.MbListRow
@@ -63,10 +64,12 @@ fun ProfileScreen(
     )
 
     MbScreen { padding ->
+      Column(Modifier.fillMaxSize().padding(padding)) {
+        // In the content, not the scaffold's top bar: that slot is laid out
+        // above the window insets, so the name ended up under the clock.
+        MbTabHeader(stringResource(R.string.tab_profile))
         LazyColumn(
-            Modifier
-                .fillMaxSize()
-                .padding(padding),
+            Modifier.fillMaxSize(),
             contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -185,6 +188,7 @@ fun ProfileScreen(
 
             item { MbTabBarSpacer() }
         }
+      }
     }
 
     if (confirmSignOut) {

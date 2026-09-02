@@ -31,6 +31,7 @@ import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.mbClickable
+import uz.minibozor.core.design.component.MbTabHeader
 import uz.minibozor.core.design.component.MbCard
 import uz.minibozor.core.design.component.MbCheckbox
 import uz.minibozor.core.design.component.MbDivider
@@ -74,23 +75,18 @@ fun CartScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MbTheme.colors.surface)
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                MbText(stringResource(R.string.savat), MbTheme.type.title1)
-                Spacer(Modifier.weight(1f))
-                if (cart != null && cart.items.isNotEmpty()) {
-                    MbText(
-                        pluralStringResource(R.plurals.n_products, cart.items.size, cart.items.size),
-                        MbTheme.type.caption,
-                        MbTheme.colors.icon,
-                    )
-                }
-            }
+            MbTabHeader(
+                stringResource(R.string.savat),
+                trailing = {
+                    if (cart != null && cart.items.isNotEmpty()) {
+                        MbText(
+                            pluralStringResource(R.plurals.n_products, cart.items.size, cart.items.size),
+                            MbTheme.type.caption,
+                            MbTheme.colors.icon,
+                        )
+                    }
+                },
+            )
 
             when {
                 loading && cart == null -> MbLoading()

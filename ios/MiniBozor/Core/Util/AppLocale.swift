@@ -41,6 +41,9 @@ final class Localization {
     func apply(_ value: String) {
         let next = Self.supported.contains(value) ? value : Self.fallback
         guard next != code else { return }
+        // The tree below is about to be discarded, navigation and all. This is
+        // what lets the screen the switch was made on come back.
+        LocaleRestart.arm()
         defaults.set(next, forKey: key)
         // Also told to the system, so the language shows up in Settings for the
         // app and survives a cold start before this object is built.

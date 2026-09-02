@@ -32,9 +32,32 @@ Set your signing team on the target before running on a device.
 | Release | `https://api.minibozor.uz/api/v1` | `https://api.minibozor.uz/media` |
 
 The simulator shares the Mac's `localhost`, so the local FastAPI server just
-works. On a physical device, put your Mac's LAN address there instead.
+works. Any other target is set at build time rather than by editing the file —
+`Info.plist` carries two build settings into the bundle and `AppConfig` prefers
+them over the compiled-in defaults:
+
+```bash
+xcodebuild ... MB_API_BASE_URL=https://host/api/v1 MB_MEDIA_BASE_URL=https://host/media
+```
+
+Blank means "use the default", so ordinary builds are unaffected.
+
 `Info.plist` allows cleartext only through `NSAllowsLocalNetworking`, which
-covers local hostnames and nothing else.
+covers local hostnames and RFC 1918 addresses and nothing else — a tailnet
+address is neither, so serve the dev backend over HTTPS instead of adding an
+exception:
+
+```bash
+sudo tailscale serve --bg --https=443 http://127.0.0.1:8000
+```
+
+## TestFlight
+
+`./testflight.sh` archives and uploads in one step, and is written for a headless
+SSH session on the build Mac: it unlocks the login keychain, passes the App Store
+Connect API key to `xcodebuild`, stamps a unique build number, and points the
+build at the tailnet backend. It needs an app record for `uz.minibozor` to exist
+in App Store Connect first.
 
 Start the backend with `cd ../backend && ./run.sh`, then sign in with
 `+998 90 123 45 67`. Debug builds of the backend return the SMS code, and the

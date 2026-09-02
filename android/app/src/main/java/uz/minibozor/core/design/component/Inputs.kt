@@ -310,6 +310,9 @@ private fun StepperButton(
     Box(
         Modifier
             .size(size)
+            // Round, like the button it sits in: a bare clickable washed a
+            // square across the stepper's rounded corner.
+            .clip(CircleShape)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

@@ -577,8 +577,6 @@ private fun LazyListScope.homeSection(
                                 oldPrice = product.oldPrice,
                                 discountPercent = product.discountPercent,
                                 imageUrl = product.imageUrl,
-                                rating = product.rating,
-                                reviewsCount = product.reviewsCount,
                                 isFavorite = product.isFavorite,
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { onToggleFavorite(product) },

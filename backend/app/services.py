@@ -156,34 +156,6 @@ def product_cards(
     return [product_card(session, p, favs) for p in products]
 
 
-def category_tree_ids(session: Session, root_id: int) -> list[int]:
-    """A category and every descendant, so counts and listings agree."""
-    ids = [root_id]
-    frontier = [root_id]
-    while frontier:
-        children = session.exec(
-            select(Category.id).where(col(Category.parent_id).in_(frontier))
-        ).all()
-        if not children:
-            break
-        ids.extend(children)
-        frontier = list(children)
-    return ids
-
-
-def category_product_count(session: Session, category_id: int) -> int:
-    """Counted, never stored.
-
-    A hand-maintained number drifts the moment stock changes, and showing
-    "12 400 tovar" over an empty category is worse than showing nothing.
-    """
-    return session.exec(
-        select(func.count())
-        .select_from(Product)
-        .where(col(Product.category_id).in_(category_tree_ids(session, category_id)))
-    ).one()
-
-
 def category_out(session: Session, c: Category) -> s.CategoryOut:
     has_children = session.exec(
         select(func.count()).select_from(Category).where(Category.parent_id == c.id)
@@ -195,7 +167,15 @@ def category_out(session: Session, c: Category) -> s.CategoryOut:
         subtitle=i18n.t(session, "category", c.id, "subtitle", c.subtitle),
         icon=c.icon,
         image_url=media_url(c.image_url),
-        product_count=category_product_count(session, c.id),
+        # Left at zero, and the apps no longer print it.
+        #
+        # It used to be counted per category, and counting one meant walking
+        # its whole subtree first: the catalogue root is 26 categories, so one
+        # screen cost 26 tree walks and 26 COUNTs. Nobody picks a category by
+        # how many things are in it, and a shopper who reads "3 tovar" as
+        # "almost sold out" has been told something untrue. The field stays in
+        # the response so an older build still decodes it.
+        product_count=0,
         has_children=has_children,
     )
 
@@ -234,6 +214,7 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
                 kind=v.kind,
                 label=i18n.t(session, "variant", v.id, "label", v.label),
                 value=v.value,
+                image_url=media_url(v.image_url),
                 in_stock=v.in_stock,
             )
             for v in variants
@@ -252,6 +233,7 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
         free_delivery=p.free_delivery,
         next_day_delivery=p.next_day_delivery,
         delivery_note=note,
+        sold_count=p.sold_count,
     )
 
 
@@ -317,7 +299,21 @@ def review_summary(session: Session, product_id: int) -> s.ReviewSummaryOut:
         )
         for n in range(5, 0, -1)
     ]
-    return s.ReviewSummaryOut(rating=round(avg, 1), total=total, distribution=distribution)
+    # Every published photograph, newest first, capped at what a strip can show.
+    # The count is of photographs rather than of reviews carrying them: the tile
+    # says "+60", and 60 pictures across 20 reviews is still 60 pictures.
+    photos = [
+        media_url(url)
+        for r in sorted(reviews, key=lambda r: r.created_at, reverse=True)
+        for url in r.photos
+    ]
+    return s.ReviewSummaryOut(
+        rating=round(avg, 1),
+        total=total,
+        distribution=distribution,
+        photos=[u for u in photos[:9] if u],
+        photos_total=len([u for u in photos if u]),
+    )
 
 
 def recalc_product_rating(session: Session, product_id: int) -> None:

@@ -379,4 +379,16 @@
     <string name="yopish">Yopish</string>
     <string name="yetkazish_va_kafolat">Yetkazish va kafolat</string>
     <string name="rating_n_dan_yuqori">%1$s ★ dan yuqori</string>
+
+    <!-- Product page: rating panel, colour picker, description -->
+    <string name="tavsif_va_xususiyatlar">Tavsif va xususiyatlar</string>
+    <string name="barcha_rasmlar">Barcha rasmlar</string>
+    <plurals name="n_orders">
+        <item quantity="one">%1$s ta buyurtma</item>
+        <item quantity="other">%1$s ta buyurtma</item>
+    </plurals>
+    <plurals name="n_buyers">
+        <item quantity="one">%1$s kishi sotib oldi</item>
+        <item quantity="other">%1$s kishi sotib oldi</item>
+    </plurals>
 </resources>

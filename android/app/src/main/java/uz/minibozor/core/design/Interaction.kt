@@ -1,12 +1,17 @@
 package uz.minibozor.core.design
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
@@ -14,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DrawModifierNode
 import kotlinx.coroutines.launch
@@ -68,6 +74,55 @@ fun Modifier.mbPressable(
     enabled = enabled,
     onClick = onClick,
 )
+
+/**
+ * The highlight [mbPressable] draws, handed out on its own.
+ *
+ * For call sites that need to own the interaction source rather than let
+ * `clickable` create one — a card whose whole body dips under the finger has to
+ * read the same presses the highlight is drawn from, so the dip and the wash
+ * begin on the same frame. See [mbPressDip].
+ */
+fun mbPressIndication(shape: Shape, color: Color): IndicationNodeFactory =
+    MbPressHighlight(shape, color)
+
+/** The press source a card's dip and its highlight share. */
+@Composable
+fun rememberMbPress(): MutableInteractionSource = remember { MutableInteractionSource() }
+
+/**
+ * Dips everything drawn to the right of it while [interaction] is pressed.
+ *
+ * A card is a large target, and a wash of ink over a large target is a weak
+ * signal — the tile is 180 dp across and the highlight is five percent of ink.
+ * Taking the whole card down a fraction is the part the eye actually catches,
+ * and it is the same gesture the app's buttons already make.
+ *
+ * Placed at the head of a card's modifier chain, before the shadow and the
+ * background, so the surface and its shadow scale with the content rather than
+ * standing still around a shrinking picture.
+ */
+@Composable
+fun Modifier.mbPressDip(
+    interaction: MutableInteractionSource,
+    pressedScale: Float = 0.975f,
+): Modifier {
+    val pressed by interaction.collectIsPressedAsState()
+    // Down fast, back slower: the dip should land with the finger and recover
+    // gently enough to be seen recovering.
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) pressedScale else 1f,
+        animationSpec = tween(
+            durationMillis = if (pressed) MbMotion.Quick else MbMotion.Standard,
+            easing = MbMotion.Ease,
+        ),
+        label = "pressDip",
+    )
+    return graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
+}
 
 private data class MbPressHighlight(
     val shape: Shape,
