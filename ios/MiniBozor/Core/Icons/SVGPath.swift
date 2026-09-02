@@ -256,7 +256,7 @@ enum SVGPath {
                     index += 1
                 }
             }
-            return Double(text).map(CGFloat.init)
+            return Double(text).map { CGFloat($0) }
         }
 
         /// Arc flags are single digits and may be written without separators.

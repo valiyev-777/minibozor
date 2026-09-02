@@ -17,7 +17,7 @@ struct AddressFormView: View {
         AddressPreset(title: L("preset_boshqa"), icon: "star", badge: nil),
     ] }
 
-    @State var preset: AddressPreset
+    @State private var preset: AddressPreset
     @State var line = ""
     @State var floor = ""
     @State var apartment = ""

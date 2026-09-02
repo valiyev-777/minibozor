@@ -10,8 +10,25 @@
 		MB0000000000000000000005 /* Mini Bozor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Mini Bozor.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		MB0000000000000000000010 /* Exceptions for "MiniBozor" folder in "MiniBozor" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = MB0000000000000000000004 /* MiniBozor */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		MB0000000000000000000006 /* MiniBozor */ = {isa = PBXFileSystemSynchronizedRootGroup; path = MiniBozor; sourceTree = "<group>"; };
+		MB0000000000000000000006 /* MiniBozor */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				MB0000000000000000000010 /* Exceptions for "MiniBozor" folder in "MiniBozor" target */,
+			);
+			path = MiniBozor;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
