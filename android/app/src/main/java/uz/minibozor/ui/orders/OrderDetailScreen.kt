@@ -46,11 +46,19 @@ import uz.minibozor.core.util.toLocalDateTimeOrNull
 import uz.minibozor.core.util.uzDateTime
 import uz.minibozor.data.remote.dto.OrderEventDto
 
-/** Screens 25 (tracking) and 27 (full detail) — the same data, different depth. */
+/**
+ * Screen 27 — one order, in full.
+ *
+ * This used to be two screens off one composable: a tracking view that showed
+ * the timeline and stopped there, and the detail view. But tracking was a strict
+ * subset — the same timeline with the information, the totals and the buttons
+ * taken away — so a customer who tapped "Kuzatish" landed somewhere that could
+ * not tell them what they had paid or let them cancel, and had to find the order
+ * again to get there. Everything opens the order now.
+ */
 @Composable
 fun OrderDetailScreen(
     orderId: Int,
-    trackingOnly: Boolean,
     onBack: () -> Unit,
     onCancel: (Int) -> Unit,
     onReturn: (Int) -> Unit,
@@ -64,7 +72,7 @@ fun OrderDetailScreen(
     MbScreen(
         topBar = {
             MbTopBar(
-                title = if (trackingOnly) stringResource(R.string.yetkazish_holati) else stringResource(R.string.buyurtma_tafsilotlari),
+                title = stringResource(R.string.buyurtma_tafsilotlari),
                 subtitle = order?.code,
                 onBack = onBack,
             )
@@ -128,64 +136,62 @@ fun OrderDetailScreen(
                     }
                 }
 
-                if (!trackingOnly) {
-                    item {
-                        MbCard {
-                            SectionHeader(stringResource(R.string.ma_lumot))
-                            Spacer(Modifier.height(4.dp))
-                            MbKeyValueRow(
-                                stringResource(R.string.buyurtma_sanasi),
-                                order.createdAt.toLocalDateTimeOrNull()?.uzDateTime().orEmpty(),
-                            )
-                            MbKeyValueRow(stringResource(R.string.tolov), order.paymentLabel)
-                            MbKeyValueRow(
-                                stringResource(R.string.manzil),
-                                listOf(order.addressLine, order.addressMeta)
-                                    .filter { it.isNotBlank() }
-                                    .joinToString(", "),
-                            )
-                            MbKeyValueRow(
-                                stringResource(R.string.qabul_qiluvchi),
-                                "${order.recipientName}, ${order.recipientPhone}",
+                item {
+                    MbCard {
+                        SectionHeader(stringResource(R.string.ma_lumot))
+                        Spacer(Modifier.height(4.dp))
+                        MbKeyValueRow(
+                            stringResource(R.string.buyurtma_sanasi),
+                            order.createdAt.toLocalDateTimeOrNull()?.uzDateTime().orEmpty(),
+                        )
+                        MbKeyValueRow(stringResource(R.string.tolov), order.paymentLabel)
+                        MbKeyValueRow(
+                            stringResource(R.string.manzil),
+                            listOf(order.addressLine, order.addressMeta)
+                                .filter { it.isNotBlank() }
+                                .joinToString(", "),
+                        )
+                        MbKeyValueRow(
+                            stringResource(R.string.qabul_qiluvchi),
+                            "${order.recipientName}, ${order.recipientPhone}",
+                        )
+                    }
+                }
+
+                item {
+                    MbCard {
+                        MbTotalRow(stringResource(R.string.tovarlar), order.subtotal.sum())
+                        if (order.discount > 0) {
+                            MbTotalRow(
+                                stringResource(R.string.chegirma),
+                                "−${order.discount.grouped()}",
+                                valueColor = MbTheme.colors.success,
                             )
                         }
+                        MbTotalRow(
+                            stringResource(R.string.yetkazish),
+                            if (order.deliveryFee == 0) stringResource(R.string.bepul) else order.deliveryFee.sum(),
+                        )
+                        MbDivider(Modifier.padding(vertical = 8.dp))
+                        MbTotalRow(stringResource(R.string.jami), order.total.sum(), strong = true)
                     }
+                }
 
+                if (order.canCancel || order.status == "delivered") {
                     item {
-                        MbCard {
-                            MbTotalRow(stringResource(R.string.tovarlar), order.subtotal.sum())
-                            if (order.discount > 0) {
-                                MbTotalRow(
-                                    stringResource(R.string.chegirma),
-                                    "−${order.discount.grouped()}",
-                                    valueColor = MbTheme.colors.success,
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (order.canCancel) {
+                                MbSecondaryButton(
+                                    stringResource(R.string.buyurtmani_bekor_qilish),
+                                    { onCancel(order.id) },
+                                    contentColor = MbTheme.colors.danger,
                                 )
                             }
-                            MbTotalRow(
-                                stringResource(R.string.yetkazish),
-                                if (order.deliveryFee == 0) stringResource(R.string.bepul) else order.deliveryFee.sum(),
-                            )
-                            MbDivider(Modifier.padding(vertical = 8.dp))
-                            MbTotalRow(stringResource(R.string.jami), order.total.sum(), strong = true)
-                        }
-                    }
-
-                    if (order.canCancel || order.status == "delivered") {
-                        item {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                if (order.canCancel) {
-                                    MbSecondaryButton(
-                                        stringResource(R.string.buyurtmani_bekor_qilish),
-                                        { onCancel(order.id) },
-                                        contentColor = MbTheme.colors.danger,
-                                    )
-                                }
-                                if (order.status == "delivered") {
-                                    MbSecondaryButton(
-                                        stringResource(R.string.qaytarish_arizasi),
-                                        { onReturn(order.id) },
-                                    )
-                                }
+                            if (order.status == "delivered") {
+                                MbSecondaryButton(
+                                    stringResource(R.string.qaytarish_arizasi),
+                                    { onReturn(order.id) },
+                                )
                             }
                         }
                     }

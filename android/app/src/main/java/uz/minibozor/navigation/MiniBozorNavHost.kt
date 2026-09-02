@@ -421,7 +421,7 @@ fun MiniBozorNavHost(
             OrderPlacedScreen(
                 orderId = orderId,
                 onTrack = { id ->
-                    navController.navigate(Routes.tracking(id)) {
+                    navController.navigate(Routes.orderDetail(id)) {
                         popUpTo(Routes.ORDER_PLACED) { inclusive = true }
                     }
                 },
@@ -433,18 +433,11 @@ fun MiniBozorNavHost(
 
         // ---------------------------------------------------------- 25-29
 
-        composable(
-            Routes.TRACKING,
-            arguments = listOf(navArgument(Args.ORDER_ID) { type = NavType.IntType }),
-        ) { entry ->
-            OrderScreenHost(entry, navController, trackingOnly = true)
-        }
-
         composable(Routes.ORDERS) {
             OrdersScreen(
                 onBack = { navController.popBackStack() },
                 onOpenOrder = { id -> navController.navigate(Routes.orderDetail(id)) },
-                onTrack = { id -> navController.navigate(Routes.tracking(id)) },
+                onTrack = { id -> navController.navigate(Routes.orderDetail(id)) },
                 onStartShopping = { switchTab(Routes.HOME) },
             )
         }
@@ -453,7 +446,7 @@ fun MiniBozorNavHost(
             Routes.ORDER_DETAIL,
             arguments = listOf(navArgument(Args.ORDER_ID) { type = NavType.IntType }),
         ) { entry ->
-            OrderScreenHost(entry, navController, trackingOnly = false)
+            OrderScreenHost(entry, navController)
         }
 
         composable(
@@ -607,12 +600,10 @@ fun MiniBozorNavHost(
 private fun OrderScreenHost(
     entry: NavBackStackEntry,
     navController: NavHostController,
-    trackingOnly: Boolean,
 ) {
     val orderId = entry.arguments?.getInt(Args.ORDER_ID) ?: 0
     OrderDetailScreen(
         orderId = orderId,
-        trackingOnly = trackingOnly,
         onBack = { navController.popBackStack() },
         onCancel = { id -> navController.navigate(Routes.orderCancel(id)) },
         onReturn = { id -> navController.navigate(Routes.orderReturn(id)) },

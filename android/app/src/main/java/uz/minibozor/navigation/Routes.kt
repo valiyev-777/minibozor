@@ -48,8 +48,6 @@ object Routes {
     fun orderPlaced(orderId: Int) = "order_placed/$orderId"
 
     // Orders
-    const val TRACKING = "tracking/{orderId}"              // 25
-    fun tracking(orderId: Int) = "tracking/$orderId"
     const val ORDERS = "orders"                            // 26
     const val ORDER_DETAIL = "order/{orderId}"             // 27
     fun orderDetail(orderId: Int) = "order/$orderId"
