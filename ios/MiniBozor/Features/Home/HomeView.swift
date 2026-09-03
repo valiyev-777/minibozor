@@ -200,18 +200,9 @@ struct HomeView: View {
                 Task { await model.toggleFavorite(product, city: session.city) }
             },
             onAddToCart: {
-                // A product that comes in sizes or colours opens the picker
-                // instead of being added with a variant we guessed. And
-                // nothing else while one is on its way — see ListingView.
-                guard picking == nil else { return }
-                if product.hasVariants {
-                    picking = product
-                } else {
-                    Task {
-                        let outcome = await cart.add(productId: product.id)
-                        toast = outcome.errorMessage ?? L("savatga_qoshildi")
-                    }
-                }
+                // Every product opens the sheet — see ListingView — and only
+                // one at a time, since it presents a frame or two later.
+                if picking == nil { picking = product }
             }
         )
     }

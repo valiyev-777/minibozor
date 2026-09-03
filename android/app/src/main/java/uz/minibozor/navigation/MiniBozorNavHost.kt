@@ -524,6 +524,7 @@ fun MiniBozorNavHost(
                 onBack = { navController.popBackStack() },
                 onOpenProduct = { id -> navController.navigate(Routes.product(id)) },
                 onStartShopping = { switchTab(Routes.HOME) },
+                onOpenCart = { switchTab(Routes.CART) },
             )
         }
 

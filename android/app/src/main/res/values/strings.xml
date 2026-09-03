@@ -401,4 +401,5 @@
     <!-- Filters: what the listing leaves out -->
     <string name="tugaganlarni_korsatish">Tugaganlarni ko\'rsatish</string>
     <string name="tugaganlar_odatda_royxatda_korinmaydi">Sotuvda yo\'q tovarlar odatda ro\'yxatda ko\'rinmaydi</string>
+    <string name="savatga_qoshish">Savatga qo\'shish</string>
 </resources>

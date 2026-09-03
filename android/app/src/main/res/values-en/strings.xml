@@ -379,4 +379,5 @@
     <!-- Filters: what the listing leaves out -->
     <string name="tugaganlarni_korsatish">Show sold out</string>
     <string name="tugaganlar_odatda_royxatda_korinmaydi">Products with none left are normally left out of the listing</string>
+    <string name="savatga_qoshish">Add to cart</string>
 </resources>

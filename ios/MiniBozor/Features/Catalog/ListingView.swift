@@ -197,23 +197,19 @@ struct ListingView: View {
                             onOpen: { router.push(.product(id: product.id)) },
                             onToggleFavorite: { Task { await model.toggleFavorite(product) } },
                             onAddToCart: {
-                                // Nothing else while a picker is on its way.
-                                // The sheet presents a frame or two after
-                                // `picking` is set, and a tap landing in
-                                // between reached the grid behind it and added
-                                // that product outright — asking for one thing
-                                // and having a different one go into the basket
-                                // without a word is about the worst a shop can
-                                // do.
-                                guard picking == nil else { return }
-                                if product.hasVariants {
-                                    picking = product
-                                } else {
-                                    Task {
-                                        let outcome = await cart.add(productId: product.id)
-                                        toast = outcome.errorMessage ?? L("savatga_qoshildi")
-                                    }
-                                }
+                                // Every product, not only the ones with
+                                // something to choose. Two tiles side by side
+                                // where one asks and the other puts itself in
+                                // the basket is a grid you cannot press with any
+                                // confidence — and the ones that did not ask
+                                // were the ones a tap could not be taken back
+                                // on. The sheet carries a count, so there is a
+                                // choice to make even with no variants.
+                                //
+                                // Guarded, because the sheet presents a frame or
+                                // two after `picking` is set and a tap landing
+                                // in between reached the grid behind it.
+                                if picking == nil { picking = product }
                             }
                         )
                         .task { await model.loadMoreIfNeeded(current: product) }

@@ -175,15 +175,16 @@ fun ListingScreen(
                                     // Asking for one thing and having a
                                     // different one go into the basket without
                                     // a word is about the worst a shop can do.
-                                    if (picking == null) {
-                                        if (product.hasVariants) {
-                                            picking = product
-                                        } else {
-                                            viewModel.addToCart(product.id) {
-                                                toast.value = it
-                                            }
-                                        }
-                                    }
+                                    // Every product, not only the ones with
+                                    // something to choose. Two tiles side by
+                                    // side where one asks and the other puts
+                                    // itself in the basket is a grid you cannot
+                                    // press with any confidence — and the ones
+                                    // that did not ask were the ones a tap
+                                    // could not be taken back on. The sheet
+                                    // carries a count, so there is a choice to
+                                    // make even when there are no variants.
+                                    if (picking == null) picking = product
                                 },
                             )
                         }

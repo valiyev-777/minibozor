@@ -230,13 +230,10 @@ fun HomeScreen(
                                 // frame before the sheet's scrim arrives goes
                                 // to the grid behind it and adds that product
                                 // outright.
-                                if (picking == null) {
-                                    if (p.hasVariants) {
-                                        picking = p
-                                    } else {
-                                        viewModel.addToCart(p.id) { toast.value = it }
-                                    }
-                                }
+                                // See ListingScreen: every product opens the
+                                // sheet, so no tile puts itself in the basket
+                                // without being asked twice.
+                                if (picking == null) picking = p
                             },
                         )
                     }

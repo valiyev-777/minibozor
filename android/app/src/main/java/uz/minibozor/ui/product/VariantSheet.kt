@@ -90,7 +90,15 @@ fun VariantSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 MbText(
-                    stringResource(R.string.xususiyatlarni_tanlang),
+                    stringResource(
+                        // Nothing to choose on a product without variants, so
+                        // it does not ask the customer to choose anything.
+                        if (state.colors.isEmpty() && state.sizes.isEmpty()) {
+                            R.string.savatga_qoshish
+                        } else {
+                            R.string.xususiyatlarni_tanlang
+                        }
+                    ),
                     MbTheme.type.title2,
                     modifier = Modifier.weight(1f),
                 )
@@ -164,6 +172,7 @@ fun VariantSheet(
             BottomBar(
                 state = state,
                 onAdd = viewModel::addToCart,
+                onPendingQuantity = viewModel::setPendingQuantity,
                 onQuantity = viewModel::setQuantity,
                 onOpenCart = onOpenCart,
             )
@@ -335,6 +344,7 @@ private fun SizeRow(sizes: List<VariantDto>, selectedId: Int?, onSelect: (Int) -
 private fun BottomBar(
     state: VariantSheetState,
     onAdd: () -> Unit,
+    onPendingQuantity: (Int) -> Unit,
     onQuantity: (Int) -> Unit,
     onOpenCart: () -> Unit,
 ) {
@@ -345,12 +355,29 @@ private fun BottomBar(
             .padding(horizontal = 20.dp, vertical = 14.dp),
     ) {
         if (state.cartItemId == null) {
-            MbPrimaryButton(
-                text = stringResource(R.string.savatga),
-                onClick = onAdd,
-                enabled = state.ready && !state.busy,
-                loading = state.busy,
-            )
+            // How many, before it goes in rather than after. Every product
+            // opens this sheet now, including the ones with nothing to choose,
+            // and for those the count is the only choice there is to make —
+            // without it the sheet would be a confirmation with no question on
+            // it. For the rest it saves adding one and immediately reaching for
+            // the stepper.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MbQuantityStepper(
+                    quantity = state.quantity,
+                    onChange = onPendingQuantity,
+                    min = 1,
+                    max = state.shelfLeft.coerceAtLeast(1),
+                    size = MbTheme.dimens.buttonHeight,
+                )
+                Spacer(Modifier.width(12.dp))
+                MbPrimaryButton(
+                    text = stringResource(R.string.savatga),
+                    onClick = onAdd,
+                    enabled = state.ready && !state.busy,
+                    loading = state.busy,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 MbQuantityStepper(

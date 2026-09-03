@@ -246,6 +246,7 @@
 "savat_va_sevimlilar_hisobingizda_saqlanadi" = "Корзина и избранное хранятся в аккаунте — вернётесь, и всё будет на месте.";
 "savatga" = "В корзину";
 "savatga_qoshildi" = "Добавлено в корзину";
+"savatga_qoshish" = "Добавить в корзину";
 "sevimlilar" = "Избранное";
 "sevimlilar_bosh" = "В избранном пусто";
 "sevimlilar_narxi" = "Цены избранного";

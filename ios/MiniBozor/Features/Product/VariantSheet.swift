@@ -76,6 +76,16 @@ final class VariantSheetModel {
 
     /// Stepper on the added state; zero removes the line and returns to choosing.
     @MainActor
+    /// Stepper before the line exists: how many to add, held locally.
+    ///
+    /// Nothing to patch yet — the line is not in the cart — so this only moves
+    /// the number the "Savatga" button will send.
+    @MainActor
+    func setPendingQuantity(_ value: Int) {
+        guard cartItemId == nil else { return }
+        quantity = min(Swift.max(value, 1), Swift.max(shelfLeft, 1))
+    }
+
     func setQuantity(_ value: Int, using cart: CartRepository) async {
         guard let itemId = cartItemId, !busy, (0...99).contains(value) else { return }
         busy = true
@@ -106,7 +116,11 @@ struct VariantSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(L("xususiyatlarni_tanlang"))
+                // Nothing to choose on a product without variants, so it does
+                // not ask the customer to choose anything.
+                Text(L(model.colors.isEmpty && model.sizes.isEmpty
+                       ? "savatga_qoshish"
+                       : "xususiyatlarni_tanlang"))
                     .mbFont(MB.type.title2)
                     .foregroundStyle(MB.color.ink)
                 Spacer()
@@ -267,12 +281,27 @@ struct VariantSheet: View {
     private var bottomBar: some View {
         VStack(spacing: 0) {
             if model.cartItemId == nil {
-                MBPrimaryButton(
-                    L("savatga"),
-                    enabled: model.ready && !model.busy,
-                    loading: model.busy
-                ) {
-                    Task { await model.addToCart(using: cart) }
+                // How many, before it goes in rather than after. Every product
+                // opens this sheet now, including the ones with nothing to
+                // choose, and for those the count is the only choice there is
+                // to make — without it the sheet would be a confirmation with
+                // no question on it.
+                HStack(spacing: 12) {
+                    MBQuantityStepper(
+                        quantity: model.quantity,
+                        minimum: 1,
+                        maximum: Swift.max(model.shelfLeft, 1),
+                        size: 48
+                    ) { value in
+                        model.setPendingQuantity(value)
+                    }
+                    MBPrimaryButton(
+                        L("savatga"),
+                        enabled: model.ready && !model.busy,
+                        loading: model.busy
+                    ) {
+                        Task { await model.addToCart(using: cart) }
+                    }
                 }
             } else {
                 HStack(spacing: 12) {

@@ -82,15 +82,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun addToCart(productId: Int, onDone: (String) -> Unit) {
-        viewModelScope.launch {
-            when (val result = cart.add(productId, null)) {
-                is Outcome.Success -> onDone(AppStrings[R.string.savatga_qoshildi])
-                is Outcome.Failure -> onDone(result.message)
-            }
-        }
-    }
-
     private suspend fun reloadQuietly() {
         val result = catalog.home(city.value)
         if (result is Outcome.Success) _state.value = UiState.Ready(result.data)

@@ -115,6 +115,18 @@ class VariantSheetViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Stepper before the line exists: how many to add, held locally.
+     *
+     * Nothing to patch yet — the line is not in the cart — so this only moves
+     * the number the "Savatga" button will send. Bounded by the shelf the
+     * choice stands on, the same figure the added state is bounded by.
+     */
+    fun setPendingQuantity(quantity: Int) = _state.update {
+        if (it.cartItemId != null) it
+        else it.copy(quantity = quantity.coerceIn(1, it.shelfLeft.coerceAtLeast(1)))
+    }
+
     /** Stepper on the added state; 0 removes the line and returns to choosing. */
     fun setQuantity(quantity: Int) {
         val itemId = _state.value.cartItemId ?: return

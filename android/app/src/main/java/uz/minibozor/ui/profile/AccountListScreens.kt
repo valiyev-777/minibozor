@@ -20,6 +20,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +48,8 @@ import uz.minibozor.core.design.component.MbTopBar
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.ui.common.MbToastHost
 import uz.minibozor.ui.common.rememberToast
+import uz.minibozor.ui.product.VariantSheet
+import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.ui.product.component.ReviewRow
 
 /** Screen 32 — To'lov kartalari. */
@@ -326,11 +331,13 @@ fun FavoritesScreen(
     onBack: () -> Unit,
     onOpenProduct: (Int) -> Unit,
     onStartShopping: () -> Unit,
+    onOpenCart: () -> Unit,
     viewModel: FavoritesViewModel = hiltViewModel(),
 ) {
     val items by viewModel.items.collectAsStateWithLifecycle()
     val loading by viewModel.loading.collectAsStateWithLifecycle()
     val toast = rememberToast()
+    var picking by remember { mutableStateOf<ProductCardDto?>(null) }
 
     MbScreen(topBar = { MbTopBar(stringResource(R.string.sevimlilar), onBack = onBack) }) { padding ->
         Box(
@@ -366,14 +373,27 @@ fun FavoritesScreen(
                             stockLeft = product.stockLeft,
                             onClick = { onOpenProduct(product.id) },
                             onToggleFavorite = { viewModel.remove(product.id) },
-                            onAddToCart = {
-                                viewModel.addToCart(product.id) { toast.value = it }
-                            },
+                            // The sheet, as everywhere else. This was the
+                            // worst of the direct-add screens: a favourite with
+                            // sizes went into the basket with no size chosen at
+                            // all, because nothing here ever opened a picker.
+                            onAddToCart = { if (picking == null) picking = product },
                         )
                     }
                 }
             }
             MbToastHost(toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp))
         }
+    }
+
+    picking?.let { card ->
+        VariantSheet(
+            card = card,
+            onDismiss = { picking = null },
+            onOpenCart = {
+                picking = null
+                onOpenCart()
+            },
+        )
     }
 }

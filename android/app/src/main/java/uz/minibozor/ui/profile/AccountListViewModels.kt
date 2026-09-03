@@ -122,15 +122,6 @@ class FavoritesViewModel @Inject constructor(
         catalog.setFavorite(productId, false)
         _items.update { list -> list.filterNot { it.id == productId } }
     }
-
-    fun addToCart(productId: Int, onDone: (String) -> Unit) = viewModelScope.launch {
-        onDone(
-            when (val result = cart.add(productId, null)) {
-                is Outcome.Success -> AppStrings[R.string.savatga_qoshildi]
-                is Outcome.Failure -> result.message
-            }
-        )
-    }
 }
 
 /** Screen 36 — Bildirishnomalar. */

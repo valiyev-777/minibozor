@@ -391,4 +391,5 @@
     <!-- Filters: what the listing leaves out -->
     <string name="tugaganlarni_korsatish">Показывать распроданные</string>
     <string name="tugaganlar_odatda_royxatda_korinmaydi">Товары не в наличии обычно не показываются в списке</string>
+    <string name="savatga_qoshish">Добавить в корзину</string>
 </resources>
