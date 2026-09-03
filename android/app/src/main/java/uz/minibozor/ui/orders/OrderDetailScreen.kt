@@ -170,7 +170,7 @@ fun OrderDetailScreen(
                         }
                         MbTotalRow(
                             stringResource(R.string.yetkazish),
-                            if (order.deliveryFee == 0) stringResource(R.string.bepul) else order.deliveryFee.sum(),
+                            if (order.deliveryFee == 0L) stringResource(R.string.bepul) else order.deliveryFee.sum(),
                         )
                         MbDivider(Modifier.padding(vertical = 8.dp))
                         MbTotalRow(stringResource(R.string.jami), order.total.sum(), strong = true)

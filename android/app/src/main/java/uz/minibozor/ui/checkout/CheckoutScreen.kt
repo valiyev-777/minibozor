@@ -152,9 +152,9 @@ fun CheckoutScreen(
                     }
                     MbTotalRow(
                         stringResource(R.string.yetkazish),
-                        if (preview.totals.deliveryFee == 0) stringResource(R.string.bepul)
+                        if (preview.totals.deliveryFee == 0L) stringResource(R.string.bepul)
                         else preview.totals.deliveryFee.sum(),
-                        valueColor = if (preview.totals.deliveryFee == 0) MbTheme.colors.success
+                        valueColor = if (preview.totals.deliveryFee == 0L) MbTheme.colors.success
                         else MbTheme.colors.ink,
                     )
                     MbDivider(Modifier.padding(vertical = 8.dp))

@@ -198,8 +198,8 @@ data class SpecDto(val key: String, val value: String)
 data class ProductCardDto(
     val id: Int,
     val title: String,
-    val price: Int,
-    @SerialName("old_price") val oldPrice: Int? = null,
+    val price: Long,
+    @SerialName("old_price") val oldPrice: Long? = null,
     @SerialName("discount_percent") val discountPercent: Int? = null,
     @SerialName("image_url") val imageUrl: String? = null,
     val rating: Double = 0.0,
@@ -221,8 +221,8 @@ data class ProductDto(
     val title: String,
     val subtitle: String = "",
     val description: String = "",
-    val price: Int,
-    @SerialName("old_price") val oldPrice: Int? = null,
+    val price: Long,
+    @SerialName("old_price") val oldPrice: Long? = null,
     @SerialName("discount_percent") val discountPercent: Int? = null,
     @SerialName("image_url") val imageUrl: String? = null,
     val images: List<String> = emptyList(),
@@ -293,8 +293,8 @@ data class FilterFlagDto(
 @Immutable
 @Serializable
 data class FiltersDto(
-    @SerialName("price_min") val priceMin: Int,
-    @SerialName("price_max") val priceMax: Int,
+    @SerialName("price_min") val priceMin: Long,
+    @SerialName("price_max") val priceMax: Long,
     val brands: List<BrandDto>,
     val sizes: List<String>,
     val ratings: List<String>,
@@ -307,7 +307,7 @@ data class FiltersDto(
 data class SuggestionDto(
     @SerialName("product_id") val productId: Int,
     val title: String,
-    val price: Int,
+    val price: Long,
     @SerialName("image_url") val imageUrl: String? = null,
 )
 
@@ -371,24 +371,24 @@ data class CartItemDto(
     val title: String,
     @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("variant_label") val variantLabel: String = "",
-    @SerialName("unit_price") val unitPrice: Int,
-    @SerialName("old_unit_price") val oldUnitPrice: Int? = null,
+    @SerialName("unit_price") val unitPrice: Long,
+    @SerialName("old_unit_price") val oldUnitPrice: Long? = null,
     val quantity: Int,
     val selected: Boolean,
     @SerialName("in_stock") val inStock: Boolean,
     /** What the stepper may reach, so plus stops where the shelf does. */
     @SerialName("stock_left") val stockLeft: Int = 0,
-    @SerialName("line_total") val lineTotal: Int,
+    @SerialName("line_total") val lineTotal: Long,
 )
 
 @Immutable
 @Serializable
 data class CartTotalsDto(
     @SerialName("items_count") val itemsCount: Int,
-    val subtotal: Int,
-    val discount: Int,
-    @SerialName("delivery_fee") val deliveryFee: Int,
-    val total: Int,
+    val subtotal: Long,
+    val discount: Long,
+    @SerialName("delivery_fee") val deliveryFee: Long,
+    val total: Long,
     @SerialName("free_delivery_threshold") val freeDeliveryThreshold: Int,
     @SerialName("promo_code") val promoCode: String? = null,
 )
@@ -471,7 +471,7 @@ data class SlotDto(
     @SerialName("end_time") val endTime: String,
     val label: String,
     val note: String = "",
-    val price: Int = 0,
+    val price: Long = 0,
     val express: Boolean = false,
     val available: Boolean = true,
 )
@@ -522,9 +522,9 @@ data class OrderItemDto(
     val title: String,
     @SerialName("image_url") val imageUrl: String = "",
     @SerialName("variant_label") val variantLabel: String = "",
-    @SerialName("unit_price") val unitPrice: Int,
+    @SerialName("unit_price") val unitPrice: Long,
     val quantity: Int,
-    @SerialName("line_total") val lineTotal: Int,
+    @SerialName("line_total") val lineTotal: Long,
     val reviewed: Boolean = false,
 )
 
@@ -545,7 +545,7 @@ data class OrderSummaryDto(
     val code: String,
     val status: String,
     @SerialName("status_label") val statusLabel: String,
-    val total: Int,
+    val total: Long,
     @SerialName("items_count") val itemsCount: Int,
     @SerialName("preview_images") val previewImages: List<String> = emptyList(),
     @SerialName("eta_label") val etaLabel: String = "",
@@ -561,7 +561,7 @@ data class OrderDto(
     val code: String,
     val status: String,
     @SerialName("status_label") val statusLabel: String,
-    val total: Int,
+    val total: Long,
     @SerialName("items_count") val itemsCount: Int,
     @SerialName("preview_images") val previewImages: List<String> = emptyList(),
     @SerialName("eta_label") val etaLabel: String = "",
@@ -579,9 +579,9 @@ data class OrderDto(
     val paid: Boolean = false,
     @SerialName("recipient_name") val recipientName: String = "",
     @SerialName("recipient_phone") val recipientPhone: String = "",
-    val subtotal: Int = 0,
-    @SerialName("delivery_fee") val deliveryFee: Int = 0,
-    val discount: Int = 0,
+    val subtotal: Long = 0,
+    @SerialName("delivery_fee") val deliveryFee: Long = 0,
+    val discount: Long = 0,
     val items: List<OrderItemDto> = emptyList(),
     val events: List<OrderEventDto> = emptyList(),
 )

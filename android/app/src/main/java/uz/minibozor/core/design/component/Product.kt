@@ -279,8 +279,8 @@ fun MbDiscountPill(
  */
 @Composable
 fun MbPriceRow(
-    price: Int,
-    oldPrice: Int? = null,
+    price: Long,
+    oldPrice: Long? = null,
     discountPercent: Int? = null,
     modifier: Modifier = Modifier,
     priceStyle: TextStyle = MbTheme.type.price,
@@ -385,8 +385,8 @@ fun MbStars(rating: Double, modifier: Modifier = Modifier, size: Dp = 15.dp) {
  */
 @Composable
 fun MbHeroPrice(
-    price: Int,
-    oldPrice: Int? = null,
+    price: Long,
+    oldPrice: Long? = null,
     discountPercent: Int? = null,
     /**
      * A step smaller, for the bar at the top of the product page.
@@ -541,8 +541,8 @@ fun MbCartButton(
 @Composable
 fun MbProductTile(
     title: String,
-    price: Int,
-    oldPrice: Int?,
+    price: Long,
+    oldPrice: Long?,
     discountPercent: Int?,
     imageUrl: String?,
     isFavorite: Boolean,
@@ -573,8 +573,8 @@ fun MbProductTile(
 @Composable
 fun MbDealTile(
     title: String,
-    price: Int,
-    oldPrice: Int?,
+    price: Long,
+    oldPrice: Long?,
     discountPercent: Int?,
     imageUrl: String?,
     onClick: () -> Unit,
@@ -616,8 +616,8 @@ fun MbDealTile(
 @Composable
 private fun ProductTileBody(
     title: String,
-    price: Int,
-    oldPrice: Int?,
+    price: Long,
+    oldPrice: Long?,
     discountPercent: Int?,
     imageUrl: String?,
     isFavorite: Boolean,
@@ -716,8 +716,8 @@ private fun ProductTileBody(
 @Composable
 fun MbRailTile(
     title: String,
-    price: Int,
-    oldPrice: Int?,
+    price: Long,
+    oldPrice: Long?,
     discountPercent: Int?,
     imageUrl: String?,
     onClick: () -> Unit,
@@ -843,7 +843,7 @@ fun MbLineItem(
     title: String,
     imageUrl: String?,
     meta: String,
-    price: Int,
+    price: Long,
     quantity: Int? = null,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,

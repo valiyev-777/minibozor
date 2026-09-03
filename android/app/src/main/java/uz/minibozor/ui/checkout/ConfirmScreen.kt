@@ -121,7 +121,7 @@ fun ConfirmScreen(
                     }
                     MbTotalRow(
                         stringResource(R.string.yetkazish),
-                        if (preview.totals.deliveryFee == 0) stringResource(R.string.bepul)
+                        if (preview.totals.deliveryFee == 0L) stringResource(R.string.bepul)
                         else preview.totals.deliveryFee.sum(),
                     )
                     MbDivider(Modifier.padding(vertical = 8.dp))

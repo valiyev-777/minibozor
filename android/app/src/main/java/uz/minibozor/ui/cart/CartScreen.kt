@@ -185,9 +185,9 @@ fun CartScreen(
                             }
                             MbTotalRow(
                                 stringResource(R.string.yetkazish),
-                                if (cart.totals.deliveryFee == 0) stringResource(R.string.bepul)
+                                if (cart.totals.deliveryFee == 0L) stringResource(R.string.bepul)
                                 else cart.totals.deliveryFee.sum(),
-                                valueColor = if (cart.totals.deliveryFee == 0) {
+                                valueColor = if (cart.totals.deliveryFee == 0L) {
                                     MbTheme.colors.success
                                 } else MbTheme.colors.ink,
                             )
