@@ -392,4 +392,31 @@
     <string name="tugaganlarni_korsatish">Показывать распроданные</string>
     <string name="tugaganlar_odatda_royxatda_korinmaydi">Товары не в наличии обычно не показываются в списке</string>
     <string name="savatga_qoshish">Добавить в корзину</string>
+    <!-- Screen 19: checkout, rebuilt -->
+    <string name="rasmiylashtirish">Оформление</string>
+    <string name="yetkazish_usuli">Способ доставки</string>
+    <string name="kuryer">Курьер</string>
+    <string name="kuryer_izoh">1–2 дня · бесплатно</string>
+    <string name="punktdan_olish_izoh">Завтра · бесплатно</string>
+    <string name="manzil_kiritilmagan">Адрес не указан</string>
+    <string name="xaritada_joyni_belgilang">Отметьте место на карте</string>
+    <string name="punkt_tanlanmagan">Пункт не выбран</string>
+    <string name="ozingizga_qulay_punktni_tanlang">Выберите удобный пункт выдачи</string>
+    <string name="punkt_tanlash">Выбрать пункт</string>
+    <string name="yetkazish_vaqti_qisqa">Время доставки</string>
+    <string name="manzil_kiritilgandan_keyin">Можно выбрать после указания адреса</string>
+    <string name="karta_qoshilmagan">Карта не добавлена</string>
+    <string name="karta_yoki_naqd">Карта или наличные</string>
+    <string name="aniqlanadi">уточняется</string>
+    <string name="korish">Посмотреть</string>
+    <string name="yetkazish_narxi_manzildan_keyin">Стоимость доставки станет известна после указания адреса</string>
+    <string name="hammasi_tayyor">Всё готово</string>
+    <string name="tasdiq">Подтверждение</string>
+    <plurals name="n_qadam_qoldi">
+        <item quantity="one">До заказа остался %1$d шаг</item>
+        <item quantity="few">До заказа осталось %1$d шага</item>
+        <item quantity="many">До заказа осталось %1$d шагов</item>
+        <item quantity="other">До заказа осталось %1$d шага</item>
+    </plurals>
+    <string name="yetkazish_narxi_punktdan_keyin">Стоимость доставки станет известна после выбора пункта</string>
 </resources>

@@ -372,6 +372,7 @@ fun MiniBozorNavHost(
                     onEditAddress = { navController.navigate(Routes.ADDRESS_PICKER) },
                     onEditTime = { navController.navigate(Routes.DELIVERY_TIME) },
                     onEditPayment = { navController.navigate(Routes.PAYMENT_METHOD) },
+                    onOpenCart = { navController.popBackStack() },
                     onConfirm = { navController.navigate(Routes.CONFIRM) },
                 )
             }

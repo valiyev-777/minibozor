@@ -20,6 +20,25 @@ import uz.minibozor.data.repository.CartRepository
 import uz.minibozor.data.repository.OrderRepository
 import javax.inject.Inject
 
+/**
+ * Courier or counter.
+ *
+ * It was never a choice the customer made — it was inferred from which of
+ * `addressId` and `pickupPointId` happened to be set, which meant the screen
+ * could show a delivery time slot for an order being collected in person, and
+ * nothing on it ever said which of the two was happening.
+ */
+enum class DeliveryMethod { Courier, Pickup }
+
+/**
+ * What is still missing before the order can be placed.
+ *
+ * A list rather than a boolean: a disabled button teaches nobody what is wrong
+ * with their order, and "2 qadam qoldi — manzil va to'lov" is the difference
+ * between a screen that waits and a screen that asks.
+ */
+enum class CheckoutStep { Address, Time, Payment }
+
 data class CheckoutState(
     val loading: Boolean = true,
     val error: String? = null,
@@ -33,6 +52,7 @@ data class CheckoutState(
     val slotId: Int? = null,
     val cardId: Int? = null,
     val paymentMethod: String = "card",
+    val delivery: DeliveryMethod = DeliveryMethod.Courier,
     val promoCode: String? = null,
     val placing: Boolean = false,
     val placedOrderId: Int? = null,
@@ -46,10 +66,27 @@ data class CheckoutState(
     val selectedCard: CardDto?
         get() = cards.firstOrNull { it.id == cardId }
 
-    val ready: Boolean
-        get() = (addressId != null || pickupPointId != null) &&
-            (pickupPointId != null || slotId != null) &&
-            (paymentMethod == "cash" || cardId != null)
+    val selectedPickup: PickupPointDto?
+        get() = pickupPoints.firstOrNull { it.id == pickupPointId }
+
+    /** In order, so the first of them is the one to ask for next. */
+    val missing: List<CheckoutStep>
+        get() = buildList {
+            when (delivery) {
+                DeliveryMethod.Courier -> {
+                    if (addressId == null) add(CheckoutStep.Address)
+                    if (slotId == null) add(CheckoutStep.Time)
+                }
+                // Nothing to schedule when the customer is coming to fetch it.
+                DeliveryMethod.Pickup -> if (pickupPointId == null) add(CheckoutStep.Address)
+            }
+            if (paymentMethod != "cash" && cardId == null) add(CheckoutStep.Payment)
+        }
+
+    /** What the button asks for. Null once there is nothing left to ask. */
+    val nextStep: CheckoutStep? get() = missing.firstOrNull()
+
+    val ready: Boolean get() = missing.isEmpty()
 }
 
 /**
@@ -96,13 +133,41 @@ class CheckoutViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Courier or counter, as a choice rather than a side effect.
+     *
+     * Switching drops what belonged to the other one: an address means nothing
+     * to a pickup order, and a delivery slot means nothing to either the
+     * counter or an order with nowhere to go yet.
+     */
+    fun selectDelivery(method: DeliveryMethod) {
+        if (_state.value.delivery == method) return
+        _state.update {
+            when (method) {
+                DeliveryMethod.Courier -> it.copy(delivery = method, pickupPointId = null)
+                DeliveryMethod.Pickup ->
+                    it.copy(delivery = method, addressId = null, slotId = null)
+            }
+        }
+        refreshPreview()
+    }
+
     fun selectAddress(id: Int) {
-        _state.update { it.copy(addressId = id, pickupPointId = null) }
+        _state.update {
+            it.copy(delivery = DeliveryMethod.Courier, addressId = id, pickupPointId = null)
+        }
         refreshPreview()
     }
 
     fun selectPickup(id: Int) {
-        _state.update { it.copy(pickupPointId = id, addressId = null, slotId = null) }
+        _state.update {
+            it.copy(
+                delivery = DeliveryMethod.Pickup,
+                pickupPointId = id,
+                addressId = null,
+                slotId = null,
+            )
+        }
         refreshPreview()
     }
 

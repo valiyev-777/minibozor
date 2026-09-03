@@ -402,4 +402,29 @@
     <string name="tugaganlarni_korsatish">Tugaganlarni ko\'rsatish</string>
     <string name="tugaganlar_odatda_royxatda_korinmaydi">Sotuvda yo\'q tovarlar odatda ro\'yxatda ko\'rinmaydi</string>
     <string name="savatga_qoshish">Savatga qo\'shish</string>
+    <!-- Screen 19: checkout, rebuilt -->
+    <string name="rasmiylashtirish">Rasmiylashtirish</string>
+    <string name="yetkazish_usuli">Yetkazish usuli</string>
+    <string name="kuryer">Kuryer</string>
+    <string name="kuryer_izoh">1–2 kun · bepul</string>
+    <string name="punktdan_olish_izoh">Ertaga · bepul</string>
+    <string name="manzil_kiritilmagan">Manzil kiritilmagan</string>
+    <string name="xaritada_joyni_belgilang">Xaritada joyni belgilang</string>
+    <string name="punkt_tanlanmagan">Punkt tanlanmagan</string>
+    <string name="ozingizga_qulay_punktni_tanlang">O\'zingizga qulay punktni tanlang</string>
+    <string name="punkt_tanlash">Punkt tanlash</string>
+    <string name="yetkazish_vaqti_qisqa">Yetkazish vaqti</string>
+    <string name="manzil_kiritilgandan_keyin">Manzil kiritilgandan keyin tanlanadi</string>
+    <string name="karta_qoshilmagan">Karta qo\'shilmagan</string>
+    <string name="karta_yoki_naqd">Karta yoki naqd pul</string>
+    <string name="aniqlanadi">aniqlanadi</string>
+    <string name="korish">Ko\'rish</string>
+    <string name="yetkazish_narxi_manzildan_keyin">Yetkazish narxi manzil kiritilgandan keyin aniqlanadi</string>
+    <string name="hammasi_tayyor">Hammasi tayyor</string>
+    <string name="tasdiq">Tasdiq</string>
+    <plurals name="n_qadam_qoldi">
+        <item quantity="one">Buyurtma uchun %1$d qadam qoldi</item>
+        <item quantity="other">Buyurtma uchun %1$d qadam qoldi</item>
+    </plurals>
+    <string name="yetkazish_narxi_punktdan_keyin">Yetkazish narxi punkt tanlangandan keyin aniqlanadi</string>
 </resources>

@@ -435,7 +435,7 @@ fun MbHeroPrice(
  * many rather than as three separate pictures.
  */
 @Composable
-fun MbReviewPhotoStack(
+fun MbPhotoStack(
     photos: List<String>,
     total: Int,
     modifier: Modifier = Modifier,

@@ -380,4 +380,29 @@
     <string name="tugaganlarni_korsatish">Show sold out</string>
     <string name="tugaganlar_odatda_royxatda_korinmaydi">Products with none left are normally left out of the listing</string>
     <string name="savatga_qoshish">Add to cart</string>
+    <!-- Screen 19: checkout, rebuilt -->
+    <string name="rasmiylashtirish">Checkout</string>
+    <string name="yetkazish_usuli">Delivery method</string>
+    <string name="kuryer">Courier</string>
+    <string name="kuryer_izoh">1–2 days · free</string>
+    <string name="punktdan_olish_izoh">Tomorrow · free</string>
+    <string name="manzil_kiritilmagan">No address yet</string>
+    <string name="xaritada_joyni_belgilang">Mark the place on the map</string>
+    <string name="punkt_tanlanmagan">No pickup point yet</string>
+    <string name="ozingizga_qulay_punktni_tanlang">Pick the point that suits you</string>
+    <string name="punkt_tanlash">Choose a point</string>
+    <string name="yetkazish_vaqti_qisqa">Delivery time</string>
+    <string name="manzil_kiritilgandan_keyin">Available once there is an address</string>
+    <string name="karta_qoshilmagan">No card yet</string>
+    <string name="karta_yoki_naqd">Card or cash</string>
+    <string name="aniqlanadi">to be confirmed</string>
+    <string name="korish">View</string>
+    <string name="yetkazish_narxi_manzildan_keyin">Delivery is priced once there is an address</string>
+    <string name="hammasi_tayyor">Everything is ready</string>
+    <string name="tasdiq">Confirm</string>
+    <plurals name="n_qadam_qoldi">
+        <item quantity="one">%1$d step left before ordering</item>
+        <item quantity="other">%1$d steps left before ordering</item>
+    </plurals>
+    <string name="yetkazish_narxi_punktdan_keyin">Delivery is priced once there is a pickup point</string>
 </resources>

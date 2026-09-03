@@ -28,7 +28,7 @@ import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbProductImage
-import uz.minibozor.core.design.component.MbReviewPhotoStack
+import uz.minibozor.core.design.component.MbPhotoStack
 import uz.minibozor.core.design.component.MbSizeChip
 import uz.minibozor.core.design.component.MbStatusPill
 import uz.minibozor.core.design.component.MbStars
@@ -89,7 +89,7 @@ fun RatingPanel(
         }
         if (photos.isNotEmpty()) {
             Spacer(Modifier.width(10.dp))
-            MbReviewPhotoStack(photos, photosTotal)
+            MbPhotoStack(photos, photosTotal)
         } else {
             MbIcon("chevron-right", size = 16.dp, tint = MbTheme.colors.icon)
         }
