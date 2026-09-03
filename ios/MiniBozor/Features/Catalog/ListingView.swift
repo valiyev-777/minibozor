@@ -154,7 +154,7 @@ struct ListingView: View {
             } label: {
                 let count = model.query.activeFilterCount
                 HStack(spacing: 6) {
-                    MBIcon("gear", size: 14, tint: count > 0 ? .white : MB.color.ink)
+                    MBIcon("filter", size: 14, tint: count > 0 ? .white : MB.color.ink)
                     Text(count > 0 ? L("filtr_n", count) : L("filtr"))
                         .mbFont(MB.type.caption)
                         .foregroundStyle(count > 0 ? .white : MB.color.ink)

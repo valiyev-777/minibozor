@@ -264,7 +264,7 @@ private fun Toolbar(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             MbIcon(
-                "gear",
+                "filter",
                 size = 14.dp,
                 tint = if (filterCount > 0) MbTheme.colors.onInverse else MbTheme.colors.ink,
             )
