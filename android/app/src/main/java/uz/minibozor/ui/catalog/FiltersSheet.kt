@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import uz.minibozor.R
@@ -53,10 +54,17 @@ fun FiltersSheet(
     var minPrice by remember { mutableStateOf(initial.minPrice?.toString().orEmpty()) }
     var maxPrice by remember { mutableStateOf(initial.maxPrice?.toString().orEmpty()) }
 
+    // Two thirds of the screen rather than a fixed 640 points. On a tall
+    // phone that fixed number was most of the display: the sheet opened
+    // almost at the status bar and read as a page that had replaced the
+    // listing rather than as a panel over it, with nothing of the grid left
+    // behind it to dismiss back to. A share of the screen keeps the same
+    // proportion on every device, and the sections inside still scroll.
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     Column(
         Modifier
             .fillMaxWidth()
-            .heightIn(max = 640.dp)
+            .heightIn(max = (screenHeight * 0.66f).coerceIn(420.dp, 640.dp))
     ) {
         Row(
             Modifier
