@@ -271,8 +271,11 @@ private fun PageContent(page: OnboardingPage) {
 private fun NextButton(onClick: () -> Unit) {
     Row(
         Modifier
-            .mbClickable(CircleShape, onClick = onClick)
+            .clip(CircleShape)
+            // Background first: a ripple drawn behind one is a ripple nobody
+            // sees.
             .background(MbTheme.colors.inverse)
+            .mbClickable(CircleShape, onClick = onClick)
             .padding(start = 24.dp, end = 20.dp, top = 15.dp, bottom = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),

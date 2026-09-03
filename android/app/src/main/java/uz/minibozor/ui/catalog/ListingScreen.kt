@@ -239,8 +239,13 @@ private fun Toolbar(
         }
         Row(
             Modifier
-                .mbClickable(MbTheme.shapes.chip, onClick = onOpenFilters)
+                .clip(MbTheme.shapes.chip)
+                // Background first, then the click: `clickable` draws its
+                // ripple where it sits in the chain, and behind a background it
+                // is a ripple nobody sees. The chip was the one control in the
+                // app that answered a tap with nothing at all.
                 .background(if (filterCount > 0) MbTheme.colors.inverse else MbTheme.colors.fill)
+                .mbClickable(MbTheme.shapes.chip, onClick = onOpenFilters)
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
