@@ -362,6 +362,7 @@ fun FavoritesScreen(
                             discountPercent = product.discountPercent,
                             imageUrl = product.imageUrl,
                             isFavorite = true,
+                            inStock = product.inStock,
                             onClick = { onOpenProduct(product.id) },
                             onToggleFavorite = { viewModel.remove(product.id) },
                             onAddToCart = {

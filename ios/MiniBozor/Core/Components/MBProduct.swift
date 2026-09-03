@@ -297,6 +297,37 @@ struct FavoriteBubble: View {
 ///
 /// No flourish on it. The feedback is the same dip every card makes under a
 /// finger — a glyph that flipped to a tick would claim more than the tap knows,
+/// What a photograph looks like when the thing in it cannot be bought.
+///
+/// A wash of the card's own surface over the picture rather than a grey filter
+/// on it: the photograph stays recognisable — a customer scanning a grid is
+/// looking for the shoe, not reading the labels — while sitting a clear step
+/// back from the tiles either side of it. The word itself goes in the middle on
+/// a chip of solid surface, because over a photograph there is no colour a bare
+/// line of text is reliably legible against.
+///
+/// The card stays tappable. What it cannot do is go in the basket, and the
+/// product page is where that is explained, so the way in has to stay open.
+struct SoldOutVeil: View {
+    var cornerRadius: CGFloat
+
+    var body: some View {
+        ZStack {
+            MB.color.surface.opacity(0.66)
+            Text(L("mavjud_emas"))
+                .mbFont(MB.type.captionBold)
+                .foregroundStyle(MB.color.textSecondary)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(MB.color.surface)
+                .clipShape(Capsule())
+        }
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .allowsHitTesting(false)
+    }
+}
+
 /// since on a product with sizes it opens the picker instead of adding anything.
 struct MBCartButton: View {
     var size: CGFloat = 34
@@ -367,8 +398,13 @@ private struct ProductTileBody: View {
                     // Square, always: the catalogue is shot 1:1 with its own
                     // backdrop, so any other ratio letterboxes the tile.
                     .aspectRatio(1, contentMode: .fit)
+                    .overlay {
+                        if !product.inStock {
+                            SoldOutVeil(cornerRadius: MB.metric.radiusL)
+                        }
+                    }
                     .overlay(alignment: .bottomLeading) {
-                        if let badge = product.badge, !badge.isEmpty {
+                        if let badge = product.badge, !badge.isEmpty, product.inStock {
                             MBStatusPill(
                                 badge,
                                 background: MB.color.scrim,
@@ -400,7 +436,7 @@ private struct ProductTileBody: View {
                         .frame(maxWidth: .infinity, minHeight: 38, alignment: .topLeading)
                     // The room the cart disc occupies, held open in the label so
                     // the name never runs under it.
-                    if onAddToCart != nil {
+                    if onAddToCart != nil && product.inStock {
                         Color.clear.frame(width: 40, height: 1)
                     }
                 }
@@ -416,7 +452,7 @@ private struct ProductTileBody: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            if let onAddToCart {
+            if let onAddToCart, product.inStock {
                 MBCartButton(action: onAddToCart).padding(.trailing, 3).padding(.bottom, 3)
             }
         }
@@ -459,7 +495,14 @@ struct MBRailTile: View {
                     )
                     .frame(width: MB.metric.railTileWidth, height: MB.metric.railTileWidth)
 
-                    if let discount = product.discountPercent {
+                    if !product.inStock {
+                        SoldOutVeil(cornerRadius: 0)
+                    } else if let discount = product.discountPercent {
+                        // One label over the photograph, not two. The grid
+                        // tile keeps its saving because there it sits in the
+                        // text block below the picture; here both would be
+                        // pinned to the same small square, which is more
+                        // chrome than photograph.
                         MBDiscountPill(percent: discount).padding(7)
                     }
                 }

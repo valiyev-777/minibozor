@@ -5,6 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import uz.minibozor.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -165,6 +168,42 @@ fun MbProductImage(
             // empty warm rectangle just reads as broken.
             MbIcon("box", size = 26.dp, tint = MbTheme.colors.hairlineStrong)
         }
+    }
+}
+
+
+/**
+ * What a photograph looks like when the thing in it cannot be bought.
+ *
+ * A wash of the card's own surface over the picture rather than a grey filter
+ * on it: the photograph stays recognisable — a customer scanning a grid is
+ * looking for the shoe, not reading the labels — while sitting a clear step
+ * back from the tiles either side of it. The word itself goes in the middle on
+ * a chip of solid surface, because over a photograph there is no colour a bare
+ * line of text is reliably legible against.
+ *
+ * The card stays tappable. What it cannot do is go in the basket, and the
+ * product page is where that is explained, so the way in has to stay open.
+ */
+@Composable
+private fun BoxScope.SoldOutVeil(shape: Shape) {
+    Box(
+        Modifier
+            .matchParentSize()
+            .clip(shape)
+            .background(MbTheme.colors.surface.copy(alpha = 0.66f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        MbText(
+            stringResource(R.string.mavjud_emas),
+            MbTheme.type.captionBold,
+            MbTheme.colors.textSecondary,
+            maxLines = 1,
+            modifier = Modifier
+                .clip(MbTheme.shapes.badge)
+                .background(MbTheme.colors.surface)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        )
     }
 }
 
@@ -481,6 +520,7 @@ fun MbProductTile(
     discountPercent: Int?,
     imageUrl: String?,
     isFavorite: Boolean,
+    inStock: Boolean = true,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onAddToCart: (() -> Unit)? = null,
@@ -493,6 +533,7 @@ fun MbProductTile(
         discountPercent = discountPercent,
         imageUrl = imageUrl,
         isFavorite = isFavorite,
+        inStock = inStock,
         onClick = onClick,
         onToggleFavorite = onToggleFavorite,
         onAddToCart = onAddToCart,
@@ -510,6 +551,7 @@ fun MbDealTile(
     imageUrl: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    inStock: Boolean = true,
 ) {
     ProductTileBody(
         title = title,
@@ -518,6 +560,7 @@ fun MbDealTile(
         discountPercent = discountPercent,
         imageUrl = imageUrl,
         isFavorite = false,
+        inStock = inStock,
         onClick = onClick,
         onToggleFavorite = null,
         onAddToCart = null,
@@ -548,6 +591,7 @@ private fun ProductTileBody(
     discountPercent: Int?,
     imageUrl: String?,
     isFavorite: Boolean,
+    inStock: Boolean,
     onClick: () -> Unit,
     /** Null leaves the heart off the photograph. */
     onToggleFavorite: (() -> Unit)?,
@@ -570,6 +614,7 @@ private fun ProductTileBody(
                     .aspectRatio(1f),
                 shape = MbTheme.shapes.tileSmall,
             )
+            if (!inStock) SoldOutVeil(MbTheme.shapes.tileSmall)
             if (onToggleFavorite != null) {
                 FavoriteBubble(
                     isFavorite = isFavorite,
@@ -614,7 +659,7 @@ private fun ProductTileBody(
                 minLines = 2,
                 modifier = Modifier.weight(1f),
             )
-            if (onAddToCart != null) {
+            if (onAddToCart != null && inStock) {
                 Spacer(Modifier.width(4.dp))
                 MbCartButton(onAddToCart)
             }
@@ -645,6 +690,7 @@ fun MbRailTile(
     imageUrl: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    inStock: Boolean = true,
 ) {
     val was = oldPrice?.takeIf { it > price }
     Column(
@@ -665,7 +711,13 @@ fun MbRailTile(
                 shape = RectangleShape,
                 background = MbTheme.colors.photoWarm,
             )
-            if (discountPercent != null) {
+            if (!inStock) {
+                SoldOutVeil(RectangleShape)
+            } else if (discountPercent != null) {
+                // One label over the photograph, not two. The grid tile keeps
+                // its saving because there it sits in the text block below the
+                // picture; here both would be pinned to the same small square,
+                // which is more chrome than photograph.
                 MbDiscountPill(
                     discountPercent,
                     Modifier

@@ -161,6 +161,7 @@ fun ListingScreen(
                                 discountPercent = product.discountPercent,
                                 imageUrl = product.imageUrl,
                                 isFavorite = product.isFavorite,
+                                inStock = product.inStock,
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { viewModel.toggleFavorite(product) },
                                 onAddToCart = {
