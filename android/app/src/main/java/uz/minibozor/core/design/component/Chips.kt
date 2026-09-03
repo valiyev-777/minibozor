@@ -2,7 +2,6 @@ package uz.minibozor.core.design.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
@@ -16,6 +15,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbPressable
 
 /**
  * Selectable pill. The design inverts to solid ink when selected and keeps a
@@ -44,7 +44,18 @@ fun MbChip(
                 color = if (selected || !enabled) Color.Transparent else MbTheme.colors.border,
                 shape = MbTheme.shapes.chip,
             )
-            .clickable(enabled = enabled, onClick = onClick)
+            // The app's own highlight rather than whatever `LocalIndication`
+            // happens to be here. The theme hands out a 5% ripple, but a
+            // modal sheet is its own window and anything composed outside that
+            // provider falls back to Foundation's debugging indication —
+            // flat black at nearly a third opacity, which is the dark
+            // rectangle that turned up under the filter's controls.
+            .mbPressable(
+                MbTheme.shapes.chip,
+                if (selected) MbTheme.colors.onInverse else MbTheme.colors.ink,
+                enabled = enabled,
+                onClick = onClick,
+            )
             .padding(horizontal = 14.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -98,7 +109,14 @@ fun MbSizeChip(
                 },
                 shape = MbTheme.shapes.field,
             )
-            .clickable(enabled = enabled, onClick = onClick)
+            // See MbChip: the highlight is named rather than inherited, so a
+            // sheet in its own window cannot fall back to the debugging one.
+            .mbPressable(
+                MbTheme.shapes.field,
+                MbTheme.colors.ink,
+                enabled = enabled,
+                onClick = onClick,
+            )
             // Horizontal padding only has to hold a longer label — "41 mm",
             // "XXL" — off the border; the width above is what sets the size of
             // an ordinary two-digit chip.

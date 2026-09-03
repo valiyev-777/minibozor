@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbPressable
 import uz.minibozor.core.design.mbClickable
 import uz.minibozor.core.design.icon.MbIcon
 
@@ -233,7 +234,11 @@ fun MbCheckRow(
     Row(
         modifier
             .fillMaxWidth()
-            .mbClickable(MbTheme.shapes.field, onClick = onToggle)
+            // Named rather than inherited: a modal sheet is its own window,
+            // and a row that falls back to Foundation's debugging indication
+            // washes the whole width in flat black. This is the same 5%
+            // highlight the rest of the app presses with.
+            .mbPressable(MbTheme.shapes.field, MbTheme.colors.ink, onClick = onToggle)
             .padding(horizontal = contentPadding, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
