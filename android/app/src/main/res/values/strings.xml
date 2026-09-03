@@ -421,7 +421,6 @@
     <string name="korish">Ko\'rish</string>
     <string name="yetkazish_narxi_manzildan_keyin">Yetkazish narxi manzil kiritilgandan keyin aniqlanadi</string>
     <string name="hammasi_tayyor">Hammasi tayyor</string>
-    <string name="tasdiq">Tasdiq</string>
     <plurals name="n_qadam_qoldi">
         <item quantity="one">Buyurtma uchun %1$d qadam qoldi</item>
         <item quantity="other">Buyurtma uchun %1$d qadam qoldi</item>

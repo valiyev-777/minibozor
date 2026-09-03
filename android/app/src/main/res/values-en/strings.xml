@@ -399,7 +399,6 @@
     <string name="korish">View</string>
     <string name="yetkazish_narxi_manzildan_keyin">Delivery is priced once there is an address</string>
     <string name="hammasi_tayyor">Everything is ready</string>
-    <string name="tasdiq">Confirm</string>
     <plurals name="n_qadam_qoldi">
         <item quantity="one">%1$d step left before ordering</item>
         <item quantity="other">%1$d steps left before ordering</item>

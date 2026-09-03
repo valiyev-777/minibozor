@@ -37,7 +37,6 @@ import uz.minibozor.core.design.component.MbLoading
 import uz.minibozor.core.design.component.MbPhotoStack
 import uz.minibozor.core.design.component.MbPrimaryButton
 import uz.minibozor.core.design.component.MbScreen
-import uz.minibozor.core.design.component.MbStepBar
 import uz.minibozor.core.design.component.MbTopBar
 import uz.minibozor.core.design.component.MbTotalRow
 import uz.minibozor.core.design.component.SectionHeader
@@ -79,27 +78,7 @@ fun CheckoutScreen(
     val courier = state.delivery == DeliveryMethod.Courier
 
     MbScreen(
-        topBar = {
-            Column(Modifier.background(MbTheme.colors.surface)) {
-                MbTopBar(stringResource(R.string.rasmiylashtirish), onBack = onBack)
-                MbStepBar(
-                    steps = listOf(
-                        stringResource(R.string.savat),
-                        stringResource(R.string.manzil),
-                        stringResource(R.string.tolov),
-                        stringResource(R.string.tasdiq),
-                    ),
-                    // The basket is behind us the moment this screen opens; the
-                    // rest lights up as its step is answered.
-                    current = when {
-                        state.ready -> 3
-                        state.missing == listOf(CheckoutStep.Payment) -> 2
-                        else -> 1
-                    },
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 14.dp),
-                )
-            }
-        },
+        topBar = { MbTopBar(stringResource(R.string.rasmiylashtirish), onBack = onBack) },
         bottomBar = {
             MbBottomBar {
                 // What is left, in words, above the button that asks for it.

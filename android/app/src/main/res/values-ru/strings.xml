@@ -411,7 +411,6 @@
     <string name="korish">Посмотреть</string>
     <string name="yetkazish_narxi_manzildan_keyin">Стоимость доставки станет известна после указания адреса</string>
     <string name="hammasi_tayyor">Всё готово</string>
-    <string name="tasdiq">Подтверждение</string>
     <plurals name="n_qadam_qoldi">
         <item quantity="one">До заказа остался %1$d шаг</item>
         <item quantity="few">До заказа осталось %1$d шага</item>
