@@ -170,6 +170,8 @@ struct ProductCardDTO: Decodable, Identifiable, Hashable {
     let badge: String?
     let inStock: Bool
     var isFavorite: Bool
+    /// How many are left, so a tile can say when there are few.
+    var stockLeft: Int = 0
     /// Whether tapping "Savatga" should open the picker sheet or add at once.
     var hasVariants: Bool = false
 }

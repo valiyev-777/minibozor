@@ -338,3 +338,4 @@
 "return_approved" = "ОДОБРЕНО";
 "return_rejected" = "ОТКЛОНЕНО";
 "return_refunded" = "ДЕНЬГИ ВОЗВРАЩЕНЫ";
+"n_dona_qoldi" = "Осталось %d шт.";

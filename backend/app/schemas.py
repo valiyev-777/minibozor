@@ -194,6 +194,10 @@ class ProductCardOut(BaseModel):
     badge: str | None
     in_stock: bool
     is_favorite: bool = False
+    # How many are left, so a tile can say when there are few. On the card as
+    # well as the product page: the grid is where the choosing happens, and
+    # "there are two of these" belongs there rather than one tap further in.
+    stock_left: int = 0
     # Lets a tile decide between adding straight to the cart and opening the
     # picker sheet, without fetching the whole product first.
     has_variants: bool = False
@@ -210,7 +214,6 @@ class ProductOut(ProductCardOut):
     specs: list[SpecOut]
     seller: str
     warranty: str | None
-    stock_left: int
     is_original: bool
     free_delivery: bool
     next_day_delivery: bool

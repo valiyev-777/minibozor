@@ -197,6 +197,8 @@ data class ProductCardDto(
     val badge: String? = null,
     @SerialName("in_stock") val inStock: Boolean = true,
     @SerialName("is_favorite") val isFavorite: Boolean = false,
+    /** How many are left, so a tile can say when there are few. */
+    @SerialName("stock_left") val stockLeft: Int = 0,
     /** Whether tapping "Savatga" should open the picker sheet or add at once. */
     @SerialName("has_variants") val hasVariants: Boolean = false,
 )

@@ -138,6 +138,7 @@ def product_card(session: Session, p: Product, favs: set[int]) -> s.ProductCardO
         badge=i18n.t(session, "product", p.id, "badge", p.badge) if p.badge else None,
         in_stock=p.in_stock,
         is_favorite=p.id in favs,
+        stock_left=p.stock_left,
         has_variants=has_variants(session, p.id),
     )
 
@@ -228,7 +229,6 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
         ],
         seller=p.seller,
         warranty=i18n.t(session, "product", p.id, "warranty", p.warranty) if p.warranty else None,
-        stock_left=p.stock_left,
         is_original=p.is_original,
         free_delivery=p.free_delivery,
         next_day_delivery=p.next_day_delivery,

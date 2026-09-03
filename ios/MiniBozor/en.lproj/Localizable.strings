@@ -338,3 +338,4 @@
 "return_approved" = "APPROVED";
 "return_rejected" = "REJECTED";
 "return_refunded" = "REFUNDED";
+"n_dona_qoldi" = "%d left";

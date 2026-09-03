@@ -207,6 +207,32 @@ private fun BoxScope.SoldOutVeil(shape: Shape) {
     }
 }
 
+/** Under this many left, the count stops being a fact and becomes a reason. */
+private const val LowStock = 5
+
+/**
+ * How many are left, on the card.
+ *
+ * Quiet by default and urgent when there are few: the same line, louder only
+ * when the number has something to say. Twenty-five of something is a fact
+ * nobody acts on; two of it is a reason to decide now, and the difference has
+ * to be visible without reading the number.
+ *
+ * Nothing at all when the count is zero — the veil over the photograph has
+ * already said the only thing that matters about a product with none left.
+ */
+@Composable
+private fun StockLine(stockLeft: Int) {
+    if (stockLeft <= 0) return
+    val low = stockLeft <= LowStock
+    MbText(
+        stringResource(R.string.n_dona_qoldi, stockLeft),
+        MbTheme.type.micro,
+        if (low) MbTheme.colors.danger else MbTheme.colors.textQuaternary,
+        maxLines = 1,
+    )
+}
+
 /**
  * The saving, in the red pill this app puts a discount in everywhere.
  *
@@ -521,6 +547,7 @@ fun MbProductTile(
     imageUrl: String?,
     isFavorite: Boolean,
     inStock: Boolean = true,
+    stockLeft: Int = 0,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onAddToCart: (() -> Unit)? = null,
@@ -534,6 +561,7 @@ fun MbProductTile(
         imageUrl = imageUrl,
         isFavorite = isFavorite,
         inStock = inStock,
+        stockLeft = stockLeft,
         onClick = onClick,
         onToggleFavorite = onToggleFavorite,
         onAddToCart = onAddToCart,
@@ -552,6 +580,7 @@ fun MbDealTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     inStock: Boolean = true,
+    stockLeft: Int = 0,
 ) {
     ProductTileBody(
         title = title,
@@ -561,6 +590,7 @@ fun MbDealTile(
         imageUrl = imageUrl,
         isFavorite = false,
         inStock = inStock,
+        stockLeft = stockLeft,
         onClick = onClick,
         onToggleFavorite = null,
         onAddToCart = null,
@@ -592,6 +622,7 @@ private fun ProductTileBody(
     imageUrl: String?,
     isFavorite: Boolean,
     inStock: Boolean,
+    stockLeft: Int,
     onClick: () -> Unit,
     /** Null leaves the heart off the photograph. */
     onToggleFavorite: (() -> Unit)?,
@@ -630,6 +661,7 @@ private fun ProductTileBody(
         // Full width, always: the price is the one line on the card that must
         // never be squeezed, so nothing shares its row.
         MbPriceRow(price, oldPrice, discountPercent)
+        StockLine(stockLeft)
         Spacer(Modifier.height(6.dp))
         // Two lines always, so every tile in a row is the same height and no
         // title ends up pressed against the card edge. Longer than that is cut
@@ -691,6 +723,7 @@ fun MbRailTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     inStock: Boolean = true,
+    stockLeft: Int = 0,
 ) {
     val was = oldPrice?.takeIf { it > price }
     Column(
@@ -743,6 +776,7 @@ fun MbRailTile(
                     )
                 }
             }
+            StockLine(stockLeft)
             Spacer(Modifier.height(3.dp))
             // A step up from meta: the tile is the narrowest card in the app, so
             // a name gets two short lines and needs both of them to be readable.

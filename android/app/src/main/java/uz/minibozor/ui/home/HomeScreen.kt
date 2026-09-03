@@ -619,6 +619,7 @@ private fun LazyListScope.homeSection(
                             discountPercent = product.discountPercent,
                             imageUrl = product.imageUrl,
                             inStock = product.inStock,
+                            stockLeft = product.stockLeft,
                             onClick = { onOpenProduct(product.id) },
                             modifier = Modifier.weight(1f),
                         )
@@ -669,6 +670,7 @@ private fun LazyListScope.homeSection(
                                 imageUrl = product.imageUrl,
                                 isFavorite = product.isFavorite,
                                 inStock = product.inStock,
+                                stockLeft = product.stockLeft,
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { onToggleFavorite(product) },
                                 onAddToCart = { onAddToCart(product) },
@@ -722,6 +724,7 @@ private fun LazyListScope.homeSection(
                             discountPercent = product.discountPercent,
                             imageUrl = product.imageUrl,
                             inStock = product.inStock,
+                            stockLeft = product.stockLeft,
                             onClick = { onOpenProduct(product.id) },
                         )
                     }

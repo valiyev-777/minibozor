@@ -265,6 +265,55 @@ def test_checkout_places_an_order(client: TestClient, auth: dict[str, str]) -> N
     assert client.get(f"{API}/cart", headers=auth).json()["items"] == []
 
 
+def test_buying_takes_the_item_off_the_shelf(client: TestClient, auth: dict[str, str]) -> None:
+    """The sold count was being raised on every order and the stock beside it
+    was not, so a product could be bought any number of times and still claim
+    the same 25 remaining."""
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
+    before = client.get(f"{API}/products/{product['id']}").json()
+    quantity = 3
+
+    client.post(
+        f"{API}/cart/items",
+        json={"product_id": product["id"], "quantity": quantity},
+        headers=auth,
+    )
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    created = client.post(f"{API}/orders", json={"address_id": address["id"]}, headers=auth)
+    assert created.status_code == 201
+
+    after = client.get(f"{API}/products/{product['id']}").json()
+    assert after["stock_left"] == before["stock_left"] - quantity
+    assert after["sold_count"] == before["sold_count"] + quantity
+    # And the card carries it too, so a tile can say when there are few.
+    card = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
+    assert card["stock_left"] == after["stock_left"]
+
+
+def test_the_last_one_sold_goes_out_of_stock(client: TestClient, auth: dict[str, str]) -> None:
+    """Nothing was setting in_stock, so a product could sit at zero remaining
+    and still offer a basket button on every tile in the catalogue."""
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
+    left = client.get(f"{API}/products/{product['id']}").json()["stock_left"]
+
+    client.post(
+        f"{API}/cart/items",
+        json={"product_id": product["id"], "quantity": left},
+        headers=auth,
+    )
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    assert client.post(f"{API}/orders", json={"address_id": address["id"]}, headers=auth).status_code == 201
+
+    sold_out = client.get(f"{API}/products/{product['id']}").json()
+    assert sold_out["stock_left"] == 0
+    assert sold_out["in_stock"] is False
+    # And it cannot be put back in the basket.
+    rejected = client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    assert rejected.status_code == 409
+
+
 # --------------------------------------------------------------------------- 25-29
 
 

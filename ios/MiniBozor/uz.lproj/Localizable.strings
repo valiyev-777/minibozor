@@ -338,3 +338,4 @@
 "return_approved" = "QABUL QILINDI";
 "return_rejected" = "RAD ETILDI";
 "return_refunded" = "PUL QAYTARILDI";
+"n_dona_qoldi" = "%d dona qoldi";

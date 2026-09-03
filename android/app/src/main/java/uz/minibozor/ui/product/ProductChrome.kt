@@ -531,6 +531,7 @@ fun Recommendations(
                     discountPercent = item.discountPercent,
                     imageUrl = item.imageUrl,
                     inStock = item.inStock,
+                    stockLeft = item.stockLeft,
                     onClick = { onOpenProduct(item.id) },
                 )
             }

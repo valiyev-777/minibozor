@@ -307,6 +307,31 @@ struct FavoriteBubble: View {
 /// line of text is reliably legible against.
 ///
 /// The card stays tappable. What it cannot do is go in the basket, and the
+/// Under this many left, the count stops being a fact and becomes a reason.
+private let lowStock = 5
+
+/// How many are left, on the card.
+///
+/// Quiet by default and urgent when there are few: the same line, louder only
+/// when the number has something to say. Twenty-five of something is a fact
+/// nobody acts on; two of it is a reason to decide now, and the difference has
+/// to be visible without reading the number.
+///
+/// Nothing at all when the count is zero — the veil over the photograph has
+/// already said the only thing that matters about a product with none left.
+struct StockLine: View {
+    let stockLeft: Int
+
+    var body: some View {
+        if stockLeft > 0 {
+            Text(String(format: L("n_dona_qoldi"), stockLeft))
+                .mbFont(MB.type.micro)
+                .foregroundStyle(stockLeft <= lowStock ? MB.color.danger : MB.color.textQuaternary)
+                .lineLimit(1)
+        }
+    }
+}
+
 /// product page is where that is explained, so the way in has to stay open.
 struct SoldOutVeil: View {
     var cornerRadius: CGFloat
@@ -422,6 +447,7 @@ private struct ProductTileBody: View {
                     oldPrice: product.oldPrice,
                     discountPercent: product.discountPercent
                 )
+                StockLine(stockLeft: product.stockLeft)
                 Spacer().frame(height: 6)
 
                 HStack(spacing: 0) {
@@ -529,6 +555,7 @@ struct MBRailTile: View {
                     }
                     .frame(minHeight: 15, alignment: .leading)
 
+                    StockLine(stockLeft: product.stockLeft)
                     Spacer().frame(height: 3)
                     // A step up from meta: the tile is the narrowest card in
                     // the app, so a name gets two short lines and needs both.

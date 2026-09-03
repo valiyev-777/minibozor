@@ -131,6 +131,13 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         )
         if product:
             product.sold_count += item.quantity
+            # What is left, kept in step with what has gone. The sold count was
+            # being raised here already and the stock beside it was not, so a
+            # product could be bought any number of times and still claim the
+            # same 25 remaining — and never fall out of stock on its own.
+            product.stock_left = max(0, product.stock_left - item.quantity)
+            if product.stock_left == 0:
+                product.in_stock = False
             session.add(product)
 
     sv.seed_order_events(session, order)

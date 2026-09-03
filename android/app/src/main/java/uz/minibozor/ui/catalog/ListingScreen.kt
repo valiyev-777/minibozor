@@ -162,6 +162,7 @@ fun ListingScreen(
                                 imageUrl = product.imageUrl,
                                 isFavorite = product.isFavorite,
                                 inStock = product.inStock,
+                                stockLeft = product.stockLeft,
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { viewModel.toggleFavorite(product) },
                                 onAddToCart = {
