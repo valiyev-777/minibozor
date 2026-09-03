@@ -201,6 +201,20 @@ struct ProductView: View {
     private var buyBar: some View {
         if let product = model.product, !leaving {
             MBBottomBar {
+                // Above the row, and above both of them. It had been a clause
+                // in the seller's row a third of the way down the page —
+                // "Sotuvchi · 25 dona qoldi" — which is the one place nobody
+                // reads twice. Here it is beside the button being aimed at.
+                //
+                // Above rather than tucked under the price, because the bar has
+                // two shapes: a price and a button before the product is in the
+                // basket, a stepper and a way onward once it is. Under the
+                // price it would vanish exactly when the customer is choosing
+                // how many to take, which is the moment it matters most.
+                HStack {
+                    StockLine(stockLeft: product.stockLeft)
+                    Spacer()
+                }
                 HStack(spacing: 12) {
                     if let line = cartLine {
                         // Where the shelf ends. The bar could otherwise walk
@@ -221,19 +235,12 @@ struct ProductView: View {
                         // Wraps rather than takes a share of the row: the button
                         // is the thing being aimed at, so it gets everything the
                         // number does not need.
-                        VStack(alignment: .leading, spacing: 2) {
-                            MBPriceRow(
-                                price: product.price,
-                                oldPrice: product.oldPrice,
-                                style: MB.type.title3,
-                                reservesFootnote: false
-                            )
-                            // Under the price, where the decision is being
-                            // made. It had been a clause in the seller's row
-                            // further up the page — "Sotuvchi · 25 dona qoldi" —
-                            // which is the one place nobody reads twice.
-                            StockLine(stockLeft: product.stockLeft)
-                        }
+                        MBPriceRow(
+                            price: product.price,
+                            oldPrice: product.oldPrice,
+                            style: MB.type.title3,
+                            reservesFootnote: false
+                        )
                         .fixedSize(horizontal: true, vertical: false)
                         MBPrimaryButton(
                             product.inStock ? L("savatga") : L("mavjud_emas"),

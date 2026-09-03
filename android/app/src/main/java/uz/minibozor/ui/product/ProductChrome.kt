@@ -413,6 +413,17 @@ fun BuyBar(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
+        // Above the row, and above both of them. It had been a clause in the
+        // seller's row a third of the way down the page — "Sotuvchi · 25 dona
+        // qoldi" — which is the one place nobody reads twice. Here it is beside
+        // the button being aimed at.
+        //
+        // Above rather than tucked under the price, because the bar has two
+        // shapes: a price and a button before the product is in the basket, a
+        // stepper and a way onward once it is. Under the price it would vanish
+        // exactly when the customer is choosing how many to take, which is the
+        // moment the number matters most.
+        StockLine(product.stockLeft)
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (line == null) {
                 // Wraps rather than takes a share of the row: the button is the
@@ -431,11 +442,6 @@ fun BuyBar(
                             maxLines = 1,
                         )
                     }
-                    // Under the price, where the decision is being made. It had
-                    // been a clause in the seller's row further up the page —
-                    // "Sotuvchi · 25 dona qoldi" — which is the one place on
-                    // the page nobody reads twice.
-                    StockLine(product.stockLeft)
                 }
                 MbPrimaryButton(
                     text = stringResource(
