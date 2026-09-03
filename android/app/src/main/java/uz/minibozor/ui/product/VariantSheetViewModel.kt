@@ -31,6 +31,13 @@ data class VariantSheetState(
     val selectedColor: VariantDto? get() = colors.firstOrNull { it.id == colorId }
     val selectedSize: VariantDto? get() = sizes.firstOrNull { it.id == sizeId }
 
+    /**
+     * How many of the thing actually chosen are left: the colour's share of the
+     * shelf, or the whole shelf when the colours are not counted apart. The
+     * sheet is adding one colour, so that is the shelf its stepper stops at.
+     */
+    val shelfLeft: Int get() = selectedColor?.stockLeft ?: product?.stockLeft ?: 1
+
     /** A size has to be chosen when the product has any in stock. */
     val ready: Boolean
         get() = product != null && (sizes.none { it.inStock } || sizeId != null)

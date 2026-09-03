@@ -339,8 +339,9 @@ private fun BottomBar(
                     onChange = onQuantity,
                     min = 0,
                     // Where the shelf ends, as everywhere else the count can be
-                    // raised.
-                    max = (state.product?.stockLeft ?: 1).coerceAtLeast(1),
+                    // raised — and it is the chosen colour's shelf, since that
+                    // is what this sheet is adding.
+                    max = state.shelfLeft.coerceAtLeast(1),
                     // Matches the button beside it, so the two sit as one bar.
                     size = MbTheme.dimens.buttonHeight,
                 )
