@@ -222,7 +222,7 @@ private const val LowStock = 5
  * already said the only thing that matters about a product with none left.
  */
 @Composable
-private fun StockLine(stockLeft: Int) {
+fun StockLine(stockLeft: Int) {
     if (stockLeft <= 0) return
     val low = stockLeft <= LowStock
     MbText(

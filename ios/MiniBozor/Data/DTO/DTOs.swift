@@ -333,6 +333,8 @@ struct CartItemDTO: Decodable, Identifiable, Hashable {
     let quantity: Int
     let selected: Bool
     let inStock: Bool
+    /// What the stepper may reach, so plus stops where the shelf does.
+    var stockLeft: Int = 0
     let lineTotal: Int
 }
 

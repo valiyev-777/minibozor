@@ -63,6 +63,7 @@ import uz.minibozor.core.design.component.MbChip
 import uz.minibozor.core.design.component.MbPrimaryButton
 import uz.minibozor.core.design.component.MbProductImage
 import uz.minibozor.core.design.component.MbQuantityStepper
+import uz.minibozor.core.design.component.StockLine
 import uz.minibozor.core.design.component.MbRailTile
 import uz.minibozor.core.design.component.MbSkeleton
 import uz.minibozor.core.design.component.SectionHeader
@@ -430,6 +431,11 @@ fun BuyBar(
                             maxLines = 1,
                         )
                     }
+                    // Under the price, where the decision is being made. It had
+                    // been a clause in the seller's row further up the page —
+                    // "Sotuvchi · 25 dona qoldi" — which is the one place on
+                    // the page nobody reads twice.
+                    StockLine(product.stockLeft)
                 }
                 MbPrimaryButton(
                     text = stringResource(
@@ -450,6 +456,9 @@ fun BuyBar(
                     quantity = line.quantity,
                     onChange = { onSetQuantity(line.id, it) },
                     min = 0,
+                    // Where the shelf ends. The bar could otherwise walk the
+                    // count up to ninety-nine of something there were three of.
+                    max = product.stockLeft.coerceAtLeast(1),
                     size = 44.dp,
                 )
                 Spacer(Modifier.width(12.dp))

@@ -493,11 +493,13 @@ fun ProductScreen(
                                             DeliveryRow(
                                                 "basket",
                                                 stringResource(R.string.sotuvchi),
-                                                stringResource(
-                                                    R.string.sotuvchi_va_qoldiq,
-                                                    product.seller,
-                                                    product.stockLeft,
-                                                ),
+                                                // The seller, and only the
+                                                // seller. What is left moved to
+                                                // the buy bar, where the count
+                                                // is a reason rather than a
+                                                // clause in a row about
+                                                // delivery.
+                                                product.seller,
                                             )
                                         }
                                     }

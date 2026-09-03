@@ -265,6 +265,35 @@ def test_checkout_places_an_order(client: TestClient, auth: dict[str, str]) -> N
     assert client.get(f"{API}/cart", headers=auth).json()["items"] == []
 
 
+def test_the_basket_cannot_hold_more_than_the_shelf(
+    client: TestClient, auth: dict[str, str]
+) -> None:
+    """The only ceiling was ninety-nine, which is not a ceiling: the basket
+    would hold thirty of something there were three of, and the shortfall
+    surfaced at checkout or not at all."""
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
+    left = client.get(f"{API}/products/{product['id']}").json()["stock_left"]
+
+    added = client.post(
+        f"{API}/cart/items",
+        json={"product_id": product["id"], "quantity": left + 10},
+        headers=auth,
+    ).json()
+    item = added["items"][0]
+    assert item["quantity"] == left
+    # And the stepper is handed the same figure to stop its own plus button.
+    assert item["stock_left"] == left
+
+    # The stepper itself cannot push past it either.
+    patched = client.patch(
+        f"{API}/cart/items/{item['id']}",
+        json={"quantity": left + 5},
+        headers=auth,
+    ).json()
+    assert patched["items"][0]["quantity"] == left
+
+
 def test_buying_takes_the_item_off_the_shelf(client: TestClient, auth: dict[str, str]) -> None:
     """The sold count was being raised on every order and the stock beside it
     was not, so a product could be bought any number of times and still claim

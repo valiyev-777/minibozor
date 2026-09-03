@@ -12,6 +12,18 @@ from app.models import CartItem, Product, ProductVariant
 router = APIRouter(prefix="/cart", tags=["cart"])
 
 
+def _cap(product: Product, quantity: int) -> int:
+    """How many of this the basket is allowed to hold.
+
+    A backstop rather than the way the customer finds out: the stepper is given
+    the same figure and stops its own plus button there. Ninety-nine was the
+    only ceiling before, which is not a ceiling — it let the basket hold thirty
+    of something there were three of, and the shortfall surfaced at checkout or
+    not at all.
+    """
+    return max(1, min(quantity, product.stock_left)) if product.stock_left else 1
+
+
 @router.get("", response_model=s.CartOut, summary="Screens 17, 18 — cart")
 def get_cart(user: CurrentUser, session: SessionDep, promo_code: str | None = None) -> s.CartOut:
     return sv.build_cart(session, user, promo_code)
@@ -41,7 +53,7 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
     ).first()
 
     if existing:
-        existing.quantity = min(existing.quantity + payload.quantity, 99)
+        existing.quantity = _cap(product, existing.quantity + payload.quantity)
         session.add(existing)
     else:
         session.add(
@@ -50,7 +62,7 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
                 product_id=payload.product_id,
                 variant_id=payload.variant_id,
                 color_variant_id=payload.color_variant_id,
-                quantity=payload.quantity,
+                quantity=_cap(product, payload.quantity),
             )
         )
     session.commit()
@@ -69,7 +81,8 @@ def update_item(
         if payload.quantity == 0:
             session.delete(item)
         else:
-            item.quantity = payload.quantity
+            product = session.get(Product, item.product_id)
+            item.quantity = _cap(product, payload.quantity) if product else payload.quantity
             session.add(item)
     if payload.selected is not None:
         item.selected = payload.selected

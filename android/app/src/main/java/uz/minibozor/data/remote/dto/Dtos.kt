@@ -366,6 +366,8 @@ data class CartItemDto(
     val quantity: Int,
     val selected: Boolean,
     @SerialName("in_stock") val inStock: Boolean,
+    /** What the stepper may reach, so plus stops where the shelf does. */
+    @SerialName("stock_left") val stockLeft: Int = 0,
     @SerialName("line_total") val lineTotal: Int,
 )
 

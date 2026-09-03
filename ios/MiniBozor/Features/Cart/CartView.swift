@@ -87,7 +87,12 @@ struct CartView: View {
 
             Spacer().frame(height: 12)
             HStack(spacing: 14) {
-                MBQuantityStepper(quantity: item.quantity) { quantity in
+                // Where the shelf ends, not an arbitrary 99: plus stops there
+                // rather than sending a number the server has to cut down.
+                MBQuantityStepper(
+                    quantity: item.quantity,
+                    maximum: Swift.max(item.stockLeft, 1)
+                ) { quantity in
                     Task { _ = await cart.setQuantity(itemId: item.id, quantity: quantity) }
                 }
                 Spacer()

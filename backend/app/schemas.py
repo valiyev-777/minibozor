@@ -336,6 +336,9 @@ class CartItemOut(BaseModel):
     quantity: int
     selected: bool
     in_stock: bool
+    # What the stepper is allowed to reach, so its plus button can stop where
+    # the shelf does rather than at an arbitrary ninety-nine.
+    stock_left: int = 0
     line_total: int
 
 

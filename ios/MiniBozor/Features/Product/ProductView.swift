@@ -203,9 +203,13 @@ struct ProductView: View {
             MBBottomBar {
                 HStack(spacing: 12) {
                     if let line = cartLine {
+                        // Where the shelf ends. The bar could otherwise walk
+                        // the count up to ninety-nine of something there were
+                        // three of.
                         MBQuantityStepper(
                             quantity: line.quantity,
                             minimum: 0,
+                            maximum: Swift.max(product.stockLeft, 1),
                             size: 44
                         ) { quantity in
                             Task { await cart.setQuantity(itemId: line.id, quantity: quantity) }
@@ -217,12 +221,19 @@ struct ProductView: View {
                         // Wraps rather than takes a share of the row: the button
                         // is the thing being aimed at, so it gets everything the
                         // number does not need.
-                        MBPriceRow(
-                            price: product.price,
-                            oldPrice: product.oldPrice,
-                            style: MB.type.title3,
-                            reservesFootnote: false
-                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            MBPriceRow(
+                                price: product.price,
+                                oldPrice: product.oldPrice,
+                                style: MB.type.title3,
+                                reservesFootnote: false
+                            )
+                            // Under the price, where the decision is being
+                            // made. It had been a clause in the seller's row
+                            // further up the page — "Sotuvchi · 25 dona qoldi" —
+                            // which is the one place nobody reads twice.
+                            StockLine(stockLeft: product.stockLeft)
+                        }
                         .fixedSize(horizontal: true, vertical: false)
                         MBPrimaryButton(
                             product.inStock ? L("savatga") : L("mavjud_emas"),
@@ -476,7 +487,10 @@ struct ProductView: View {
                 InfoRow(
                     glyph: "basket",
                     title: L("sotuvchi"),
-                    subtitle: L("sotuvchi_va_qoldiq", product.seller, product.stockLeft)
+                    // The seller, and only the seller. What is left moved to the
+                    // buy bar, where the count is a reason rather than a clause
+                    // in a row about delivery.
+                    subtitle: product.seller
                 )
             }
         }

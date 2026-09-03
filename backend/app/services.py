@@ -361,6 +361,7 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
         quantity=item.quantity,
         selected=item.selected,
         in_stock=product.in_stock,
+        stock_left=product.stock_left,
         line_total=product.price * item.quantity,
     )
 

@@ -338,6 +338,9 @@ private fun BottomBar(
                     quantity = state.quantity,
                     onChange = onQuantity,
                     min = 0,
+                    // Where the shelf ends, as everywhere else the count can be
+                    // raised.
+                    max = (state.product?.stockLeft ?: 1).coerceAtLeast(1),
                     // Matches the button beside it, so the two sit as one bar.
                     size = MbTheme.dimens.buttonHeight,
                 )

@@ -259,7 +259,14 @@ struct VariantSheet: View {
                 }
             } else {
                 HStack(spacing: 12) {
-                    MBQuantityStepper(quantity: model.quantity, minimum: 0, size: 48) { value in
+                    MBQuantityStepper(
+                        quantity: model.quantity,
+                        minimum: 0,
+                        // Where the shelf ends, as everywhere else the count
+                        // can be raised.
+                        maximum: Swift.max(model.product?.stockLeft ?? 1, 1),
+                        size: 48
+                    ) { value in
                         Task { await model.setQuantity(value, using: cart) }
                     }
                     MBPrimaryButton(L("otish"), leadingGlyph: "cart", action: onOpenCart)
