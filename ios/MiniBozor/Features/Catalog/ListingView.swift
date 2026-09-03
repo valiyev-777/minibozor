@@ -197,6 +197,15 @@ struct ListingView: View {
                             onOpen: { router.push(.product(id: product.id)) },
                             onToggleFavorite: { Task { await model.toggleFavorite(product) } },
                             onAddToCart: {
+                                // Nothing else while a picker is on its way.
+                                // The sheet presents a frame or two after
+                                // `picking` is set, and a tap landing in
+                                // between reached the grid behind it and added
+                                // that product outright — asking for one thing
+                                // and having a different one go into the basket
+                                // without a word is about the worst a shop can
+                                // do.
+                                guard picking == nil else { return }
                                 if product.hasVariants {
                                     picking = product
                                 } else {

@@ -201,7 +201,9 @@ struct HomeView: View {
             },
             onAddToCart: {
                 // A product that comes in sizes or colours opens the picker
-                // instead of being added with a variant we guessed.
+                // instead of being added with a variant we guessed. And
+                // nothing else while one is on its way — see ListingView.
+                guard picking == nil else { return }
                 if product.hasVariants {
                     picking = product
                 } else {

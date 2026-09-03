@@ -225,10 +225,17 @@ fun HomeScreen(
                             onOpenAll = { onOpenListing(section.categorySlug, section.title) },
                             onToggleFavorite = { p -> viewModel.toggleFavorite(p.id, p.isFavorite) },
                             onAddToCart = { p ->
-                                if (p.hasVariants) {
-                                    picking = p
-                                } else {
-                                    viewModel.addToCart(p.id) { toast.value = it }
+                                // See ListingScreen: nothing else while a
+                                // picker is on its way, or a tap landing in the
+                                // frame before the sheet's scrim arrives goes
+                                // to the grid behind it and adds that product
+                                // outright.
+                                if (picking == null) {
+                                    if (p.hasVariants) {
+                                        picking = p
+                                    } else {
+                                        viewModel.addToCart(p.id) { toast.value = it }
+                                    }
                                 }
                             },
                         )

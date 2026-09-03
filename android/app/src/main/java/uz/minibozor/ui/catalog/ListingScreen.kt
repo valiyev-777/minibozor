@@ -166,10 +166,23 @@ fun ListingScreen(
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { viewModel.toggleFavorite(product) },
                                 onAddToCart = {
-                                    if (product.hasVariants) {
-                                        picking = product
-                                    } else {
-                                        viewModel.addToCart(product.id) { toast.value = it }
+                                    // Nothing else while a picker is on its
+                                    // way. Setting `picking` only composes the
+                                    // sheet on the next frame, and its scrim
+                                    // arrives a frame after that — so a second
+                                    // tap landing in between reached the grid
+                                    // behind it and added that product outright.
+                                    // Asking for one thing and having a
+                                    // different one go into the basket without
+                                    // a word is about the worst a shop can do.
+                                    if (picking == null) {
+                                        if (product.hasVariants) {
+                                            picking = product
+                                        } else {
+                                            viewModel.addToCart(product.id) {
+                                                toast.value = it
+                                            }
+                                        }
                                     }
                                 },
                             )
