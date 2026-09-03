@@ -177,6 +177,16 @@ data class VariantDto(
      */
     @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("in_stock") val inStock: Boolean,
+    /**
+     * How many of this colour are on the shelf.
+     *
+     * The product's own count is the whole shelf; this is the share of it
+     * wearing one colour. The page asks the colour rather than the product,
+     * because the photograph above is of one colour and the count under it has
+     * to be about the thing being looked at. Null on a size, and on a colour
+     * the shop does not count apart — then the product's own count answers.
+     */
+    @SerialName("stock_left") val stockLeft: Int? = null,
 )
 
 @Immutable
@@ -197,6 +207,8 @@ data class ProductCardDto(
     val badge: String? = null,
     @SerialName("in_stock") val inStock: Boolean = true,
     @SerialName("is_favorite") val isFavorite: Boolean = false,
+    /** How many are left, so a tile can say when there are few. */
+    @SerialName("stock_left") val stockLeft: Int = 0,
     /** Whether tapping "Savatga" should open the picker sheet or add at once. */
     @SerialName("has_variants") val hasVariants: Boolean = false,
 )
@@ -364,6 +376,8 @@ data class CartItemDto(
     val quantity: Int,
     val selected: Boolean,
     @SerialName("in_stock") val inStock: Boolean,
+    /** What the stepper may reach, so plus stops where the shelf does. */
+    @SerialName("stock_left") val stockLeft: Int = 0,
     @SerialName("line_total") val lineTotal: Int,
 )
 

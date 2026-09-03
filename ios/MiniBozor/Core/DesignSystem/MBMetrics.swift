@@ -43,7 +43,30 @@ struct MBMetrics {
     /// any other ratio shows a letterboxed strip of its own ground down two
     /// sides. The old fixed heights (148 for a grid tile, 104 for a deal tile)
     /// did exactly that, and left the two kinds of card cropping differently.
-    let railTileWidth: CGFloat = 112
+    /// How wide a rail tile is, so a rail always shows two and a half of them.
+    ///
+    /// A hard 112 was drawn against a 375 pt canvas and never did fit three
+    /// tiles anywhere: three of them and their gaps come to 356, and the widest
+    /// device in the design is 319 of room. What that produced was two and
+    /// three quarter cards — near enough to three to read as three cards that
+    /// would not fit, rather than as a rail that scrolls.
+    ///
+    /// Two and a half is the point of the number: half a card is unmistakably
+    /// half a card, so the rail says it continues without a chevron to say it,
+    /// and a bigger phone gets a roomier card rather than a wider gap.
+    ///
+    /// Sized against the home rail: 20 pt of padding before the first tile and
+    /// after the last, and 10 between them. Clamped at both ends — a 320 pt
+    /// phone would shrink the photograph past what a photograph is for, and an
+    /// iPad would blow one tile up instead of showing more of them.
+    /// What a rail spends before its first tile, and after its last.
+    let railEdge: CGFloat = 20
+
+    var railTileWidth: CGFloat {
+        let screen = UIScreen.main.bounds.width
+        return min(max((screen - 40 - 20) / 2.5, 108), 150)
+    }
+
     let categoryTile: CGFloat = 44
 
     /// How far a product card is lifted off whatever it sits on.

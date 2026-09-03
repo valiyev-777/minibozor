@@ -10,6 +10,7 @@ from app.deps import CurrentUser, SessionDep
 from app.models import (
     Address,
     CancelReason,
+    CartItem,
     DeliverySlot,
     Notification,
     NotificationKind,
@@ -20,6 +21,7 @@ from app.models import (
     PaymentMethod,
     PickupPoint,
     Product,
+    ProductVariant,
     ReturnReason,
     ReturnRequest,
 )
@@ -131,7 +133,29 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         )
         if product:
             product.sold_count += item.quantity
+            # What is left, kept in step with what has gone. The sold count was
+            # being raised here already and the stock beside it was not, so a
+            # product could be bought any number of times and still claim the
+            # same 25 remaining — and never fall out of stock on its own.
+            product.stock_left = max(0, product.stock_left - item.quantity)
+            if product.stock_left == 0:
+                product.in_stock = False
             session.add(product)
+            # And the same one level down. A colour is counted apart from the
+            # shelf it stands on, so buying two blue has to come off the blue
+            # as well as off the total — otherwise the page keeps offering a
+            # colour that has gone while the product as a whole looks fine.
+            cart_item = session.get(CartItem, item.id)
+            color = (
+                session.get(ProductVariant, cart_item.color_variant_id)
+                if cart_item is not None and cart_item.color_variant_id
+                else None
+            )
+            if color is not None and color.stock_left is not None:
+                color.stock_left = max(0, color.stock_left - item.quantity)
+                if color.stock_left == 0:
+                    color.in_stock = False
+                session.add(color)
 
     sv.seed_order_events(session, order)
 

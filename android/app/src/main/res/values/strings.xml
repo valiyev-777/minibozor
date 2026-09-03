@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Uzbek is the default locale; ru and en live in values-ru / values-en. -->
 <resources>
-    <string name="app_name">Mini Bozor</string>
+    <string name="app_name" translatable="false">Mini Bozor</string>
     <string name="qaytarish_14_kun_ichida_qadoq_butun_bolsa">14 kun ichida, qadoq butun bo\'lsa</string>
     <string name="rating_4_0_dan_yuqori">4.0 ★ dan yuqori</string>
     <string name="rating_4_5_dan_yuqori">4.5 ★ dan yuqori</string>
     <string name="pin_4_xonali_kod_oylab_toping">4 xonali kod o\'ylab toping</string>
     <string name="amal_qilish_muddati">Amal qilish muddati</string>
-    <string name="apple">Apple</string>
+    <string name="apple" translatable="false">Apple</string>
     <string name="ariza_korib_chiqilgach_sms_yuboramiz">Ariza ko\'rib chiqilgach SMS yuboramiz. Tovarni qadog\'i bilan saqlang.</string>
     <string name="ariza_yuborish">Ariza yuborish</string>
     <string name="asosiy">ASOSIY</string>
     <string name="asosiy_karta">Asosiy karta</string>
     <string name="asosiy_manzil">Asosiy manzil</string>
     <string name="asosiy_qilish">Asosiy qilish</string>
-    <string name="aziz_toshmatov">AZIZ TOSHMATOV</string>
-    <string name="aziz_toshmatov_2">Aziz Toshmatov</string>
+    <string name="aziz_toshmatov" translatable="false">AZIZ TOSHMATOV</string>
+    <string name="aziz_toshmatov_2" translatable="false">Aziz Toshmatov</string>
     <string name="barcha_tovarlar">Barcha tovarlar</string>
     <string name="barchasi">Barchasi</string>
     <string name="bekor">Bekor</string>
@@ -53,7 +53,7 @@
     <string name="davom_etish">Davom etish</string>
     <string name="domofon_ishlamaydi_qongiroq_qiling">Domofon ishlamaydi, qo\'ng\'iroq qiling</string>
     <string name="e_lon_qilindi">E\'LON QILINDI</string>
-    <string name="email">Email</string>
+    <string name="email" translatable="false">Email</string>
     <string name="endi_ilovaga_kirishda_yangi_kod_soraladi">Endi ilovaga kirishda yangi kod so\'raladi.</string>
     <string name="face_id_barmoq_izi">Face ID / barmoq izi</string>
     <string name="faol_buyurtma_yoq">Faol buyurtma yo\'q</string>
@@ -62,7 +62,7 @@
     <string name="filtrlar">Filtrlar</string>
     <string name="filtrlarni_tozalash">Filtrlarni tozalash</string>
     <string name="filtrlarni_yumshatib_yoki_boshqa_soz_bilan">Filtrlarni yumshatib yoki boshqa so\'z bilan qidirib ko\'ring.</string>
-    <string name="google">Google</string>
+    <string name="google" translatable="false">Google</string>
     <string name="haftada_2_martadan_kop_emas">Haftada 2 martadan ko\'p emas</string>
     <string name="hali_sharh_yoq_birinchi_boling">Hali sharh yo\'q — birinchi bo\'ling.</string>
     <string name="hali_sharh_yozmagansiz">Hali sharh yozmagansiz</string>
@@ -74,7 +74,7 @@
     <string name="hozircha_mavjud_emas">Hozircha mavjud emas</string>
     <string name="hududni_tanlang">Hududni tanlang</string>
     <string name="hujjat">Hujjat</string>
-    <string name="humo_uzcard_visa">Humo, UzCard, Visa</string>
+    <string name="humo_uzcard_visa" translatable="false">Humo, UzCard, Visa</string>
     <string name="ilova_tili">Ilova tili</string>
     <string name="ilovaga_kirishda_soraladi">Ilovaga kirishda so\'raladi</string>
     <string name="ism_va_familiya">Ism va familiya</string>
@@ -126,7 +126,7 @@
     <string name="mavjud_emas">Mavjud emas</string>
     <string name="menda_referal_kod_bor">Menda referal-kod bor</string>
     <string name="mini_bozor_versiya_1_0">Mini Bozor · versiya 1.0</string>
-    <string name="mm_yy">MM/YY</string>
+    <string name="mm_yy" translatable="false">MM/YY</string>
     <string name="muddati_otgan">Muddati o\'tgan</string>
     <string name="naqd_pul">Naqd pul</string>
     <string name="narx">Narx</string>
@@ -139,7 +139,7 @@
     <string name="olchamlar_jadvali">o\'lchamlar jadvali</string>
     <string name="ommabop_sorovlar">Ommabop so\'rovlar</string>
     <string name="ommaviy_oferta">ommaviy oferta</string>
-    <string name="oneid">OneID</string>
+    <string name="oneid" translatable="false">OneID</string>
     <string name="original">ORIGINAL</string>
     <string name="otkazish">O\'tkazish</string>
     <string name="oxirgi_qidiruvlar">Oxirgi qidiruvlar</string>
@@ -185,7 +185,7 @@
     <string name="shartlariga_rozilik_bildirasiz">" shartlariga rozilik bildirasiz"</string>
     <string name="shaxsiy_ma_lumotlar">Shaxsiy ma\'lumotlar</string>
     <string name="sifati_olchami_yetkazish_haqida_yozing">Sifati, o\'lchami, yetkazish haqida yozing…</string>
-    <string name="sms">SMS</string>
+    <string name="sms" translatable="false">SMS</string>
     <string name="som">so\'m</string>
     <string name="sotuvchi">Sotuvchi</string>
     <string name="sozlamalar">Sozlamalar</string>
@@ -383,14 +383,6 @@
     <!-- Product page: rating panel, colour picker, description -->
     <string name="tavsif_va_xususiyatlar">Tavsif va xususiyatlar</string>
     <string name="barcha_rasmlar">Barcha rasmlar</string>
-    <plurals name="n_orders">
-        <item quantity="one">%1$s ta buyurtma</item>
-        <item quantity="other">%1$s ta buyurtma</item>
-    </plurals>
-    <plurals name="n_buyers">
-        <item quantity="one">%1$s kishi sotib oldi</item>
-        <item quantity="other">%1$s kishi sotib oldi</item>
-    </plurals>
     <string name="qaytarishlarim">Qaytarishlarim</string>
     <string name="hali_qaytarish_arizasi_yubormagansiz">Hali qaytarish arizasi yubormagansiz</string>
     <string name="yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin">Yetkazilgan buyurtmani 14 kun ichida qaytarish mumkin</string>
@@ -398,4 +390,12 @@
     <string name="return_approved">QABUL QILINDI</string>
     <string name="return_rejected">RAD ETILDI</string>
     <string name="return_refunded">PUL QAYTARILDI</string>
+    <string name="n_dona_qoldi">%1$d dona qoldi</string>
+    <!-- Product page: what is on the shelf -->
+    <string name="kam_qoldi">KAM QOLDI</string>
+    <string name="tugadi">TUGADI</string>
+    <plurals name="n_sotilgan">
+        <item quantity="one">%1$s dona sotilgan</item>
+        <item quantity="other">%1$s dona sotilgan</item>
+    </plurals>
 </resources>

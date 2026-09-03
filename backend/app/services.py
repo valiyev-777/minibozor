@@ -138,6 +138,7 @@ def product_card(session: Session, p: Product, favs: set[int]) -> s.ProductCardO
         badge=i18n.t(session, "product", p.id, "badge", p.badge) if p.badge else None,
         in_stock=p.in_stock,
         is_favorite=p.id in favs,
+        stock_left=p.stock_left,
         has_variants=has_variants(session, p.id),
     )
 
@@ -216,6 +217,7 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
                 value=v.value,
                 image_url=media_url(v.image_url),
                 in_stock=v.in_stock,
+                stock_left=v.stock_left,
             )
             for v in variants
         ],
@@ -228,7 +230,6 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
         ],
         seller=p.seller,
         warranty=i18n.t(session, "product", p.id, "warranty", p.warranty) if p.warranty else None,
-        stock_left=p.stock_left,
         is_original=p.is_original,
         free_delivery=p.free_delivery,
         next_day_delivery=p.next_day_delivery,
@@ -334,16 +335,28 @@ def cart_items(session: Session, user: User) -> list[CartItem]:
     ).all()
 
 
+def shelf_left(product: Product, color: ProductVariant | None) -> int:
+    """
+    How many of the thing actually chosen are left.
+
+    A cart line is for one colour, not for the product, so the stepper's ceiling
+    and the page's count both have to be that colour's share of the shelf. Falls
+    back to the whole shelf when the colours are not counted apart.
+    """
+    if color is not None and color.stock_left is not None:
+        return color.stock_left
+    return product.stock_left
+
+
 def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
     product = session.get(Product, item.product_id)
     if product is None:
         return None
+    color = session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None
     labels = [
         i18n.t(session, "variant", v.id, "label", v.label)
         for v in (
-            session.get(ProductVariant, item.color_variant_id)
-            if item.color_variant_id
-            else None,
+            color,
             session.get(ProductVariant, item.variant_id) if item.variant_id else None,
         )
         if v is not None
@@ -360,7 +373,8 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
         old_unit_price=product.old_price,
         quantity=item.quantity,
         selected=item.selected,
-        in_stock=product.in_stock,
+        in_stock=product.in_stock and (color is None or color.in_stock),
+        stock_left=shelf_left(product, color),
         line_total=product.price * item.quantity,
     )
 

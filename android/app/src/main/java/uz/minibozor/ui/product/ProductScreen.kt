@@ -73,7 +73,7 @@ import uz.minibozor.ui.product.component.ColorPicker
 import uz.minibozor.ui.product.component.RatingPanel
 import uz.minibozor.ui.product.component.ReviewRow
 import uz.minibozor.ui.product.component.SizePicker
-import uz.minibozor.ui.product.component.SoldLine
+import uz.minibozor.ui.product.component.ShelfLine
 
 /**
  * The share of the scroll the photograph sits out.
@@ -245,6 +245,39 @@ fun ProductScreen(
 
     val context = LocalContext.current
 
+    // The photograph and the colour are one choice made two ways. A colour is
+    // a photograph of the product in it, and most of those photographs are also
+    // pages of the hero — so swiping to the black one is choosing black, and
+    // tapping the black swatch turns the page to it. Whichever way the choice is
+    // made the page agrees with itself, and the count under the picture is the
+    // count of what is in the picture.
+    val productColors = remember(product) {
+        product?.variants.orEmpty().filter { it.kind == "color" }
+    }
+    val pageOfColor = remember(product) {
+        productColors.mapNotNull { color ->
+            val page = product?.images.orEmpty()
+                .indexOf(color.imageUrl ?: return@mapNotNull null)
+            if (page < 0) null else color.id to page
+        }.toMap()
+    }
+    LaunchedEffect(heroPager.currentPage, pageOfColor) {
+        val id = pageOfColor.entries.firstOrNull { it.value == heroPager.currentPage }?.key
+        if (id != null && id != state.selectedColorId) viewModel.selectColor(id)
+    }
+    LaunchedEffect(state.selectedColorId, pageOfColor) {
+        val page = pageOfColor[state.selectedColorId]
+        if (page != null && page != heroPager.currentPage) heroPager.animateScrollToPage(page)
+    }
+
+    // What the page is actually about: the colour on show, or the product
+    // itself when it has no colours to speak of. A colour the shop does not
+    // count apart falls back to the whole shelf.
+    val selectedColor = productColors.firstOrNull { it.id == state.selectedColorId }
+        ?: productColors.firstOrNull()
+    val shelfLeft = selectedColor?.stockLeft ?: product?.stockLeft ?: 0
+    val shelfInStock = product?.inStock == true && (selectedColor?.inStock ?: true)
+
     Box(
         Modifier
             .fillMaxSize()
@@ -356,15 +389,21 @@ fun ProductScreen(
                                         rating = state.summary?.rating ?: product.rating,
                                         reviewsCount = state.summary?.total
                                             ?: product.reviewsCount,
-                                        soldCount = product.soldCount,
                                         photos = state.summary?.photos.orEmpty(),
                                         photosTotal = state.summary?.photosTotal ?: 0,
                                         onClick = { onOpenReviews(product.id) },
                                     )
-                                    if (product.soldCount > 0) {
-                                        Spacer(Modifier.height(12.dp))
-                                        SoldLine(product.soldCount)
-                                    }
+                                    // What is on the shelf, right under what
+                                    // other people made of it: the evidence
+                                    // someone weighs between the price above and
+                                    // the choice below. One line, because that
+                                    // is all it has to say.
+                                    Spacer(Modifier.height(10.dp))
+                                    ShelfLine(
+                                        stockLeft = shelfLeft,
+                                        soldCount = product.soldCount,
+                                        inStock = shelfInStock,
+                                    )
                                 }
                             }
                         }
@@ -493,11 +532,13 @@ fun ProductScreen(
                                             DeliveryRow(
                                                 "basket",
                                                 stringResource(R.string.sotuvchi),
-                                                stringResource(
-                                                    R.string.sotuvchi_va_qoldiq,
-                                                    product.seller,
-                                                    product.stockLeft,
-                                                ),
+                                                // The seller, and only the
+                                                // seller. What is left moved to
+                                                // the buy bar, where the count
+                                                // is a reason rather than a
+                                                // clause in a row about
+                                                // delivery.
+                                                product.seller,
                                             )
                                         }
                                     }
@@ -589,6 +630,8 @@ fun ProductScreen(
                 product?.let {
                     BuyBar(
                         product = it,
+                        stockLeft = shelfLeft,
+                        inStock = shelfInStock,
                         adding = state.adding,
                         line = cartLine,
                         onAdd = { viewModel.addToCart { message -> toast.value = message } },

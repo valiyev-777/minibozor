@@ -13,6 +13,7 @@
 "asosiy_qilish" = "Make default";
 "aziz_toshmatov" = "AZIZ TOSHMATOV";
 "aziz_toshmatov_2" = "Aziz Toshmatov";
+"barcha_rasmlar" = "All photos";
 "barcha_tovarlar" = "All products";
 "barchasi" = "All";
 "batafsil" = "Read more";
@@ -78,6 +79,7 @@
 "filtrlarni_yumshatib_yoki_boshqa_soz_bilan" = "Loosen the filters or try a different word.";
 "google" = "Google";
 "haftada_2_martadan_kop_emas" = "No more than twice a week";
+"hali_qaytarish_arizasi_yubormagansiz" = "You have not requested a return yet";
 "hali_sharh_yoq_birinchi_boling" = "No reviews yet — be the first.";
 "hali_sharh_yozmagansiz" = "You haven't written any reviews yet";
 "hammasi" = "All";
@@ -100,6 +102,7 @@
 "joriy_pin_kod" = "Current PIN";
 "joylashuv" = "Location";
 "kafolat" = "Warranty";
+"kam_qoldi" = "ONLY A FEW LEFT";
 "kanallar" = "Channels";
 "karta" = "Card";
 "karta_egasi" = "Cardholder";
@@ -148,6 +151,7 @@
 "mini_bozor_versiya_1_0" = "Mini Bozor · version 1.0";
 "mm_yy" = "MM/YY";
 "muddati_otgan" = "Expired";
+"n_dona_qoldi" = "%1$d left";
 "n_km" = "%1$@ km";
 "n_yangi" = "%1$@ new";
 "naqd_pul" = "Cash";
@@ -206,6 +210,7 @@
 "qaytarish" = "Return";
 "qaytarish_14_kun_ichida_qadoq_butun_bolsa" = "Within 14 days, if the packaging is intact";
 "qaytarish_arizasi" = "Return request";
+"qaytarishlarim" = "My returns";
 "qisqacha_yozib_qoldiring" = "Tell us briefly…";
 "qollash" = "Apply";
 "qongiroq_qilish" = "Call";
@@ -228,6 +233,10 @@
 "region_toshkent" = "Tashkent";
 "region_toshkent_viloyati" = "Tashkent Region";
 "region_xorazm" = "Khorezm";
+"return_approved" = "APPROVED";
+"return_refunded" = "REFUNDED";
+"return_rejected" = "REJECTED";
+"return_submitted" = "SUBMITTED";
 "reyting" = "Rating";
 "sana" = "Date";
 "saqlash" = "Save";
@@ -264,6 +273,7 @@
 "tasdiqlash" = "Confirm";
 "tasdiqlash_kodi" = "Verification code";
 "tavsif" = "Description";
+"tavsif_va_xususiyatlar" = "Description and specs";
 "tayyor" = "Done";
 "tekshirilmoqda" = "UNDER REVIEW";
 "telefon" = "Phone";
@@ -286,6 +296,7 @@
 "tovarlar_tez_orada_qoshiladi" = "Products are coming soon";
 "tovarni_nima_uchun_qaytarmoqchisiz" = "Why are you returning the item?";
 "tozalash" = "Clear";
+"tugadi" = "SOLD OUT";
 "tugagan" = "Completed";
 "tugagan_buyurtma_yoq" = "No completed orders";
 "tugilgan_sana" = "Date of birth";
@@ -306,6 +317,7 @@
 "yangi_manzil_qoshish" = "Add a new address";
 "yangi_pin_kod" = "New PIN";
 "yaqin_punktlarni_korsatish" = "Show nearby points";
+"yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin" = "A delivered order can be returned within 14 days";
 "yetkazilgan_tovarlarga_sharh_qoldiring" = "Review what you've received — it helps other shoppers.";
 "yetkazish" = "Delivery";
 "yetkazish_holati" = "Delivery status";

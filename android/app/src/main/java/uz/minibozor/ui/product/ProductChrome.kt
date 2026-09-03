@@ -63,6 +63,7 @@ import uz.minibozor.core.design.component.MbChip
 import uz.minibozor.core.design.component.MbPrimaryButton
 import uz.minibozor.core.design.component.MbProductImage
 import uz.minibozor.core.design.component.MbQuantityStepper
+import uz.minibozor.core.design.component.StockLine
 import uz.minibozor.core.design.component.MbRailTile
 import uz.minibozor.core.design.component.MbSkeleton
 import uz.minibozor.core.design.component.SectionHeader
@@ -399,6 +400,14 @@ private fun GlassButton(
 @Composable
 fun BuyBar(
     product: ProductDto,
+    /**
+     * The shelf the bar is buying off: the chosen colour's share of it, not the
+     * product's total. The photograph above is of one colour and the stepper
+     * below is for one colour, so a ceiling taken from the sum of every colour
+     * is a ceiling for something nobody is buying.
+     */
+    stockLeft: Int,
+    inStock: Boolean,
     adding: Boolean,
     line: CartItemDto?,
     onAdd: () -> Unit,
@@ -412,6 +421,17 @@ fun BuyBar(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
+        // Above the row, and above both of them. It had been a clause in the
+        // seller's row a third of the way down the page — "Sotuvchi · 25 dona
+        // qoldi" — which is the one place nobody reads twice. Here it is beside
+        // the button being aimed at.
+        //
+        // Above rather than tucked under the price, because the bar has two
+        // shapes: a price and a button before the product is in the basket, a
+        // stepper and a way onward once it is. Under the price it would vanish
+        // exactly when the customer is choosing how many to take, which is the
+        // moment the number matters most.
+        StockLine(stockLeft)
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (line == null) {
                 // Wraps rather than takes a share of the row: the button is the
@@ -433,12 +453,12 @@ fun BuyBar(
                 }
                 MbPrimaryButton(
                     text = stringResource(
-                        if (product.inStock) R.string.savatga else R.string.mavjud_emas
+                        if (inStock) R.string.savatga else R.string.mavjud_emas
                     ),
                     onClick = onAdd,
-                    enabled = product.inStock,
+                    enabled = inStock,
                     loading = adding,
-                    subtitle = product.deliveryNote.takeIf { product.inStock },
+                    subtitle = product.deliveryNote.takeIf { inStock },
                     modifier = Modifier.weight(1f),
                 )
             } else {
@@ -450,6 +470,9 @@ fun BuyBar(
                     quantity = line.quantity,
                     onChange = { onSetQuantity(line.id, it) },
                     min = 0,
+                    // Where the shelf ends. The bar could otherwise walk the
+                    // count up to ninety-nine of something there were three of.
+                    max = stockLeft.coerceAtLeast(1),
                     size = 44.dp,
                 )
                 Spacer(Modifier.width(12.dp))
@@ -530,6 +553,8 @@ fun Recommendations(
                     oldPrice = item.oldPrice,
                     discountPercent = item.discountPercent,
                     imageUrl = item.imageUrl,
+                    inStock = item.inStock,
+                    stockLeft = item.stockLeft,
                     onClick = { onOpenProduct(item.id) },
                 )
             }

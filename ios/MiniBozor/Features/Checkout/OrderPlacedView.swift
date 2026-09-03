@@ -47,7 +47,7 @@ struct OrderPlacedView: View {
         .safeAreaInset(edge: .bottom) {
             MBBottomBar {
                 MBPrimaryButton(L("buyurtmani_kuzatish"), leadingGlyph: "box") {
-                    router.replace(with: .tracking(orderId: orderId))
+                    router.replace(with: .orderDetail(orderId: orderId))
                 }
                 MBSecondaryButton(L("bosh_sahifaga")) { router.popToRoot() }
             }

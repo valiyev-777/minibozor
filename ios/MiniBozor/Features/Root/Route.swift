@@ -17,7 +17,6 @@ enum Route: Hashable {
     case confirm                                   // 23
     case orderPlaced(orderId: Int)                 // 24
 
-    case tracking(orderId: Int)                    // 25
     case orders                                    // 26
     case orderDetail(orderId: Int)                 // 27
     case orderCancel(orderId: Int)                 // 28
@@ -28,6 +27,8 @@ enum Route: Hashable {
     case addCard
     case addresses                                 // 33
     case myReviews                                 // 34
+    /// Every return asked for, where `orderReturn` is the asking.
+    case returns
     case favorites                                 // 35
     case notifications                             // 36
     case settings                                  // 37

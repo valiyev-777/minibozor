@@ -23,6 +23,7 @@ import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCard
 import uz.minibozor.core.design.component.MbEmptyState
+import uz.minibozor.core.design.component.MbErrorState
 import uz.minibozor.core.design.component.MbLoading
 import uz.minibozor.core.design.component.MbScreen
 import uz.minibozor.core.design.component.MbStatusPill
@@ -49,6 +50,16 @@ fun ReturnsScreen(
     MbScreen(topBar = { MbTopBar(stringResource(R.string.qaytarishlarim), onBack = onBack) }) { padding ->
         when {
             state.loading && state.items.isEmpty() -> MbLoading(Modifier.padding(padding))
+
+            // Before the empty state, not after it. A request that failed and a
+            // customer who has never asked for a return are not the same thing,
+            // and saying the second when the first happened is the app telling
+            // them their requests are not there.
+            state.error != null && state.items.isEmpty() -> MbErrorState(
+                state.error!!,
+                viewModel::load,
+                Modifier.padding(padding),
+            )
 
             state.items.isEmpty() -> MbEmptyState(
                 glyph = "ret",

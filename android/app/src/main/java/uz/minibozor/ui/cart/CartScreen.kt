@@ -130,6 +130,10 @@ fun CartScreen(
                                 MbQuantityStepper(
                                     quantity = item.quantity,
                                     onChange = { viewModel.setQuantity(item.id, it) },
+                                    // Where the shelf ends, not an arbitrary 99:
+                                    // plus stops there rather than sending a
+                                    // number the server has to quietly cut down.
+                                    max = item.stockLeft.coerceAtLeast(1),
                                 )
                                 Spacer(Modifier.size(6.dp))
                                 // Deleting a line sits next to the stepper, as a trash

@@ -42,7 +42,12 @@ struct MBTextField: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .frame(minHeight: minHeight, alignment: .center)
+            // Centred is right for the one-line field, where the text sits in
+            // a 48 pt pill and centring is what puts it on the pill's axis. It
+            // is wrong the moment the field is a box: a review field is 120 pt
+            // tall and holds one line to begin with, so the first thing typed
+            // appeared half way down it with empty room above.
+            .frame(minHeight: minHeight, alignment: multiline ? .topLeading : .center)
             .background(MB.color.fill)
             .overlay(
                 RoundedRectangle(cornerRadius: MB.metric.radiusM, style: .continuous)

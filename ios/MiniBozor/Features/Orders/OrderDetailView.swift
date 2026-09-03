@@ -71,10 +71,16 @@ final class OrderDetailModel {
     }
 }
 
-/// Screens 25 (tracking) and 27 (full detail) — same data, different depth.
+/// Screen 27 — one order, in full.
+///
+/// This used to be two screens off one view: a tracking view that showed the
+/// timeline and stopped there, and the detail view. But tracking was a strict
+/// subset — the same timeline with the information, the totals and the buttons
+/// taken away — so a customer who tapped "Kuzatish" landed somewhere that could
+/// not tell them what they had paid or let them cancel, and had to find the
+/// order again to get there. Everything opens the order now.
 struct OrderDetailView: View {
     let orderId: Int
-    let trackingOnly: Bool
 
     @Environment(Router.self) var router
     @State var model = OrderDetailModel()
@@ -83,7 +89,7 @@ struct OrderDetailView: View {
         MBScreen {
             VStack(spacing: 0) {
                 MBTopBar(
-                    trackingOnly ? L("yetkazish_holati") : L("buyurtma_tafsilotlari"),
+                    L("buyurtma_tafsilotlari"),
                     subtitle: model.order?.code,
                     onBack: { router.pop() }
                 )
@@ -143,51 +149,49 @@ struct OrderDetailView: View {
                     }
                 }
 
-                if !trackingOnly {
-                    MBCard {
-                        SectionHeader(title: L("ma_lumot"))
-                        if let created = UzDate.parseDateTime(order.createdAt) {
-                            MBKeyValueRow(key: L("buyurtma_sanasi"), value: UzDate.dayTime(created))
-                        }
-                        MBKeyValueRow(key: L("tolov"), value: order.paymentLabel)
-                        MBKeyValueRow(
-                            key: L("manzil"),
-                            value: [order.addressLine, order.addressMeta]
-                                .filter { !$0.isEmpty }
-                                .joined(separator: ", ")
-                        )
-                        MBKeyValueRow(
-                            key: L("qabul_qiluvchi"),
-                            value: "\(order.recipientName), \(order.recipientPhone)"
-                        )
+                MBCard {
+                    SectionHeader(title: L("ma_lumot"))
+                    if let created = UzDate.parseDateTime(order.createdAt) {
+                        MBKeyValueRow(key: L("buyurtma_sanasi"), value: UzDate.dayTime(created))
                     }
+                    MBKeyValueRow(key: L("tolov"), value: order.paymentLabel)
+                    MBKeyValueRow(
+                        key: L("manzil"),
+                        value: [order.addressLine, order.addressMeta]
+                            .filter { !$0.isEmpty }
+                            .joined(separator: ", ")
+                    )
+                    MBKeyValueRow(
+                        key: L("qabul_qiluvchi"),
+                        value: "\(order.recipientName), \(order.recipientPhone)"
+                    )
+                }
 
-                    MBCard {
-                        MBTotalRow(label: L("tovarlar"), value: Format.sum(order.subtotal))
-                        if order.discount > 0 {
-                            MBTotalRow(
-                                label: L("chegirma"),
-                                value: "−\(Format.grouped(order.discount))",
-                                valueColor: MB.color.success
-                            )
-                        }
+                MBCard {
+                    MBTotalRow(label: L("tovarlar"), value: Format.sum(order.subtotal))
+                    if order.discount > 0 {
                         MBTotalRow(
-                            label: L("yetkazish"),
-                            value: order.deliveryFee == 0 ? L("bepul") : Format.sum(order.deliveryFee)
+                            label: L("chegirma"),
+                            value: "−\(Format.grouped(order.discount))",
+                            valueColor: MB.color.success
                         )
-                        MBDivider().padding(.vertical, 8)
-                        MBTotalRow(label: L("jami"), value: Format.sum(order.total), strong: true)
                     }
+                    MBTotalRow(
+                        label: L("yetkazish"),
+                        value: order.deliveryFee == 0 ? L("bepul") : Format.sum(order.deliveryFee)
+                    )
+                    MBDivider().padding(.vertical, 8)
+                    MBTotalRow(label: L("jami"), value: Format.sum(order.total), strong: true)
+                }
 
-                    if order.canCancel {
-                        MBSecondaryButton(L("buyurtmani_bekor_qilish"), contentColor: MB.color.danger) {
-                            router.push(.orderCancel(orderId: order.id))
-                        }
+                if order.canCancel {
+                    MBSecondaryButton(L("buyurtmani_bekor_qilish"), contentColor: MB.color.danger) {
+                        router.push(.orderCancel(orderId: order.id))
                     }
-                    if order.status == "delivered" {
-                        MBSecondaryButton(L("qaytarish_arizasi")) {
-                            router.push(.orderReturn(orderId: order.id))
-                        }
+                }
+                if order.status == "delivered" {
+                    MBSecondaryButton(L("qaytarish_arizasi")) {
+                        router.push(.orderReturn(orderId: order.id))
                     }
                 }
             }

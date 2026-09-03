@@ -30,6 +30,7 @@ import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbProductImage
 import uz.minibozor.core.design.component.MbReviewPhotoStack
 import uz.minibozor.core.design.component.MbSizeChip
+import uz.minibozor.core.design.component.MbStatusPill
 import uz.minibozor.core.design.component.MbStars
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.design.mbClickable
@@ -52,7 +53,6 @@ import uz.minibozor.data.remote.dto.VariantDto
 fun RatingPanel(
     rating: Double,
     reviewsCount: Int,
-    soldCount: Int,
     photos: List<String>,
     photosTotal: Int,
     onClick: () -> Unit,
@@ -76,30 +76,16 @@ fun RatingPanel(
                 MbStars(rating, size = 17.dp)
             }
             Spacer(Modifier.height(5.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                MbText(
-                    pluralStringResource(R.plurals.n_reviews, reviewsCount, reviewsCount),
-                    MbTheme.type.caption,
-                    MbTheme.colors.textSecondary,
-                    maxLines = 1,
-                )
-                if (soldCount > 0) {
-                    MbText("·", MbTheme.type.caption, MbTheme.colors.hairlineStrong)
-                    MbText(
-                        pluralStringResource(
-                            R.plurals.n_orders,
-                            soldCount,
-                            soldCount.grouped(),
-                        ),
-                        MbTheme.type.caption,
-                        MbTheme.colors.textSecondary,
-                        maxLines = 1,
-                    )
-                }
-            }
+            // Reviews only. The order count used to sit here beside them, and
+            // the line below now prints what has sold as one half of its own
+            // answer — the same number twice in forty vertical points was one
+            // too many.
+            MbText(
+                pluralStringResource(R.plurals.n_reviews, reviewsCount, reviewsCount),
+                MbTheme.type.caption,
+                MbTheme.colors.textSecondary,
+                maxLines = 1,
+            )
         }
         if (photos.isNotEmpty()) {
             Spacer(Modifier.width(10.dp))
@@ -110,21 +96,75 @@ fun RatingPanel(
     }
 }
 
-/** "1 240 kishi sotib oldi" — the quiet nudge under the rating. */
+/** Under this many left, the count stops being a fact and becomes a reason. */
+private const val LowStock = 5
+
+/**
+ * How many are left and how many have gone, in one line under the rating.
+ *
+ * The same fact the tile in the grid prints, at the same weight and in the same
+ * words — a caption with the box beside it, quiet by default and red once the
+ * number has something to say. It was a bordered panel for a while, with a
+ * meter across it and the two figures set at title size; that is a great deal
+ * of page for "six left, three hundred sold", and the meter was drawing a
+ * proportion of a denominator nobody had. What it says fits on a line, so it
+ * takes a line.
+ *
+ * The pill only appears when there is a reason for it. A product that is simply
+ * in stock says so by not saying anything.
+ *
+ * [stockLeft] and [inStock] are about the colour on show above, not about the
+ * product as a whole — the photograph is of one colour, and the count under it
+ * has to be the count of the thing being looked at.
+ */
 @Composable
-fun SoldLine(soldCount: Int, modifier: Modifier = Modifier) {
+fun ShelfLine(
+    stockLeft: Int,
+    soldCount: Int,
+    inStock: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val gone = !inStock || stockLeft <= 0
+    val low = !gone && stockLeft <= LowStock
+    val urgent = gone || low
     Row(
-        modifier,
+        modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        MbIcon("cart-check", size = 16.dp, tint = MbTheme.colors.accent)
-        MbText(
-            pluralStringResource(R.plurals.n_buyers, soldCount, soldCount.grouped()),
-            MbTheme.type.caption,
-            MbTheme.colors.textSecondary,
-            maxLines = 1,
+        MbIcon(
+            "box",
+            size = 14.dp,
+            tint = if (urgent) MbTheme.colors.danger else MbTheme.colors.icon,
         )
+        // Nothing to count when there are none: the pill on the right is the
+        // whole of what a sold-out shelf has to say, and "0 dona qoldi" beside
+        // it would be the same sentence twice.
+        if (!gone) {
+            MbText(
+                stringResource(R.string.n_dona_qoldi, stockLeft),
+                MbTheme.type.caption,
+                if (low) MbTheme.colors.danger else MbTheme.colors.inkMuted,
+                maxLines = 1,
+            )
+        }
+        if (soldCount > 0) {
+            if (!gone) MbText("·", MbTheme.type.caption, MbTheme.colors.hairlineStrong)
+            MbText(
+                pluralStringResource(R.plurals.n_sotilgan, soldCount, soldCount.grouped()),
+                MbTheme.type.caption,
+                MbTheme.colors.textSecondary,
+                maxLines = 1,
+            )
+        }
+        if (urgent) {
+            Spacer(Modifier.weight(1f))
+            MbStatusPill(
+                stringResource(if (gone) R.string.tugadi else R.string.kam_qoldi),
+                background = MbTheme.colors.dangerBg,
+                contentColor = MbTheme.colors.danger,
+            )
+        }
     }
 }
 

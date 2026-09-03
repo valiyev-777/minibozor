@@ -60,7 +60,7 @@ struct ProfileView: View {
         QuickAction(glyph: "box", label: L("buyurtmalar"), route: .orders),
         QuickAction(glyph: "heart", label: L("sevimlilar"), route: .favorites),
         QuickAction(glyph: "star", label: L("sharhlarim"), route: .myReviews),
-        QuickAction(glyph: "ret", label: L("qaytarish"), route: .orders),
+        QuickAction(glyph: "ret", label: L("qaytarish"), route: .returns),
     ] }
 
     var body: some View {

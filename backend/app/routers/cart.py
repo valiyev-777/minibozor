@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app import i18n
 from app import schemas as s
@@ -10,6 +10,26 @@ from app.deps import CurrentUser, SessionDep
 from app.models import CartItem, Product, ProductVariant
 
 router = APIRouter(prefix="/cart", tags=["cart"])
+
+
+def _cap(product: Product, quantity: int, color: ProductVariant | None = None) -> int:
+    """How many of this the basket is allowed to hold.
+
+    A backstop rather than the way the customer finds out: the stepper is given
+    the same figure and stops its own plus button there. Ninety-nine was the
+    only ceiling before, which is not a ceiling — it let the basket hold thirty
+    of something there were three of, and the shortfall surfaced at checkout or
+    not at all.
+
+    The colour, when one was chosen, is the shelf that counts: a basket holding
+    six of a colour there are two of is the same shortfall one level down.
+    """
+    left = sv.shelf_left(product, color)
+    return max(1, min(quantity, left)) if left else 1
+
+
+def _color(session: Session, item: CartItem) -> ProductVariant | None:
+    return session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None
 
 
 @router.get("", response_model=s.CartOut, summary="Screens 17, 18 — cart")
@@ -24,12 +44,17 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     if not product.in_stock:
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock"))
+    color: ProductVariant | None = None
     for variant_id in (payload.variant_id, payload.color_variant_id):
         if variant_id is None:
             continue
         variant = session.get(ProductVariant, variant_id)
         if variant is None or variant.product_id != product.id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("variant_invalid"))
+        if variant_id == payload.color_variant_id:
+            color = variant
+    if color is not None and not color.in_stock:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock"))
 
     existing = session.exec(
         select(CartItem).where(
@@ -41,7 +66,7 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
     ).first()
 
     if existing:
-        existing.quantity = min(existing.quantity + payload.quantity, 99)
+        existing.quantity = _cap(product, existing.quantity + payload.quantity, color)
         session.add(existing)
     else:
         session.add(
@@ -50,7 +75,7 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
                 product_id=payload.product_id,
                 variant_id=payload.variant_id,
                 color_variant_id=payload.color_variant_id,
-                quantity=payload.quantity,
+                quantity=_cap(product, payload.quantity, color),
             )
         )
     session.commit()
@@ -69,7 +94,12 @@ def update_item(
         if payload.quantity == 0:
             session.delete(item)
         else:
-            item.quantity = payload.quantity
+            product = session.get(Product, item.product_id)
+            item.quantity = (
+                _cap(product, payload.quantity, _color(session, item))
+                if product
+                else payload.quantity
+            )
             session.add(item)
     if payload.selected is not None:
         item.selected = payload.selected
