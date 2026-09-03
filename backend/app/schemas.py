@@ -173,6 +173,10 @@ class VariantOut(BaseModel):
     # hex swatches. None for sizes, and for a colour nobody photographed.
     image_url: str | None = None
     in_stock: bool
+    # How many of this colour are left, when they are counted apart. None means
+    # the shelf is only counted as a whole, and the product's own stock_left is
+    # the answer.
+    stock_left: int | None = None
 
 
 class SpecOut(BaseModel):

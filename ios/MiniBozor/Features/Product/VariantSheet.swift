@@ -24,6 +24,9 @@ final class VariantSheetModel {
     var colors: [VariantDTO] { product?.colors ?? [] }
     var selectedSize: VariantDTO? { sizes.first { $0.id == sizeId } }
     var selectedColor: VariantDTO? { colors.first { $0.id == colorId } }
+    /// How many of the thing actually chosen are left: the colour's share of
+    /// the shelf, or the whole shelf when the colours are not counted apart.
+    var shelfLeft: Int { selectedColor?.stockLeft ?? product?.stockLeft ?? 1 }
 
     /// A size has to be chosen when the product has any in stock.
     var ready: Bool { product != nil && (!sizes.contains { $0.inStock } || sizeId != nil) }
@@ -263,8 +266,9 @@ struct VariantSheet: View {
                         quantity: model.quantity,
                         minimum: 0,
                         // Where the shelf ends, as everywhere else the count
-                        // can be raised.
-                        maximum: Swift.max(model.product?.stockLeft ?? 1, 1),
+                        // can be raised — and it is the chosen colour's shelf,
+                        // since that is what this sheet is adding.
+                        maximum: Swift.max(model.shelfLeft, 1),
                         size: 48
                     ) { value in
                         Task { await model.setQuantity(value, using: cart) }

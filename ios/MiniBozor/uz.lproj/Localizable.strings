@@ -13,6 +13,7 @@
 "asosiy_qilish" = "Asosiy qilish";
 "aziz_toshmatov" = "AZIZ TOSHMATOV";
 "aziz_toshmatov_2" = "Aziz Toshmatov";
+"barcha_rasmlar" = "Barcha rasmlar";
 "barcha_tovarlar" = "Barcha tovarlar";
 "barchasi" = "Barchasi";
 "batafsil" = "Batafsil";
@@ -78,6 +79,7 @@
 "filtrlarni_yumshatib_yoki_boshqa_soz_bilan" = "Filtrlarni yumshatib yoki boshqa so'z bilan qidirib ko'ring.";
 "google" = "Google";
 "haftada_2_martadan_kop_emas" = "Haftada 2 martadan ko'p emas";
+"hali_qaytarish_arizasi_yubormagansiz" = "Hali qaytarish arizasi yubormagansiz";
 "hali_sharh_yoq_birinchi_boling" = "Hali sharh yo'q — birinchi bo'ling.";
 "hali_sharh_yozmagansiz" = "Hali sharh yozmagansiz";
 "hammasi" = "Hammasi";
@@ -100,6 +102,7 @@
 "joriy_pin_kod" = "Joriy PIN kod";
 "joylashuv" = "Joylashuv";
 "kafolat" = "Kafolat";
+"kam_qoldi" = "KAM QOLDI";
 "kanallar" = "Kanallar";
 "karta" = "Karta";
 "karta_egasi" = "Karta egasi";
@@ -148,6 +151,7 @@
 "mini_bozor_versiya_1_0" = "Mini Bozor · versiya 1.0";
 "mm_yy" = "MM/YY";
 "muddati_otgan" = "Muddati o'tgan";
+"n_dona_qoldi" = "%1$d dona qoldi";
 "n_km" = "%1$@ km";
 "n_yangi" = "%1$@ yangi";
 "naqd_pul" = "Naqd pul";
@@ -206,6 +210,7 @@
 "qaytarish" = "Qaytarish";
 "qaytarish_14_kun_ichida_qadoq_butun_bolsa" = "14 kun ichida, qadoq butun bo'lsa";
 "qaytarish_arizasi" = "Qaytarish arizasi";
+"qaytarishlarim" = "Qaytarishlarim";
 "qisqacha_yozib_qoldiring" = "Qisqacha yozib qoldiring…";
 "qollash" = "Qo'llash";
 "qongiroq_qilish" = "Qo'ng'iroq qilish";
@@ -228,6 +233,10 @@
 "region_toshkent" = "Toshkent";
 "region_toshkent_viloyati" = "Toshkent viloyati";
 "region_xorazm" = "Xorazm";
+"return_approved" = "QABUL QILINDI";
+"return_refunded" = "PUL QAYTARILDI";
+"return_rejected" = "RAD ETILDI";
+"return_submitted" = "YUBORILDI";
 "reyting" = "Reyting";
 "sana" = "Sana";
 "saqlash" = "Saqlash";
@@ -264,6 +273,7 @@
 "tasdiqlash" = "Tasdiqlash";
 "tasdiqlash_kodi" = "Tasdiqlash kodi";
 "tavsif" = "Tavsif";
+"tavsif_va_xususiyatlar" = "Tavsif va xususiyatlar";
 "tayyor" = "Tayyor";
 "tekshirilmoqda" = "TEKSHIRILMOQDA";
 "telefon" = "Telefon";
@@ -286,6 +296,7 @@
 "tovarlar_tez_orada_qoshiladi" = "Tovarlar tez orada qo'shiladi";
 "tovarni_nima_uchun_qaytarmoqchisiz" = "Tovarni nima uchun qaytarmoqchisiz?";
 "tozalash" = "Tozalash";
+"tugadi" = "TUGADI";
 "tugagan" = "Tugagan";
 "tugagan_buyurtma_yoq" = "Tugagan buyurtma yo'q";
 "tugilgan_sana" = "Tug'ilgan sana";
@@ -306,6 +317,7 @@
 "yangi_manzil_qoshish" = "Yangi manzil qo'shish";
 "yangi_pin_kod" = "Yangi PIN kod";
 "yaqin_punktlarni_korsatish" = "Yaqin punktlarni ko'rsatish";
+"yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin" = "Yetkazilgan buyurtmani 14 kun ichida qaytarish mumkin";
 "yetkazilgan_tovarlarga_sharh_qoldiring" = "Yetkazilgan tovarlarga sharh qoldiring — boshqalarga yordam beradi.";
 "yetkazish" = "Yetkazish";
 "yetkazish_holati" = "Yetkazish holati";
@@ -329,13 +341,3 @@
 "rating_words.3" = "Yaxshi";
 "rating_words.4" = "Juda yaxshi";
 "rating_words.5" = "Ajoyib";
-
-// Screen — Qaytarishlarim
-"qaytarishlarim" = "Qaytarishlarim";
-"hali_qaytarish_arizasi_yubormagansiz" = "Hali qaytarish arizasi yubormagansiz";
-"yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin" = "Yetkazilgan buyurtmani 14 kun ichida qaytarish mumkin";
-"return_submitted" = "YUBORILDI";
-"return_approved" = "QABUL QILINDI";
-"return_rejected" = "RAD ETILDI";
-"return_refunded" = "PUL QAYTARILDI";
-"n_dona_qoldi" = "%d dona qoldi";

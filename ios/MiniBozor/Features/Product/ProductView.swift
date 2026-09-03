@@ -103,8 +103,43 @@ struct ProductView: View {
     @State private var panelTop: CGFloat = .greatestFiniteMagnitude
     /// The photograph the full-screen view is showing, and where it grew from.
     @State private var viewer: ViewerTarget?
+    /// Which photograph the hero is showing. Hoisted out of the hero so it can
+    /// be one half of the colour choice — the two `onChange` handlers on the
+    /// page keep it and `model.selectedColorId` saying the same thing.
+    @State private var heroPage = 0
     /// True once the page has been asked to leave.
     @State private var leaving = false
+
+    /// The colour the page is currently about, or nil for a product with none.
+    ///
+    /// The photograph and the colour are one choice made two ways. A colour is
+    /// a photograph of the product in it, and most of those photographs are
+    /// also pages of the hero — so swiping to the black one is choosing black,
+    /// and tapping the black swatch turns the page to it.
+    private var selectedColour: VariantDTO? {
+        let colours = model.product?.colors ?? []
+        return colours.first { $0.id == model.selectedColorId } ?? colours.first
+    }
+
+    /// Which hero page each colour is photographed on.
+    private var pageOfColour: [Int: Int] {
+        let images = model.product?.images ?? []
+        return (model.product?.colors ?? []).reduce(into: [:]) { out, colour in
+            guard let url = colour.imageUrl, let page = images.firstIndex(of: url) else { return }
+            out[colour.id] = page
+        }
+    }
+
+    /// What the page is actually about: the colour on show, or the product
+    /// itself when it has no colours to speak of. A colour the shop does not
+    /// count apart falls back to the whole shelf.
+    private var shelfLeft: Int {
+        selectedColour?.stockLeft ?? model.product?.stockLeft ?? 0
+    }
+
+    private var shelfInStock: Bool {
+        (model.product?.inStock ?? false) && (selectedColour?.inStock ?? true)
+    }
 
     /// The photograph a tap opened, and the frame it was sitting in.
     private struct ViewerTarget: Identifiable {
@@ -165,6 +200,18 @@ struct ProductView: View {
                 }
             }
         }
+        // Both directions, so whichever way the choice is made the page agrees
+        // with itself and the count under the picture is the count of what is
+        // in the picture.
+        .onChange(of: heroPage) { _, page in
+            guard let id = pageOfColour.first(where: { $0.value == page })?.key,
+                  id != model.selectedColorId else { return }
+            model.selectedColorId = id
+        }
+        .onChange(of: model.selectedColorId) { _, id in
+            guard let id, let page = pageOfColour[id], page != heroPage else { return }
+            withAnimation(MBMotion.ease) { heroPage = page }
+        }
         .task { await model.load(id: productId) }
     }
 
@@ -212,7 +259,7 @@ struct ProductView: View {
                 // price it would vanish exactly when the customer is choosing
                 // how many to take, which is the moment it matters most.
                 HStack {
-                    StockLine(stockLeft: product.stockLeft)
+                    StockLine(stockLeft: shelfLeft)
                     Spacer()
                 }
                 HStack(spacing: 12) {
@@ -223,7 +270,7 @@ struct ProductView: View {
                         MBQuantityStepper(
                             quantity: line.quantity,
                             minimum: 0,
-                            maximum: Swift.max(product.stockLeft, 1),
+                            maximum: Swift.max(shelfLeft, 1),
                             size: 44
                         ) { quantity in
                             Task { await cart.setQuantity(itemId: line.id, quantity: quantity) }
@@ -243,8 +290,8 @@ struct ProductView: View {
                         )
                         .fixedSize(horizontal: true, vertical: false)
                         MBPrimaryButton(
-                            product.inStock ? L("savatga") : L("mavjud_emas"),
-                            enabled: product.inStock,
+                            shelfInStock ? L("savatga") : L("mavjud_emas"),
+                            enabled: shelfInStock,
                             loading: model.adding
                         ) {
                             Task { toast = await model.addToCart(using: cart) }
@@ -270,7 +317,8 @@ struct ProductView: View {
                     lag: lag,
                     onOpen: { page, frame in
                         viewer = ViewerTarget(page: page, origin: frame)
-                    }
+                    },
+                    page: $heroPage
                 )
                 .background {
                     GeometryReader { geometry in
@@ -374,16 +422,20 @@ struct ProductView: View {
             RatingPanel(
                 rating: model.summary?.rating ?? product.rating,
                 reviewsCount: model.summary?.total ?? product.reviewsCount,
-                soldCount: product.sold,
                 photos: model.summary?.photoStrip ?? [],
                 photosTotal: model.summary?.photoCount ?? 0
             ) {
                 router.push(.reviews(productId: product.id))
             }
-            if product.sold > 0 {
-                Spacer().frame(height: 12)
-                SoldLine(soldCount: product.sold)
-            }
+            // What is on the shelf, right under what other people made of it:
+            // the evidence someone weighs between the price above and the
+            // choice below. One line, because that is all it has to say.
+            Spacer().frame(height: 10)
+            ShelfLine(
+                stockLeft: shelfLeft,
+                soldCount: product.sold,
+                inStock: shelfInStock
+            )
             if product.isOriginal {
                 Spacer().frame(height: 12)
                 MBStatusPill(

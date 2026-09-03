@@ -383,14 +383,6 @@
     <!-- Product page: rating panel, colour picker, description -->
     <string name="tavsif_va_xususiyatlar">Tavsif va xususiyatlar</string>
     <string name="barcha_rasmlar">Barcha rasmlar</string>
-    <plurals name="n_orders">
-        <item quantity="one">%1$s ta buyurtma</item>
-        <item quantity="other">%1$s ta buyurtma</item>
-    </plurals>
-    <plurals name="n_buyers">
-        <item quantity="one">%1$s kishi sotib oldi</item>
-        <item quantity="other">%1$s kishi sotib oldi</item>
-    </plurals>
     <string name="qaytarishlarim">Qaytarishlarim</string>
     <string name="hali_qaytarish_arizasi_yubormagansiz">Hali qaytarish arizasi yubormagansiz</string>
     <string name="yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin">Yetkazilgan buyurtmani 14 kun ichida qaytarish mumkin</string>
@@ -399,4 +391,11 @@
     <string name="return_rejected">RAD ETILDI</string>
     <string name="return_refunded">PUL QAYTARILDI</string>
     <string name="n_dona_qoldi">%1$d dona qoldi</string>
+    <!-- Product page: what is on the shelf -->
+    <string name="kam_qoldi">KAM QOLDI</string>
+    <string name="tugadi">TUGADI</string>
+    <plurals name="n_sotilgan">
+        <item quantity="one">%1$s dona sotilgan</item>
+        <item quantity="other">%1$s dona sotilgan</item>
+    </plurals>
 </resources>

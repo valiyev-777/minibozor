@@ -59,8 +59,10 @@ struct ProductHeroView: View {
     /// Tapping the photograph opens it full screen: the page being shown, and
     /// the frame it is sitting in, so the full-screen view can grow out of it.
     let onOpen: (Int, CGRect) -> Void
+    /// Hoisted, so the page above shares the photograph being shown: swiping
+    /// the hero is how a colour gets chosen.
+    @Binding var page: Int
 
-    @State private var page = 0
     /// Where the live photograph sits on the screen, for the full-screen view to
     /// grow out of.
     @State private var frame: CGRect = .zero

@@ -343,6 +343,58 @@ def test_the_last_one_sold_goes_out_of_stock(client: TestClient, auth: dict[str,
     assert rejected.status_code == 409
 
 
+def test_a_colour_is_counted_apart_from_the_shelf(client: TestClient) -> None:
+    """The page shows one colour at a time and used to answer "how many" with
+    the sum of every colour — so a shirt with two left in black claimed
+    twenty-five while the picture on screen was of the black one."""
+    product = client.get(f"{API}/products/1").json()
+    colors = [v for v in product["variants"] if v["kind"] == "color"]
+    assert len(colors) > 1, "this product is seeded with more than one colour"
+
+    # Each colour carries its own count, and the halves make up the whole.
+    assert all(c["stock_left"] is not None for c in colors)
+    assert sum(c["stock_left"] for c in colors) == product["stock_left"]
+    # A size is not counted apart — the shelf answers for it.
+    sizes = [v for v in product["variants"] if v["kind"] == "size"]
+    assert all(v["stock_left"] is None for v in sizes)
+
+
+def test_buying_a_colour_takes_it_off_that_colour(
+    client: TestClient, auth: dict[str, str]
+) -> None:
+    """Only the product's own count was coming down, so a colour could be
+    bought out and go on offering itself at the top of the page."""
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(f"{API}/products/1").json()
+    colors = [v for v in product["variants"] if v["kind"] == "color"]
+    chosen, other = colors[0], colors[1]
+    quantity = 2
+
+    added = client.post(
+        f"{API}/cart/items",
+        json={
+            "product_id": product["id"],
+            "color_variant_id": chosen["id"],
+            "quantity": quantity,
+        },
+        headers=auth,
+    ).json()
+    # The stepper's ceiling is the colour's shelf, not the product's.
+    assert added["items"][0]["stock_left"] == chosen["stock_left"]
+
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    assert client.post(
+        f"{API}/orders", json={"address_id": address["id"]}, headers=auth
+    ).status_code == 201
+
+    after = client.get(f"{API}/products/{product['id']}").json()
+    after_colors = {v["id"]: v for v in after["variants"] if v["kind"] == "color"}
+    assert after_colors[chosen["id"]]["stock_left"] == chosen["stock_left"] - quantity
+    # The colour nobody bought is untouched.
+    assert after_colors[other["id"]]["stock_left"] == other["stock_left"]
+    assert after["stock_left"] == product["stock_left"] - quantity
+
+
 # --------------------------------------------------------------------------- 25-29
 
 

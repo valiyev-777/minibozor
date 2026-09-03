@@ -361,14 +361,6 @@
     <!-- Product page: rating panel, colour picker, description -->
     <string name="tavsif_va_xususiyatlar">Description and specs</string>
     <string name="barcha_rasmlar">All photos</string>
-    <plurals name="n_orders">
-        <item quantity="one">%1$s order</item>
-        <item quantity="other">%1$s orders</item>
-    </plurals>
-    <plurals name="n_buyers">
-        <item quantity="one">%1$s person bought this</item>
-        <item quantity="other">%1$s people bought this</item>
-    </plurals>
     <string name="qaytarishlarim">My returns</string>
     <string name="hali_qaytarish_arizasi_yubormagansiz">You have not requested a return yet</string>
     <string name="yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin">A delivered order can be returned within 14 days</string>
@@ -377,4 +369,11 @@
     <string name="return_rejected">REJECTED</string>
     <string name="return_refunded">REFUNDED</string>
     <string name="n_dona_qoldi">%1$d left</string>
+    <!-- Product page: what is on the shelf -->
+    <string name="kam_qoldi">ONLY A FEW LEFT</string>
+    <string name="tugadi">SOLD OUT</string>
+    <plurals name="n_sotilgan">
+        <item quantity="one">%1$s sold</item>
+        <item quantity="other">%1$s sold</item>
+    </plurals>
 </resources>

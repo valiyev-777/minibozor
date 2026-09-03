@@ -664,6 +664,30 @@ def _seed_brands(session: Session) -> dict[str, Brand]:
 MEDIA_DIR = Path(__file__).resolve().parent.parent / "media"
 
 
+def _split_stock(total: int, parts: int) -> list[int]:
+    """
+    The shelf, divided between the colours standing on it.
+
+    A product is stocked as a whole and photographed one colour at a time, so
+    the catalogue knows the total and the page has to answer for a colour. The
+    split is by descending weight rather than evenly: the first colour is the
+    one photographed first and the one that sells, and four blue against two
+    black reads like a shelf while twelve of each reads like arithmetic.
+
+    Deterministic, and the parts always sum back to the total — the page shows
+    a share of a number the rest of the app still agrees with.
+    """
+    if parts <= 0:
+        return []
+    weights = list(range(parts, 0, -1))
+    scale = sum(weights)
+    out = [total * w // scale for w in weights]
+    # Whatever the flooring dropped goes back to the first colours, in order.
+    for i in range(total - sum(out)):
+        out[i % parts] += 1
+    return out
+
+
 def _image_exists(path: str) -> bool:
     """Whether the export actually shipped this file.
 
@@ -715,6 +739,7 @@ def _seed_products(
                 )
             )
         colors = spec.get("colors", [])
+        color_stock = _split_stock(product.stock_left, len(colors))
         for i, color in enumerate(colors):
             # ("Qora", "#0E0F12") or ("Qora", "#0E0F12", "products/af1-black.png").
             label, value, *rest = color
@@ -725,10 +750,12 @@ def _seed_products(
                 image = next(iter(spec.get("images", [])), None)
             if image and not _image_exists(image):
                 image = None
+            left = color_stock[i]
             session.add(
                 ProductVariant(
                     product_id=product.id, kind=VariantKind.COLOR,
                     label=label, value=value, image_url=image, sort=i,
+                    stock_left=left, in_stock=left > 0,
                 )
             )
         for i, (key, value) in enumerate(spec.get("specs", [])):

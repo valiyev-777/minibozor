@@ -11,7 +11,6 @@ import SwiftUI
 struct RatingPanel: View {
     let rating: Double
     let reviewsCount: Int
-    let soldCount: Int
     var photos: [String] = []
     var photosTotal: Int = 0
     let action: () -> Void
@@ -26,22 +25,14 @@ struct RatingPanel: View {
                             .foregroundStyle(MB.color.ink)
                         MBFractionalStars(rating: rating, size: 17)
                     }
-                    HStack(spacing: 5) {
-                        Text(LPlural("n_reviews", count: reviewsCount, "\(reviewsCount)"))
-                            .mbFont(MB.type.caption)
-                            .foregroundStyle(MB.color.textSecondary)
-                            .lineLimit(1)
-                        if soldCount > 0 {
-                            Text("·")
-                                .mbFont(MB.type.caption)
-                                .foregroundStyle(MB.color.hairlineStrong)
-                            Text(LPlural("n_orders", count: soldCount,
-                                         Format.grouped(soldCount)))
-                                .mbFont(MB.type.caption)
-                                .foregroundStyle(MB.color.textSecondary)
-                                .lineLimit(1)
-                        }
-                    }
+                    // Reviews only. The order count used to sit here beside
+                    // them, and the line below now prints what has sold as one
+                    // half of its own answer — the same number twice in forty
+                    // vertical points was one too many.
+                    Text(LPlural("n_reviews", count: reviewsCount, "\(reviewsCount)"))
+                        .mbFont(MB.type.caption)
+                        .foregroundStyle(MB.color.textSecondary)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 if photos.isEmpty {
@@ -62,18 +53,63 @@ struct RatingPanel: View {
     }
 }
 
-/// "1 240 kishi sotib oldi" — the quiet nudge under the rating.
-struct SoldLine: View {
+/// Under this many left, the count stops being a fact and becomes a reason.
+private let lowStock = 5
+
+/// How many are left and how many have gone, in one line under the rating.
+///
+/// The same fact the tile in the grid prints, at the same weight and in the same
+/// words — a caption with the box beside it, quiet by default and red once the
+/// number has something to say. What it says fits on a line, so it takes a line.
+///
+/// The pill only appears when there is a reason for it. A product that is simply
+/// in stock says so by not saying anything.
+///
+/// `stockLeft` and `inStock` are about the colour on show above, not about the
+/// product as a whole — the photograph is of one colour, and the count under it
+/// has to be the count of the thing being looked at.
+struct ShelfLine: View {
+    let stockLeft: Int
     let soldCount: Int
+    let inStock: Bool
+
+    private var gone: Bool { !inStock || stockLeft <= 0 }
+    private var low: Bool { !gone && stockLeft <= lowStock }
+    private var urgent: Bool { gone || low }
 
     var body: some View {
-        HStack(spacing: 7) {
-            MBIcon("cart", size: 16, tint: MB.color.accent)
-            Text(LPlural("n_buyers", count: soldCount, Format.grouped(soldCount)))
-                .mbFont(MB.type.caption)
-                .foregroundStyle(MB.color.textSecondary)
-                .lineLimit(1)
+        HStack(spacing: 6) {
+            MBIcon("box", size: 14, tint: urgent ? MB.color.danger : MB.color.icon)
+            // Nothing to count when there are none: the pill on the right is
+            // the whole of what a sold-out shelf has to say, and "0 dona qoldi"
+            // beside it would be the same sentence twice.
+            if !gone {
+                Text(String(format: L("n_dona_qoldi"), stockLeft))
+                    .mbFont(MB.type.caption)
+                    .foregroundStyle(low ? MB.color.danger : MB.color.inkMuted)
+                    .lineLimit(1)
+            }
+            if soldCount > 0 {
+                if !gone {
+                    Text("·")
+                        .mbFont(MB.type.caption)
+                        .foregroundStyle(MB.color.hairlineStrong)
+                }
+                Text(LPlural("n_sotilgan", count: soldCount, Format.grouped(soldCount)))
+                    .mbFont(MB.type.caption)
+                    .foregroundStyle(MB.color.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if urgent {
+                MBStatusPill(
+                    L(gone ? "tugadi" : "kam_qoldi"),
+                    background: MB.color.dangerBg,
+                    contentColor: MB.color.danger
+                )
+            }
         }
+        .frame(maxWidth: .infinity)
     }
 }
 

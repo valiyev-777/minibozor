@@ -66,7 +66,7 @@
 			<string>%2$@ sharh</string>
 		</dict>
 	</dict>
-	<key>n_orders</key>
+	<key>n_sotilgan</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
 		<string>%1$#@count@</string>
@@ -77,25 +77,9 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>d</string>
 			<key>one</key>
-			<string>%2$@ ta buyurtma</string>
+			<string>%2$@ dona sotilgan</string>
 			<key>other</key>
-			<string>%2$@ ta buyurtma</string>
-		</dict>
-	</dict>
-	<key>n_buyers</key>
-	<dict>
-		<key>NSStringLocalizedFormatKey</key>
-		<string>%1$#@count@</string>
-		<key>count</key>
-		<dict>
-			<key>NSStringFormatSpecTypeKey</key>
-			<string>NSStringPluralRuleType</string>
-			<key>NSStringFormatValueTypeKey</key>
-			<string>d</string>
-			<key>one</key>
-			<string>%2$@ kishi sotib oldi</string>
-			<key>other</key>
-			<string>%2$@ kishi sotib oldi</string>
+			<string>%2$@ dona sotilgan</string>
 		</dict>
 	</dict>
 </dict>

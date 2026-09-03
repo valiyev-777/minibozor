@@ -151,6 +151,14 @@ struct VariantDTO: Decodable, Identifiable, Hashable {
     /// failing the whole product page over one missing key.
     let imageUrl: String?
     let inStock: Bool
+    /// How many of this colour are on the shelf.
+    ///
+    /// The product's own count is the whole shelf; this is the share of it
+    /// wearing one colour. The page asks the colour rather than the product,
+    /// because the photograph above is of one colour and the count under it has
+    /// to be about the thing being looked at. Nil on a size, and on a colour the
+    /// shop does not count apart — then the product's own count answers.
+    let stockLeft: Int?
 }
 
 struct SpecDTO: Decodable, Hashable {

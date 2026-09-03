@@ -13,6 +13,7 @@
 "asosiy_qilish" = "Сделать основным";
 "aziz_toshmatov" = "AZIZ TOSHMATOV";
 "aziz_toshmatov_2" = "Aziz Toshmatov";
+"barcha_rasmlar" = "Все фото";
 "barcha_tovarlar" = "Все товары";
 "barchasi" = "Все";
 "batafsil" = "Подробнее";
@@ -78,6 +79,7 @@
 "filtrlarni_yumshatib_yoki_boshqa_soz_bilan" = "Смягчите фильтры или попробуйте другой запрос.";
 "google" = "Google";
 "haftada_2_martadan_kop_emas" = "Не чаще 2 раз в неделю";
+"hali_qaytarish_arizasi_yubormagansiz" = "Вы ещё не отправляли заявку на возврат";
 "hali_sharh_yoq_birinchi_boling" = "Отзывов пока нет — будьте первым.";
 "hali_sharh_yozmagansiz" = "Вы ещё не оставляли отзывов";
 "hammasi" = "Все";
@@ -100,6 +102,7 @@
 "joriy_pin_kod" = "Текущий PIN-код";
 "joylashuv" = "Геолокация";
 "kafolat" = "Гарантия";
+"kam_qoldi" = "ОСТАЛОСЬ МАЛО";
 "kanallar" = "Каналы";
 "karta" = "Карта";
 "karta_egasi" = "Держатель карты";
@@ -148,6 +151,7 @@
 "mini_bozor_versiya_1_0" = "Mini Bozor · версия 1.0";
 "mm_yy" = "MM/YY";
 "muddati_otgan" = "Просрочена";
+"n_dona_qoldi" = "Осталось %1$d шт.";
 "n_km" = "%1$@ км";
 "n_yangi" = "%1$@ новых";
 "naqd_pul" = "Наличные";
@@ -206,6 +210,7 @@
 "qaytarish" = "Возврат";
 "qaytarish_14_kun_ichida_qadoq_butun_bolsa" = "В течение 14 дней, если упаковка цела";
 "qaytarish_arizasi" = "Заявка на возврат";
+"qaytarishlarim" = "Мои возвраты";
 "qisqacha_yozib_qoldiring" = "Опишите кратко…";
 "qollash" = "Применить";
 "qongiroq_qilish" = "Позвонить";
@@ -228,6 +233,10 @@
 "region_toshkent" = "Ташкент";
 "region_toshkent_viloyati" = "Ташкентская область";
 "region_xorazm" = "Хорезм";
+"return_approved" = "ОДОБРЕНО";
+"return_refunded" = "ДЕНЬГИ ВОЗВРАЩЕНЫ";
+"return_rejected" = "ОТКЛОНЕНО";
+"return_submitted" = "ОТПРАВЛЕНО";
 "reyting" = "Рейтинг";
 "sana" = "Дата";
 "saqlash" = "Сохранить";
@@ -264,6 +273,7 @@
 "tasdiqlash" = "Подтвердить";
 "tasdiqlash_kodi" = "Код подтверждения";
 "tavsif" = "Описание";
+"tavsif_va_xususiyatlar" = "Описание и характеристики";
 "tayyor" = "Готово";
 "tekshirilmoqda" = "НА ПРОВЕРКЕ";
 "telefon" = "Телефон";
@@ -286,6 +296,7 @@
 "tovarlar_tez_orada_qoshiladi" = "Товары появятся совсем скоро";
 "tovarni_nima_uchun_qaytarmoqchisiz" = "Почему вы возвращаете товар?";
 "tozalash" = "Очистить";
+"tugadi" = "НЕТ В НАЛИЧИИ";
 "tugagan" = "Завершённые";
 "tugagan_buyurtma_yoq" = "Завершённых заказов нет";
 "tugilgan_sana" = "Дата рождения";
@@ -306,6 +317,7 @@
 "yangi_manzil_qoshish" = "Добавить новый адрес";
 "yangi_pin_kod" = "Новый PIN-код";
 "yaqin_punktlarni_korsatish" = "Показать ближайшие пункты";
+"yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin" = "Доставленный заказ можно вернуть в течение 14 дней";
 "yetkazilgan_tovarlarga_sharh_qoldiring" = "Оставьте отзыв о доставленных товарах — это поможет другим.";
 "yetkazish" = "Доставка";
 "yetkazish_holati" = "Статус доставки";
@@ -329,13 +341,3 @@
 "rating_words.3" = "Хорошо";
 "rating_words.4" = "Очень хорошо";
 "rating_words.5" = "Отлично";
-
-// Screen — Qaytarishlarim
-"qaytarishlarim" = "Мои возвраты";
-"hali_qaytarish_arizasi_yubormagansiz" = "Вы ещё не отправляли заявку на возврат";
-"yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin" = "Доставленный заказ можно вернуть в течение 14 дней";
-"return_submitted" = "ОТПРАВЛЕНО";
-"return_approved" = "ОДОБРЕНО";
-"return_rejected" = "ОТКЛОНЕНО";
-"return_refunded" = "ДЕНЬГИ ВОЗВРАЩЕНЫ";
-"n_dona_qoldi" = "Осталось %d шт.";

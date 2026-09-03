@@ -371,18 +371,6 @@
     <!-- Product page: rating panel, colour picker, description -->
     <string name="tavsif_va_xususiyatlar">Описание и характеристики</string>
     <string name="barcha_rasmlar">Все фото</string>
-    <plurals name="n_orders">
-        <item quantity="one">%1$s заказ</item>
-        <item quantity="few">%1$s заказа</item>
-        <item quantity="many">%1$s заказов</item>
-        <item quantity="other">%1$s заказа</item>
-    </plurals>
-    <plurals name="n_buyers">
-        <item quantity="one">%1$s человек купил</item>
-        <item quantity="few">%1$s человека купили</item>
-        <item quantity="many">%1$s человек купили</item>
-        <item quantity="other">%1$s человека купили</item>
-    </plurals>
     <string name="qaytarishlarim">Мои возвраты</string>
     <string name="hali_qaytarish_arizasi_yubormagansiz">Вы ещё не отправляли заявку на возврат</string>
     <string name="yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin">Доставленный заказ можно вернуть в течение 14 дней</string>
@@ -391,4 +379,13 @@
     <string name="return_rejected">ОТКЛОНЕНО</string>
     <string name="return_refunded">ДЕНЬГИ ВОЗВРАЩЕНЫ</string>
     <string name="n_dona_qoldi">Осталось %1$d шт.</string>
+    <!-- Product page: what is on the shelf -->
+    <string name="kam_qoldi">ОСТАЛОСЬ МАЛО</string>
+    <string name="tugadi">НЕТ В НАЛИЧИИ</string>
+    <plurals name="n_sotilgan">
+        <item quantity="one">%1$s шт. продано</item>
+        <item quantity="few">%1$s шт. продано</item>
+        <item quantity="many">%1$s шт. продано</item>
+        <item quantity="other">%1$s шт. продано</item>
+    </plurals>
 </resources>

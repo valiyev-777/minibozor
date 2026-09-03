@@ -217,6 +217,12 @@ class ProductVariant(SQLModel, table=True):
     # it empty, and a colour without a photo falls back to its hex.
     image_url: str | None = None
     in_stock: bool = True
+    # How many of *this* colour are on the shelf, when the colours are counted
+    # apart. The product's own stock_left is the whole shelf; this is the share
+    # of it wearing one colour, so picking a colour on the page answers "how
+    # many" about the thing actually being looked at rather than about the
+    # sum of every colour. None on a size, and on a colour nobody counted.
+    stock_left: int | None = None
     sort: int = 0
 
 
