@@ -66,7 +66,8 @@ def home(
 
 def _section_products(session: SessionDep, section: HomeSection) -> list[Product]:
     limit = {"deals": 2, "grid": 4, "rail": 8}.get(section.layout, 8)
-    stmt = select(Product)
+    # The home screen is the shop's own window. Nothing sold out goes in it.
+    stmt = select(Product).where(Product.in_stock.is_(True))
 
     if section.category_slug:
         category = session.exec(

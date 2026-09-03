@@ -299,6 +299,8 @@
 "tugadi" = "TUGADI";
 "tugagan" = "Tugagan";
 "tugagan_buyurtma_yoq" = "Tugagan buyurtma yo'q";
+"tugaganlar_odatda_royxatda_korinmaydi" = "Sotuvda yo'q tovarlar odatda ro'yxatda ko'rinmaydi";
+"tugaganlarni_korsatish" = "Tugaganlarni ko'rsatish";
 "tugilgan_sana" = "Tug'ilgan sana";
 "tugmani_bosish_orqali_ommaviy_oferta" = "Tugmani bosish orqali ommaviy oferta shartlariga rozilik bildirasiz.";
 "tungi_rejim" = "Tungi rejim";

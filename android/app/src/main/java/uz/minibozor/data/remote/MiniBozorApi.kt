@@ -66,6 +66,7 @@ interface MiniBozorApi {
         @Query("free_delivery") freeDelivery: Boolean? = null,
         @Query("discounted") discounted: Boolean? = null,
         @Query("is_original") isOriginal: Boolean? = null,
+        @Query("show_sold_out") showSoldOut: Boolean? = null,
         @Query("sort") sort: String = "popular",
         @Query("page") page: Int = 1,
         @Query("page_size") pageSize: Int = 20,

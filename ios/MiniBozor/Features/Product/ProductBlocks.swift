@@ -249,6 +249,18 @@ struct SizeOptionsRow: View {
                 }
                 .padding(.vertical, 1)
             }
+            // How many of the size in hand, under the row rather than on the
+            // chips. A 38-point chip holds two digits and nothing else, and a
+            // count on every one of eight of them is a wall of numbers to read
+            // before choosing — this answers about the one actually chosen. A
+            // size with none left is struck through above and says nothing here.
+            if let left = selected?.stockLeft, left > 0 {
+                Spacer().frame(height: 9)
+                Text(String(format: L("n_dona_qoldi"), left))
+                    .mbFont(MB.type.caption)
+                    .foregroundStyle(left <= lowStock ? MB.color.danger : MB.color.textTertiary)
+                    .lineLimit(1)
+            }
         }
     }
 }

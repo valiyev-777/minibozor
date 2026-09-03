@@ -1,6 +1,9 @@
 import Observation
 import SwiftUI
 
+/// Under this many left, the count stops being a fact and becomes a reason.
+private let sheetLowStock = 5
+
 /// Backs the picker a tile opens instead of adding straight to the cart.
 ///
 /// The tile only knows the card fields, so the variants are fetched when the
@@ -234,17 +237,28 @@ struct VariantSheet: View {
     }
 
     private var sizeRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(model.sizes) { variant in
-                    MBSizeChip(
-                        variant.label,
-                        selected: variant.id == model.sizeId,
-                        enabled: variant.inStock
-                    ) {
-                        model.sizeId = variant.id
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(model.sizes) { variant in
+                        MBSizeChip(
+                            variant.label,
+                            selected: variant.id == model.sizeId,
+                            enabled: variant.inStock
+                        ) {
+                            model.sizeId = variant.id
+                        }
                     }
                 }
+            }
+            // The same note the product page puts under its size row: how many
+            // of the one in hand.
+            if let left = model.selectedSize?.stockLeft, left > 0 {
+                Spacer().frame(height: 9)
+                Text(String(format: L("n_dona_qoldi"), left))
+                    .mbFont(MB.type.caption)
+                    .foregroundStyle(left <= sheetLowStock ? MB.color.danger : MB.color.textTertiary)
+                    .lineLimit(1)
             }
         }
     }

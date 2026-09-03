@@ -11,6 +11,14 @@ struct ProductQuery: Equatable {
     var maxPrice: Int?
     var minRating: Double?
     var flags: [String: Bool] = [:]
+    /// Whether to list what cannot be bought.
+    ///
+    /// Off by default — a shelf shows what is for sale, and a sold-out product
+    /// behind its veil was taking a slot in every grid from something that
+    /// could actually be bought. Its own property rather than one of `flags`,
+    /// because it is a choice about what the listing shows rather than a
+    /// property of the products in it.
+    var showSoldOut = false
     var sort: String = "popular"
 
     /// Drives the "N ta filtr" badge on the listing toolbar.
@@ -20,6 +28,7 @@ struct ProductQuery: Equatable {
             + flags.values.filter { $0 }.count
             + ((minPrice != nil || maxPrice != nil) ? 1 : 0)
             + (minRating != nil ? 1 : 0)
+            + (showSoldOut ? 1 : 0)
     }
 
     mutating func toggleBrand(_ slug: String) {
@@ -53,6 +62,9 @@ struct ProductQuery: Equatable {
         for (key, value) in flags where value {
             items.append(URLQueryItem(name: key, value: "true"))
         }
+        // Only ever sent when it is on: the server leaves them out by default,
+        // and a `false` on every request is noise.
+        if showSoldOut { items.append(URLQueryItem(name: "show_sold_out", value: "true")) }
         return items
     }
 }

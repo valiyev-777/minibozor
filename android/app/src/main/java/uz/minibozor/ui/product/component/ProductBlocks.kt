@@ -320,5 +320,21 @@ fun SizePicker(
                 )
             }
         }
+        // How many of the size in hand, under the row rather than on the chips.
+        // A 38-point chip holds two digits and nothing else, and a count on
+        // every one of eight of them is a wall of numbers to read before
+        // choosing — this answers about the one actually chosen, which is the
+        // one the question is being asked about. A size with none left is
+        // struck through in the row above and says nothing here.
+        val left = selected?.stockLeft
+        if (left != null && left > 0) {
+            Spacer(Modifier.height(9.dp))
+            MbText(
+                stringResource(R.string.n_dona_qoldi, left),
+                MbTheme.type.caption,
+                if (left <= LowStock) MbTheme.colors.danger else MbTheme.colors.textTertiary,
+                maxLines = 1,
+            )
+        }
     }
 }

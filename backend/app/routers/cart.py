@@ -12,7 +12,12 @@ from app.models import CartItem, Product, ProductVariant
 router = APIRouter(prefix="/cart", tags=["cart"])
 
 
-def _cap(product: Product, quantity: int, color: ProductVariant | None = None) -> int:
+def _cap(
+    product: Product,
+    quantity: int,
+    color: ProductVariant | None = None,
+    size: ProductVariant | None = None,
+) -> int:
     """How many of this the basket is allowed to hold.
 
     A backstop rather than the way the customer finds out: the stepper is given
@@ -21,15 +26,20 @@ def _cap(product: Product, quantity: int, color: ProductVariant | None = None) -
     of something there were three of, and the shortfall surfaced at checkout or
     not at all.
 
-    The colour, when one was chosen, is the shelf that counts: a basket holding
-    six of a colour there are two of is the same shortfall one level down.
+    The variants chosen are the shelf that counts: a basket holding six of a
+    colour there are two of is the same shortfall one level down, and the same
+    goes for a size.
     """
-    left = sv.shelf_left(product, color)
+    left = sv.shelf_left(product, color, size)
     return max(1, min(quantity, left)) if left else 1
 
 
-def _color(session: Session, item: CartItem) -> ProductVariant | None:
-    return session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None
+def _chosen(session: Session, item: CartItem) -> tuple[ProductVariant | None, ProductVariant | None]:
+    """The colour and the size a cart line was added for."""
+    return (
+        session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None,
+        session.get(ProductVariant, item.variant_id) if item.variant_id else None,
+    )
 
 
 @router.get("", response_model=s.CartOut, summary="Screens 17, 18 — cart")
@@ -45,16 +55,19 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
     if not product.in_stock:
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock"))
     color: ProductVariant | None = None
+    size: ProductVariant | None = None
     for variant_id in (payload.variant_id, payload.color_variant_id):
         if variant_id is None:
             continue
         variant = session.get(ProductVariant, variant_id)
         if variant is None or variant.product_id != product.id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("variant_invalid"))
+        if not variant.in_stock:
+            raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock"))
         if variant_id == payload.color_variant_id:
             color = variant
-    if color is not None and not color.in_stock:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock"))
+        else:
+            size = variant
 
     existing = session.exec(
         select(CartItem).where(
@@ -66,7 +79,7 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
     ).first()
 
     if existing:
-        existing.quantity = _cap(product, existing.quantity + payload.quantity, color)
+        existing.quantity = _cap(product, existing.quantity + payload.quantity, color, size)
         session.add(existing)
     else:
         session.add(
@@ -75,7 +88,7 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
                 product_id=payload.product_id,
                 variant_id=payload.variant_id,
                 color_variant_id=payload.color_variant_id,
-                quantity=_cap(product, payload.quantity, color),
+                quantity=_cap(product, payload.quantity, color, size),
             )
         )
     session.commit()
@@ -96,7 +109,7 @@ def update_item(
         else:
             product = session.get(Product, item.product_id)
             item.quantity = (
-                _cap(product, payload.quantity, _color(session, item))
+                _cap(product, payload.quantity, *_chosen(session, item))
                 if product
                 else payload.quantity
             )

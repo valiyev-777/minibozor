@@ -141,21 +141,27 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
             if product.stock_left == 0:
                 product.in_stock = False
             session.add(product)
-            # And the same one level down. A colour is counted apart from the
-            # shelf it stands on, so buying two blue has to come off the blue
-            # as well as off the total — otherwise the page keeps offering a
-            # colour that has gone while the product as a whole looks fine.
+            # And the same one level down, for both variants. A colour and a
+            # size are each counted apart from the shelf they stand on, so
+            # buying two blue 42s has to come off the blue and off the 42 as
+            # well as off the total — otherwise the page keeps offering a
+            # colour or a size that has gone while the product looks fine.
             cart_item = session.get(CartItem, item.id)
-            color = (
-                session.get(ProductVariant, cart_item.color_variant_id)
-                if cart_item is not None and cart_item.color_variant_id
-                else None
+            chosen = (
+                (cart_item.color_variant_id, cart_item.variant_id)
+                if cart_item is not None
+                else (None, None)
             )
-            if color is not None and color.stock_left is not None:
-                color.stock_left = max(0, color.stock_left - item.quantity)
-                if color.stock_left == 0:
-                    color.in_stock = False
-                session.add(color)
+            for variant_id in chosen:
+                if variant_id is None:
+                    continue
+                variant = session.get(ProductVariant, variant_id)
+                if variant is None or variant.stock_left is None:
+                    continue
+                variant.stock_left = max(0, variant.stock_left - item.quantity)
+                if variant.stock_left == 0:
+                    variant.in_stock = False
+                session.add(variant)
 
     sv.seed_order_events(session, order)
 

@@ -335,17 +335,23 @@ def cart_items(session: Session, user: User) -> list[CartItem]:
     ).all()
 
 
-def shelf_left(product: Product, color: ProductVariant | None) -> int:
+def shelf_left(
+    product: Product,
+    color: ProductVariant | None,
+    size: ProductVariant | None = None,
+) -> int:
     """
     How many of the thing actually chosen are left.
 
-    A cart line is for one colour, not for the product, so the stepper's ceiling
-    and the page's count both have to be that colour's share of the shelf. Falls
-    back to the whole shelf when the colours are not counted apart.
+    A cart line is for one colour in one size, not for the product, so the
+    stepper's ceiling and the page's count are the smallest shelf the choice
+    stands on. Colours and sizes are counted apart from the same total rather
+    than as a grid, so the honest answer for a pair of them is whichever is
+    scarcer — never more than either. Falls back to the whole shelf for a
+    variant nobody counted.
     """
-    if color is not None and color.stock_left is not None:
-        return color.stock_left
-    return product.stock_left
+    counted = [v.stock_left for v in (color, size) if v is not None and v.stock_left is not None]
+    return min(counted) if counted else product.stock_left
 
 
 def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
@@ -353,12 +359,10 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
     if product is None:
         return None
     color = session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None
+    size = session.get(ProductVariant, item.variant_id) if item.variant_id else None
     labels = [
         i18n.t(session, "variant", v.id, "label", v.label)
-        for v in (
-            color,
-            session.get(ProductVariant, item.variant_id) if item.variant_id else None,
-        )
+        for v in (color, size)
         if v is not None
     ]
     return s.CartItemOut(
@@ -373,8 +377,10 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
         old_unit_price=product.old_price,
         quantity=item.quantity,
         selected=item.selected,
-        in_stock=product.in_stock and (color is None or color.in_stock),
-        stock_left=shelf_left(product, color),
+        in_stock=product.in_stock
+        and (color is None or color.in_stock)
+        and (size is None or size.in_stock),
+        stock_left=shelf_left(product, color, size),
         line_total=product.price * item.quantity,
     )
 

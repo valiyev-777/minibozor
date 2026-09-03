@@ -731,11 +731,19 @@ def _seed_products(
         for url in spec.get("images", []):
             if url not in shipped:
                 print(f"  eksport qilinmagan rasm o'tkazib yuborildi: {url}")
-        for i, label in enumerate(spec.get("sizes", [])):
+        sizes = spec.get("sizes", [])
+        # Sizes are counted apart from the shelf the same way colours are, and
+        # from the same total: they are two views of one stock rather than a
+        # colour-by-size grid, so a shopper is told how many 42s are left
+        # without the catalogue pretending to know how many are left in blue 42.
+        size_stock = _split_stock(product.stock_left, len(sizes))
+        for i, label in enumerate(sizes):
+            left = size_stock[i]
             session.add(
                 ProductVariant(
                     product_id=product.id, kind=VariantKind.SIZE,
                     label=label, value=label, sort=i,
+                    stock_left=left, in_stock=left > 0,
                 )
             )
         colors = spec.get("colors", [])

@@ -72,11 +72,23 @@ def list_products(
     free_delivery: bool | None = None,
     discounted: bool | None = None,
     is_original: bool | None = None,
+    show_sold_out: bool = Query(
+        False,
+        description="Include products with nothing left. Off by default: a shelf "
+        "shows what can be bought.",
+    ),
     sort: SortKey = "popular",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=60),
 ) -> s.Page[s.ProductCardOut]:
     stmt = select(Product)
+
+    # What cannot be bought is not on the shelf. A sold-out product used to sit
+    # in the grid behind its veil, taking a slot in every listing and every page
+    # of results from the products that could actually be sold — and the filter
+    # sheet can put them back for anyone who wants to see them.
+    if not show_sold_out:
+        stmt = stmt.where(Product.in_stock.is_(True))
 
     if q:
         needle = f"%{q.lower()}%"
@@ -201,7 +213,13 @@ def similar_products(
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     rows = session.exec(
         select(Product)
-        .where(Product.category_id == product.category_id, Product.id != product_id)
+        .where(
+            Product.category_id == product.category_id,
+            Product.id != product_id,
+            # A recommendation is a suggestion to buy something. One that cannot
+            # be bought is not a recommendation.
+            Product.in_stock.is_(True),
+        )
         .order_by(col(Product.rating).desc())
         .limit(limit)
     ).all()

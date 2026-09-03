@@ -398,4 +398,7 @@
         <item quantity="one">%1$s dona sotilgan</item>
         <item quantity="other">%1$s dona sotilgan</item>
     </plurals>
+    <!-- Filters: what the listing leaves out -->
+    <string name="tugaganlarni_korsatish">Tugaganlarni ko\'rsatish</string>
+    <string name="tugaganlar_odatda_royxatda_korinmaydi">Sotuvda yo\'q tovarlar odatda ro\'yxatda ko\'rinmaydi</string>
 </resources>

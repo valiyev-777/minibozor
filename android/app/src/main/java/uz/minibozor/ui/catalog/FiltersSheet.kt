@@ -1,6 +1,5 @@
 package uz.minibozor.ui.catalog
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -26,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbClickable
 import uz.minibozor.core.design.component.MbCheckRow
 import uz.minibozor.core.design.component.MbChip
 import uz.minibozor.core.design.component.MbDivider
@@ -71,12 +71,15 @@ fun FiltersSheet(
                 MbTheme.type.label,
                 MbTheme.colors.accent,
                 modifier = Modifier
-                    .clickable {
+                    .mbClickable(MbTheme.shapes.chip) {
                         draft = draft.cleared()
                         minPrice = ""
                         maxPrice = ""
                     }
-                    .padding(8.dp),
+                    // Inside the click, not outside it: the padding is the
+                    // difference between a word-sized tap target and a
+                    // finger-sized one, and the ripple should cover both.
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
             )
         }
         MbDivider()
@@ -178,20 +181,27 @@ fun FiltersSheet(
                 }
             }
 
-            if (!filters?.flags.isNullOrEmpty()) {
-                Spacer(Modifier.height(22.dp))
-                SectionHeader(stringResource(R.string.qoshimcha))
-                Spacer(Modifier.height(4.dp))
-                filters!!.flags.forEach { flag ->
-                    MbCheckRow(
-                        label = flag.label,
-                        subtitle = flag.subtitle.ifBlank { null },
-                        checked = draft.flags[flag.key] == true,
-                        onToggle = { draft = draft.toggleFlag(flag.key) },
-                        count = flag.count.takeIf { it > 0 }?.toString(),
-                    )
-                }
+            Spacer(Modifier.height(22.dp))
+            SectionHeader(stringResource(R.string.qoshimcha))
+            Spacer(Modifier.height(4.dp))
+            filters?.flags.orEmpty().forEach { flag ->
+                MbCheckRow(
+                    label = flag.label,
+                    subtitle = flag.subtitle.ifBlank { null },
+                    checked = draft.flags[flag.key] == true,
+                    onToggle = { draft = draft.toggleFlag(flag.key) },
+                    count = flag.count.takeIf { it > 0 }?.toString(),
+                )
             }
+            // Last in the section, and the only row here that is about the
+            // listing rather than about the products: everything else narrows
+            // what is shown, and this one widens it.
+            MbCheckRow(
+                label = stringResource(R.string.tugaganlarni_korsatish),
+                subtitle = stringResource(R.string.tugaganlar_odatda_royxatda_korinmaydi),
+                checked = draft.showSoldOut,
+                onToggle = { draft = draft.copy(showSoldOut = !draft.showSoldOut) },
+            )
 
             Spacer(Modifier.height(20.dp))
         }

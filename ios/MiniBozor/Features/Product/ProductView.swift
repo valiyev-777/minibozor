@@ -141,6 +141,23 @@ struct ProductView: View {
         (model.product?.inStock ?? false) && (selectedColour?.inStock ?? true)
     }
 
+    private var selectedSize: VariantDTO? {
+        (model.product?.sizes ?? []).first { $0.id == model.selectedSizeId }
+    }
+
+    /// What can actually be bought, which is a narrower question than what is
+    /// on the shelf. The line under the rating answers about the colour in the
+    /// photograph above it; the bar at the bottom is buying one colour in one
+    /// size, so its ceiling is whichever of the two is scarcer. Seventeen in
+    /// blue and one in a 45 is one pair to sell.
+    private var buyableLeft: Int {
+        [selectedColour?.stockLeft, selectedSize?.stockLeft].compactMap { $0 }.min() ?? shelfLeft
+    }
+
+    private var buyable: Bool {
+        shelfInStock && (selectedSize?.inStock ?? true)
+    }
+
     /// The photograph a tap opened, and the frame it was sitting in.
     private struct ViewerTarget: Identifiable {
         let page: Int
@@ -259,7 +276,7 @@ struct ProductView: View {
                 // price it would vanish exactly when the customer is choosing
                 // how many to take, which is the moment it matters most.
                 HStack {
-                    StockLine(stockLeft: shelfLeft)
+                    StockLine(stockLeft: buyableLeft)
                     Spacer()
                 }
                 HStack(spacing: 12) {
@@ -270,7 +287,7 @@ struct ProductView: View {
                         MBQuantityStepper(
                             quantity: line.quantity,
                             minimum: 0,
-                            maximum: Swift.max(shelfLeft, 1),
+                            maximum: Swift.max(buyableLeft, 1),
                             size: 44
                         ) { quantity in
                             Task { await cart.setQuantity(itemId: line.id, quantity: quantity) }
@@ -290,8 +307,8 @@ struct ProductView: View {
                         )
                         .fixedSize(horizontal: true, vertical: false)
                         MBPrimaryButton(
-                            shelfInStock ? L("savatga") : L("mavjud_emas"),
-                            enabled: shelfInStock,
+                            buyable ? L("savatga") : L("mavjud_emas"),
+                            enabled: buyable,
                             loading: model.adding
                         ) {
                             Task { toast = await model.addToCart(using: cart) }

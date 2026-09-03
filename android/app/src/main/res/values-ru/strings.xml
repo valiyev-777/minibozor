@@ -388,4 +388,7 @@
         <item quantity="many">%1$s шт. продано</item>
         <item quantity="other">%1$s шт. продано</item>
     </plurals>
+    <!-- Filters: what the listing leaves out -->
+    <string name="tugaganlarni_korsatish">Показывать распроданные</string>
+    <string name="tugaganlar_odatda_royxatda_korinmaydi">Товары не в наличии обычно не показываются в списке</string>
 </resources>

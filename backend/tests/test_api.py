@@ -343,20 +343,23 @@ def test_the_last_one_sold_goes_out_of_stock(client: TestClient, auth: dict[str,
     assert rejected.status_code == 409
 
 
-def test_a_colour_is_counted_apart_from_the_shelf(client: TestClient) -> None:
-    """The page shows one colour at a time and used to answer "how many" with
-    the sum of every colour — so a shirt with two left in black claimed
-    twenty-five while the picture on screen was of the black one."""
+def test_a_variant_is_counted_apart_from_the_shelf(client: TestClient) -> None:
+    """The page shows one colour in one size at a time and used to answer "how
+    many" with the sum of all of them — so a shirt with two left in black
+    claimed twenty-five while the picture on screen was of the black one."""
     product = client.get(f"{API}/products/1").json()
     colors = [v for v in product["variants"] if v["kind"] == "color"]
-    assert len(colors) > 1, "this product is seeded with more than one colour"
-
-    # Each colour carries its own count, and the halves make up the whole.
-    assert all(c["stock_left"] is not None for c in colors)
-    assert sum(c["stock_left"] for c in colors) == product["stock_left"]
-    # A size is not counted apart — the shelf answers for it.
     sizes = [v for v in product["variants"] if v["kind"] == "size"]
-    assert all(v["stock_left"] is None for v in sizes)
+    assert len(colors) > 1 and len(sizes) > 1, "seeded with colours and sizes"
+
+    # Two views of one shelf rather than a grid: each kind carries its own
+    # counts, and each kind's counts add back up to the product's total.
+    for kind in (colors, sizes):
+        assert all(v["stock_left"] is not None for v in kind)
+        assert sum(v["stock_left"] for v in kind) == product["stock_left"]
+
+    # A variant counted down to nothing says so, rather than only counting zero.
+    assert all(v["in_stock"] == (v["stock_left"] > 0) for v in colors + sizes)
 
 
 def test_buying_a_colour_takes_it_off_that_colour(
@@ -393,6 +396,23 @@ def test_buying_a_colour_takes_it_off_that_colour(
     # The colour nobody bought is untouched.
     assert after_colors[other["id"]]["stock_left"] == other["stock_left"]
     assert after["stock_left"] == product["stock_left"] - quantity
+
+
+def test_the_listing_leaves_out_what_cannot_be_bought(
+    client: TestClient, auth: dict[str, str]
+) -> None:
+    """A sold-out product sat in the grid behind its veil, taking a slot in
+    every listing from the products that could actually be sold."""
+    listed = client.get(f"{API}/products", params={"page_size": 60}).json()["items"]
+    assert listed, "the shop is not empty"
+    assert all(item["in_stock"] for item in listed)
+
+    # The filter sheet can put them back for anyone who wants to see them.
+    with_sold_out = client.get(
+        f"{API}/products", params={"page_size": 60, "show_sold_out": True}
+    ).json()["items"]
+    assert len(with_sold_out) > len(listed)
+    assert any(not item["in_stock"] for item in with_sold_out)
 
 
 # --------------------------------------------------------------------------- 25-29

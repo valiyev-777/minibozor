@@ -34,6 +34,9 @@ class CatalogRepository @Inject constructor(private val api: MiniBozorApi) {
                 freeDelivery = query.flags["free_delivery"],
                 discounted = query.flags["discounted"],
                 isOriginal = query.flags["is_original"],
+                // Only ever sent when it is on: the server leaves them out by
+                // default, and a `false` on every request is noise.
+                showSoldOut = true.takeIf { query.showSoldOut },
                 sort = query.sort,
                 page = page,
             )

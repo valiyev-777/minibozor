@@ -135,6 +135,22 @@ fun VariantSheet(
                         )
                         Spacer(Modifier.height(10.dp))
                         SizeRow(state.sizes, state.sizeId, viewModel::selectSize)
+                        // The same note the product page puts under its size
+                        // row: how many of the one in hand.
+                        val left = state.selectedSize?.stockLeft
+                        if (left != null && left > 0) {
+                            Spacer(Modifier.height(9.dp))
+                            MbText(
+                                stringResource(R.string.n_dona_qoldi, left),
+                                MbTheme.type.caption,
+                                if (left <= SheetLowStock) {
+                                    MbTheme.colors.danger
+                                } else {
+                                    MbTheme.colors.textTertiary
+                                },
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
 
@@ -267,6 +283,9 @@ private fun ColorRow(colors: List<VariantDto>, selectedId: Int?, onSelect: (Int)
         }
     }
 }
+
+/** Under this many left, the count stops being a fact and becomes a reason. */
+private const val SheetLowStock = 5
 
 @Composable
 private fun SizeRow(sizes: List<VariantDto>, selectedId: Int?, onSelect: (Int) -> Unit) {

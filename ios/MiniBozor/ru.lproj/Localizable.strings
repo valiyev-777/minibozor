@@ -299,6 +299,8 @@
 "tugadi" = "НЕТ В НАЛИЧИИ";
 "tugagan" = "Завершённые";
 "tugagan_buyurtma_yoq" = "Завершённых заказов нет";
+"tugaganlar_odatda_royxatda_korinmaydi" = "Товары не в наличии обычно не показываются в списке";
+"tugaganlarni_korsatish" = "Показывать распроданные";
 "tugilgan_sana" = "Дата рождения";
 "tugmani_bosish_orqali_ommaviy_oferta" = "Нажимая кнопку, вы соглашаетесь с условиями публичной оферты.";
 "tungi_rejim" = "Тёмная тема";

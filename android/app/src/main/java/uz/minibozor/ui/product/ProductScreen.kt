@@ -278,6 +278,20 @@ fun ProductScreen(
     val shelfLeft = selectedColor?.stockLeft ?: product?.stockLeft ?: 0
     val shelfInStock = product?.inStock == true && (selectedColor?.inStock ?: true)
 
+    // And what can actually be bought, which is a narrower question than what
+    // is on the shelf. The line under the rating answers about the colour in
+    // the photograph above it; the bar at the bottom is buying one colour in
+    // one size, so its ceiling is whichever of the two is scarcer. Seventeen in
+    // blue and one in a 45 is one pair to sell, and a stepper offering
+    // seventeen of them is an offer the server refuses.
+    val selectedSize = product?.variants.orEmpty()
+        .firstOrNull { it.kind == "size" && it.id == state.selectedSizeId }
+    val buyableLeft = listOfNotNull(
+        selectedColor?.stockLeft,
+        selectedSize?.stockLeft,
+    ).minOrNull() ?: shelfLeft
+    val buyable = shelfInStock && (selectedSize?.inStock ?: true)
+
     Box(
         Modifier
             .fillMaxSize()
@@ -630,8 +644,8 @@ fun ProductScreen(
                 product?.let {
                     BuyBar(
                         product = it,
-                        stockLeft = shelfLeft,
-                        inStock = shelfInStock,
+                        stockLeft = buyableLeft,
+                        inStock = buyable,
                         adding = state.adding,
                         line = cartLine,
                         onAdd = { viewModel.addToCart { message -> toast.value = message } },

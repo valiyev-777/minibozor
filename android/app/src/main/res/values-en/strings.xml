@@ -376,4 +376,7 @@
         <item quantity="one">%1$s sold</item>
         <item quantity="other">%1$s sold</item>
     </plurals>
+    <!-- Filters: what the listing leaves out -->
+    <string name="tugaganlarni_korsatish">Show sold out</string>
+    <string name="tugaganlar_odatda_royxatda_korinmaydi">Products with none left are normally left out of the listing</string>
 </resources>

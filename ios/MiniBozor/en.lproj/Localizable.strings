@@ -299,6 +299,8 @@
 "tugadi" = "SOLD OUT";
 "tugagan" = "Completed";
 "tugagan_buyurtma_yoq" = "No completed orders";
+"tugaganlar_odatda_royxatda_korinmaydi" = "Products with none left are normally left out of the listing";
+"tugaganlarni_korsatish" = "Show sold out";
 "tugilgan_sana" = "Date of birth";
 "tugmani_bosish_orqali_ommaviy_oferta" = "By tapping the button you agree to the terms of the public offer.";
 "tungi_rejim" = "Dark mode";
