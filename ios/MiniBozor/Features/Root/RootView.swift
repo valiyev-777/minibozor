@@ -157,12 +157,10 @@ struct RouteView: View {
         case .orderPlaced(let orderId):
             OrderPlacedView(orderId: orderId)
 
-        case .tracking(let orderId):
-            OrderDetailView(orderId: orderId, trackingOnly: true)
         case .orders:
             OrdersView()
         case .orderDetail(let orderId):
-            OrderDetailView(orderId: orderId, trackingOnly: false)
+            OrderDetailView(orderId: orderId)
         case .orderCancel(let orderId):
             ReasonView(orderId: orderId, isReturn: false)
         case .orderReturn(let orderId):
@@ -176,6 +174,8 @@ struct RouteView: View {
             AddCardView()
         case .addresses:
             AddressesView()
+        case .returns:
+            ReturnsView()
         case .myReviews:
             MyReviewsView()
         case .favorites:

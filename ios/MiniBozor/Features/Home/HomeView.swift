@@ -42,8 +42,17 @@ struct HomeView: View {
         MBScreen {
             LoadStateView(state: model.state, onRetry: { Task { await model.load(city: session.city) } }) { home in
                 ScrollView {
-                    LazyVStack(spacing: 12) {
-                        header
+                    // Pinned, so the search stays while the feed runs under it.
+                    // Searching is the one thing a customer may want at any
+                    // depth of a page this long, and reaching it meant flinging
+                    // back to the top; where they are delivering to is a thing
+                    // they set once and read at the top, so that scrolls away.
+                    LazyVStack(spacing: 12, pinnedViews: .sectionHeaders) {
+                      // Outside the section, so it scrolls off and the search
+                      // below it is what stays. Inside, it would be drawn under
+                      // its own header.
+                      cityRow
+                      Section {
                         if !home.banners.isEmpty {
                             BannerCarousel(banners: home.banners) { banner in
                                 router.push(.subcategory(slug: banner.targetValue))
@@ -56,6 +65,9 @@ struct HomeView: View {
                             sectionView(section)
                         }
                         Spacer().frame(height: MB.metric.tabBarHeight + 26)
+                      } header: {
+                        searchRow
+                      }
                     }
                 }
             }
@@ -77,22 +89,46 @@ struct HomeView: View {
         .task { await model.load(city: session.city) }
     }
 
-    private var header: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 7) {
-                MBIcon("pin", size: 15, tint: MB.color.accent, lineWidth: 1.9)
-                Text(session.city).mbFont(MB.type.bodyBold).foregroundStyle(MB.color.ink)
-                Text("▾").mbFont(MB.type.micro).foregroundStyle(MB.color.hairlineStrong)
-                Spacer()
-            }
-            MBSearchPill(placeholder: L("mahsulot_va_turkumlar_qidirish")) {
-                router.push(.search)
-            }
+    private var cityRow: some View {
+        HStack(spacing: 7) {
+            MBIcon("pin", size: 15, tint: MB.color.accent, lineWidth: 1.9)
+            Text(session.city).mbFont(MB.type.bodyBold).foregroundStyle(MB.color.ink)
+            Text("▾").mbFont(MB.type.micro).foregroundStyle(MB.color.hairlineStrong)
+            Spacer()
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
-        .padding(.bottom, 14)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity)
         .background(MB.color.surface)
+    }
+
+    /// The search pill, which stays at the top while the feed runs under it.
+    ///
+    /// Opaque, and the full width of the window: a pinned header is drawn over
+    /// the list rather than beside it, so anything see-through here shows the
+    /// products sliding along behind the placeholder. The shadow under it is
+    /// what says the white above is in front of the white below — a drawn rule
+    /// is found whether or not the eye was looking, and this page keeps no
+    /// edges anywhere else.
+    private var searchRow: some View {
+        MBSearchPill(placeholder: L("mahsulot_va_turkumlar_qidirish")) {
+            router.push(.search)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(MB.color.surface)
+        .overlay(alignment: .bottom) {
+            LinearGradient(
+                colors: [Color.black.opacity(0.085), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 9)
+            .offset(y: 9)
+            .allowsHitTesting(false)
+        }
     }
 
     @ViewBuilder
@@ -126,7 +162,13 @@ struct HomeView: View {
             .padding(.horizontal, 12)
 
         default:
-            MBCard(padding: 0) {
+            // No panel under a rail, unlike the grid and the deals pair. Those
+            // two are bounded: everything they hold is on the screen at once,
+            // and a surface drawn around them says where they stop. A rail does
+            // not stop — it runs off the side of the screen, and a box around
+            // something that leaves the box was the reason the third card read
+            // as a card that would not fit rather than as one more card along.
+            VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(
                     title: section.title,
                     subtitle: section.subtitle,
@@ -136,7 +178,7 @@ struct HomeView: View {
                         .listing(category: section.categorySlug, query: nil, title: section.title)
                     )
                 }
-                .padding(16)
+                .padding(.horizontal, MB.metric.railEdge)
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 10) {
@@ -144,11 +186,9 @@ struct HomeView: View {
                             MBRailTile(product: product) { router.push(.product(id: product.id)) }
                         }
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, MB.metric.railEdge)
                 }
-                .padding(.bottom, 16)
             }
-            .padding(.horizontal, 12)
         }
     }
 
@@ -175,19 +215,25 @@ struct HomeView: View {
     }
 }
 
+/// How many times the banners repeat so the carousel can keep running forward.
+private let BannerLoops = 101
+
 private struct BannerCarousel: View {
     let banners: [BannerDTO]
     let onTap: (BannerDTO) -> Void
 
+    /// Where the run starts, far enough in that nobody swipes off the front.
     @State var index = 0
 
     var body: some View {
         VStack(spacing: 10) {
             TabView(selection: $index) {
-                ForEach(Array(banners.enumerated()), id: \.offset) { offset, banner in
-                    BannerCard(banner: banner) { onTap(banner) }
-                        .padding(.horizontal, 12)
-                        .tag(offset)
+                ForEach(0..<(banners.count * BannerLoops), id: \.self) { page in
+                    BannerCard(banner: banners[page % banners.count]) {
+                        onTap(banners[page % banners.count])
+                    }
+                    .padding(.horizontal, 12)
+                    .tag(page)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
@@ -195,9 +241,10 @@ private struct BannerCarousel: View {
 
             HStack(spacing: 4) {
                 ForEach(0..<banners.count, id: \.self) { position in
+                    let active = position == index % banners.count
                     Capsule()
-                        .fill(position == index ? MB.color.accent : MB.color.hairlineStrong)
-                        .frame(width: position == index ? 14 : 3.5, height: 3.5)
+                        .fill(active ? MB.color.accent : MB.color.hairlineStrong)
+                        .frame(width: active ? 14 : 3.5, height: 3.5)
                         .animation(.easeInOut(duration: 0.26), value: index)
                 }
             }
@@ -205,12 +252,28 @@ private struct BannerCarousel: View {
         // Restarts on every settle, including after the customer swipes it
         // themselves, which is what stops it yanking the page out from under a
         // thumb rather than simply advancing on a timer.
+        .onAppear {
+            if index == 0 { index = banners.count * (BannerLoops / 2) }
+        }
         .task(id: index) {
             guard banners.count > 1 else { return }
+            // Back to the middle of the run when an end comes into view. The
+            // jump is a whole number of banners, so the page it lands on is the
+            // one already showing and nothing moves on screen.
+            let middle = banners.count * (BannerLoops / 2)
+            if abs(index - middle) > banners.count * (BannerLoops / 2 - 2) {
+                var silent = Transaction()
+                silent.disablesAnimations = true
+                withTransaction(silent) { index = middle + index % banners.count }
+                return
+            }
             try? await Task.sleep(for: .seconds(4.5))
             guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 0.7)) {
-                index = (index + 1) % banners.count
+                    // Always the next page, never a modulo back to the first:
+                // the run is long enough in both directions that forward is
+                // always available, and the recentre below keeps it that way.
+                index += 1
             }
         }
     }

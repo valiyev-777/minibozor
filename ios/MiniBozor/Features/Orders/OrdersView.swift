@@ -140,7 +140,7 @@ struct OrdersView: View {
                 Spacer()
                 if order.canTrack {
                     MBSecondaryButton(L("kuzatish")) {
-                        router.push(.tracking(orderId: order.id))
+                        router.push(.orderDetail(orderId: order.id))
                     }
                     .frame(width: 120)
                 }

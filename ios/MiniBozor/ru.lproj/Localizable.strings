@@ -329,3 +329,12 @@
 "rating_words.3" = "Хорошо";
 "rating_words.4" = "Очень хорошо";
 "rating_words.5" = "Отлично";
+
+// Screen — Qaytarishlarim
+"qaytarishlarim" = "Мои возвраты";
+"hali_qaytarish_arizasi_yubormagansiz" = "Вы ещё не отправляли заявку на возврат";
+"yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin" = "Доставленный заказ можно вернуть в течение 14 дней";
+"return_submitted" = "ОТПРАВЛЕНО";
+"return_approved" = "ОДОБРЕНО";
+"return_rejected" = "ОТКЛОНЕНО";
+"return_refunded" = "ДЕНЬГИ ВОЗВРАЩЕНЫ";

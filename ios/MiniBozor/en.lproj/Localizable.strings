@@ -329,3 +329,12 @@
 "rating_words.3" = "Good";
 "rating_words.4" = "Very good";
 "rating_words.5" = "Excellent";
+
+// Screen — Qaytarishlarim
+"qaytarishlarim" = "My returns";
+"hali_qaytarish_arizasi_yubormagansiz" = "You have not requested a return yet";
+"yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin" = "A delivered order can be returned within 14 days";
+"return_submitted" = "SUBMITTED";
+"return_approved" = "APPROVED";
+"return_rejected" = "REJECTED";
+"return_refunded" = "REFUNDED";

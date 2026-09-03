@@ -329,3 +329,12 @@
 "rating_words.3" = "Yaxshi";
 "rating_words.4" = "Juda yaxshi";
 "rating_words.5" = "Ajoyib";
+
+// Screen — Qaytarishlarim
+"qaytarishlarim" = "Qaytarishlarim";
+"hali_qaytarish_arizasi_yubormagansiz" = "Hali qaytarish arizasi yubormagansiz";
+"yetkazilgan_buyurtmani_14_kun_ichida_qaytarish_mumkin" = "Yetkazilgan buyurtmani 14 kun ichida qaytarish mumkin";
+"return_submitted" = "YUBORILDI";
+"return_approved" = "QABUL QILINDI";
+"return_rejected" = "RAD ETILDI";
+"return_refunded" = "PUL QAYTARILDI";

@@ -423,43 +423,84 @@ private struct ProductTileBody: View {
     }
 }
 
-/// The 112 pt tile used by the horizontal rails.
+/// One product in a horizontal rail: the photograph, and what it costs under it.
+///
+/// The tile used to be a picture inside a rounded box inside a rounded card,
+/// with 7 pt of warm ground showing between the two — three edges to read
+/// before the shoe, on a card narrow enough that the shoe was the smallest
+/// thing on it. The photograph runs to the card's own edges now and the card's
+/// clip rounds its top corners, so there is one edge and the picture is what
+/// the card is.
+///
+/// The saving moved onto the photograph with it. It had been sitting under the
+/// price on a line of its own, which is a percentage placed as far from the
+/// picture as the card allows; on the photograph it is where the eye already
+/// is, and the line it left behind now carries the price it is a percentage of.
 struct MBRailTile: View {
     let product: ProductCardDTO
     let onOpen: () -> Void
 
+    private var was: Int? {
+        guard let old = product.oldPrice, old > product.price else { return nil }
+        return old
+    }
+
     var body: some View {
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: 0) {
-                MBProductImage(
-                    url: product.imageUrl,
-                    cornerRadius: MB.metric.radiusL,
-                    background: MB.color.photoWarm
-                )
-                .frame(width: MB.metric.railTileWidth, height: MB.metric.railTileWidth)
+                ZStack(alignment: .topLeading) {
+                    MBProductImage(
+                        url: product.imageUrl,
+                        // Square: the card is already clipped to its own
+                        // corners, and a second rounding here would draw the
+                        // picture's arcs inside them.
+                        cornerRadius: 0,
+                        background: MB.color.photoWarm
+                    )
+                    .frame(width: MB.metric.railTileWidth, height: MB.metric.railTileWidth)
 
-                Spacer().frame(height: 8)
-                // The same block the grid tile uses, a size down. It used to be
-                // a row of its own making — the price and 9.5 pt of red text
-                // side by side — which on a 112 pt card meant a nine-figure
-                // price and a percentage fighting over 98 pt of it.
-                MBPriceRow(
-                    price: product.price,
-                    discountPercent: product.discountPercent,
-                    style: MB.type.priceSmall
-                )
-                Spacer().frame(height: 4)
-                // A step up from meta: the rail is narrow, so a name gets two
-                // short lines and needs both to be readable.
-                Text(product.title)
-                    .mbFont(MB.type.caption)
-                    .foregroundStyle(MB.color.inkSoft)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .frame(height: 30, alignment: .top)
+                    if let discount = product.discountPercent {
+                        MBDiscountPill(percent: discount).padding(7)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(Format.grouped(product.price))
+                        .mbFont(MB.type.priceSmall)
+                        .foregroundStyle(MB.color.ink)
+                        .lineLimit(1)
+
+                    // The line is held whether or not there is anything to put
+                    // on it, so a discounted tile and a full-price one beside
+                    // it end at the same height.
+                    Group {
+                        if let was {
+                            Text(Format.grouped(was))
+                                .font(MB.type.meta.font)
+                                .foregroundStyle(MB.color.textQuaternary)
+                                .strikethrough()
+                                .lineLimit(1)
+                        } else {
+                            Text(" ").font(MB.type.meta.font)
+                        }
+                    }
+                    .frame(minHeight: 15, alignment: .leading)
+
+                    Spacer().frame(height: 3)
+                    // A step up from meta: the tile is the narrowest card in
+                    // the app, so a name gets two short lines and needs both.
+                    Text(product.title)
+                        .mbFont(MB.type.caption)
+                        .foregroundStyle(MB.color.inkSoft)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(height: 30, alignment: .top)
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 9)
+                .padding(.bottom, 11)
             }
             .frame(width: MB.metric.railTileWidth, alignment: .leading)
-            .padding(7)
             .mbProductCard(cornerRadius: MB.metric.radiusXL)
         }
         .buttonStyle(MBCardPressStyle())
