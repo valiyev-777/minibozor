@@ -3,6 +3,10 @@ package uz.minibozor.data.repository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.update
+import uz.minibozor.R
+import uz.minibozor.core.util.AppStrings
 import uz.minibozor.core.util.Outcome
 import uz.minibozor.core.util.apiCall
 import uz.minibozor.data.remote.MiniBozorApi
@@ -28,14 +32,48 @@ class CartRepository @Inject constructor(private val api: MiniBozorApi) {
     suspend fun refresh(promoCode: String? = null): Outcome<CartDto> =
         apiCall { api.cart(promoCode) }.also { it.cache() }
 
+    /**
+     * Lines currently being added, so a second tap on one of them is dropped.
+     *
+     * The guard lives here rather than in each screen because there are five
+     * ways to add the same line — the tile in the grid, the tile in a rail,
+     * search results, the product page and the picker sheet — and only the
+     * product page had a flag of its own. Everywhere else a finger resting a
+     * moment too long put the thing in the basket twice, and the server, which
+     * folds a repeat add into the existing line by raising its quantity, could
+     * not tell the difference between two taps and a customer wanting two.
+     *
+     * Keyed on the line rather than held as one lock: adding a shirt should not
+     * be blocked because a kettle is still in flight.
+     */
+    private val adding = MutableStateFlow<Set<CartLine>>(emptySet())
+
+    /** The triple the server folds a repeat add into. */
+    private data class CartLine(val productId: Int, val variantId: Int?, val colorVariantId: Int?)
+
     suspend fun add(
         productId: Int,
         variantId: Int? = null,
         colorVariantId: Int? = null,
         quantity: Int = 1,
-    ): Outcome<CartDto> = apiCall {
-        api.addToCart(CartAddRequest(productId, variantId, colorVariantId, quantity))
-    }.also { it.cache() }
+    ): Outcome<CartDto> {
+        val line = CartLine(productId, variantId, colorVariantId)
+        // getAndUpdate, so the check and the claim are one step: two taps
+        // landing in the same frame would both pass a read-then-write.
+        val busy = adding.getAndUpdate { it + line }.contains(line)
+        // A dropped tap is not an error to report — the line is on its way in,
+        // which is exactly what the tap asked for. The caller gets the cart it
+        // last saw and shows the same "added" it would have shown anyway.
+        if (busy) return _cart.value?.let { Outcome.Success(it) }
+            ?: Outcome.Failure(AppStrings[R.string.savatga_qoshildi])
+        return try {
+            apiCall {
+                api.addToCart(CartAddRequest(productId, variantId, colorVariantId, quantity))
+            }.also { it.cache() }
+        } finally {
+            adding.update { it - line }
+        }
+    }
 
     suspend fun setQuantity(itemId: Int, quantity: Int): Outcome<CartDto> =
         apiCall { api.updateCartItem(itemId, CartUpdateRequest(quantity = quantity)) }
