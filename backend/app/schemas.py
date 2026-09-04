@@ -19,8 +19,13 @@ from app.models import (
     NotificationKind,
     OrderStatus,
     PaymentMethod,
+    RemovalReason,
+    RemovalStatus,
     ReturnStatus,
     ReviewStatus,
+    StockCountStatus,
+    StockMovementKind,
+    SupplyStatus,
     UserRole,
     VariantKind,
 )
@@ -685,17 +690,197 @@ class OfferVariantStockIn(BaseModel):
 
 
 class OfferStockIn(BaseModel):
-    """Warehouse intake: the counts, and nothing else about the offer.
+    """A stocktake correction: the counts found, and why they differ.
 
     Only the leaves are given — the sizes of a product that has sizes, its
-    colours otherwise. Colour totals and the offer's own total are computed
-    from them, so a shelf cannot be left disagreeing with itself.
-    ``stock_left`` is for a product with no variants at all, where the offer
-    *is* the leaf.
+    colours otherwise. Colour totals follow from the sizes, so a shelf cannot
+    be left disagreeing with itself. ``stock_left`` is for a product with no
+    variants at all, where the offer *is* the leaf.
+
+    ``reason`` is required. A count that changed for no stated reason is
+    exactly what the movement ledger exists to make impossible, and this is
+    the one endpoint that could still write one.
     """
 
+    reason: str = Field(min_length=1, max_length=200)
     stock_left: int | None = Field(None, ge=0)
     variants: list[OfferVariantStockIn] = Field(default_factory=list, max_length=200)
+
+
+# --------------------------------------------------------------------------- warehouse
+
+
+class StockLineOut(BaseModel):
+    """One count on one offer, named so a person can read it."""
+
+    offer_id: int
+    variant_id: int | None
+    variant_label: str
+    product_title: str
+
+
+class MovementOut(StockLineOut):
+    id: int
+    kind: StockMovementKind
+    quantity: int
+    reason: str
+    actor: str
+    supply_id: int | None
+    order_id: int | None
+    return_request_id: int | None
+    count_id: int | None
+    removal_id: int | None
+    created_at: datetime
+
+
+class ShelfOut(BaseModel):
+    """What the ledger says, what is promised, and what is left to sell."""
+
+    offer_id: int
+    variant_id: int | None
+    variant_label: str
+    on_hand: int
+    reserved: int
+    sellable: int
+
+
+class SupplyLineIn(BaseModel):
+    offer_id: int
+    variant_id: int | None = None
+    quantity: int = Field(gt=0)
+
+
+class SupplyCreateIn(BaseModel):
+    """A batch a seller says is coming.
+
+    No label from the seller: their own reference belongs to their system, may
+    repeat, and two sellers may use the same one on the same day. The code
+    comes back from us and goes on the pallet.
+    """
+
+    lines: list[SupplyLineIn] = Field(min_length=1, max_length=500)
+    note: str = ""
+    seller_id: int | None = None    # admin only
+
+
+class SupplyReceiveLineIn(BaseModel):
+    line_id: int
+    received_quantity: int = Field(ge=0)
+
+
+class SupplyReceiveIn(BaseModel):
+    lines: list[SupplyReceiveLineIn] = Field(min_length=1, max_length=500)
+    note: str = ""
+
+
+class SupplyLineOut(StockLineOut):
+    id: int
+    declared_quantity: int
+    received_quantity: int | None
+    difference: int | None
+
+
+class SupplyOut(BaseModel):
+    id: int
+    code: str
+    seller: SellerOut
+    status: SupplyStatus
+    note: str
+    lines: list[SupplyLineOut]
+    declared_at: datetime
+    received_at: datetime | None
+
+
+class StockCountCreateIn(BaseModel):
+    offer_id: int
+    note: str = ""
+
+
+class StockCountLineIn(BaseModel):
+    variant_id: int | None = None
+    counted: int = Field(ge=0)
+
+
+class StockCountCloseIn(BaseModel):
+    lines: list[StockCountLineIn] = Field(min_length=1, max_length=500)
+    note: str = ""
+
+
+class StockCountLineOut(BaseModel):
+    id: int
+    variant_id: int | None
+    variant_label: str
+    expected: int
+    counted: int | None
+    difference: int | None
+
+
+class StockCountOut(BaseModel):
+    id: int
+    code: str
+    offer_id: int
+    product_title: str
+    seller: SellerOut
+    status: StockCountStatus
+    note: str
+    lines: list[StockCountLineOut]
+    opened_at: datetime
+    closed_at: datetime | None
+
+
+class RemovalLineIn(BaseModel):
+    offer_id: int
+    variant_id: int | None = None
+    quantity: int = Field(gt=0)
+
+
+class RemovalCreateIn(BaseModel):
+    reason: RemovalReason
+    lines: list[RemovalLineIn] = Field(min_length=1, max_length=500)
+    note: str = ""
+    seller_id: int | None = None    # admin only
+
+
+class RemovalPrepareLineIn(BaseModel):
+    line_id: int
+    prepared_quantity: int = Field(ge=0)
+
+
+class RemovalPrepareIn(BaseModel):
+    lines: list[RemovalPrepareLineIn] = Field(min_length=1, max_length=500)
+    note: str = ""
+
+
+class RemovalLineOut(StockLineOut):
+    id: int
+    quantity: int
+    prepared_quantity: int | None
+
+
+class RemovalOut(BaseModel):
+    id: int
+    code: str
+    seller: SellerOut
+    status: RemovalStatus
+    reason: RemovalReason
+    note: str
+    lines: list[RemovalLineOut]
+    requested_at: datetime
+    ready_at: datetime | None
+    collected_at: datetime | None
+
+
+class WriteOffIn(BaseModel):
+    """Goods that are gone: damaged, lost, spoiled.
+
+    A reason is required for the same reason it is on a stocktake correction —
+    stock that left without one is indistinguishable from stock that was
+    stolen.
+    """
+
+    variant_id: int | None = None
+    quantity: int = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=200)
 
 
 # --------------------------------------------------------------------------- misc

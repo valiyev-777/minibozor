@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
 from app import i18n, inventory
+from app import offers as of
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
@@ -21,6 +22,7 @@ from app.models import (
     PaymentCard,
     PaymentMethod,
     PickupPoint,
+    Product,
     ReturnReason,
     ReturnRequest,
     Seller,
@@ -121,6 +123,13 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
     session.commit()
     session.refresh(order)
 
+    # Every product this order touched. The cached figure is the shelf less
+    # what is held, and both sides of that move here — the goods leave the
+    # shelf and the basket line that was holding them is deleted — so the
+    # figure is recomputed once at the end rather than halfway through, when
+    # it would count the same three items as both sold and still held.
+    touched: set[int] = set()
+
     for item in preview.items:
         # The cart line is about to be deleted, so which colour and which size
         # were chosen is copied onto the order line first. Not for display —
@@ -150,9 +159,21 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
             quantity=item.quantity,
         )
         session.add(order_item)
-        # Off the shelf, onto the sold count — the same function a cancellation
-        # runs backwards, so the two cannot drift apart again.
-        inventory.take(session, order_item)
+        # Paid, so it is a sale: the goods leave the shelf and the ledger says
+        # why. An unpaid order — cash to the courier — has not been sold yet,
+        # so nothing leaves; the goods are held for it instead, which
+        # ``app.stock.reserved`` reads off the order itself. Selling on
+        # promise-of-cash is how an undelivered order used to consume stock
+        # that a refusal at the door then never gave back.
+        if order_item.product_id is not None:
+            touched.add(order_item.product_id)
+        if order.paid:
+            inventory.take(session, order_item)
+        else:
+            product = session.get(Product, order_item.product_id)
+            if product is not None:
+                product.sold_count += order_item.quantity
+                session.add(product)
 
     sv.seed_order_events(session, order)
 
@@ -176,6 +197,10 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         )
     )
     session.commit()
+    for product_id in touched:
+        of.refresh(session, product_id)
+    if touched:
+        session.commit()
     session.refresh(order)
     return sv.order_out(session, order)
 
@@ -275,6 +300,9 @@ def cancel_order(
         actor=user,
         action="order.cancel",
         note=order.cancel_reason,
+        # An unpaid order never took the goods off the shelf — they were held
+        # for it — so there is nothing there to put back.
+        shelf=order.paid,
     )
     order.status = OrderStatus.CANCELLED
     order.updated_at = sv.utcnow()

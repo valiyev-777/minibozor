@@ -414,7 +414,15 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
     offer = session.get(Offer, item.offer_id) if item.offer_id else None
     if offer is not None:
         unit_price, old_unit_price = offer.price, offer.old_price
-        left = of.shelf_left(session, offer, item.color_variant_id, item.variant_id)
+        # This shopper's own hold does not count against them: the line they
+        # are looking at is the reason the goods are held.
+        left = of.shelf_left(
+            session,
+            offer,
+            item.color_variant_id,
+            item.variant_id,
+            for_user_id=item.user_id,
+        )
         available = offer.active and left > 0
     else:
         unit_price, old_unit_price = product.price, product.old_price

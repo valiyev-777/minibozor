@@ -12,15 +12,16 @@ from sqlmodel import Session, col, select
 from app import audit
 from app import offers as of
 from app import schemas as s
+from app import stock as st
 from app.core.config import settings
 from app.db import engine
 from app.deps import AdminUser
 from app.models import (
     AuditLog,
+    CartItem,
     DeliverySlot,
     Notification,
     Offer,
-    OfferVariant,
     Order,
     OrderItem,
     Product,
@@ -28,8 +29,11 @@ from app.models import (
     Review,
     ReviewStatus,
     Seller,
+    StockMovement,
+    StockMovementKind,
     User,
     UserRole,
+    utcnow,
 )
 
 API = "/api/v1"
@@ -1356,26 +1360,27 @@ def _order_with_a_variant_and_a_slot(
     slot = next(sl for day in days for sl in day["slots"] if sl["available"])
     variant_ids = (colour["id"], size["id"])
 
-    # Written to the offer, not to the product: the product's figures are a
-    # cache of whichever offer is winning, and setting a cache is not stocking
-    # a shelf. `refresh` then copies them back down, which is the same path a
-    # seller editing a price takes.
+    # Stocked through the ledger, because that is the only way a count moves
+    # now: writing the figure onto the row would leave the running total
+    # disagreeing with the sum of its movements, which is the one thing the
+    # ledger must never do. Only the leaves are set — a colour is the sum of
+    # its sizes and follows on its own.
     with Session(engine) as session:
         offer = of.winning_offer(session, product["id"]) or of.offers_for(
             session, product["id"], active_only=False
         )[0]
-        offer.stock_left = SHELF
         offer.active = True
         session.add(offer)
-        for variant_id in variant_ids:
-            row = session.exec(
-                select(OfferVariant).where(
-                    OfferVariant.offer_id == offer.id,
-                    OfferVariant.variant_id == variant_id,
-                )
-            ).one()
-            row.stock_left = VARIANT_SHELF
-            session.add(row)
+        for leaf in of.leaf_variants(session, product["id"]):
+            current = of.variant_stock(session, offer.id, leaf.id) or 0
+            st.move(
+                session,
+                offer=offer,
+                kind=StockMovementKind.COUNT_ADJUSTMENT,
+                quantity=VARIANT_SHELF - current,
+                variant_id=leaf.id,
+                reason="sinov javoni",
+            )
         session.commit()
         of.refresh(session, product["id"])
         session.commit()
@@ -1745,7 +1750,13 @@ def _offer(
     old_price: int | None = None,
     active: bool = True,
 ) -> int:
-    """Put one seller's offer on a product, and let the cache follow."""
+    """Put one seller's offer on a product, and let the cache follow.
+
+    The shelf is moved through the ledger rather than written onto the row: a
+    running total that disagrees with the sum of its movements is the one
+    thing the warehouse must never contain, and the suite checks that
+    globally.
+    """
     seller_id = _seller(seller)
     with Session(engine) as session:
         row = session.exec(
@@ -1754,14 +1765,46 @@ def _offer(
             )
         ).first()
         if row is None:
-            row = Offer(seller_id=seller_id, product_id=product_id, price=price, stock_left=stock)
-        row.price, row.stock_left, row.old_price, row.active = price, stock, old_price, active
+            row = Offer(seller_id=seller_id, product_id=product_id, price=price)
+        row.price, row.old_price, row.active = price, old_price, active
         session.add(row)
         session.commit()
         session.refresh(row)
+        _adjust_to(session, row, stock)
+        session.commit()
         of.refresh(session, product_id)
         session.commit()
         return row.id
+
+
+def _adjust_to(session: Session, offer: Offer, target: int) -> None:
+    """Bring an offer's whole shelf to `target` by recording the difference.
+
+    All of it on the first leaf and nothing on the rest, so the offer's total
+    is the figure asked for rather than the figure times the number of sizes.
+    Which size is arbitrary and does not matter to the callers; what matters
+    is that the total is right and the ledger explains it.
+    """
+    leaves = of.leaf_variants(session, offer.product_id)
+    if leaves:
+        for index, leaf in enumerate(leaves):
+            current = of.variant_stock(session, offer.id, leaf.id) or 0
+            st.move(
+                session,
+                offer=offer,
+                kind=StockMovementKind.COUNT_ADJUSTMENT,
+                quantity=(target if index == 0 else 0) - current,
+                variant_id=leaf.id,
+                reason="sinov javoni",
+            )
+    else:
+        st.move(
+            session,
+            offer=offer,
+            kind=StockMovementKind.COUNT_ADJUSTMENT,
+            quantity=target - offer.stock_left,
+            reason="sinov javoni",
+        )
 
 
 def _undercuts(house_price: int) -> tuple[int, int]:
@@ -1827,8 +1870,7 @@ def test_an_offer_with_nothing_left_does_not_compete(client: TestClient) -> None
     _offer(product["id"], seller="Chilonzor Savdo", price=mid, stock=0)
     with Session(engine) as session:
         for row in of.offers_for(session, product["id"]):
-            row.stock_left = 0
-            session.add(row)
+            _adjust_to(session, row, 0)
         session.commit()
         of.refresh(session, product["id"])
         session.commit()
@@ -2075,8 +2117,11 @@ def _stock_body(product_id: int, per_leaf: int) -> dict:
     with Session(engine) as session:
         leaves = [v.id for v in of.leaf_variants(session, product_id)]
     if not leaves:
-        return {"stock_left": per_leaf}
-    return {"variants": [{"variant_id": v, "stock_left": per_leaf} for v in leaves]}
+        return {"stock_left": per_leaf, "reason": "sinov uchun sanoq"}
+    return {
+        "reason": "sinov uchun sanoq",
+        "variants": [{"variant_id": v, "stock_left": per_leaf} for v in leaves],
+    }
 
 
 def _untouched_with_variants(client: TestClient) -> dict:
@@ -2119,9 +2164,7 @@ def test_a_seller_sets_their_own_price_and_the_card_follows(
     assert client.get(f"{API}/products/{product['id']}").json()["price"] != cheap
 
     with Session(engine) as session:
-        row = session.get(Offer, offer["id"])
-        row.stock_left = 5
-        session.add(row)
+        _adjust_to(session, session.get(Offer, offer["id"]), 5)
         session.commit()
         of.refresh(session, product["id"])
         session.commit()
@@ -2275,7 +2318,10 @@ def test_the_warehouse_rolls_a_shelf_up_from_its_leaves(
 
     stocked = client.put(
         f"{API}/staff/offers/{offer['id']}/stock",
-        json={"variants": [{"variant_id": v, "stock_left": 2} for v in leaf_ids]},
+        json={
+            "reason": "birinchi sanoq",
+            "variants": [{"variant_id": v, "stock_left": 2} for v in leaf_ids],
+        },
         headers=warehouse,
     )
     assert stocked.status_code == 200
@@ -2297,7 +2343,10 @@ def test_the_warehouse_rolls_a_shelf_up_from_its_leaves(
     # A later delivery of one variant is not a statement about the others.
     again = client.put(
         f"{API}/staff/offers/{offer['id']}/stock",
-        json={"variants": [{"variant_id": leaf_ids[0], "stock_left": 6}]},
+        json={
+            "reason": "yana to'rttasi topildi",
+            "variants": [{"variant_id": leaf_ids[0], "stock_left": 6}],
+        },
         headers=warehouse,
     ).json()
     after = {v["variant_id"]: v["stock_left"] for v in again["variants"]}
@@ -2619,3 +2668,564 @@ def test_a_preflight_answers_the_backoffice_by_name(client: TestClient) -> None:
         headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"},
     )
     assert stranger.headers.get("access-control-allow-origin") != "https://evil.example"
+
+
+# --------------------------------------------------------- the shelf as a ledger
+
+
+def _ledger_is_consistent() -> list[tuple[int, int, int]]:
+    """Every offer whose running total disagrees with the sum of its movements.
+
+    The invariant the whole warehouse rests on. A shelf figure is no longer a
+    number anybody wrote, so if this list is ever non-empty something has
+    assigned to one instead of recording why it changed.
+    """
+    with Session(engine) as session:
+        return [
+            (offer.id, offer.stock_left, st.on_hand(session, offer.id))
+            for offer in session.exec(select(Offer)).all()
+            if offer.stock_left != st.on_hand(session, offer.id)
+        ]
+
+
+def _stocked_offer(
+    client: TestClient,
+    staff: Callable[[UserRole, str], dict[str, str]],
+    name: str,
+    phone: str,
+    *,
+    units: int = 6,
+) -> tuple[dict, dict, dict[str, str], dict[str, str]]:
+    """A seller's own offer on a fresh product, stocked through a supply.
+
+    Which is the only way goods reach a shelf now: declared by the seller,
+    counted in by the warehouse.
+    """
+    product = _untouched_product(client)
+    _, seller = _linked_seller(staff, name, phone)
+    warehouse = staff(UserRole.WAREHOUSE, f"{phone[:-1]}9")
+    cheap, _ = _undercuts(product["price"])
+
+    offer = client.post(
+        f"{API}/staff/offers", json=_offer_body(product["id"], cheap), headers=seller
+    ).json()
+
+    # All of it in one size, so the offer's total is the figure asked for
+    # rather than the figure times the number of sizes. Which size is
+    # arbitrary; that the total is right is not.
+    with Session(engine) as session:
+        leaves = [v.id for v in of.leaf_variants(session, product["id"])]
+    lines: list[dict] = [{"offer_id": offer["id"], "quantity": units}]
+    if leaves:
+        lines = [{"offer_id": offer["id"], "variant_id": leaves[0], "quantity": units}]
+    declared = client.post(
+        f"{API}/staff/supplies", json={"lines": lines, "note": "sinov partiyasi"}, headers=seller
+    )
+    assert declared.status_code == 201, declared.text
+    supply = declared.json()
+
+    received = client.post(
+        f"{API}/staff/supplies/{supply['id']}/receive",
+        json={
+            "lines": [
+                {"line_id": line["id"], "received_quantity": units}
+                for line in supply["lines"]
+            ]
+        },
+        headers=warehouse,
+    )
+    assert received.status_code == 200, received.text
+    return product, offer, seller, warehouse
+
+
+def test_goods_reach_the_shelf_only_by_being_counted_in(
+    client: TestClient, staff: Callable[[UserRole, str], dict[str, str]]
+) -> None:
+    """A declaration is a promise. The shelf moves when somebody counts."""
+    product = _untouched_product(client)
+    _, seller = _linked_seller(staff, "Chinoz Savdo", "+998900020101")
+    warehouse = staff(UserRole.WAREHOUSE, "+998900020102")
+    cheap, _ = _undercuts(product["price"])
+
+    offer = client.post(
+        f"{API}/staff/offers", json=_offer_body(product["id"], cheap), headers=seller
+    ).json()
+    assert offer["stock_left"] == 0
+
+    supply = client.post(
+        f"{API}/staff/supplies",
+        json={"lines": [{"offer_id": offer["id"], "quantity": 10}], "note": "birinchi palet"},
+        headers=seller,
+    ).json()
+    assert supply["code"].startswith("SUP-"), "the code is ours, not the seller's label"
+    assert supply["status"] == "declared"
+    # Declared is not delivered: nothing on the shelf yet.
+    with Session(engine) as session:
+        assert session.get(Offer, offer["id"]).stock_left == 0
+
+    line_id = supply["lines"][0]["id"]
+    received = client.post(
+        f"{API}/staff/supplies/{supply['id']}/receive",
+        json={"lines": [{"line_id": line_id, "received_quantity": 8}], "note": "2 tasi kelmadi"},
+        headers=warehouse,
+    )
+    assert received.status_code == 200
+    body = received.json()
+    assert body["status"] == "received"
+    # The promise and the fact are kept side by side, and so is the gap.
+    assert body["lines"][0]["declared_quantity"] == 10
+    assert body["lines"][0]["received_quantity"] == 8
+    assert body["lines"][0]["difference"] == -2
+
+    with Session(engine) as session:
+        assert session.get(Offer, offer["id"]).stock_left == 8
+        movement = session.exec(
+            select(StockMovement).where(StockMovement.supply_id == supply["id"])
+        ).one()
+    assert movement.kind is StockMovementKind.INTAKE
+    assert movement.quantity == 8
+    assert movement.reason == "2 tasi kelmadi"
+    assert movement.actor_id is not None, "somebody counted it"
+    assert not _ledger_is_consistent()
+
+
+def test_the_shelf_is_always_the_sum_of_its_movements(
+    client: TestClient,
+    auth: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The invariant, put through the whole cycle: received, sold, cancelled,
+    written off, corrected. A count that disagrees with its own ledger is a
+    count somebody assigned."""
+    product, offer, seller, warehouse = _stocked_offer(
+        client, staff, "Zarafshon Savdo", "+998900020111", units=9
+    )
+    assert not _ledger_is_consistent()
+
+    client.delete(f"{API}/cart", headers=auth)
+    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    order = client.post(
+        f"{API}/orders", json={"address_id": address["id"]}, headers=auth
+    ).json()
+    assert not _ledger_is_consistent()
+
+    client.post(f"{API}/orders/{order['id']}/cancel", json={}, headers=auth)
+    assert not _ledger_is_consistent()
+
+    with Session(engine) as session:
+        leaves = [v.id for v in of.leaf_variants(session, product["id"])]
+    body = {"quantity": 2, "reason": "suv ketgan"}
+    if leaves:
+        body["variant_id"] = leaves[0]
+    written = client.post(
+        f"{API}/staff/offers/{offer['id']}/write-off", json=body, headers=warehouse
+    )
+    assert written.status_code == 200
+    assert not _ledger_is_consistent()
+
+    corrected = client.put(
+        f"{API}/staff/offers/{offer['id']}/stock",
+        json=_stock_body(product["id"], 4),
+        headers=warehouse,
+    )
+    assert corrected.status_code == 200
+    assert not _ledger_is_consistent()
+
+    # And the whole story is readable, oldest reason first.
+    ledger = client.get(
+        f"{API}/staff/stock/movements", params={"offer_id": offer["id"]}, headers=warehouse
+    ).json()
+    kinds = {row["kind"] for row in ledger["items"]}
+    assert {"intake", "sale", "cancel_return", "write_off", "count_adjustment"} <= kinds
+    assert all(row["reason"] for row in ledger["items"]), "every movement says why"
+
+
+def test_a_correction_records_the_difference_and_not_the_figure(
+    client: TestClient, staff: Callable[[UserRole, str], dict[str, str]]
+) -> None:
+    """Two people counting the same shelf used to mean the second save erased
+    the first. A difference adds; a figure overwrites."""
+    product, offer, _, warehouse = _stocked_offer(
+        client, staff, "Xiva Savdo", "+998900020121", units=5
+    )
+    url = f"{API}/staff/offers/{offer['id']}/stock"
+
+    assert client.put(url, json=_stock_body(product["id"], 7), headers=warehouse).status_code == 200
+
+    with Session(engine) as session:
+        rows = session.exec(
+            select(StockMovement).where(
+                StockMovement.offer_id == offer["id"],
+                StockMovement.kind == StockMovementKind.COUNT_ADJUSTMENT,
+            )
+        ).all()
+    assert rows and all(row.quantity == 2 for row in rows), "the difference, not the seven"
+    assert all(row.reason for row in rows)
+
+    # And a correction with no reason is refused.
+    with Session(engine) as session:
+        leaves = [v.id for v in of.leaf_variants(session, product["id"])]
+    bare = (
+        {"variants": [{"variant_id": leaves[0], "stock_left": 3}]}
+        if leaves
+        else {"stock_left": 3}
+    )
+    assert client.put(url, json=bare, headers=warehouse).status_code == 422
+
+
+# --------------------------------------------------------- holding
+
+
+def test_what_is_in_one_basket_is_not_offered_to_the_next_shopper(
+    client: TestClient,
+    staff: Callable[[UserRole, str], dict[str, str]],
+    sign_in: Callable[[str], dict[str, str]],
+) -> None:
+    """The last one of something used to sit in two baskets at once, and one of
+    those two shoppers was going to be disappointed at the till."""
+    product, offer, _, _ = _stocked_offer(
+        client, staff, "Nukus Savdo", "+998900020131", units=2
+    )
+    mine = sign_in("+998900020135")
+    theirs = sign_in("+998900020136")
+
+    client.delete(f"{API}/cart", headers=mine)
+    client.delete(f"{API}/cart", headers=theirs)
+
+    with Session(engine) as session:
+        leaves = of.leaf_variants(session, product["id"])
+        pick: dict = {"product_id": product["id"], "quantity": 2}
+        if leaves:
+            pick["variant_id"] = leaves[0].id
+    everything = client.post(f"{API}/cart/items", json=pick, headers=mine).json()
+    assert everything["items"][0]["quantity"] == 2
+
+    # The card stops offering what is already promised.
+    card = client.get(f"{API}/products/{product['id']}").json()
+    assert card["stock_left"] == 0
+    assert card["in_stock"] is False
+
+    # And the next shopper is refused rather than sold the same two.
+    refused = client.post(f"{API}/cart/items", json=pick, headers=theirs)
+    assert refused.status_code == 409
+
+    # Nothing left the shelf: it is held, not gone.
+    with Session(engine) as session:
+        assert session.get(Offer, offer["id"]).stock_left == 2
+        assert st.reserved(session, offer["id"]) == 2
+    assert not _ledger_is_consistent()
+
+
+def test_a_hold_that_has_run_out_lets_go(
+    client: TestClient,
+    staff: Callable[[UserRole, str], dict[str, str]],
+    sign_in: Callable[[str], dict[str, str]],
+) -> None:
+    """An abandoned basket kept the last one of something for ever: nobody
+    could buy it and nobody was going to."""
+    product, offer, _, _ = _stocked_offer(
+        client, staff, "Termiz Savdo", "+998900020141", units=1
+    )
+    mine = sign_in("+998900020145")
+    theirs = sign_in("+998900020146")
+    client.delete(f"{API}/cart", headers=mine)
+    client.delete(f"{API}/cart", headers=theirs)
+
+    with Session(engine) as session:
+        leaves = of.leaf_variants(session, product["id"])
+        pick: dict = {"product_id": product["id"], "quantity": 1}
+        if leaves:
+            pick["variant_id"] = leaves[0].id
+    client.post(f"{API}/cart/items", json=pick, headers=mine)
+    assert client.post(f"{API}/cart/items", json=pick, headers=theirs).status_code == 409
+
+    # Walk away. Nothing sweeps up — the deadline is part of the question.
+    with Session(engine) as session:
+        line = session.exec(
+            select(CartItem).where(CartItem.offer_id == offer["id"])
+        ).first()
+        assert line is not None
+        line.reserved_until = utcnow() - timedelta(minutes=1)
+        session.add(line)
+        session.commit()
+        assert st.reserved(session, offer["id"]) == 0
+        of.refresh(session, product["id"])
+        session.commit()
+
+    assert client.get(f"{API}/products/{product['id']}").json()["in_stock"] is True
+    assert client.post(f"{API}/cart/items", json=pick, headers=theirs).status_code == 201
+
+
+def test_an_unpaid_order_holds_the_goods_until_the_courier_is_paid(
+    client: TestClient,
+    auth: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+    operator: dict[str, str],
+) -> None:
+    """Cash at the door is not a sale yet. Selling on promise-of-cash is how an
+    order refused at the doorstep consumed stock nobody ever gave back."""
+    product, offer, _, _ = _stocked_offer(
+        client, staff, "Jizzax Savdo", "+998900020151", units=5
+    )
+    client.delete(f"{API}/cart", headers=auth)
+    client.post(
+        f"{API}/cart/items",
+        json={"product_id": product["id"], "quantity": 2},
+        headers=auth,
+    )
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    order = client.post(
+        f"{API}/orders",
+        json={"address_id": address["id"], "payment_method": "cash"},
+        headers=auth,
+    )
+    assert order.status_code == 201
+    assert order.json()["paid"] is False
+    order_id = order.json()["id"]
+
+    # Still on the shelf, and held for this order.
+    with Session(engine) as session:
+        assert session.get(Offer, offer["id"]).stock_left == 5
+        assert st.reserved(session, offer["id"]) == 2
+    assert client.get(f"{API}/products/{product['id']}").json()["stock_left"] == 3
+    assert not _ledger_is_consistent()
+
+    for target in ("packing", "shipped", "delivered"):
+        moved = client.post(
+            f"{API}/staff/orders/{order_id}/status", json={"status": target}, headers=operator
+        )
+        assert moved.status_code == 200, moved.text
+
+    # Paid at the door: now the goods leave, and the ledger says why.
+    with Session(engine) as session:
+        assert session.get(Offer, offer["id"]).stock_left == 3
+        assert st.reserved(session, offer["id"]) == 0
+        sale = session.exec(
+            select(StockMovement).where(
+                StockMovement.order_id == order_id,
+                StockMovement.kind == StockMovementKind.SALE,
+            )
+        ).one()
+    assert sale.quantity == -2
+    assert not _ledger_is_consistent()
+
+
+# --------------------------------------------------------- stocktakes and removals
+
+
+def test_a_stocktake_writes_its_difference_as_a_movement(
+    client: TestClient, staff: Callable[[UserRole, str], dict[str, str]]
+) -> None:
+    product, offer, _, warehouse = _stocked_offer(
+        client, staff, "Navoiy Savdo", "+998900020161", units=4
+    )
+
+    opened = client.post(
+        f"{API}/staff/stock-counts",
+        json={"offer_id": offer["id"], "note": "chorak sanog'i"},
+        headers=warehouse,
+    )
+    assert opened.status_code == 201
+    count = opened.json()
+    assert count["code"].startswith("CNT-")
+    assert sum(line["expected"] for line in count["lines"]) == 4, "the books, frozen"
+
+    # One fewer on the shelf than the books say.
+    closed = client.post(
+        f"{API}/staff/stock-counts/{count['id']}/close",
+        json={
+            "lines": [
+                {
+                    "variant_id": line["variant_id"],
+                    "counted": max(0, line["expected"] - 1),
+                }
+                for line in count["lines"]
+            ],
+            "note": "bittasi yo'q",
+        },
+        headers=warehouse,
+    )
+    assert closed.status_code == 200
+    body = closed.json()
+    assert body["status"] == "closed"
+    assert sum(line["difference"] or 0 for line in body["lines"]) == -1
+
+    with Session(engine) as session:
+        rows = session.exec(
+            select(StockMovement).where(StockMovement.count_id == count["id"])
+        ).all()
+    assert rows and sum(row.quantity for row in rows) == -1
+    assert all(row.kind is StockMovementKind.COUNT_ADJUSTMENT for row in rows)
+    assert all(row.reason == "bittasi yo'q" for row in rows)
+    assert not _ledger_is_consistent()
+
+    # Closing twice is not counting twice.
+    assert client.post(
+        f"{API}/staff/stock-counts/{count['id']}/close",
+        json={"lines": [{"variant_id": None, "counted": 3}]},
+        headers=warehouse,
+    ).status_code == 409
+    # Nor may two stocktakes run on one shelf at once.
+    assert client.post(
+        f"{API}/staff/stock-counts", json={"offer_id": offer["id"]}, headers=warehouse
+    ).status_code == 201
+
+
+def test_a_removal_holds_the_goods_then_takes_them_away(
+    client: TestClient, staff: Callable[[UserRole, str], dict[str, str]]
+) -> None:
+    """Selling something that is already on a pallet by the door is the
+    failure `ready` exists to prevent."""
+    product, offer, seller, warehouse = _stocked_offer(
+        client, staff, "Andijon Savdo", "+998900020171", units=6
+    )
+    with Session(engine) as session:
+        leaves = [v.id for v in of.leaf_variants(session, product["id"])]
+    line = {"offer_id": offer["id"], "quantity": 4}
+    if leaves:
+        line["variant_id"] = leaves[0]
+
+    requested = client.post(
+        f"{API}/staff/removals",
+        json={"reason": "unsold", "lines": [line], "note": "sotilmadi"},
+        headers=seller,
+    )
+    assert requested.status_code == 201
+    removal = requested.json()
+    assert removal["code"].startswith("RMV-")
+    assert removal["status"] == "requested"
+
+    # Requested is not picked: nothing is held yet.
+    with Session(engine) as session:
+        assert st.reserved(session, offer["id"]) == 0
+
+    # A seller may not walk off with it themselves.
+    assert client.post(
+        f"{API}/staff/removals/{removal['id']}/collect", headers=seller
+    ).status_code == 403
+
+    ready = client.post(
+        f"{API}/staff/removals/{removal['id']}/prepare",
+        json={"lines": [{"line_id": removal["lines"][0]["id"], "prepared_quantity": 4}]},
+        headers=warehouse,
+    )
+    assert ready.status_code == 200
+    assert ready.json()["status"] == "ready"
+
+    # Picked and standing by the door: still ours to account for, nobody's to buy.
+    with Session(engine) as session:
+        assert session.get(Offer, offer["id"]).stock_left == 6
+        assert st.reserved(session, offer["id"]) == 4
+        assert st.sellable(session, session.get(Offer, offer["id"])) == 2
+    assert not _ledger_is_consistent()
+
+    collected = client.post(
+        f"{API}/staff/removals/{removal['id']}/collect", headers=warehouse
+    )
+    assert collected.status_code == 200
+    assert collected.json()["status"] == "collected"
+
+    with Session(engine) as session:
+        assert session.get(Offer, offer["id"]).stock_left == 2
+        assert st.reserved(session, offer["id"]) == 0
+        movement = session.exec(
+            select(StockMovement).where(StockMovement.removal_id == removal["id"])
+        ).one()
+    assert movement.kind is StockMovementKind.SELLER_RETURN
+    assert movement.quantity == -4
+    assert not _ledger_is_consistent()
+
+    # And it cannot be collected twice.
+    assert client.post(
+        f"{API}/staff/removals/{removal['id']}/collect", headers=warehouse
+    ).status_code == 409
+
+
+def test_a_seller_sees_their_own_batches_and_nobody_elses(
+    client: TestClient, staff: Callable[[UserRole, str], dict[str, str]]
+) -> None:
+    _, mine_offer, mine, warehouse = _stocked_offer(
+        client, staff, "Farg'ona Savdo", "+998900020181", units=3
+    )
+    _, _, theirs, _ = _stocked_offer(
+        client, staff, "Namangan Savdo", "+998900020191", units=3
+    )
+
+    ours = client.get(f"{API}/staff/supplies", headers=mine).json()
+    assert ours and {row["seller"]["name"] for row in ours} == {"Farg'ona Savdo"}
+    others = client.get(f"{API}/staff/supplies", headers=theirs).json()
+    assert {row["seller"]["name"] for row in others} == {"Namangan Savdo"}
+
+    # The warehouse sees everybody's, which is the point of a warehouse.
+    everything = client.get(f"{API}/staff/supplies", headers=warehouse).json()
+    assert {"Farg'ona Savdo", "Namangan Savdo"} <= {r["seller"]["name"] for r in everything}
+
+    # And one seller cannot read the other's by id.
+    theirs_id = next(r["id"] for r in others)
+    assert client.get(f"{API}/staff/supplies/{theirs_id}", headers=mine).status_code == 403
+
+    # Nor declare a batch against somebody else's offer.
+    assert client.post(
+        f"{API}/staff/supplies",
+        json={"lines": [{"offer_id": mine_offer["id"], "quantity": 1}]},
+        headers=theirs,
+    ).status_code == 403
+
+    # The ledger is scoped the same way.
+    mine_ledger = client.get(f"{API}/staff/stock/movements", headers=mine).json()
+    with Session(engine) as session:
+        mine_offers = {
+            o.id
+            for o in session.exec(
+                select(Offer).where(Offer.id == mine_offer["id"])
+            ).all()
+        }
+    assert mine_offers <= {row["offer_id"] for row in mine_ledger["items"]}
+    assert all(row["offer_id"] != theirs_id for row in mine_ledger["items"])
+
+
+def test_only_the_warehouse_moves_a_count(
+    client: TestClient,
+    auth: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The seller sets the price, the warehouse sets the count. That line is
+    the whole reason these live in different files."""
+    product, offer, seller, warehouse = _stocked_offer(
+        client, staff, "Qarshi Savdo", "+998900020201", units=3
+    )
+    with Session(engine) as session:
+        leaves = [v.id for v in of.leaf_variants(session, product["id"])]
+    supply = client.post(
+        f"{API}/staff/supplies",
+        json={"lines": [{"offer_id": offer["id"], "quantity": 1}]},
+        headers=seller,
+    ).json()
+    receipt = {"lines": [{"line_id": supply["lines"][0]["id"], "received_quantity": 1}]}
+
+    for headers, expected in ((None, 401), (auth, 403), (seller, 403)):
+        response = client.post(
+            f"{API}/staff/supplies/{supply['id']}/receive",
+            json=receipt,
+            **({"headers": headers} if headers else {}),
+        )
+        assert response.status_code == expected
+
+    write_off = {"quantity": 1, "reason": "sinov"}
+    if leaves:
+        write_off["variant_id"] = leaves[0]
+    assert client.post(
+        f"{API}/staff/offers/{offer['id']}/write-off", json=write_off, headers=seller
+    ).status_code == 403
+    assert client.post(
+        f"{API}/staff/stock-counts", json={"offer_id": offer["id"]}, headers=seller
+    ).status_code == 403
+
+    # The warehouse can, and the shelf tells the whole story afterwards.
+    assert client.post(
+        f"{API}/staff/supplies/{supply['id']}/receive", json=receipt, headers=warehouse
+    ).status_code == 200
+    shelf = client.get(f"{API}/staff/offers/{offer['id']}/shelf", headers=warehouse).json()
+    total = next(row for row in shelf if row["variant_id"] is None)
+    assert total["on_hand"] == total["sellable"] + total["reserved"]

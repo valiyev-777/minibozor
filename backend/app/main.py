@@ -27,6 +27,7 @@ from app.routers import (
     reviews,
     search,
     staff,
+    warehouse,
 )
 
 MEDIA_DIR = Path(__file__).resolve().parent.parent / "media"
@@ -97,6 +98,7 @@ for router in (
     staff.router,
     operations.router,
     merchandising.router,
+    warehouse.router,
 ):
     app.include_router(router, prefix=API)
 

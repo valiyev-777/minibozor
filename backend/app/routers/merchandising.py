@@ -29,6 +29,7 @@ from sqlmodel import col, select
 from app import audit, i18n
 from app import offers as of
 from app import schemas as s
+from app import stock as st
 from app.deps import SellerUser, SessionDep, WarehouseUser
 from app.models import (
     Offer,
@@ -36,6 +37,7 @@ from app.models import (
     Product,
     ProductVariant,
     Seller,
+    StockMovementKind,
     User,
     UserRole,
 )
@@ -176,28 +178,36 @@ def update_offer(
 @router.put(
     "/offers/{offer_id}/stock",
     response_model=s.StaffOfferOut,
-    summary="Warehouse intake — set what is actually on the shelf",
+    summary="Correct a count — a stocktake finding, with a reason",
 )
-def set_offer_stock(
+def adjust_offer_stock(
     offer_id: int, payload: s.OfferStockIn, user: WarehouseUser, session: SessionDep
 ) -> s.StaffOfferOut:
-    """The counts, and only the counts.
+    """Set a count to what was actually found, and say why.
 
-    Deliberately not the seller's endpoint and deliberately not part of the
-    price one: these two figures answer to different people, and an endpoint
-    that took both would be an endpoint whose guard had to be the weaker of
-    the two.
+    This used to *be* the way stock arrived, which was the wrong shape for it
+    twice over: nothing recorded where the goods came from, and two people
+    saving at once meant the second one won silently. Goods now arrive through
+    a supply (``POST /staff/supplies/{id}/receive``) and leave through a
+    removal, and what is left here is the one thing neither of those covers —
+    the shelf disagreeing with the books.
 
-    Only the leaves are given. A colour's total is the sum of its sizes and the
-    offer's total is the sum of its colours, computed here rather than trusted,
-    so a shelf cannot be left disagreeing with itself. A variant left out of
-    the request keeps the count it had — a delivery of black 42s is not a
-    statement about the blue ones.
+    So it is a stocktake correction. It writes the *difference* to the ledger
+    rather than overwriting the figure, which means a concurrent sale is not
+    lost, and it requires a reason, because a count that changed for no stated
+    reason is the thing this whole ledger exists to make impossible. For a
+    full recount of an offer, open a ``stock-count`` instead — it snapshots
+    what was expected first, so a sale during the count is not mistaken for a
+    discrepancy.
+
+    A variant left out of the request keeps the count it had: finding two more
+    black 42s is not a statement about the blue ones.
     """
     offer = session.get(Offer, offer_id)
     if offer is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("offer_not_found"))
 
+    was = offer.stock_left
     leaves = {v.id: v for v in of.leaf_variants(session, offer.product_id)}
     for entry in payload.variants:
         variant = leaves.get(entry.variant_id)
@@ -205,40 +215,31 @@ def set_offer_stock(
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST, i18n.label("variant_not_of_product")
             )
-        row = session.exec(
-            select(OfferVariant).where(
-                OfferVariant.offer_id == offer.id,
-                OfferVariant.variant_id == variant.id,
-            )
-        ).first()
-        if row is None:
-            row = OfferVariant(offer_id=offer.id, variant_id=variant.id, stock_left=0)
-        if row.stock_left != entry.stock_left:
-            _log(
-                session,
-                user,
-                offer,
-                "stock_left",
-                row.stock_left,
-                entry.stock_left,
-                entity="offer_variant",
-                entity_id=row.id,
-                note=variant.label,
-            )
-        row.stock_left = entry.stock_left
-        session.add(row)
+        current = of.variant_stock(session, offer.id, variant.id) or 0
+        st.move(
+            session,
+            offer=offer,
+            kind=StockMovementKind.COUNT_ADJUSTMENT,
+            quantity=entry.stock_left - current,
+            variant_id=variant.id,
+            actor=user,
+            reason=payload.reason,
+        )
 
     if not leaves and payload.stock_left is not None:
-        if payload.stock_left != offer.stock_left:
-            _log(session, user, offer, "stock_left", offer.stock_left, payload.stock_left)
-        offer.stock_left = payload.stock_left
-        session.add(offer)
+        st.move(
+            session,
+            offer=offer,
+            kind=StockMovementKind.COUNT_ADJUSTMENT,
+            quantity=payload.stock_left - offer.stock_left,
+            actor=user,
+            reason=payload.reason,
+        )
 
-    session.commit()
-    was = offer.stock_left
-    of.roll_up(session, offer)
-    if leaves and offer.stock_left != was:
-        _log(session, user, offer, "stock_left", was, offer.stock_left)
+    # The audit row stays beside the ledger row: the ledger says what the
+    # shelf did, the audit log says what the shop is advertising as a result.
+    if offer.stock_left != was:
+        _log(session, user, offer, "stock_left", was, offer.stock_left, note=payload.reason)
     of.refresh(session, offer.product_id)
     session.commit()
     session.refresh(offer)

@@ -15,12 +15,13 @@ moves writes an audit row in the caller's transaction. Two rules:
   pair work from ``OrderItem``, which carries the offer, the product and both
   variant ids. The cart line it came from is deleted when the order is placed,
   so anything not snapshotted there cannot be given back.
-* **The shelf belongs to an offer.** The counts that move are the seller's —
-  ``Offer.stock_left`` and ``OfferVariant.stock_left`` — because the seller is
-  who the goods and the money belong to. The figures on ``Product`` and
-  ``ProductVariant`` are a cache of whichever offer is winning, so they are
-  never assigned here: ``app.offers.refresh`` recomputes them after every
-  movement, and what they did as a result is logged beside what the shelf did.
+* **The shelf belongs to an offer, and it is a ledger.** The counts that move
+  are the seller's, and they move by writing a row in ``stock_movements``
+  through ``app.stock.move`` — never by assignment. ``Offer.stock_left`` is a
+  running total of that ledger, and the figures on ``Product`` and
+  ``ProductVariant`` are a cache of whichever offer is winning, recomputed by
+  ``app.offers.refresh`` after every movement. What the advertised figures did
+  as a result is logged beside what the shelf did.
 * **Nothing is restored twice.** Both entry points are guarded by a status
   that can only be reached once — cancelled from placed or packing, refunded
   from approved — so the counts move exactly as often as the decision is made.
@@ -28,12 +29,11 @@ moves writes an audit row in the caller's transaction. Two rules:
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 from sqlmodel import Session, select
 
 from app import audit
 from app import offers as of
+from app import stock as st
 from app.models import (
     DeliverySlot,
     Offer,
@@ -42,6 +42,7 @@ from app.models import (
     OrderItem,
     Product,
     ProductVariant,
+    StockMovementKind,
     User,
 )
 
@@ -52,16 +53,18 @@ def order_items(session: Session, order: Order) -> list[OrderItem]:
     )
 
 
-def _counted_variants(session: Session, item: OrderItem) -> Iterator[OfferVariant]:
-    """The colour and the size of this line, on this seller's shelf.
+def _leaves(session: Session, item: OrderItem) -> list[int]:
+    """The one count this line sits on, if it sits on one.
 
-    A row absent means nobody counts that variant apart — the offer's own
-    total is the whole answer for it — and moving a count that does not exist
-    would invent one.
+    The size where a size was chosen, the colour otherwise, and neither where
+    the customer named no variant at all — there the offer's own total is the
+    whole answer. One leaf, not both: a size and its colour are the same goods
+    counted at two depths, and moving both would take the same shirt off the
+    shelf twice.
     """
     if item.offer_id is None:
-        return
-    for variant_id in (item.color_variant_id, item.variant_id):
+        return []
+    for variant_id in (item.variant_id, item.color_variant_id):
         if variant_id is None:
             continue
         row = session.exec(
@@ -71,7 +74,8 @@ def _counted_variants(session: Session, item: OrderItem) -> Iterator[OfferVarian
             )
         ).first()
         if row is not None:
-            yield row
+            return [variant_id]
+    return []
 
 
 # --------------------------------------------------------------------------- taking
@@ -96,15 +100,32 @@ def take(session: Session, item: OrderItem) -> None:
     # product rather than on one seller's offer.
     product.sold_count += item.quantity
     session.add(product)
+    sell(session, item)
 
+
+def sell(session: Session, item: OrderItem) -> None:
+    """The goods leaving the shelf, and nothing else.
+
+    Apart from ``take`` because the two halves happen at different moments for
+    a cash order: it is counted as sold when it is placed, and the goods only
+    actually leave when the courier is paid at the door. Until then they are
+    held for it rather than gone from it.
+    """
+    product = session.get(Product, item.product_id) if item.product_id else None
     offer = session.get(Offer, item.offer_id) if item.offer_id else None
+    if product is None:
+        return
     if offer is not None:
-        offer.stock_left = max(0, offer.stock_left - item.quantity)
-        session.add(offer)
-        for row in _counted_variants(session, item):
-            row.stock_left = max(0, row.stock_left - item.quantity)
-            session.add(row)
-
+        for variant_id in _leaves(session, item) or [None]:
+            st.move(
+                session,
+                offer=offer,
+                kind=StockMovementKind.SALE,
+                quantity=item.quantity,
+                variant_id=variant_id,
+                order_id=item.order_id,
+                reason=f"{item.title} × {item.quantity}",
+            )
     # The card's price and stock follow from whose offer is now winning, which
     # this may just have changed — a seller selling out hands the card to the
     # next cheapest.
@@ -121,16 +142,30 @@ def restore_order(
     actor: User | None,
     action: str,
     note: str = "",
+    shelf: bool = True,
 ) -> None:
     """Everything a cancelled order took, back where it came from.
 
     All four counts, because none of it happened: the goods never left, so
     they are on the shelf and were never sold, and the window is free for
     somebody else.
+
+    ``shelf=False`` for an order that was never paid: its goods were only ever
+    held for it, not taken off the shelf, and the hold ends when the order
+    does. Putting them "back" would create stock out of nothing.
     """
     for item in order_items(session, order):
         _give_back_line(
-            session, item, actor=actor, action=action, note=note, unsell=True
+            session,
+            item,
+            actor=actor,
+            action=action,
+            note=note,
+            unsell=True,
+            shelf=shelf,
+            # Nothing about a cancelled order happened, so the goods come back
+            # as goods that never left.
+            kind=StockMovementKind.CANCEL_RETURN,
         )
     _give_back_seat(session, order, actor=actor, action=action, note=note)
 
@@ -152,7 +187,14 @@ def restock_returned(
     """
     for item in items:
         _give_back_line(
-            session, item, actor=actor, action=action, note=note, unsell=False
+            session,
+            item,
+            actor=actor,
+            action=action,
+            note=note,
+            unsell=False,
+            # This one did happen: it was bought, delivered, and came back.
+            kind=StockMovementKind.CUSTOMER_RETURN,
         )
 
 
@@ -164,6 +206,8 @@ def _give_back_line(
     action: str,
     note: str,
     unsell: bool,
+    kind: StockMovementKind,
+    shelf: bool = True,
 ) -> None:
     product = session.get(Product, item.product_id) if item.product_id else None
     if product is None:
@@ -172,36 +216,21 @@ def _give_back_line(
     offer = session.get(Offer, item.offer_id) if item.offer_id else None
     before = _cache_snapshot(session, product)
 
-    if offer is not None:
-        _log(
-            session,
-            actor=actor,
-            action=action,
-            entity="offer",
-            entity_id=offer.id,
-            field="stock_left",
-            old=offer.stock_left,
-            new=offer.stock_left + item.quantity,
-            note=note,
-        )
-        offer.stock_left += item.quantity
-        session.add(offer)
-
-        for row in _counted_variants(session, item):
-            variant = session.get(ProductVariant, row.variant_id)
-            _log(
+    if offer is not None and shelf:
+        # The ledger, not an audit row: the movement carries who did it and
+        # why, which is what an audit row was standing in for while the shelf
+        # was a number somebody assigned.
+        for variant_id in _leaves(session, item) or [None]:
+            st.move(
                 session,
+                offer=offer,
+                kind=kind,
+                quantity=item.quantity,
+                variant_id=variant_id,
                 actor=actor,
-                action=action,
-                entity="offer_variant",
-                entity_id=row.id,
-                field="stock_left",
-                old=row.stock_left,
-                new=row.stock_left + item.quantity,
-                note=note or (variant.label if variant else ""),
+                reason=note or item.title,
+                order_id=item.order_id,
             )
-            row.stock_left += item.quantity
-            session.add(row)
     # A line with no offer has no shelf to put anything back onto: the seller
     # it was bought from cannot be named, so inventing a count for one of them
     # would be worse than leaving it. Every line written since offers exist

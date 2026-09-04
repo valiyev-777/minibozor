@@ -439,7 +439,16 @@ def set_order_status(
             actor=user,
             action="order.cancel",
             note=payload.note,
+            shelf=order.paid,
         )
+    if payload.status is OrderStatus.DELIVERED and not order.paid:
+        # Cash at the door. The goods were held for this order from the moment
+        # it was placed; this is the moment they actually leave, because this
+        # is the moment it becomes a sale.
+        order.paid = True
+        for line in inventory.order_items(session, order):
+            inventory.sell(session, line)
+
     # Returning an order does not restock it here: whether the goods go back on
     # the shelf is decided when the refund is made, and doing it in both places
     # would put them back twice.

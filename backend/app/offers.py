@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from sqlmodel import Session, col, select
 
+from app import stock as st
 from app.models import (
     Offer,
     OfferVariant,
@@ -102,8 +103,13 @@ def refresh(session: Session, product_id: int) -> Product | None:
     # With no offer at all the last known price stays put. Deleting every offer
     # on a product is not a statement about what it used to cost.
 
-    product.stock_left = winner.stock_left if winner else 0
-    product.in_stock = winner is not None
+    # What the card says is what can be bought: the shelf less what is already
+    # in somebody's basket, on an unpaid order, or picked for a seller to
+    # collect. A figure that counted goods already promised would be an
+    # invitation to oversell them.
+    ready = st.sellable(session, winner) if winner else 0
+    product.stock_left = ready
+    product.in_stock = ready > 0
     session.add(product)
 
     _refresh_variants(session, product, winner)
@@ -126,7 +132,7 @@ def _refresh_variants(session: Session, product: Product, winner: Offer | None) 
     counted: dict[int, int] = {}
     if winner is not None:
         counted = {
-            row.variant_id: row.stock_left
+            row.variant_id: st.sellable(session, winner, row.variant_id)
             for row in session.exec(
                 select(OfferVariant).where(OfferVariant.offer_id == winner.id)
             ).all()
@@ -174,20 +180,23 @@ def shelf_left(
     offer: Offer,
     color_variant_id: int | None = None,
     variant_id: int | None = None,
+    *,
+    for_user_id: int | None = None,
 ) -> int:
-    """How many of the thing actually chosen this offer has left.
+    """How many of the thing actually chosen this offer can still sell.
 
     The same rule as the product-level shelf, read off one seller's stock: a
     size is a cell of the colour × size grid and answers on its own; failing
     that the colour; failing that the offer as a whole.
+
+    Less whatever is already promised — except this shopper's own basket. A
+    stepper that stopped at what the shopper is already holding would refuse
+    to let them buy the thing they just picked up.
     """
-    size_left = variant_stock(session, offer.id, variant_id)
-    if size_left is not None:
-        return size_left
-    color_left = variant_stock(session, offer.id, color_variant_id)
-    if color_left is not None:
-        return color_left
-    return offer.stock_left
+    for candidate in (variant_id, color_variant_id):
+        if candidate is not None and variant_stock(session, offer.id, candidate) is not None:
+            return st.sellable(session, offer, candidate, for_user_id=for_user_id)
+    return st.sellable(session, offer, for_user_id=for_user_id)
 
 
 # --------------------------------------------------------------------------- adoption
@@ -242,12 +251,13 @@ def mirror_catalogue(session: Session, seller: Seller) -> int:
         # Only the variants somebody counted apart. A ``None`` there has always
         # meant "the product's own shelf is the answer", and inventing a figure
         # for it would answer a question nobody asked.
-        for variant in session.exec(
+        counted = session.exec(
             select(ProductVariant).where(
                 ProductVariant.product_id == product.id,
                 col(ProductVariant.stock_left).is_not(None),
             )
-        ).all():
+        ).all()
+        for variant in counted:
             session.add(
                 OfferVariant(
                     offer_id=offer.id,
@@ -256,7 +266,55 @@ def mirror_catalogue(session: Session, seller: Seller) -> int:
                 )
             )
         session.commit()
+        opening_balance(session, offer)
+        session.commit()
     return made
+
+
+def opening_balance(session: Session, offer: Offer) -> None:
+    """Explain the shelf the ledger inherited.
+
+    The stock came from a catalogue that predates the ledger, so without this
+    the running total would disagree with the sum of the movements from the
+    first row — which is the one thing the ledger must never do. One movement
+    per leaf, saying so.
+
+    Written with ``stock_movements`` directly rather than through
+    ``app.stock.move``: that function *adds* to the running total, and here the
+    total is already right and the ledger has to be made to match it.
+    """
+    from app.models import StockMovement, StockMovementKind
+
+    leaves = leaf_variants(session, offer.product_id)
+    if leaves:
+        for leaf in leaves:
+            row = session.exec(
+                select(OfferVariant).where(
+                    OfferVariant.offer_id == offer.id,
+                    OfferVariant.variant_id == leaf.id,
+                )
+            ).first()
+            amount = row.stock_left if row else 0
+            if amount:
+                session.add(
+                    StockMovement(
+                        offer_id=offer.id,
+                        variant_id=leaf.id,
+                        kind=StockMovementKind.OPENING,
+                        quantity=amount,
+                        reason="Jurnal boshlanishidagi qoldiq",
+                    )
+                )
+    elif offer.stock_left:
+        session.add(
+            StockMovement(
+                offer_id=offer.id,
+                kind=StockMovementKind.OPENING,
+                quantity=offer.stock_left,
+                reason="Jurnal boshlanishidagi qoldiq",
+            )
+        )
+
 
 
 # --------------------------------------------------------------------------- the shelf's shape
@@ -279,15 +337,15 @@ def leaf_variants(session: Session, product_id: int) -> list[ProductVariant]:
 
 
 def roll_up(session: Session, offer: Offer) -> None:
-    """Recompute an offer's totals from the counts underneath them.
+    """Recompute the colour totals from the sizes underneath them.
 
     A colour holding four when its sizes hold one, one and one is a shelf that
-    lies about itself, and so is an offer holding twelve when its colours hold
-    ten. So neither total is ever set directly: a colour is the sum of its
-    sizes and the offer is the sum of its colours, and the only figures anybody
-    writes are the leaves.
+    lies about itself, and the sizes are where the counting happens.
 
-    Left alone for a product with no variants — there the offer's own count *is*
+    The offer's own total is no longer computed here: it is the sum of
+    ``stock_movements``, which is the sum of the leaves by construction, and
+    recomputing it from the colours as well would give one figure two owners.
+    Left alone for a product with no variants, where the offer's own count *is*
     the leaf.
     """
     counts = {
@@ -316,12 +374,4 @@ def roll_up(session: Session, offer: Offer) -> None:
             )
             session.add(row)
 
-    if colors:
-        offer.stock_left = sum(
-            counts[c.id].stock_left for c in colors if c.id in counts
-        )
-    elif sizes:
-        offer.stock_left = sum(
-            counts[s.id].stock_left for s in sizes if s.id in counts
-        )
     session.add(offer)

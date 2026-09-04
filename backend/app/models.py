@@ -102,6 +102,47 @@ class VariantKind(StrEnum):
     COLOR = "color"
 
 
+class StockMovementKind(StrEnum):
+    """Why a count moved. Every movement has one; there is no other kind.
+
+    A shelf figure used to be a number somebody wrote. Now it is the sum of
+    these, which means a disputed count is not an opinion — it is a list.
+    """
+
+    OPENING = "opening"                    # what was there when the ledger began
+    INTAKE = "intake"                      # received from a seller
+    SALE = "sale"                          # bought and paid for
+    CANCEL_RETURN = "cancel_return"        # an order called off, never left
+    CUSTOMER_RETURN = "customer_return"    # came back and passed inspection
+    WRITE_OFF = "write_off"                # damaged, lost, unsellable
+    COUNT_ADJUSTMENT = "count_adjustment"  # a stocktake found something else
+    SELLER_RETURN = "seller_return"        # handed back to the seller
+
+
+class SupplyStatus(StrEnum):
+    DECLARED = "declared"    # the seller says it is coming
+    RECEIVED = "received"    # the warehouse counted it in
+    CANCELLED = "cancelled"
+
+
+class StockCountStatus(StrEnum):
+    OPEN = "open"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
+
+
+class RemovalReason(StrEnum):
+    UNSELLABLE = "unsellable"   # damaged, expired
+    UNSOLD = "unsold"           # fine, just not selling
+
+
+class RemovalStatus(StrEnum):
+    REQUESTED = "requested"
+    READY = "ready"             # picked and set aside — and held off the shelf
+    COLLECTED = "collected"
+    CANCELLED = "cancelled"
+
+
 # --------------------------------------------------------------------------- identity
 
 
@@ -421,6 +462,13 @@ class CartItem(SQLModel, table=True):
     offer_id: int | None = Field(default=None, foreign_key="offers.id", index=True)
     quantity: int = 1
     selected: bool = True
+    # How long this line holds the goods off other people's shelves.
+    #
+    # Without it an abandoned basket keeps the last one of something for ever:
+    # nobody can buy it and nobody is going to. Touching the line — adding
+    # another, changing the quantity — pushes the deadline out again, because
+    # somebody still shopping has not abandoned anything.
+    reserved_until: datetime | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -809,3 +857,180 @@ class AuditLog(SQLModel, table=True):
     note: str = ""                         # a reason, a ticket number, a phone call
 
     created_at: datetime = Field(default_factory=utcnow, index=True)
+
+
+# --------------------------------------------------------------------------- warehouse
+
+# The shelf figure stops being a number anybody writes.
+#
+# ``Offer.stock_left`` and ``OfferVariant.stock_left`` are now a running total
+# of the rows below, kept as columns for the same reason the price is (the
+# listings filter and sort on them in SQL). The invariant the tests hold us to
+# is that the column equals the sum of the ledger — so a count that looks
+# wrong is not an argument, it is a list of movements with a name and a reason
+# against each one.
+
+
+class StockMovement(SQLModel, table=True):
+    """One reason a count changed.
+
+    Signed: what came in is positive and what went out is negative, so the
+    shelf is the sum and nothing has to be read twice. Which *kind* it was is
+    separate from the sign — a stocktake correction can go either way and is
+    still a stocktake correction.
+    """
+
+    __tablename__ = "stock_movements"
+
+    id: int | None = Field(default=None, primary_key=True)
+    offer_id: int = Field(foreign_key="offers.id", index=True)
+    # The leaf the count sits on — a size, or a colour where there are no
+    # sizes. Null for an offer nobody counts by variant, and for the odd sale
+    # of "one of the product" where the customer named no colour.
+    variant_id: int | None = Field(
+        default=None, foreign_key="product_variants.id", index=True
+    )
+
+    kind: StockMovementKind = Field(index=True)
+    quantity: int                     # signed
+    reason: str = ""
+
+    # Who moved it. Null for the opening balance, which nobody decided.
+    actor_id: int | None = Field(default=None, foreign_key="users.id", index=True)
+
+    # What caused it. Exactly one of these is set on anything but an opening
+    # balance or a bare write-off, and they are what turns the ledger from a
+    # list of numbers into a story that can be followed both ways.
+    supply_id: int | None = Field(default=None, foreign_key="supplies.id", index=True)
+    order_id: int | None = Field(default=None, foreign_key="orders.id", index=True)
+    return_request_id: int | None = Field(
+        default=None, foreign_key="return_requests.id", index=True
+    )
+    count_id: int | None = Field(default=None, foreign_key="stock_counts.id", index=True)
+    removal_id: int | None = Field(
+        default=None, foreign_key="removal_orders.id", index=True
+    )
+
+    created_at: datetime = Field(default_factory=utcnow, index=True)
+
+
+class Supply(SQLModel, table=True):
+    """A batch a seller brings in, declared before it arrives.
+
+    The code is ours. A seller's own label is a label on somebody else's
+    system: it may repeat, it may be missing, and two sellers may use the same
+    one on the same day. The pallet gets a code from here and the warehouse
+    looks for that.
+    """
+
+    __tablename__ = "supplies"
+
+    id: int | None = Field(default=None, primary_key=True)
+    code: str = Field(index=True, unique=True)       # "SUP-000123"
+    seller_id: int = Field(foreign_key="sellers.id", index=True)
+    status: SupplyStatus = Field(default=SupplyStatus.DECLARED, index=True)
+    note: str = ""
+
+    declared_at: datetime = Field(default_factory=utcnow)
+    received_at: datetime | None = None
+    received_by_id: int | None = Field(default=None, foreign_key="users.id")
+
+
+class SupplyLine(SQLModel, table=True):
+    """What the seller says is in the batch, and what the warehouse found.
+
+    Both, kept side by side. A declaration is a promise and a receipt is a
+    fact, and the gap between them is the only thing either party will want to
+    talk about afterwards.
+    """
+
+    __tablename__ = "supply_lines"
+
+    id: int | None = Field(default=None, primary_key=True)
+    supply_id: int = Field(foreign_key="supplies.id", index=True)
+    offer_id: int = Field(foreign_key="offers.id", index=True)
+    variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
+
+    declared_quantity: int = 0
+    received_quantity: int | None = None    # None until somebody counts it
+
+    @property
+    def difference(self) -> int | None:
+        if self.received_quantity is None:
+            return None
+        return self.received_quantity - self.declared_quantity
+
+
+class StockCount(SQLModel, table=True):
+    """A stocktake of one offer: what we think is there, then what is.
+
+    Opened against an offer rather than a place, because a place is not
+    modelled yet and the offer is what a figure belongs to. The expected
+    numbers are snapshotted when it opens, so a sale during the count does not
+    silently become a discrepancy.
+    """
+
+    __tablename__ = "stock_counts"
+
+    id: int | None = Field(default=None, primary_key=True)
+    code: str = Field(index=True, unique=True)       # "CNT-000042"
+    offer_id: int = Field(foreign_key="offers.id", index=True)
+    status: StockCountStatus = Field(default=StockCountStatus.OPEN, index=True)
+    note: str = ""
+
+    opened_by_id: int | None = Field(default=None, foreign_key="users.id")
+    opened_at: datetime = Field(default_factory=utcnow)
+    closed_by_id: int | None = Field(default=None, foreign_key="users.id")
+    closed_at: datetime | None = None
+
+
+class StockCountLine(SQLModel, table=True):
+    __tablename__ = "stock_count_lines"
+
+    id: int | None = Field(default=None, primary_key=True)
+    count_id: int = Field(foreign_key="stock_counts.id", index=True)
+    variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
+
+    expected: int = 0                  # as at the moment the count opened
+    counted: int | None = None         # what was on the shelf
+
+    @property
+    def difference(self) -> int | None:
+        if self.counted is None:
+            return None
+        return self.counted - self.expected
+
+
+class RemovalOrder(SQLModel, table=True):
+    """A seller asking for their goods back — damaged or simply unsold.
+
+    Between ``ready`` and ``collected`` the goods are held: picked, set aside,
+    and not on anybody's shelf. Selling something that is already on a pallet
+    by the door is the failure this state exists to prevent.
+    """
+
+    __tablename__ = "removal_orders"
+
+    id: int | None = Field(default=None, primary_key=True)
+    code: str = Field(index=True, unique=True)       # "RMV-000007"
+    seller_id: int = Field(foreign_key="sellers.id", index=True)
+    status: RemovalStatus = Field(default=RemovalStatus.REQUESTED, index=True)
+    reason: RemovalReason = Field(default=RemovalReason.UNSOLD)
+    note: str = ""
+
+    requested_at: datetime = Field(default_factory=utcnow)
+    ready_at: datetime | None = None
+    collected_at: datetime | None = None
+    prepared_by_id: int | None = Field(default=None, foreign_key="users.id")
+
+
+class RemovalLine(SQLModel, table=True):
+    __tablename__ = "removal_lines"
+
+    id: int | None = Field(default=None, primary_key=True)
+    removal_id: int = Field(foreign_key="removal_orders.id", index=True)
+    offer_id: int = Field(foreign_key="offers.id", index=True)
+    variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
+
+    quantity: int = 0                       # what the seller asked for
+    prepared_quantity: int | None = None    # what the warehouse actually found

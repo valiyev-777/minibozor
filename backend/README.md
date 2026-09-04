@@ -111,6 +111,83 @@ The backoffice that consumes these endpoints is in [`../backoffice`](../backoffi
 The optional PIN (screens 40–44) is a *local* re-entry lock, hashed with argon2
 server-side so it can be verified across devices. It never replaces the JWT.
 
+## The warehouse
+
+Under this model (FBO) the goods sit in our warehouse and the seller owns them.
+So the two sides of a shelf answer to different people: **a seller sets the
+price, the warehouse sets the count.**
+
+### The shelf is a ledger, not a number
+
+`Offer.stock_left` and `OfferVariant.stock_left` are a running total of
+`stock_movements`, and the invariant the tests hold us to is that the column
+equals the sum of the ledger. Nothing assigns to a count; everything records a
+*difference*, which is also what makes two people working the same shelf at
+once safe — the second save adds to the first instead of erasing it.
+
+| kind | where it comes from |
+|---|---|
+| `opening` | the balance the ledger inherited (written once, by the migration and the seed) |
+| `intake` | `POST /staff/supplies/{id}/receive` |
+| `sale` | an order paid for — at checkout for a card, at the door for cash |
+| `cancel_return` | an order called off, whose goods never left |
+| `customer_return` | a refund with `restock: true` |
+| `write_off` | `POST /staff/offers/{id}/write-off` |
+| `count_adjustment` | a stocktake, or `PUT /staff/offers/{id}/stock` |
+| `seller_return` | `POST /staff/removals/{id}/collect` |
+
+Every movement carries a kind, a reason, a person and a cause, so a disputed
+count is not an opinion — it is `GET /staff/stock/movements`.
+
+`PUT /staff/offers/{id}/stock` used to *set* the figure. It is now a stocktake
+correction: it takes a required `reason` and writes the difference. For a full
+recount use a `stock-count`, which snapshots what was expected first so a sale
+during the count is not mistaken for a discrepancy.
+
+### Holding
+
+Goods in a basket, on an unpaid order, or picked for a seller to collect are
+**held**: still ours to account for, nobody else's to buy. Sellable is the
+shelf less what is held, and that is the figure the apps are shown.
+
+Holding is *derived* from the things doing the holding, not stored — so a hold
+cannot be leaked, released twice, or left behind by a crash. A basket line
+carries `reserved_until` (30 minutes, pushed out whenever the line is touched),
+so an abandoned basket stops holding the last one of something without a
+sweeper having to notice.
+
+A cash order is not a sale yet: its goods are held from the moment it is placed
+and only leave the shelf when it is marked delivered.
+
+### Flows
+
+```
+seller declares  POST   /staff/supplies                    → SUP-000123
+warehouse counts POST   /staff/supplies/{id}/receive        → intake movements
+warehouse counts POST   /staff/stock-counts                 → CNT-000042, expected frozen
+                 POST   /staff/stock-counts/{id}/close      → count_adjustment movements
+seller asks back POST   /staff/removals                     → RMV-000007
+warehouse picks  POST   /staff/removals/{id}/prepare        → ready: held, not sold
+seller collects  POST   /staff/removals/{id}/collect        → seller_return movements
+anyone reads     GET    /staff/offers/{id}/shelf            → on hand / reserved / sellable
+                 GET    /staff/stock/movements              → the ledger
+```
+
+The batch code is ours, not the seller's. A seller's own reference belongs to
+their system: it may repeat, it may be missing, and two sellers may use the
+same one on the same day.
+
+### Migrating an existing database
+
+```bash
+.venv/bin/python -m tools.open_stock_ledger          # dry run
+.venv/bin/python -m tools.open_stock_ledger --apply
+```
+
+Creates the seven warehouse tables, adds `cart_items.reserved_until`, and
+writes the opening balances without which the running totals would disagree
+with their own ledger before anybody had done anything. Idempotent.
+
 ## Money and cards
 
 Prices are integers of so'm; formatting (`1 090 000`) belongs to the apps.

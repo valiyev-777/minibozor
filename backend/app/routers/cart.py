@@ -7,6 +7,7 @@ from app import i18n
 from app import offers as of
 from app import schemas as s
 from app import services as sv
+from app import stock as st
 from app.deps import CurrentUser, SessionDep
 from app.models import CartItem, Offer, Product, ProductVariant
 
@@ -20,6 +21,8 @@ def _cap(
     quantity: int,
     color: ProductVariant | None = None,
     size: ProductVariant | None = None,
+    *,
+    user_id: int | None = None,
 ) -> int:
     """How many of this the basket is allowed to hold.
 
@@ -33,23 +36,43 @@ def _cap(
     colour there are two of is the same shortfall one level down, and the same
     goes for a size. And the shelf is the seller's, not the catalogue's —
     holding three of something the chosen seller has one of is the same
-    shortfall again, a level sideways.
+    shortfall again, a level sideways. And less whatever somebody else is
+    already holding — in their own basket, on an unpaid order, or picked for a
+    seller to collect — because those goods are promised, not available.
     """
     if offer is not None:
         left = of.shelf_left(
-            session, offer, color.id if color else None, size.id if size else None
+            session,
+            offer,
+            color.id if color else None,
+            size.id if size else None,
+            for_user_id=user_id,
         )
     else:
         left = sv.shelf_left(product, color, size)
     return max(1, min(quantity, left)) if left else 1
 
 
-def _chosen(session: Session, item: CartItem) -> tuple[ProductVariant | None, ProductVariant | None]:
+def _chosen(
+    session: Session, item: CartItem
+) -> tuple[ProductVariant | None, ProductVariant | None]:
     """The colour and the size a cart line was added for."""
     return (
         session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None,
         session.get(ProductVariant, item.variant_id) if item.variant_id else None,
     )
+
+
+def _release(session: SessionDep, product_id: int | None) -> None:
+    """Let go of a hold, by telling the card the shelf grew back.
+
+    Nothing is deleted anywhere: a hold is derived from the basket line, so
+    removing the line *is* the release. This only refreshes the cached figure
+    that had been reduced by it.
+    """
+    if product_id is not None:
+        of.refresh(session, product_id)
+        session.commit()
 
 
 @router.get("", response_model=s.CartOut, summary="Screens 17, 18 — cart")
@@ -116,8 +139,17 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
         held = session.get(Offer, existing.offer_id) if existing.offer_id else offer
         existing.offer_id = existing.offer_id or offer.id
         existing.quantity = _cap(
-            session, held, product, existing.quantity + payload.quantity, color, size
+            session,
+            held,
+            product,
+            existing.quantity + payload.quantity,
+            color,
+            size,
+            user_id=user.id,
         )
+        # Touched, so the hold starts again: somebody still shopping has not
+        # abandoned anything.
+        existing.reserved_until = st.hold_until()
         session.add(existing)
     else:
         session.add(
@@ -127,9 +159,17 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
                 variant_id=payload.variant_id,
                 color_variant_id=color_id,
                 offer_id=offer.id,
-                quantity=_cap(session, offer, product, payload.quantity, color, size),
+                quantity=_cap(
+                    session, offer, product, payload.quantity, color, size,
+                    user_id=user.id,
+                ),
+                reserved_until=st.hold_until(),
             )
         )
+    session.commit()
+    # What the card says is the shelf less what is held, and this just held
+    # some, so the card has to be told.
+    of.refresh(session, product.id)
     session.commit()
     return sv.build_cart(session, user)
 
@@ -149,16 +189,25 @@ def update_item(
             product = session.get(Product, item.product_id)
             offer = session.get(Offer, item.offer_id) if item.offer_id else None
             item.quantity = (
-                _cap(session, offer, product, payload.quantity, *_chosen(session, item))
+                _cap(
+                    session,
+                    offer,
+                    product,
+                    payload.quantity,
+                    *_chosen(session, item),
+                    user_id=user.id,
+                )
                 if product
                 else payload.quantity
             )
+            item.reserved_until = st.hold_until()
             session.add(item)
     if payload.selected is not None:
         item.selected = payload.selected
         session.add(item)
 
     session.commit()
+    _release(session, item.product_id)
     return sv.build_cart(session, user)
 
 
@@ -167,16 +216,21 @@ def delete_item(item_id: int, user: CurrentUser, session: SessionDep) -> s.CartO
     item = session.get(CartItem, item_id)
     if item is None or item.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("cart_item_not_found"))
+    product_id = item.product_id
     session.delete(item)
     session.commit()
+    _release(session, product_id)
     return sv.build_cart(session, user)
 
 
 @router.delete("", response_model=s.CartOut, summary="Empty the cart")
 def clear_cart(user: CurrentUser, session: SessionDep) -> s.CartOut:
+    touched = {item.product_id for item in sv.cart_items(session, user)}
     for item in sv.cart_items(session, user):
         session.delete(item)
     session.commit()
+    for product_id in touched:
+        _release(session, product_id)
     return sv.build_cart(session, user)
 
 

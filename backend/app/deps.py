@@ -129,6 +129,15 @@ WarehouseUser = Annotated[
     User, Depends(require_role(UserRole.WAREHOUSE, UserRole.ADMIN))
 ]
 
+# Reading the goods: a seller's own supplies and removals, all of them for the
+# warehouse. The scoping is done in the endpoint — a seller sees their own
+# rows and nobody else's, which is not a filter they choose but the only rows
+# that exist for them.
+StockViewer = Annotated[
+    User,
+    Depends(require_role(UserRole.SELLER, UserRole.WAREHOUSE, UserRole.ADMIN)),
+]
+
 
 def get_user_by_phone(session: Session, phone: str) -> User | None:
     return session.exec(select(User).where(User.phone == phone)).first()

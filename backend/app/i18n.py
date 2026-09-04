@@ -324,6 +324,42 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Остаток задаётся приёмкой на склад, а не продавцом",
         "en": "Stock is set by warehouse intake, not by the seller",
     },
+    # the warehouse
+    "supply_not_found": {
+        "uz": "Partiya topilmadi",
+        "ru": "Поставка не найдена",
+        "en": "Supply not found",
+    },
+    "supply_line_not_found": {
+        "uz": "Partiyada bunday satr yo'q",
+        "ru": "В поставке нет такой строки",
+        "en": "No such line in that supply",
+    },
+    "not_your_supply": {
+        "uz": "Bu sizning partiyangiz emas",
+        "ru": "Это не ваша поставка",
+        "en": "That is not yours",
+    },
+    "removal_not_found": {
+        "uz": "Qaytarib olish buyrug'i topilmadi",
+        "ru": "Заявка на вывоз не найдена",
+        "en": "Removal order not found",
+    },
+    "removal_line_not_found": {
+        "uz": "Buyruqda bunday satr yo'q",
+        "ru": "В заявке нет такой строки",
+        "en": "No such line in that order",
+    },
+    "count_not_found": {
+        "uz": "Sanoq topilmadi",
+        "ru": "Инвентаризация не найдена",
+        "en": "Stocktake not found",
+    },
+    "count_already_open": {
+        "uz": "Bu taklif bo'yicha sanoq allaqachon ochiq",
+        "ru": "По этому предложению инвентаризация уже открыта",
+        "en": "A stocktake is already open on this offer",
+    },
     # what the customer is told when somebody finally answers
     "order_packing_note": {
         "uz": "{code} omborda yig'ilmoqda",
