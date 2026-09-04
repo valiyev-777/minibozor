@@ -294,6 +294,113 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "A window has to end after it starts",
     },
     # offers
+    "banner_not_found": {
+        "uz": "Banner topilmadi", "ru": "Баннер не найден", "en": "Banner not found",
+    },
+    "section_not_found": {
+        "uz": "Blok topilmadi", "ru": "Блок не найден", "en": "Section not found",
+    },
+    "promo_not_found": {
+        "uz": "Promokod topilmadi",
+        "ru": "Промокод не найден",
+        "en": "Promo code not found",
+    },
+    "promo_exists": {
+        "uz": "Bu promokod allaqachon bor",
+        "ru": "Такой промокод уже есть",
+        "en": "That promo code already exists",
+    },
+    "promo_empty": {
+        "uz": "Chegirma foizi yoki summasini ko'rsating",
+        "ru": "Укажите процент или сумму скидки",
+        "en": "Give a percentage or an amount off",
+    },
+    "promo_in_use": {
+        "uz": "Ishlatilgan promokodni o'chirib bo'lmaydi — faolsizlantiring",
+        "ru": "Использованный промокод удалить нельзя — отключите его",
+        "en": "A promo code that has been used cannot be deleted — switch it off",
+    },
+    "order_repeats": {
+        "uz": "Tartibda takrorlangan qator bor",
+        "ru": "В порядке есть повторяющаяся строка",
+        "en": "That order names a row twice",
+    },
+    "order_incomplete": {
+        "uz": "Tartibda hamma qator bo'lishi kerak",
+        "ru": "Порядок должен содержать все строки",
+        "en": "The order has to name every row",
+    },
+    "seller_exists": {
+        "uz": "Bu nomli sotuvchi allaqachon bor",
+        "ru": "Продавец с таким именем уже есть",
+        "en": "A seller with that name already exists",
+    },
+    "account_taken": {
+        "uz": "Bu hisob boshqa sotuvchiga bog'langan",
+        "ru": "Этот аккаунт привязан к другому продавцу",
+        "en": "That account is linked to another seller",
+    },
+    "sku_exists": {
+        "uz": "Bu SKU allaqachon ishlatilgan",
+        "ru": "Такой SKU уже используется",
+        "en": "That SKU is already in use",
+    },
+    "slug_exists": {
+        "uz": "Bu slug allaqachon ishlatilgan",
+        "ru": "Такой slug уже используется",
+        "en": "That slug is already in use",
+    },
+    "brand_not_found": {
+        "uz": "Brend topilmadi",
+        "ru": "Бренд не найден",
+        "en": "Brand not found",
+    },
+    "brand_in_use": {
+        "uz": "Bu brendda mahsulotlar bor",
+        "ru": "У этого бренда есть товары",
+        "en": "That brand still has products",
+    },
+    "category_in_use": {
+        "uz": "Bu turkumda mahsulot yoki ichki turkum bor",
+        "ru": "В этой категории есть товары или подкатегории",
+        "en": "That category still has products or children",
+    },
+    "category_own_parent": {
+        "uz": "Turkum o'ziga ota bo'lolmaydi",
+        "ru": "Категория не может быть родителем себе",
+        "en": "A category cannot be its own parent",
+    },
+    "image_not_found": {
+        "uz": "Rasm topilmadi",
+        "ru": "Изображение не найдено",
+        "en": "Image not found",
+    },
+    "size_needs_a_colour": {
+        "uz": "O'lcham qaysi rangga tegishli ekanini ko'rsating",
+        "ru": "Укажите, какому цвету принадлежит размер",
+        "en": "Say which colour the size belongs to",
+    },
+    "variant_would_move_the_count": {
+        "uz": "Javonda tovar bor — o'lcham qo'shish sanoq joyini o'zgartiradi. "
+              "Avval qoldiqni chiqarib, keyin qo'shing.",
+        "ru": "На складе есть остаток — добавление размера сдвинет уровень учёта. "
+              "Сначала обнулите остаток.",
+        "en": "There is stock on the shelf — adding a size would move where it is "
+              "counted. Count it out first.",
+    },
+    "variant_has_history": {
+        "uz": "Bu variant bo'yicha harakat yoki buyurtma bor — o'chirib bo'lmaydi. "
+              "Uni javondan chiqaring.",
+        "ru": "По этому варианту есть движения или заказы — удалить нельзя. "
+              "Обнулите остаток.",
+        "en": "That variant has movements or orders against it — it cannot be "
+              "deleted. Take it out of stock instead.",
+    },
+    "variant_has_children": {
+        "uz": "Bu rangning o'lchamlari bor",
+        "ru": "У этого цвета есть размеры",
+        "en": "That colour still has sizes",
+    },
     "offer_not_found": {
         "uz": "Taklif topilmadi",
         "ru": "Предложение не найдено",

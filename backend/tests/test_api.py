@@ -27,6 +27,7 @@ from app.models import (
     OrderItem,
     Product,
     ProductVariant,
+    PromoCode,
     Review,
     ReviewStatus,
     Seller,
@@ -37,6 +38,7 @@ from app.models import (
     VariantKind,
     utcnow,
 )
+from app.seed import ADMIN_PHONE
 
 API = "/api/v1"
 
@@ -1862,6 +1864,11 @@ def _untouched_product(client: TestClient) -> dict:
     One offer means one price, which is the state the whole catalogue is in
     after the migration — and taking a fresh one per test keeps each of them
     reasoning about a shelf nothing else has been spending.
+
+    The seeded catalogue is thirty-one cards and this suite spends them, so
+    when they run out a new one is made through the front door: written,
+    published, offered by the house and stocked. That is a slower path than
+    picking one, which is why it is the fallback rather than the rule.
     """
     listing = client.get(f"{API}/products", params={"page_size": 60}).json()
     with Session(engine) as session:
@@ -1870,7 +1877,64 @@ def _untouched_product(client: TestClient) -> dict:
             for product_id in session.exec(select(Offer.product_id)).all()
             if len(of.offers_for(session, product_id, active_only=False)) == 1
         }
-    return next(p for p in listing["items"] if p["in_stock"] and p["id"] in single)
+    found = next(
+        (p for p in listing["items"] if p["in_stock"] and p["id"] in single), None
+    )
+    return found if found is not None else _mint_a_product(client)
+
+
+def _mint_a_product(client: TestClient) -> dict:
+    """A fresh card in the shop, offered by the house and stocked.
+
+    Everything through the endpoints this stage added, except the shelf, which
+    goes through the ledger because that is the only way a count moves.
+    """
+    admin = _sign_in_as(client, ADMIN_PHONE)
+    slug = client.get(f"{API}/categories").json()[0]["slug"]
+    with Session(engine) as session:
+        minted = len(session.exec(select(Product)).all()) + 1
+        house = session.exec(select(Seller).where(Seller.name == "Mini Bozor")).one()
+        house_id = house.id
+
+    card = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": f"MB-MINT-{minted}",
+            "title": f"Sinov tovari {minted}",
+            "category_slug": slug,
+            "price": 400_000,
+        },
+        headers=admin,
+    )
+    assert card.status_code == 201, card.text
+    product_id = card.json()["id"]
+    client.post(
+        f"{API}/staff/catalog/products/{product_id}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+    offer = client.post(
+        f"{API}/staff/offers",
+        json={"product_id": product_id, "price": 400_000, "seller_id": house_id},
+        headers=admin,
+    )
+    assert offer.status_code == 201, offer.text
+
+    with Session(engine) as session:
+        _adjust_to(session, session.get(Offer, offer.json()["id"]), 25)
+        session.commit()
+        of.refresh(session, product_id)
+        session.commit()
+    return client.get(f"{API}/products/{product_id}").json()
+
+
+def _sign_in_as(client: TestClient, phone: str) -> dict[str, str]:
+    """Auth headers for a phone, for the helpers that cannot take a fixture."""
+    requested = client.post(f"{API}/auth/otp/request", json={"phone": phone}).json()
+    tokens = client.post(
+        f"{API}/auth/otp/verify", json={"phone": phone, "code": requested["dev_code"]}
+    ).json()
+    return {"Authorization": f"Bearer {tokens['access_token']}"}
 
 
 def test_the_cheapest_offer_wins_the_card(client: TestClient) -> None:
@@ -3420,3 +3484,807 @@ def test_the_warehouse_can_see_the_shelves_it_counts(
     assert client.patch(
         f"{API}/staff/offers/{offer_id}", json={"price": 1}, headers=warehouse
     ).status_code == 403
+
+
+# --------------------------------------------------------- the catalogue's owner
+
+
+def _new_card(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    sku: str,
+    title: str,
+    price: int = 500_000,
+    path: str = "/staff/catalog/products",
+) -> dict:
+    listing = client.get(f"{API}/categories").json()
+    created = client.post(
+        f"{API}{path}",
+        json={
+            "sku": sku,
+            "title": title,
+            "subtitle": "sinov",
+            "category_slug": listing[0]["slug"],
+            "price": price,
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    return created.json()
+
+
+def test_an_admin_takes_on_a_seller_and_nobody_else_can(
+    client: TestClient,
+    admin: dict[str, str],
+    operator: dict[str, str],
+    auth: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Until now the only way to make a second seller was the database, which
+    left the multi-seller model exercised by nothing but a fixture."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900030001")
+    body = {"name": "Chorsu Bozori", "phone": "+998781112233", "commission_percent": 8}
+
+    assert client.post(f"{API}/staff/sellers", json=body).status_code == 401
+    assert client.post(f"{API}/staff/sellers", json=body, headers=auth).status_code == 403
+    assert client.post(f"{API}/staff/sellers", json=body, headers=operator).status_code == 403
+    assert client.post(f"{API}/staff/sellers", json=body, headers=warehouse).status_code == 403
+
+    created = client.post(f"{API}/staff/sellers", json=body, headers=admin)
+    assert created.status_code == 201, created.text
+    seller = created.json()
+    assert (seller["name"], seller["commission_percent"], seller["active"]) == (
+        "Chorsu Bozori",
+        8,
+        True,
+    )
+    assert seller["user_phone"] is None, "nobody signs in as them yet"
+
+    # And one name, one seller.
+    assert client.post(f"{API}/staff/sellers", json=body, headers=admin).status_code == 409
+
+
+def test_linking_an_account_is_what_makes_somebody_a_seller(
+    client: TestClient,
+    admin: dict[str, str],
+    sign_in: Callable[[str], dict[str, str]],
+) -> None:
+    """There is no state where an account is attached to a seller and cannot
+    act as one, so the role comes with the link rather than through a second
+    door that does not exist."""
+    phone = "+998900030011"
+    theirs = sign_in(phone)          # an ordinary customer, for now
+    assert client.get(f"{API}/staff/offers", headers=theirs).status_code == 403
+
+    seller = client.post(
+        f"{API}/staff/sellers",
+        json={"name": "Yakkasaroy Savdo", "user_phone": phone},
+        headers=admin,
+    ).json()
+    assert seller["user_phone"] == phone
+
+    with Session(engine) as session:
+        account = session.exec(select(User).where(User.phone == phone)).one()
+    assert account.role is UserRole.SELLER
+
+    # They can now see their own shelf — and it is theirs, not everybody's.
+    theirs = sign_in(phone)
+    mine = client.get(f"{API}/staff/offers", headers=theirs)
+    assert mine.status_code == 200
+    assert mine.json() == [], "a new seller has no offers"
+
+    # A privilege change is logged with a name against it.
+    rows = _audit_rows("user.role", account.id)
+    assert rows and rows[0].new_value == "seller"
+
+    # And one account cannot be two sellers.
+    assert client.post(
+        f"{API}/staff/sellers",
+        json={"name": "Boshqa Savdo", "user_phone": phone},
+        headers=admin,
+    ).status_code == 409
+
+
+def test_a_second_seller_undercuts_the_first_on_the_same_card(
+    client: TestClient,
+    admin: dict[str, str],
+    sign_in: Callable[[str], dict[str, str]],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The whole model, end to end and through the front door: the admin takes
+    on a seller, the seller offers on a card the platform already owns, the
+    warehouse books the goods in, and the cheaper price wins the card."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900030021")
+    phone = "+998900030022"
+    sign_in(phone)
+    seller_row = client.post(
+        f"{API}/staff/sellers",
+        json={"name": "Olmaliq Savdo", "user_phone": phone, "commission_percent": 11},
+        headers=admin,
+    ).json()
+    seller = sign_in(phone)
+
+    product = _untouched_product(client)
+    was = client.get(f"{API}/products/{product['id']}").json()
+    cheap, _ = _undercuts(was["price"])
+    with Session(engine) as session:
+        leaves = [v.id for v in of.leaf_variants(session, product["id"])]
+
+    offer = client.post(
+        f"{API}/staff/offers",
+        json={"product_id": product["id"], "price": cheap, "variant_ids": leaves},
+        headers=seller,
+    )
+    assert offer.status_code == 201, offer.text
+    # Not in the shop until the warehouse has it: a price with nothing behind
+    # it does not win a card.
+    assert client.get(f"{API}/products/{product['id']}").json()["price"] == was["price"]
+
+    line: dict = {"offer_id": offer.json()["id"], "quantity": 4}
+    if leaves:
+        line["variant_id"] = leaves[0]
+    supply = client.post(
+        f"{API}/staff/supplies", json={"lines": [line]}, headers=seller
+    ).json()
+    received = client.post(
+        f"{API}/staff/supplies/{supply['id']}/receive",
+        json={"lines": [{"line_id": supply["lines"][0]["id"], "received_quantity": 4}]},
+        headers=warehouse,
+    )
+    assert received.status_code == 200, received.text
+
+    won = client.get(f"{API}/products/{product['id']}").json()
+    assert (won["price"], won["seller"], won["stock_left"]) == (cheap, "Olmaliq Savdo", 4)
+
+    # And the card lists both sellers, cheapest first.
+    quotes = client.get(f"{API}/products/{product['id']}/offers").json()
+    assert [q["seller"]["name"] for q in quotes][0] == "Olmaliq Savdo"
+    assert len(quotes) >= 2
+    assert sum(1 for q in quotes if q["is_winner"]) == 1
+
+    # The admin sees who they took on, and what they carry.
+    seen = next(
+        row
+        for row in client.get(f"{API}/staff/sellers", headers=admin).json()
+        if row["id"] == seller_row["id"]
+    )
+    assert (seen["offer_count"], seen["commission_percent"]) == (1, 11)
+    assert not _stock_is_consistent()
+
+
+def test_a_card_nobody_has_approved_is_not_in_the_shop(
+    client: TestClient, admin: dict[str, str], auth: dict[str, str]
+) -> None:
+    """Every customer-facing path that returns a product, held to the same
+    rule. A shopper who can find a draft has been shown something that does
+    not exist yet."""
+    card = _new_card(client, admin, sku="MB-DRAFT-1", title="Sinov chiroq, qoralama")
+    assert card["status"] == "draft"
+    product_id = card["id"]
+
+    def visible() -> dict[str, bool]:
+        listing = client.get(f"{API}/products", params={"page_size": 60}).json()
+        sold_out_too = client.get(
+            f"{API}/products", params={"page_size": 60, "show_sold_out": True}
+        ).json()
+        similar = client.get(f"{API}/products/1/similar").json()
+        home = client.get(f"{API}/home").json()
+        suggest = client.get(f"{API}/search/suggest", params={"q": "Sinov chiroq"}).json()
+        client.put(f"{API}/favorites/{product_id}", headers=auth)
+        favourites = client.get(f"{API}/favorites", headers=auth).json()
+        return {
+            "listing": any(p["id"] == product_id for p in listing["items"]),
+            "even_sold_out": any(p["id"] == product_id for p in sold_out_too["items"]),
+            "similar": any(p["id"] == product_id for p in similar),
+            "home": any(
+                p["id"] == product_id
+                for section in home["sections"]
+                for p in section["products"]
+            ),
+            "suggest": any(row["product_id"] == product_id for row in suggest),
+            "favourites": any(p["id"] == product_id for p in favourites["items"]),
+            "page": client.get(f"{API}/products/{product_id}").status_code == 200,
+            "offers": client.get(f"{API}/products/{product_id}/offers").status_code == 200,
+        }
+
+    assert not any(visible().values()), visible()
+
+    # Published, and the same walk finds it — the page and the offer list at
+    # least; the rails and the typeahead want stock, which it has none of.
+    published = client.post(
+        f"{API}/staff/catalog/products/{product_id}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+    assert published.status_code == 200, published.text
+    now = visible()
+    assert now["page"] and now["offers"]
+    assert now["even_sold_out"], "in the shop, and the filter can show it"
+    assert now["favourites"], "a favourite that can be opened again"
+
+    # Withdrawn, and it is gone from all of them again.
+    client.post(
+        f"{API}/staff/catalog/products/{product_id}/status",
+        json={"status": "archived"},
+        headers=admin,
+    )
+    assert not any(visible().values())
+
+
+def test_a_sellers_proposal_never_lands_in_the_shop(
+    client: TestClient,
+    admin: dict[str, str],
+    sign_in: Callable[[str], dict[str, str]],
+) -> None:
+    """The catalogue belongs to the platform. A seller may suggest a card; a
+    copy per seller would duplicate the catalogue and leave the warehouse
+    holding the same goods in two places under two names."""
+    phone = "+998900030031"
+    sign_in(phone)
+    client.post(
+        f"{API}/staff/sellers",
+        json={"name": "Uchtepa Savdo", "user_phone": phone},
+        headers=admin,
+    )
+    seller = sign_in(phone)
+
+    proposed = _new_card(
+        client,
+        seller,
+        sku="MB-PROP-1",
+        title="Sotuvchi taklifi, stol chirog'i",
+        path="/staff/catalog/proposals",
+    )
+    assert proposed["status"] == "moderating", "not in the shop, whoever sent it"
+    assert proposed["proposed_by"]["name"] == "Uchtepa Savdo"
+    assert client.get(f"{API}/products/{proposed['id']}").status_code == 404
+
+    # A seller cannot write straight into the catalogue, nor approve their own.
+    assert client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "MB-PROP-2",
+            "title": "O'zim yozdim",
+            "category_slug": client.get(f"{API}/categories").json()[0]["slug"],
+            "price": 100_000,
+        },
+        headers=seller,
+    ).status_code == 403
+    assert client.post(
+        f"{API}/staff/catalog/products/{proposed['id']}/status",
+        json={"status": "published"},
+        headers=seller,
+    ).status_code == 403
+
+    # The queue, oldest first, and a refusal the seller can read.
+    queue = client.get(
+        f"{API}/staff/catalog/products", params={"status": "moderating"}, headers=admin
+    ).json()
+    assert any(row["id"] == proposed["id"] for row in queue["items"])
+    assert client.post(
+        f"{API}/staff/catalog/products/{proposed['id']}/status",
+        json={"status": "rejected"},
+        headers=admin,
+    ).status_code == 400, "a refusal without a reason is not a refusal"
+
+    refused = client.post(
+        f"{API}/staff/catalog/products/{proposed['id']}/status",
+        json={"status": "rejected", "reason": "Rasm yo'q, tavsif to'liq emas"},
+        headers=admin,
+    ).json()
+    assert refused["status"] == "rejected"
+    assert refused["moderation_note"] == "Rasm yo'q, tavsif to'liq emas"
+    assert refused["next_statuses"] == ["moderating", "archived"]
+    assert client.get(f"{API}/products/{proposed['id']}").status_code == 404
+
+    rows = _audit_rows("product.status", proposed["id"])
+    assert (rows[0].old_value, rows[0].new_value) == ("moderating", "rejected")
+    assert rows[0].actor_role is UserRole.ADMIN
+    assert "Rasm yo'q" in rows[0].note
+
+    # Fixed and sent back, then approved — and only then is it in the shop.
+    client.post(
+        f"{API}/staff/catalog/products/{proposed['id']}/status",
+        json={"status": "moderating"},
+        headers=admin,
+    )
+    client.post(
+        f"{API}/staff/catalog/products/{proposed['id']}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+    page = client.get(f"{API}/products/{proposed['id']}")
+    assert page.status_code == 200
+    assert page.json()["title"] == "Sotuvchi taklifi, stol chirog'i"
+
+    # Published does not go back to a queue: it is withdrawn, which is a
+    # different act.
+    assert client.post(
+        f"{API}/staff/catalog/products/{proposed['id']}/status",
+        json={"status": "moderating"},
+        headers=admin,
+    ).status_code == 409
+
+
+def test_the_catalogue_can_be_written_without_a_developer(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """Everything a card is made of, through the front door: a category, a
+    brand, the card, its photographs, its colours and sizes, its spec table."""
+    assert client.post(
+        f"{API}/staff/catalog/categories",
+        json={"slug": "sinov-turkum", "name": "Sinov turkumi", "icon": "box", "sort": 99},
+        headers=admin,
+    ).status_code == 201
+    assert client.post(
+        f"{API}/staff/catalog/brands",
+        json={"slug": "sinov-brend", "name": "Sinov Brend"},
+        headers=admin,
+    ).status_code == 201
+
+    created = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "MB-FULL-1",
+            "title": "Sinov krossovka",
+            "subtitle": "to'liq kartochka",
+            "description": "Admin panelidan yozilgan",
+            "category_slug": "sinov-turkum",
+            "brand_slug": "sinov-brend",
+            "price": 700_000,
+            "old_price": 900_000,
+            "badge": "Yangi",
+        },
+        headers=admin,
+    )
+    assert created.status_code == 201, created.text
+    card = created.json()
+    product_id = card["id"]
+    assert (card["stock_left"], card["offer_count"]) == (0, 0), "stock is the ledger's"
+
+    # One SKU, one card.
+    assert client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "MB-FULL-1",
+            "title": "Takror",
+            "category_slug": "sinov-turkum",
+            "price": 1,
+        },
+        headers=admin,
+    ).status_code == 409
+
+    images = client.post(
+        f"{API}/staff/catalog/products/{product_id}/images",
+        json={"url": "products/gazelle.png", "sort": 0},
+        headers=admin,
+    )
+    assert images.status_code == 201 and len(images.json()) == 1
+
+    colour = client.post(
+        f"{API}/staff/catalog/products/{product_id}/variants",
+        json={"kind": "color", "label": "Qora", "value": "#0E0F12"},
+        headers=admin,
+    )
+    assert colour.status_code == 201
+    colour_id = colour.json()[0]["id"]
+    # A size has to say which colour it is a size of.
+    assert client.post(
+        f"{API}/staff/catalog/products/{product_id}/variants",
+        json={"kind": "size", "label": "42", "value": "42"},
+        headers=admin,
+    ).status_code == 400
+    sized = client.post(
+        f"{API}/staff/catalog/products/{product_id}/variants",
+        json={"kind": "size", "label": "42", "value": "42", "parent_id": colour_id},
+        headers=admin,
+    )
+    assert sized.status_code == 201
+    assert {v["kind"] for v in sized.json()} == {"color", "size"}
+
+    specs = client.put(
+        f"{API}/staff/catalog/products/{product_id}/specs",
+        json={"specs": [{"key": "Material", "value": "Zamsh"}, {"key": "Vazn", "value": "320 g"}]},
+        headers=admin,
+    )
+    assert [row["key"] for row in specs.json()] == ["Material", "Vazn"]
+
+    # Published, and the customer sees the card the admin built.
+    client.post(
+        f"{API}/staff/catalog/products/{product_id}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+    page = client.get(f"{API}/products/{product_id}").json()
+    assert page["brand"]["name"] == "Sinov Brend"
+    assert page["category"]["slug"] == "sinov-turkum"
+    assert [spec["key"] for spec in page["specs"]] == ["Material", "Vazn"]
+    assert page["images"] and page["badge"] == "Yangi"
+    assert {v["label"] for v in page["variants"]} == {"Qora", "42"}
+
+    # A category with a card in it is load-bearing.
+    assert client.delete(
+        f"{API}/staff/catalog/categories/sinov-turkum", headers=admin
+    ).status_code == 409
+    assert client.delete(
+        f"{API}/staff/catalog/brands/sinov-brend", headers=admin
+    ).status_code == 409
+
+
+def _card_with_a_colour(
+    client: TestClient, admin: dict[str, str], sku: str, *, with_a_size: bool
+) -> tuple[int, int]:
+    """A published card carrying a colour, and optionally a size of it.
+
+    Written through the admin endpoints, so the test depends on nothing the
+    seed happened to include.
+    """
+    slug = client.get(f"{API}/categories").json()[0]["slug"]
+    card = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": sku,
+            "title": f"Sinov kiyim {sku}",
+            "category_slug": slug,
+            "price": 300_000,
+        },
+        headers=admin,
+    )
+    assert card.status_code == 201, card.text
+    product_id = card.json()["id"]
+
+    colour = client.post(
+        f"{API}/staff/catalog/products/{product_id}/variants",
+        json={"kind": "color", "label": "Qora", "value": "#0E0F12"},
+        headers=admin,
+    )
+    assert colour.status_code == 201, colour.text
+    colour_id = colour.json()[0]["id"]
+
+    leaf_id = colour_id
+    if with_a_size:
+        sized = client.post(
+            f"{API}/staff/catalog/products/{product_id}/variants",
+            json={"kind": "size", "label": "L", "value": "L", "parent_id": colour_id},
+            headers=admin,
+        )
+        assert sized.status_code == 201, sized.text
+        leaf_id = next(v["id"] for v in sized.json() if v["kind"] == "size")
+
+    client.post(
+        f"{API}/staff/catalog/products/{product_id}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+    return product_id, leaf_id
+
+
+def _stock_a_leaf(
+    client: TestClient,
+    admin: dict[str, str],
+    warehouse: dict[str, str],
+    product_id: int,
+    leaf_id: int,
+    units: int,
+) -> int:
+    """The house takes the card on and the warehouse books goods in."""
+    with Session(engine) as session:
+        house_id = session.exec(select(Seller).where(Seller.name == "Mini Bozor")).one().id
+    offer = client.post(
+        f"{API}/staff/offers",
+        json={
+            "product_id": product_id,
+            "price": 300_000,
+            "seller_id": house_id,
+            "variant_ids": [leaf_id],
+        },
+        headers=admin,
+    )
+    assert offer.status_code == 201, offer.text
+    offer_id = offer.json()["id"]
+
+    supply = client.post(
+        f"{API}/staff/supplies",
+        json={
+            "lines": [{"offer_id": offer_id, "variant_id": leaf_id, "quantity": units}],
+            "seller_id": house_id,
+        },
+        headers=admin,
+    )
+    assert supply.status_code == 201, supply.text
+    received = client.post(
+        f"{API}/staff/supplies/{supply.json()['id']}/receive",
+        json={
+            "lines": [
+                {"line_id": supply.json()["lines"][0]["id"], "received_quantity": units}
+            ]
+        },
+        headers=warehouse,
+    )
+    assert received.status_code == 200, received.text
+    return offer_id
+
+
+def test_a_variant_with_a_history_cannot_be_deleted(
+    client: TestClient,
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The ledger would stop explaining its own totals, and an old order would
+    point at a row that is not there."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900030041")
+    product_id, leaf_id = _card_with_a_colour(
+        client, admin, "MB-VAR-1", with_a_size=True
+    )
+
+    # Before anything has happened to it, a variant is just a row.
+    spare = client.post(
+        f"{API}/staff/catalog/products/{product_id}/variants",
+        json={"kind": "color", "label": "Oq", "value": "#FFFFFF"},
+        headers=admin,
+    ).json()
+    spare_id = next(v["id"] for v in spare if v["label"] == "Oq")
+    assert client.delete(
+        f"{API}/staff/catalog/products/{product_id}/variants/{spare_id}",
+        headers=admin,
+    ).status_code == 200
+
+    _stock_a_leaf(client, admin, warehouse, product_id, leaf_id, 3)
+
+    refused = client.delete(
+        f"{API}/staff/catalog/products/{product_id}/variants/{leaf_id}",
+        headers=admin,
+    )
+    assert refused.status_code == 409
+    assert "harakat" in refused.json()["detail"]
+    assert not _stock_is_consistent()
+
+
+def test_a_size_cannot_be_added_under_stock_that_is_already_counted(
+    client: TestClient,
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A shelf counted on colours would have every figure sitting a level
+    above where the ledger looks for it, with no way to say how the colour's
+    stock divides between the new sizes."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900030042")
+    product_id, colour_id = _card_with_a_colour(
+        client, admin, "MB-VAR-2", with_a_size=False
+    )
+
+    # No stock yet, so the grid may still change shape.
+    allowed = client.post(
+        f"{API}/staff/catalog/products/{product_id}/variants",
+        json={"kind": "size", "label": "S", "value": "S", "parent_id": colour_id},
+        headers=admin,
+    )
+    assert allowed.status_code == 201
+
+    other_id, other_colour = _card_with_a_colour(
+        client, admin, "MB-VAR-3", with_a_size=False
+    )
+    _stock_a_leaf(client, admin, warehouse, other_id, other_colour, 4)
+
+    blocked = client.post(
+        f"{API}/staff/catalog/products/{other_id}/variants",
+        json={"kind": "size", "label": "M", "value": "M", "parent_id": other_colour},
+        headers=admin,
+    )
+    assert blocked.status_code == 409
+    assert "sanoq" in blocked.json()["detail"]
+    assert not _stock_is_consistent()
+
+
+def test_standing_a_seller_down_takes_their_offers_with_them(
+    client: TestClient,
+    admin: dict[str, str],
+    sign_in: Callable[[str], dict[str, str]],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Left active, the cheapest card in the shop could belong to somebody we
+    have stopped dealing with."""
+    product, offer, seller_headers, _ = _stocked_offer(
+        client, staff, "Sirdaryo Savdo", "+998900030051", units=5
+    )
+    assert client.get(f"{API}/products/{product['id']}").json()["seller"] == "Sirdaryo Savdo"
+
+    with Session(engine) as session:
+        seller_id = session.exec(
+            select(Seller).where(Seller.name == "Sirdaryo Savdo")
+        ).one().id
+
+    stood_down = client.patch(
+        f"{API}/staff/sellers/{seller_id}", json={"active": False}, headers=admin
+    )
+    assert stood_down.status_code == 200
+    assert stood_down.json()["active"] is False
+
+    # The card is back with whoever else sells it.
+    assert client.get(f"{API}/products/{product['id']}").json()["seller"] != "Sirdaryo Savdo"
+    with Session(engine) as session:
+        assert session.get(Offer, offer["id"]).active is False
+    rows = _audit_rows("seller.active", seller_id)
+    assert (rows[0].old_value, rows[0].new_value) == ("true", "false")
+    assert seller_headers
+
+
+# --------------------------------------------------------- the shop window
+
+
+def test_the_banner_order_is_the_order_the_app_shows(
+    client: TestClient, admin: dict[str, str], operator: dict[str, str]
+) -> None:
+    """A seasonal banner used to need a deployment. The order is set as a
+    whole, because a screen where rows are dragged knows the final order and
+    nothing else."""
+    assert client.get(f"{API}/staff/showcase/banners", headers=operator).status_code == 403
+
+    added = client.post(
+        f"{API}/staff/showcase/banners",
+        json={
+            "title": "Qishki chegirma",
+            "kicker": "MINI BOZOR / SINOV",
+            "image_url": "banners/deal.png",
+            "target_type": "category",
+            "target_value": "elektronika",
+        },
+        headers=admin,
+    )
+    assert added.status_code == 201, added.text
+    mine = added.json()
+    assert mine["active"] is True
+
+    # New banners go at the bottom, where a person expects to find them.
+    listed = client.get(f"{API}/staff/showcase/banners", headers=admin).json()
+    assert listed[-1]["id"] == mine["id"]
+    assert [row["sort"] for row in listed] == sorted(row["sort"] for row in listed)
+
+    # The app already shows it, at the end.
+    on_screen = client.get(f"{API}/home").json()["banners"]
+    assert on_screen[-1]["title"] == "Qishki chegirma"
+
+    # Drag it to the front, and the app follows.
+    order = [mine["id"], *[row["id"] for row in listed if row["id"] != mine["id"]]]
+    reordered = client.post(
+        f"{API}/staff/showcase/banners/order", json={"ids": order}, headers=admin
+    )
+    assert reordered.status_code == 200
+    assert [row["id"] for row in reordered.json()] == order
+    assert client.get(f"{API}/home").json()["banners"][0]["title"] == "Qishki chegirma"
+
+    # A partial order would leave the rest holding numbers that mean something
+    # else, so it is refused rather than half applied.
+    assert client.post(
+        f"{API}/staff/showcase/banners/order", json={"ids": [mine["id"]]}, headers=admin
+    ).status_code == 400
+    assert client.post(
+        f"{API}/staff/showcase/banners/order",
+        json={"ids": [mine["id"], mine["id"]]},
+        headers=admin,
+    ).status_code == 400
+
+    # Switched off, and it is out of the window without being lost.
+    client.patch(
+        f"{API}/staff/showcase/banners/{mine['id']}",
+        json={"active": False},
+        headers=admin,
+    )
+    titles = [b["title"] for b in client.get(f"{API}/home").json()["banners"]]
+    assert "Qishki chegirma" not in titles
+    assert any(
+        row["id"] == mine["id"]
+        for row in client.get(f"{API}/staff/showcase/banners", headers=admin).json()
+    )
+
+    assert client.delete(
+        f"{API}/staff/showcase/banners/{mine['id']}", headers=admin
+    ).status_code == 200
+
+
+def test_a_home_rail_can_be_added_moved_and_taken_down(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    before = [section["key"] for section in client.get(f"{API}/home").json()["sections"]]
+    assert before, "the seeded window is not empty"
+
+    created = client.post(
+        f"{API}/staff/showcase/sections",
+        json={
+            "key": "sinov-rail",
+            "title": "Sinov tokchasi",
+            "subtitle": "faqat test uchun",
+            "layout": "rail",
+        },
+        headers=admin,
+    )
+    assert created.status_code == 201, created.text
+    # A rail pointing at a category that is not there would show nothing.
+    assert client.post(
+        f"{API}/staff/showcase/sections",
+        json={"key": "yoq-rail", "title": "Yo'q", "category_slug": "bunday-turkum-yoq"},
+        headers=admin,
+    ).status_code == 404
+    assert client.post(
+        f"{API}/staff/showcase/sections",
+        json={"key": "sinov-rail", "title": "Takror"},
+        headers=admin,
+    ).status_code == 409
+
+    shown = [section["key"] for section in client.get(f"{API}/home").json()["sections"]]
+    assert shown[-1] == "sinov-rail"
+
+    rows = client.get(f"{API}/staff/showcase/sections", headers=admin).json()
+    order = [
+        next(r["id"] for r in rows if r["key"] == "sinov-rail"),
+        *[r["id"] for r in rows if r["key"] != "sinov-rail"],
+    ]
+    client.post(f"{API}/staff/showcase/sections/order", json={"ids": order}, headers=admin)
+    assert client.get(f"{API}/home").json()["sections"][0]["key"] == "sinov-rail"
+
+    # Out of season rather than deleted: the alternative is writing it again
+    # from memory next year.
+    client.patch(
+        f"{API}/staff/showcase/sections/sinov-rail",
+        json={"active": False, "title": "Sinov tokchasi (yopiq)"},
+        headers=admin,
+    )
+    keys = [section["key"] for section in client.get(f"{API}/home").json()["sections"]]
+    assert "sinov-rail" not in keys
+    assert set(before) <= set(keys), "nothing else moved"
+
+    assert client.delete(
+        f"{API}/staff/showcase/sections/sinov-rail", headers=admin
+    ).status_code == 200
+    assert client.delete(
+        f"{API}/staff/showcase/sections/sinov-rail", headers=admin
+    ).status_code == 404
+
+
+def test_a_promo_code_can_be_written_and_switched_off(
+    client: TestClient, admin: dict[str, str], auth: dict[str, str]
+) -> None:
+    created = client.post(
+        f"{API}/staff/showcase/promos",
+        json={"code": "sinov20", "percent_off": 20, "min_total": 100_000},
+        headers=admin,
+    )
+    assert created.status_code == 201, created.text
+    # Stored upper case, because that is how the cart looks one up — a
+    # lower-case row would be a code nobody could redeem.
+    assert created.json()["code"] == "SINOV20"
+
+    # A discount that discounts nothing is not a promo code.
+    assert client.post(
+        f"{API}/staff/showcase/promos", json={"code": "bosh"}, headers=admin
+    ).status_code == 400
+    assert client.post(
+        f"{API}/staff/showcase/promos", json={"code": "SINOV20", "amount_off": 1}, headers=admin
+    ).status_code == 409
+
+    # The customer's cart takes it.
+    client.delete(f"{API}/cart", headers=auth)
+    product = _untouched_product(client)
+    client.post(f"{API}/cart/items", json=_pick(product["id"], 1), headers=auth)
+    applied = client.post(f"{API}/cart/promo", json={"code": "SINOV20"}, headers=auth)
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["totals"]["promo_code"] == "SINOV20"
+    assert applied.json()["totals"]["discount"] > 0
+
+    # Switched off, and the same code stops working.
+    client.patch(
+        f"{API}/staff/showcase/promos/SINOV20", json={"active": False}, headers=admin
+    )
+    assert client.post(
+        f"{API}/cart/promo", json={"code": "SINOV20"}, headers=auth
+    ).status_code == 400
+
+    # A discount is money, so writing one is logged.
+    with Session(engine) as session:
+        promo_id = session.exec(
+            select(PromoCode).where(PromoCode.code == "SINOV20")
+        ).one().id
+    assert _audit_rows("promo.create", promo_id)
+    off = _audit_rows("promo.active", promo_id)
+    assert (off[0].old_value, off[0].new_value) == ("true", "false")

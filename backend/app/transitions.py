@@ -19,7 +19,7 @@ from fastapi import HTTPException
 from fastapi import status as http
 
 from app import i18n
-from app.models import OrderStatus, ReturnStatus, ReviewStatus
+from app.models import OrderStatus, ProductStatus, ReturnStatus, ReviewStatus
 
 # An order goes forward, and may be called off while nothing has left the
 # building yet. Cancelling stops at ``packing`` for the same reason the
@@ -54,6 +54,28 @@ REVIEW_TRANSITIONS: dict[ReviewStatus, frozenset[ReviewStatus]] = {
     ReviewStatus.MODERATING: frozenset({ReviewStatus.PUBLISHED, ReviewStatus.REJECTED}),
     ReviewStatus.PUBLISHED: frozenset({ReviewStatus.REJECTED}),
     ReviewStatus.REJECTED: frozenset({ReviewStatus.PUBLISHED}),
+}
+
+
+# A card's way into the shop, and out again.
+#
+# ``draft`` is ours and may go straight up; a seller's proposal lands in
+# ``moderating`` and waits. A refusal is not a dead end — the seller fixes what
+# was wrong and sends it back — but ``published`` never returns to a queue: a
+# card in the shop is taken out by archiving it, which is a different act with
+# a different consequence for the offers hanging off it.
+PRODUCT_TRANSITIONS: dict[ProductStatus, frozenset[ProductStatus]] = {
+    ProductStatus.DRAFT: frozenset(
+        {ProductStatus.MODERATING, ProductStatus.PUBLISHED, ProductStatus.ARCHIVED}
+    ),
+    ProductStatus.MODERATING: frozenset(
+        {ProductStatus.PUBLISHED, ProductStatus.REJECTED}
+    ),
+    ProductStatus.REJECTED: frozenset(
+        {ProductStatus.MODERATING, ProductStatus.ARCHIVED}
+    ),
+    ProductStatus.PUBLISHED: frozenset({ProductStatus.ARCHIVED}),
+    ProductStatus.ARCHIVED: frozenset({ProductStatus.DRAFT}),
 }
 
 

@@ -19,6 +19,7 @@ from app.models import (
     NotificationKind,
     OrderStatus,
     PaymentMethod,
+    ProductStatus,
     RemovalReason,
     RemovalStatus,
     ReturnStatus,
@@ -889,6 +890,294 @@ class WriteOffIn(BaseModel):
     variant_id: int | None = None
     quantity: int = Field(gt=0)
     reason: str = Field(min_length=1, max_length=200)
+
+
+# --------------------------------------------------------------------------- admin
+
+
+class AdminSellerOut(BaseModel):
+    id: int
+    name: str
+    phone: str
+    commission_percent: int
+    active: bool
+    # The account that signs in as this seller, if one is linked yet.
+    user_phone: str | None
+    user_name: str | None
+    offer_count: int
+    created_at: datetime
+
+
+class SellerCreateIn(BaseModel):
+    """A seller, and optionally the account that signs in as them.
+
+    Linking an account is what *makes* somebody a seller — it is not a
+    separate administrative step — so giving a phone here grants that user the
+    seller role, and the change is written to the audit log.
+    """
+
+    name: str = Field(min_length=1, max_length=120)
+    phone: str = Field("", max_length=20)
+    commission_percent: int = Field(5, ge=0, le=100)
+    user_phone: str | None = Field(None, pattern=UZ_PHONE)
+
+
+class SellerUpdateIn(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    phone: str | None = Field(None, max_length=20)
+    commission_percent: int | None = Field(None, ge=0, le=100)
+    active: bool | None = None
+    user_phone: str | None = Field(None, pattern=UZ_PHONE)
+
+
+class AdminProductOut(BaseModel):
+    """A card as the person who owns the catalogue sees it."""
+
+    id: int
+    sku: str
+    title: str
+    subtitle: str
+    status: ProductStatus
+    next_statuses: list[ProductStatus]
+    category_slug: str
+    brand_slug: str | None
+    price: int
+    old_price: int | None
+    stock_left: int
+    offer_count: int
+    proposed_by: SellerOut | None
+    moderation_note: str
+    image_count: int
+    variant_count: int
+    created_at: datetime
+
+
+class ProductCreateIn(BaseModel):
+    """A new card.
+
+    ``price`` seeds the cached figure and nothing more. The price a shopper
+    pays comes from an offer, and ``app.offers.refresh`` overwrites this the
+    moment one exists — it is here so a card with no offers yet has a number
+    to show rather than a nought. Stock is absent on purpose: it comes from
+    the movement ledger and is the warehouse's to move.
+    """
+
+    sku: str = Field(min_length=1, max_length=40)
+    title: str = Field(min_length=1, max_length=200)
+    subtitle: str = ""
+    description: str = ""
+    category_slug: str
+    brand_slug: str | None = None
+    price: int = Field(gt=0)
+    old_price: int | None = Field(None, gt=0)
+    badge: str | None = None
+    warranty: str | None = None
+    is_original: bool = True
+    free_delivery: bool = True
+    next_day_delivery: bool = True
+
+
+class ProductUpdateIn(BaseModel):
+    """Everything about a card except its price, its stock and its status.
+
+    Those three have owners: the price belongs to an offer, the stock to the
+    ledger, and the status to a moderation decision with a reason attached.
+    """
+
+    title: str | None = Field(None, min_length=1, max_length=200)
+    subtitle: str | None = None
+    description: str | None = None
+    category_slug: str | None = None
+    brand_slug: str | None = None
+    badge: str | None = None
+    warranty: str | None = None
+    is_original: bool | None = None
+    free_delivery: bool | None = None
+    next_day_delivery: bool | None = None
+
+
+class ProductProposeIn(ProductCreateIn):
+    """A seller suggesting a card for the platform's catalogue.
+
+    The catalogue belongs to the platform: a seller attaches an offer to a card
+    that already exists rather than opening their own copy, because a copy per
+    seller duplicates the catalogue and leaves the warehouse holding the same
+    goods in two places. What a seller *can* do is suggest one, and this is
+    that — it lands in moderation, never in the shop.
+    """
+
+
+class ProductStatusIn(BaseModel):
+    status: ProductStatus
+    reason: str = ""
+
+
+class CategoryWriteIn(BaseModel):
+    slug: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9-]+$")
+    name: str = Field(min_length=1, max_length=120)
+    subtitle: str = ""
+    icon: str = "box"
+    image_url: str | None = None
+    parent_slug: str | None = None
+    sort: int = 0
+    is_quick_link: bool = False
+
+
+class CategoryUpdateIn(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    subtitle: str | None = None
+    icon: str | None = None
+    image_url: str | None = None
+    parent_slug: str | None = None
+    sort: int | None = None
+    is_quick_link: bool | None = None
+
+
+class BrandWriteIn(BaseModel):
+    slug: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9-]+$")
+    name: str = Field(min_length=1, max_length=120)
+
+
+class ImageWriteIn(BaseModel):
+    url: str = Field(min_length=1, max_length=300)
+    sort: int = 0
+
+
+class VariantWriteIn(BaseModel):
+    kind: VariantKind
+    label: str = Field(min_length=1, max_length=60)
+    value: str = Field(min_length=1, max_length=60)
+    image_url: str | None = None
+    # Which colour this size belongs to. Required for a size on a product that
+    # has colours — a size that belongs to nothing is a cell of no grid.
+    parent_id: int | None = None
+    sort: int = 0
+
+
+class SpecWriteIn(BaseModel):
+    key: str = Field(min_length=1, max_length=80)
+    value: str = Field(min_length=1, max_length=200)
+
+
+class SpecsReplaceIn(BaseModel):
+    """The whole list, in order. Specs are read as a table, not edited row by
+    row, and replacing them is how the order gets fixed."""
+
+    specs: list[SpecWriteIn] = Field(default_factory=list, max_length=60)
+
+
+# --------------------------------------------------------------------------- showcase
+
+
+class AdminBannerOut(BaseModel):
+    id: int
+    kicker: str
+    title: str
+    subtitle: str
+    cta: str
+    image_url: str
+    gradient_from: str
+    gradient_to: str
+    target_type: str
+    target_value: str
+    sort: int
+    active: bool
+
+
+class BannerWriteIn(BaseModel):
+    kicker: str = ""
+    title: str = Field(min_length=1, max_length=200)
+    subtitle: str = ""
+    cta: str = "Ko'rish"
+    image_url: str = Field(min_length=1, max_length=300)
+    gradient_from: str = "#14162A"
+    gradient_to: str = "#0E7BF5"
+    target_type: Literal["category", "product", "url"] = "category"
+    target_value: str = ""
+    active: bool = True
+
+
+class BannerUpdateIn(BaseModel):
+    kicker: str | None = None
+    title: str | None = Field(None, min_length=1, max_length=200)
+    subtitle: str | None = None
+    cta: str | None = None
+    image_url: str | None = Field(None, min_length=1, max_length=300)
+    gradient_from: str | None = None
+    gradient_to: str | None = None
+    target_type: Literal["category", "product", "url"] | None = None
+    target_value: str | None = None
+    active: bool | None = None
+
+
+class AdminSectionOut(BaseModel):
+    id: int
+    key: str
+    title: str
+    subtitle: str
+    category_slug: str | None
+    layout: str
+    sort: int
+    active: bool
+
+
+class SectionWriteIn(BaseModel):
+    key: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9-]+$")
+    title: str = Field(min_length=1, max_length=120)
+    subtitle: str = ""
+    category_slug: str | None = None
+    layout: Literal["rail", "grid", "deals"] = "rail"
+    active: bool = True
+
+
+class SectionUpdateIn(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=120)
+    subtitle: str | None = None
+    category_slug: str | None = None
+    layout: Literal["rail", "grid", "deals"] | None = None
+    active: bool | None = None
+
+
+class ReorderIn(BaseModel):
+    """The whole order, in one call.
+
+    A screen where rows are dragged into place knows the final order and
+    nothing else. Sending it as one list means the order cannot be left half
+    applied, and it costs one request instead of one per row.
+    """
+
+    ids: list[int] = Field(min_length=1, max_length=200)
+
+
+class AdminPromoOut(BaseModel):
+    id: int
+    code: str
+    percent_off: int
+    amount_off: int
+    min_total: int
+    active: bool
+
+
+class PromoWriteIn(BaseModel):
+    code: str = Field(min_length=3, max_length=40)
+    percent_off: int = Field(0, ge=0, le=100)
+    amount_off: int = Field(0, ge=0)
+    min_total: int = Field(0, ge=0)
+    active: bool = True
+
+    @field_validator("code")
+    @classmethod
+    def _upper(cls, value: str) -> str:
+        # The cart looks a code up in upper case, so a lower-case one would be
+        # a code nobody could redeem.
+        return value.strip().upper()
+
+
+class PromoUpdateIn(BaseModel):
+    percent_off: int | None = Field(None, ge=0, le=100)
+    amount_off: int | None = Field(None, ge=0)
+    min_total: int | None = Field(None, ge=0)
+    active: bool | None = None
 
 
 # --------------------------------------------------------------------------- misc

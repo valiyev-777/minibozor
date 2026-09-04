@@ -21,7 +21,9 @@ def home(
     favs = sv.favorite_ids(session, user)
 
     banners = session.exec(
-        select(Banner).where(Banner.active.is_(True)).order_by(col(Banner.sort))
+        select(Banner)
+        .where(Banner.active.is_(True))
+        .order_by(col(Banner.sort), col(Banner.id))
     ).all()
 
     categories = session.exec(
@@ -29,7 +31,11 @@ def home(
     ).all()
 
     sections: list[s.SectionOut] = []
-    for section in session.exec(select(HomeSection).order_by(col(HomeSection.sort))).all():
+    for section in session.exec(
+        select(HomeSection)
+        .where(HomeSection.active.is_(True))
+        .order_by(col(HomeSection.sort), col(HomeSection.id))
+    ).all():
         products = _section_products(session, section)
         sections.append(
             s.SectionOut(
@@ -66,8 +72,9 @@ def home(
 
 def _section_products(session: SessionDep, section: HomeSection) -> list[Product]:
     limit = {"deals": 2, "grid": 4, "rail": 8}.get(section.layout, 8)
-    # The home screen is the shop's own window. Nothing sold out goes in it.
-    stmt = select(Product).where(Product.in_stock.is_(True))
+    # The home screen is the shop's own window. Nothing sold out goes in it,
+    # and nothing that is not in the shop at all.
+    stmt = sv.in_the_shop(select(Product)).where(Product.in_stock.is_(True))
 
     if section.category_slug:
         category = session.exec(

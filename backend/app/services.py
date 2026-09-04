@@ -26,6 +26,7 @@ from app.models import (
     Product,
     ProductImage,
     ProductSpec,
+    ProductStatus,
     ProductVariant,
     PromoCode,
     Review,
@@ -118,6 +119,26 @@ def short_name(name: str) -> str:
 
 
 # --------------------------------------------------------------------------- catalog
+
+
+def in_the_shop(stmt):
+    """Narrow a product query to the cards that are actually in the shop.
+
+    Every customer-facing path goes through this. A card that is a draft, in
+    moderation, refused or withdrawn is not for sale, and a shopper who can
+    find one has been shown something that does not exist yet — or does not
+    exist any more, which is worse, because they may already own one.
+
+    One function rather than a repeated ``where`` so that a new listing cannot
+    be written that forgets: there is a test that walks every product-returning
+    endpoint and holds them all to it.
+    """
+    return stmt.where(Product.status == ProductStatus.PUBLISHED)
+
+
+def is_in_the_shop(product: Product | None) -> bool:
+    """The same question about one row we already have in hand."""
+    return product is not None and product.status is ProductStatus.PUBLISHED
 
 
 def primary_image(session: Session, product_id: int) -> str | None:
@@ -432,6 +453,13 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
             and (color is None or color.in_stock)
             and (size is None or size.in_stock)
         )
+
+    # A card withdrawn from the shop cannot be bought, whatever its offers say.
+    # The line stays in the basket and reads as unavailable rather than
+    # disappearing: the shopper put it there, and a basket that quietly loses
+    # a row is a basket nobody trusts.
+    if not is_in_the_shop(product):
+        available = False
 
     labels = [
         i18n.t(session, "variant", v.id, "label", v.label)

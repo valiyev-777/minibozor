@@ -11,6 +11,7 @@ from app import i18n
 from app.core.config import settings
 from app.db import init_db
 from app.routers import (
+    admin,
     auth,
     cards,
     cart,
@@ -26,6 +27,7 @@ from app.routers import (
     profile,
     reviews,
     search,
+    showcase,
     staff,
     warehouse,
 )
@@ -99,6 +101,8 @@ for router in (
     operations.router,
     merchandising.router,
     warehouse.router,
+    admin.router,
+    showcase.router,
 ):
     app.include_router(router, prefix=API)
 

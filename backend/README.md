@@ -92,6 +92,72 @@ broken in the browser's console rather than in ours.
 MB_CORS_ORIGINS=http://localhost:5173,https://ofis.minibozor.uz uvicorn app.main:app
 ```
 
+## The catalogue belongs to the platform
+
+A seller attaches an offer to a card that already exists; they do not open
+their own copy of it. That is the whole point of one card carrying several
+offers — a copy per seller duplicates the catalogue and leaves the warehouse
+holding the same goods in two places under two names. What a seller *can* do is
+propose a card, which lands in moderation.
+
+### A card has a state
+
+| state | what it means |
+|---|---|
+| `draft` | being written, ours |
+| `moderating` | proposed by a seller, waiting on us |
+| `published` | in the shop |
+| `rejected` | refused, with a reason the seller reads |
+| `archived` | withdrawn; the orders that named it survive |
+
+**Customer endpoints show `published` and nothing else.** Every path that
+returns a product goes through `services.in_the_shop()` — the listing, the
+filter sheet, the product page, similar products, the home rails, the
+typeahead and the favourites list — and there is a test that walks all of them.
+A basket line for a card that has left the shop stays in the basket and reads
+as unavailable rather than disappearing.
+
+Which moves are legal is `transitions.PRODUCT_TRANSITIONS`; a refusal needs a
+reason and every move is written to `audit_log`.
+
+### Doors
+
+```
+admin   POST   /staff/sellers                              take on a seller
+admin   PATCH  /staff/sellers/{id}                         edit, stand down, link an account
+admin   POST   /staff/catalog/products                     write a card (draft)
+seller  POST   /staff/catalog/proposals                    suggest a card (moderating)
+admin   GET    /staff/catalog/products?status=moderating   the queue
+admin   POST   /staff/catalog/products/{id}/status         publish / refuse / withdraw
+admin   POST   /staff/catalog/categories | /brands         …and PATCH, DELETE
+admin   POST   /staff/catalog/products/{id}/images         …variants, specs
+admin   POST   /staff/showcase/banners | /sections | /promos
+admin   POST   /staff/showcase/banners/order               the whole order, one call
+```
+
+Three things about a card are **not** in its edit shape, because each has an
+owner: the price belongs to an offer, the stock to the movement ledger, and the
+status to a decision somebody made with a reason attached. `price` on *create*
+seeds the cached figure so a card with no offers has a number to show;
+`offers.refresh` overwrites it the moment an offer exists.
+
+Linking an account to a seller grants that user the seller role — there is no
+state where an account is attached to a seller and cannot act as one — and the
+privilege change is audited. Standing a seller down withdraws their offers with
+them.
+
+### Migrating an existing database
+
+```bash
+.venv/bin/python -m tools.publish_catalogue          # dry run
+.venv/bin/python -m tools.publish_catalogue --apply
+```
+
+Adds `status`, `proposed_by_id` and `moderation_note`, then publishes every
+card that predates the column — they were all in the shop. The column defaults
+to `DRAFT`, matching the model, so nothing written afterwards is published by
+accident. Idempotent.
+
 ## Staff accounts
 
 Staff sign in through the same OTP flow customers use — the role is the only

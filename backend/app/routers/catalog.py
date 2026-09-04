@@ -82,7 +82,11 @@ def list_products(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=60),
 ) -> s.Page[s.ProductCardOut]:
-    stmt = select(Product)
+    # Only what is in the shop. A draft, a proposal waiting on moderation, a
+    # refused card and a withdrawn one are all invisible here — the apps see
+    # exactly the catalogue they saw before, because everything in it is
+    # published.
+    stmt = sv.in_the_shop(select(Product))
 
     # What cannot be bought is not on the shelf. A sold-out product used to sit
     # in the grid behind its veil, taking a slot in every listing and every page
@@ -143,7 +147,9 @@ def list_products(
 
 @router.get("/products/filters", response_model=s.FiltersOut, summary="Screen 13 — filter sheet")
 def product_filters(session: SessionDep, category: str | None = None) -> s.FiltersOut:
-    stmt = select(Product)
+    # The same window as the listing, or the price slider would span cards the
+    # listing cannot show and the brand counts would not add up.
+    stmt = sv.in_the_shop(select(Product))
     if category:
         stmt = stmt.where(col(Product.category_id).in_(_category_tree_ids(session, category)))
     products = session.exec(stmt).all()
@@ -200,7 +206,9 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
 @router.get("/products/{product_id}", response_model=s.ProductOut, summary="Screen 14 — product")
 def get_product(product_id: int, session: SessionDep, user: OptionalUser) -> s.ProductOut:
     product = session.get(Product, product_id)
-    if product is None:
+    # Not in the shop is not found. A card in moderation has a real id, and
+    # answering with its contents would publish it by the back door.
+    if not sv.is_in_the_shop(product):
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     return sv.product_out(session, product, sv.favorite_ids(session, user))
 
@@ -218,8 +226,7 @@ def product_offers(product_id: int, session: SessionDep) -> list[s.OfferOut]:
     on the card is the one it is. Withdrawn offers are not — an inactive offer
     is not on sale, and listing it would invite a question nobody can answer.
     """
-    product = session.get(Product, product_id)
-    if product is None:
+    if not sv.is_in_the_shop(session.get(Product, product_id)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     winner = of.winning_offer(session, product_id)
     return [
@@ -233,10 +240,10 @@ def similar_products(
     product_id: int, session: SessionDep, user: OptionalUser, limit: int = Query(8, le=20)
 ) -> list[s.ProductCardOut]:
     product = session.get(Product, product_id)
-    if product is None:
+    if not sv.is_in_the_shop(product):
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     rows = session.exec(
-        select(Product)
+        sv.in_the_shop(select(Product))
         .where(
             Product.category_id == product.category_id,
             Product.id != product_id,

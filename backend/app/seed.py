@@ -45,6 +45,7 @@ from app.models import (
     Product,
     ProductImage,
     ProductSpec,
+    ProductStatus,
     ProductVariant,
     PromoCode,
     ReturnReason,
@@ -736,6 +737,10 @@ def _seed_products(
             badge=spec.get("badge"),
             warranty=spec.get("warranty"),
             stock_left=spec.get("stock_left", 25),
+            # The catalogue the design describes is a shop that is open, so it
+            # seeds published. A card only starts as a draft when somebody
+            # writes one, or as `moderating` when a seller proposes one.
+            status=ProductStatus.PUBLISHED,
         )
         session.add(product)
         session.commit()

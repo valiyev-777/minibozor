@@ -46,7 +46,7 @@ def suggest(
 ) -> list[s.SuggestionOut]:
     needle = f"%{q.lower()}%"
     rows = session.exec(
-        select(Product)
+        sv.in_the_shop(select(Product))
         # Suggesting something that cannot be bought wastes one of six rows.
         .where(func.lower(Product.title).like(needle), Product.in_stock.is_(True))
         .order_by(col(Product.sold_count).desc())

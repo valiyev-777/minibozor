@@ -102,6 +102,27 @@ class VariantKind(StrEnum):
     COLOR = "color"
 
 
+class ProductStatus(StrEnum):
+    """Whether a card is in the shop.
+
+    The catalogue belongs to the platform: a seller attaches an offer to a card
+    that already exists rather than opening their own copy of it. That is the
+    whole point of one card with several offers — a copy per seller would
+    duplicate the catalogue and leave the warehouse holding the same goods in
+    two places under two names.
+
+    So a seller may *propose* a card and an admin decides. Until somebody
+    decides, it is not in the shop, and the customer endpoints show nothing but
+    ``published``.
+    """
+
+    DRAFT = "draft"            # being written, ours
+    MODERATING = "moderating"  # proposed by a seller, waiting on us
+    PUBLISHED = "published"    # in the shop
+    REJECTED = "rejected"      # refused, with a reason the seller reads
+    ARCHIVED = "archived"      # withdrawn; the orders that named it survive
+
+
 class StockMovementKind(StrEnum):
     """Why a count moved. Every movement has one; there is no other kind.
 
@@ -275,6 +296,15 @@ class Product(SQLModel, table=True):
     # Across every seller: how many of this thing have gone, whoever sold it.
     sold_count: int = 0
 
+    # Whether this card is in the shop at all. Customer endpoints filter on it
+    # and nothing else is visible to them, whatever offers it may carry.
+    status: ProductStatus = Field(default=ProductStatus.DRAFT, index=True)
+    # The seller who suggested it, where one did. Null for a card we wrote.
+    proposed_by_id: int | None = Field(default=None, foreign_key="sellers.id", index=True)
+    # Why it was refused — the sentence the seller is owed. Who refused it and
+    # when are in ``audit_log``.
+    moderation_note: str = ""
+
     badge: str | None = None         # "Bestseller", "Yangi", "Original", "Kafolat 1 yil"
     # The winning seller's name, cached alongside the price it won with.
     seller: str = "Mini Bozor"
@@ -429,6 +459,10 @@ class HomeSection(SQLModel, table=True):
     category_slug: str | None = None
     layout: str = "rail"            # rail | grid | deals
     sort: int = 0
+    # A rail taken off the home screen without being deleted. The design's
+    # sections are the shop's window and a seasonal one comes back next year;
+    # deleting it would mean writing it again from memory.
+    active: bool = True
 
 
 # --------------------------------------------------------------------------- shopping
