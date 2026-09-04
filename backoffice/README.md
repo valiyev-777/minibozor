@@ -6,10 +6,16 @@ because the business logic (`transitions.py`, `inventory.py`, `offers.py`,
 `audit.py`) lives in FastAPI and a second model layer over the same database
 would mean writing every schema change twice.
 
-The first panel here is the **operator's**: returns, review moderation, order
-status, delivery windows. Four more are planned — warehouse, admin, seller, and
-a courier app — so most of what is in `src/components` exists to be shared
-rather than to serve this one panel.
+Two panels so far, in one application:
+
+- **Operator** — returns, review moderation, order status, delivery windows.
+- **Warehouse** — the shelf, incoming batches, stocktakes, removals, and the
+  movement ledger.
+
+The sidebar is drawn from the signed-in role, so an operator sees the queues, a
+warehouse hand sees the shelves, and an admin sees both. Three more are planned
+(admin, seller, and a courier app), so most of what is in `src/components`
+exists to be shared rather than to serve one panel.
 
 ## Running it
 
@@ -96,6 +102,33 @@ follow — that is the point.
 - **Dense and plain.** An operator sees hundreds of rows a day. The mobile
   app's design system is not reused — that product is looked at, this one is
   worked in.
+
+## The warehouse floor is a different room
+
+The operator's panel is read at a desk. The warehouse one is read on a tablet
+held at arm's length by somebody wearing gloves and holding a scanner. That is
+a different set of constraints, not a different design system: same tokens,
+same `DataTable`, same `ConfirmDialog`.
+
+- **`<Page floor>`** turns on warehouse density — bigger type, taller rows —
+  with three CSS rules in `index.css`. Nothing is built twice.
+- **`size="lg"`** on `Button` is the gloved-thumb target.
+- **`ScanInput`** (`src/components/ui/scan.tsx`) is the whole scanner
+  integration. A barcode scanner is a keyboard that types fast and presses
+  Enter, so there is no API to talk to — there is one requirement, and it is
+  that the caret is already in the field when the trigger is pulled. It takes
+  focus and keeps taking it back: on blur, on a click anywhere in the panel,
+  and when the window comes forward. A scan that lands on the page instead of
+  in the field is a line silently not counted.
+- **`CountStepper`** is a quantity a thumb can drive, with a numeric keyboard.
+- A scan that matches nothing says so. There are no per-variant barcodes in
+  this model, so a scan identifies the *product* — where a batch has two sizes
+  of it, the panel says "several lines, choose one" rather than guessing.
+
+The receive and count screens keep the declared or expected figure beside the
+count with the difference between them, live. A discrepancy is worth seeing
+while somebody is still standing in front of the shelf and can go and look
+again; reading it afterwards in a report is too late to be useful.
 
 ## Scripts
 

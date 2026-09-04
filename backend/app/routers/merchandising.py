@@ -30,7 +30,7 @@ from app import audit, i18n
 from app import offers as of
 from app import schemas as s
 from app import stock as st
-from app.deps import SellerUser, SessionDep, WarehouseUser
+from app.deps import SellerUser, SessionDep, StockViewer, WarehouseUser
 from app.models import (
     Offer,
     OfferVariant,
@@ -51,21 +51,22 @@ router = APIRouter(prefix="/staff", tags=["staff"])
 @router.get(
     "/offers",
     response_model=list[s.StaffOfferOut],
-    summary="My offers — or everybody's, for an admin",
+    summary="My offers — or everybody's, for the warehouse and the admin",
 )
 def list_offers(
-    user: SellerUser,
+    user: StockViewer,
     session: SessionDep,
     product_id: int | None = Query(None),
     seller_id: int | None = Query(None, description="Admin only; ignored for a seller"),
 ) -> list[s.StaffOfferOut]:
     stmt = select(Offer)
-    if user.role is UserRole.ADMIN:
-        if seller_id is not None:
-            stmt = stmt.where(Offer.seller_id == seller_id)
-    else:
+    if user.role is UserRole.SELLER:
         # Not a filter the caller chose — the only rows that exist for them.
         stmt = stmt.where(Offer.seller_id == _own_seller(session, user).id)
+    elif seller_id is not None:
+        # The warehouse and the admin see every shelf, which is what a
+        # warehouse is: reading which offers exist is not pricing them.
+        stmt = stmt.where(Offer.seller_id == seller_id)
     if product_id is not None:
         stmt = stmt.where(Offer.product_id == product_id)
 

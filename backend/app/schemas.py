@@ -711,10 +711,17 @@ class OfferStockIn(BaseModel):
 
 
 class StockLineOut(BaseModel):
-    """One count on one offer, named so a person can read it."""
+    """One count on one offer, named so a person can read it.
+
+    The SKU is here because a warehouse reads a barcode, not a title: a
+    scanner hands the screen a code, and the code has to be able to find the
+    line. There is no per-variant barcode in this model, so a scan identifies
+    the product and the size is still tapped.
+    """
 
     offer_id: int
     variant_id: int | None
+    sku: str
     variant_label: str
     product_title: str
 
@@ -809,6 +816,7 @@ class StockCountCloseIn(BaseModel):
 class StockCountLineOut(BaseModel):
     id: int
     variant_id: int | None
+    sku: str
     variant_label: str
     expected: int
     counted: int | None

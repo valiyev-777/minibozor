@@ -699,11 +699,23 @@ def _own_offer(session: SessionDep, seller: Seller, offer_id: int) -> Offer:
 
 
 def _check_variant(session: SessionDep, offer: Offer, variant_id: int | None) -> None:
-    """A count sits on a leaf of this product, or on the offer itself."""
+    """A count sits on a leaf of this product, or on the offer itself.
+
+    Which cell is required wherever there are cells. A movement that names no
+    leaf comes off the offer's total and off no colour, and afterwards there
+    is no working out which colour it was — the shelf and its colours drift
+    apart by exactly that much, permanently. The same rule the basket enforces
+    on the way out is enforced here on the way in.
+    """
+    leaves = {leaf.id: leaf for leaf in of.leaf_variants(session, offer.product_id)}
     if variant_id is None:
+        if leaves:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                i18n.label("variant_required"),
+            )
         return
     variant = session.get(ProductVariant, variant_id)
-    leaves = {leaf.id for leaf in of.leaf_variants(session, offer.product_id)}
     if variant is None or variant.product_id != offer.product_id or variant.id not in leaves:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, i18n.label("variant_not_of_product")
@@ -749,11 +761,18 @@ def _seller_out(session: SessionDep, seller_id: int) -> s.SellerOut:
     )
 
 
-def _names(session: SessionDep, offer_id: int, variant_id: int | None) -> tuple[str, str]:
+def _names(
+    session: SessionDep, offer_id: int, variant_id: int | None
+) -> tuple[str, str, str]:
+    """The label, the title and the code — what a person and a scanner read."""
     offer = session.get(Offer, offer_id)
     product = session.get(Product, offer.product_id) if offer else None
     variant = session.get(ProductVariant, variant_id) if variant_id else None
-    return (variant.label if variant else "—"), (product.title if product else "")
+    return (
+        (variant.label if variant else "—"),
+        (product.title if product else ""),
+        (product.sku if product else ""),
+    )
 
 
 def _supply_out(session: SessionDep, supply: Supply) -> s.SupplyOut:
@@ -762,12 +781,13 @@ def _supply_out(session: SessionDep, supply: Supply) -> s.SupplyOut:
     ).all()
     out = []
     for line in lines:
-        label, title = _names(session, line.offer_id, line.variant_id)
+        label, title, sku = _names(session, line.offer_id, line.variant_id)
         out.append(
             s.SupplyLineOut(
                 id=line.id,
                 offer_id=line.offer_id,
                 variant_id=line.variant_id,
+                sku=sku,
                 variant_label=label,
                 product_title=title,
                 declared_quantity=line.declared_quantity,
@@ -807,6 +827,7 @@ def _count_out(session: SessionDep, count: StockCount) -> s.StockCountOut:
             s.StockCountLineOut(
                 id=line.id,
                 variant_id=line.variant_id,
+                sku=_names(session, count.offer_id, line.variant_id)[2],
                 variant_label=_names(session, count.offer_id, line.variant_id)[0],
                 expected=line.expected,
                 counted=line.counted,
@@ -827,12 +848,13 @@ def _removal_out(session: SessionDep, removal: RemovalOrder) -> s.RemovalOut:
     ).all()
     out = []
     for line in lines:
-        label, title = _names(session, line.offer_id, line.variant_id)
+        label, title, sku = _names(session, line.offer_id, line.variant_id)
         out.append(
             s.RemovalLineOut(
                 id=line.id,
                 offer_id=line.offer_id,
                 variant_id=line.variant_id,
+                sku=sku,
                 variant_label=label,
                 product_title=title,
                 quantity=line.quantity,
@@ -854,7 +876,7 @@ def _removal_out(session: SessionDep, removal: RemovalOrder) -> s.RemovalOut:
 
 
 def _shelf_out(session: SessionDep, offer: Offer, variant_id: int | None) -> s.ShelfOut:
-    label, _ = _names(session, offer.id, variant_id)
+    label, _, _ = _names(session, offer.id, variant_id)
     return s.ShelfOut(
         offer_id=offer.id,
         variant_id=variant_id,
@@ -866,12 +888,13 @@ def _shelf_out(session: SessionDep, offer: Offer, variant_id: int | None) -> s.S
 
 
 def _movement_out(session: SessionDep, movement: StockMovement) -> s.MovementOut:
-    label, title = _names(session, movement.offer_id, movement.variant_id)
+    label, title, sku = _names(session, movement.offer_id, movement.variant_id)
     actor = session.get(User, movement.actor_id) if movement.actor_id else None
     return s.MovementOut(
         id=movement.id,
         offer_id=movement.offer_id,
         variant_id=movement.variant_id,
+        sku=sku,
         variant_label=label,
         product_title=title,
         kind=movement.kind,

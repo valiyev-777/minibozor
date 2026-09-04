@@ -2,8 +2,15 @@ import * as React from "react"
 import { api, ApiError, resumeSession, setAccessToken, setSignedOutHandler } from "@/api/client"
 import type { OtpRequested, StaffMe, TokenPair, UserRole } from "@/api/types"
 
-/** Who this panel is for. Anyone else is told so rather than shown an empty one. */
-export const PANEL_ROLES: UserRole[] = ["operator", "admin"]
+/**
+ * Who this app is for, and the menu decides the rest.
+ *
+ * One application serving several panels: the sidebar is drawn from the role,
+ * so an operator sees the queues, the warehouse sees the shelves, and an admin
+ * sees both. Anyone the app is not for is told which role they hold rather
+ * than shown an empty screen.
+ */
+export const PANEL_ROLES: UserRole[] = ["operator", "warehouse", "admin"]
 
 type State =
   | { status: "loading" }
@@ -36,7 +43,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setAccessToken(null)
       throw new ApiError(
         403,
-        `Bu panel operator va administrator uchun. Sizning rolingiz — ${user.role}.`,
+        "Bu panel operator, ombor va administrator uchun. " +
+          `Sizning rolingiz — ${user.role}.`,
       )
     }
     setState({ status: "signed-in", user })

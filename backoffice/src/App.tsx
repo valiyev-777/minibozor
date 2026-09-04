@@ -2,10 +2,15 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { LoginPage } from "@/auth/LoginPage"
 import { useSession } from "@/auth/session"
 import { Layout } from "@/components/Layout"
+import { CountsPage } from "@/pages/CountsPage"
+import { MovementsPage } from "@/pages/MovementsPage"
 import { OrdersPage } from "@/pages/OrdersPage"
+import { RemovalsPage } from "@/pages/RemovalsPage"
 import { ReturnsPage } from "@/pages/ReturnsPage"
 import { ReviewsPage } from "@/pages/ReviewsPage"
+import { ShelfPage } from "@/pages/ShelfPage"
 import { SlotsPage } from "@/pages/SlotsPage"
+import { SuppliesPage } from "@/pages/SuppliesPage"
 
 export function App() {
   const session = useSession()
@@ -22,6 +27,11 @@ export function App() {
     return <LoginPage {...(session.reason ? { reason: session.reason } : {})} />
   }
 
+  // Where a role lands. The warehouse starts at the shelf, everybody else at
+  // the queue they work — nobody should have to navigate away from a screen
+  // that is not theirs.
+  const home = session.user.role === "warehouse" ? "/shelf" : "/returns"
+
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -29,7 +39,12 @@ export function App() {
         <Route path="/reviews" element={<ReviewsPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/slots" element={<SlotsPage />} />
-        <Route path="*" element={<Navigate to="/returns" replace />} />
+        <Route path="/shelf" element={<ShelfPage />} />
+        <Route path="/supplies" element={<SuppliesPage />} />
+        <Route path="/counts" element={<CountsPage />} />
+        <Route path="/removals" element={<RemovalsPage />} />
+        <Route path="/movements" element={<MovementsPage />} />
+        <Route path="*" element={<Navigate to={home} replace />} />
       </Route>
     </Routes>
   )

@@ -32,5 +32,24 @@ export type SlotCreateIn = S["SlotCreateIn"]
 export type SlotUpdateIn = S["SlotUpdateIn"]
 export type SlotWindowIn = S["SlotWindowIn"]
 
+export type StaffOffer = S["StaffOfferOut"]
+
+export type Supply = S["SupplyOut"]
+export type SupplyStatus = S["SupplyStatus"]
+export type SupplyLine = S["SupplyLineOut"]
+
+export type StockCount = S["StockCountOut"]
+export type StockCountStatus = S["StockCountStatus"]
+export type StockCountLine = S["StockCountLineOut"]
+
+export type Removal = S["RemovalOut"]
+export type RemovalStatus = S["RemovalStatus"]
+export type RemovalReason = S["RemovalReason"]
+
+export type Shelf = S["ShelfOut"]
+export type Movement = S["MovementOut"]
+export type MovementKind = S["StockMovementKind"]
+export type MovementPage = S["Page_MovementOut_"]
+
 export type TokenPair = S["TokenPair"]
 export type OtpRequested = S["OtpRequested"]

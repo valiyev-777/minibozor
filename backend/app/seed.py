@@ -1106,6 +1106,52 @@ def _seed_user_data(session: Session, user: User, products: dict[str, Product]) 
     session.commit()
 
 
+def _resolve_variants(
+    session: Session, product: Product, label: str
+) -> tuple[int | None, int | None, str]:
+    """Turn "Qora · L" into the rows it names, and say what it really is.
+
+    The design's order lines were written as display text, and some of them
+    name things that are not variants at all ("Oq · 3 rejim" is a mode, not a
+    size). Whatever resolves is used; whatever does not falls back to the
+    product's first counted cell, so every line is attributable — and the
+    label is rebuilt from what was found, so it cannot promise a colour the
+    ids do not carry.
+    """
+    variants = session.exec(
+        select(ProductVariant)
+        .where(ProductVariant.product_id == product.id)
+        .order_by(col(ProductVariant.sort), col(ProductVariant.id))
+    ).all()
+    if not variants:
+        return None, None, label
+
+    wanted = {part.strip() for part in label.split("·")}
+    colours = [v for v in variants if v.kind == VariantKind.COLOR]
+    sizes = [v for v in variants if v.kind == VariantKind.SIZE]
+
+    colour = next((v for v in colours if v.label in wanted), None)
+    of_colour = [z for z in sizes if colour is None or z.parent_id == colour.id]
+    size = next((z for z in of_colour if z.label in wanted), None)
+
+    if size is None and of_colour:
+        size = next((z for z in of_colour if (z.stock_left or 0) > 0), of_colour[0])
+    if colour is None and size is not None and size.parent_id is not None:
+        colour = session.get(ProductVariant, size.parent_id)
+    if colour is None and size is None:
+        colour = next(
+            (v for v in colours if (v.stock_left or 0) > 0),
+            colours[0] if colours else None,
+        )
+
+    words = [v.label for v in (colour, size) if v is not None]
+    return (
+        colour.id if colour else None,
+        size.id if size else None,
+        " · ".join(words) or label,
+    )
+
+
 def _seed_orders(
     session: Session,
     user: User,
@@ -1154,6 +1200,12 @@ def _seed_orders(
             offer = session.exec(
                 select(Offer).where(Offer.product_id == product.id)
             ).first()
+            # And *which* one, not only what it was called. A line that carries
+            # a label and no ids cannot be put back on the right colour when it
+            # is returned, and the shelf drifts away from its colours by that
+            # much for good. The label is rewritten from what was resolved, so
+            # the words and the ids say the same thing.
+            colour_id, size_id, variant = _resolve_variants(session, product, variant)
             commission = 0
             if offer is not None:
                 seller_row = session.get(Seller, offer.seller_id)
@@ -1162,6 +1214,8 @@ def _seed_orders(
                 OrderItem(
                     order_id=order.id, product_id=product.id, title=product.title,
                     image_url=image.url if image else "", variant_label=variant,
+                    variant_id=size_id,
+                    color_variant_id=colour_id,
                     seller_id=offer.seller_id if offer else None,
                     offer_id=offer.id if offer else None,
                     commission_percent=commission,

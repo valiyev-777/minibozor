@@ -19,6 +19,9 @@ const button = cva(
       size: {
         sm: "h-7 px-2.5 text-[12px]",
         md: "h-8 px-3 text-[13px]",
+        // For the warehouse floor: a target a gloved thumb can hit without
+        // aiming. Same colours, same shapes — only bigger.
+        lg: "h-11 gap-2 px-4 text-[15px] [&_svg]:size-4",
         icon: "size-7",
       },
     },

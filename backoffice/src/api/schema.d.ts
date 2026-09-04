@@ -1309,7 +1309,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** My offers — or everybody's, for an admin */
+        /** My offers — or everybody's, for the warehouse and the admin */
         get: operations["list_offers_api_v1_staff_offers_get"];
         put?: never;
         /** Offer a product at a price */
@@ -1346,21 +1346,303 @@ export interface paths {
         };
         get?: never;
         /**
-         * Warehouse intake — set what is actually on the shelf
-         * @description The counts, and only the counts.
+         * Correct a count — a stocktake finding, with a reason
+         * @description Set a count to what was actually found, and say why.
          *
-         *     Deliberately not the seller's endpoint and deliberately not part of the
-         *     price one: these two figures answer to different people, and an endpoint
-         *     that took both would be an endpoint whose guard had to be the weaker of
-         *     the two.
+         *     This used to *be* the way stock arrived, which was the wrong shape for it
+         *     twice over: nothing recorded where the goods came from, and two people
+         *     saving at once meant the second one won silently. Goods now arrive through
+         *     a supply (``POST /staff/supplies/{id}/receive``) and leave through a
+         *     removal, and what is left here is the one thing neither of those covers —
+         *     the shelf disagreeing with the books.
          *
-         *     Only the leaves are given. A colour's total is the sum of its sizes and the
-         *     offer's total is the sum of its colours, computed here rather than trusted,
-         *     so a shelf cannot be left disagreeing with itself. A variant left out of
-         *     the request keeps the count it had — a delivery of black 42s is not a
-         *     statement about the blue ones.
+         *     So it is a stocktake correction. It writes the *difference* to the ledger
+         *     rather than overwriting the figure, which means a concurrent sale is not
+         *     lost, and it requires a reason, because a count that changed for no stated
+         *     reason is the thing this whole ledger exists to make impossible. For a
+         *     full recount of an offer, open a ``stock-count`` instead — it snapshots
+         *     what was expected first, so a sale during the count is not mistaken for a
+         *     discrepancy.
+         *
+         *     A variant left out of the request keeps the count it had: finding two more
+         *     black 42s is not a statement about the blue ones.
          */
-        put: operations["set_offer_stock_api_v1_staff_offers__offer_id__stock_put"];
+        put: operations["adjust_offer_stock_api_v1_staff_offers__offer_id__stock_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/supplies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My batches — or everybody's, for the warehouse */
+        get: operations["list_supplies_api_v1_staff_supplies_get"];
+        put?: never;
+        /**
+         * Declare a batch that is coming in
+         * @description A promise, not a movement. Nothing reaches the shelf until it is counted.
+         */
+        post: operations["declare_supply_api_v1_staff_supplies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/supplies/{supply_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Supply */
+        get: operations["get_supply_api_v1_staff_supplies__supply_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/supplies/{supply_id}/receive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Count a batch in — this is where goods reach the shelf
+         * @description What was actually found, line by line, and the shelf follows.
+         *
+         *     The declared figure is left alone: a declaration is a promise and a
+         *     receipt is a fact, and the gap between them is the only thing either party
+         *     will want to talk about afterwards. A line not mentioned is received as
+         *     nought — it did not turn up.
+         */
+        post: operations["receive_supply_api_v1_staff_supplies__supply_id__receive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/supplies/{supply_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Call off a batch that has not arrived */
+        post: operations["cancel_supply_api_v1_staff_supplies__supply_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/stock-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Counts */
+        get: operations["list_counts_api_v1_staff_stock_counts_get"];
+        put?: never;
+        /**
+         * Open a stocktake, snapshotting what is expected
+         * @description The expected figures are frozen now, not read at the end.
+         *
+         *     A sale during the count would otherwise look like a discrepancy, and
+         *     somebody would go looking for goods that were bought while they counted.
+         */
+        post: operations["open_count_api_v1_staff_stock_counts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/stock-counts/{count_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Count */
+        get: operations["get_count_api_v1_staff_stock_counts__count_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/stock-counts/{count_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record what was found, and correct the difference
+         * @description The difference becomes a movement, so the correction has a reason.
+         *
+         *     Against the *expected* figure frozen when the count opened, not against
+         *     the shelf as it stands now — anything sold in between is already in the
+         *     ledger and is not a discrepancy.
+         */
+        post: operations["close_count_api_v1_staff_stock_counts__count_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/removals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Removals */
+        get: operations["list_removals_api_v1_staff_removals_get"];
+        put?: never;
+        /** Ask for goods back — damaged or simply unsold */
+        post: operations["request_removal_api_v1_staff_removals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/removals/{removal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Removal */
+        get: operations["get_removal_api_v1_staff_removals__removal_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/removals/{removal_id}/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pick it and set it aside — the goods stop being on sale
+         * @description Ready means picked and standing by the door.
+         *
+         *     No movement yet — the goods are still ours to account for — but they are
+         *     held: selling something that is already on a pallet waiting for its owner
+         *     is the failure this state exists to prevent.
+         */
+        post: operations["prepare_removal_api_v1_staff_removals__removal_id__prepare_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/removals/{removal_id}/collect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hand it over — this is where the goods leave us */
+        post: operations["collect_removal_api_v1_staff_removals__removal_id__collect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/offers/{offer_id}/write-off": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Goods that are gone — damaged, lost, spoiled */
+        post: operations["write_off_api_v1_staff_offers__offer_id__write_off_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/offers/{offer_id}/shelf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** On hand, promised, and left to sell */
+        get: operations["read_shelf_api_v1_staff_offers__offer_id__shelf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/stock/movements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The ledger — every reason a count changed
+         * @description A count that looks wrong is not an argument, it is this list.
+         */
+        get: operations["list_movements_api_v1_staff_stock_movements_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1826,6 +2108,43 @@ export interface components {
              */
             message: string;
         };
+        /** MovementOut */
+        MovementOut: {
+            /** Offer Id */
+            offer_id: number;
+            /** Variant Id */
+            variant_id: number | null;
+            /** Sku */
+            sku: string;
+            /** Variant Label */
+            variant_label: string;
+            /** Product Title */
+            product_title: string;
+            /** Id */
+            id: number;
+            kind: components["schemas"]["StockMovementKind"];
+            /** Quantity */
+            quantity: number;
+            /** Reason */
+            reason: string;
+            /** Actor */
+            actor: string;
+            /** Supply Id */
+            supply_id: number | null;
+            /** Order Id */
+            order_id: number | null;
+            /** Return Request Id */
+            return_request_id: number | null;
+            /** Count Id */
+            count_id: number | null;
+            /** Removal Id */
+            removal_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** NotificationGroupOut */
         NotificationGroupOut: {
             /** Label */
@@ -1940,15 +2259,20 @@ export interface components {
         };
         /**
          * OfferStockIn
-         * @description Warehouse intake: the counts, and nothing else about the offer.
+         * @description A stocktake correction: the counts found, and why they differ.
          *
          *     Only the leaves are given — the sizes of a product that has sizes, its
-         *     colours otherwise. Colour totals and the offer's own total are computed
-         *     from them, so a shelf cannot be left disagreeing with itself.
-         *     ``stock_left`` is for a product with no variants at all, where the offer
-         *     *is* the leaf.
+         *     colours otherwise. Colour totals follow from the sizes, so a shelf cannot
+         *     be left disagreeing with itself. ``stock_left`` is for a product with no
+         *     variants at all, where the offer *is* the leaf.
+         *
+         *     ``reason`` is required. A count that changed for no stated reason is
+         *     exactly what the movement ledger exists to make impossible, and this is
+         *     the one endpoint that could still write one.
          */
         OfferStockIn: {
+            /** Reason */
+            reason: string;
             /** Stock Left */
             stock_left?: number | null;
             /** Variants */
@@ -2127,6 +2451,19 @@ export interface components {
             phone: string;
             /** Code */
             code: string;
+        };
+        /** Page[MovementOut] */
+        Page_MovementOut_: {
+            /** Items */
+            items: components["schemas"]["MovementOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+            /** Has More */
+            has_more: boolean;
         };
         /** Page[OrderSummaryOut] */
         Page_OrderSummaryOut_: {
@@ -2403,6 +2740,97 @@ export interface components {
             /** Restock */
             restock: boolean;
         };
+        /** RemovalCreateIn */
+        RemovalCreateIn: {
+            reason: components["schemas"]["RemovalReason"];
+            /** Lines */
+            lines: components["schemas"]["RemovalLineIn"][];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Seller Id */
+            seller_id?: number | null;
+        };
+        /** RemovalLineIn */
+        RemovalLineIn: {
+            /** Offer Id */
+            offer_id: number;
+            /** Variant Id */
+            variant_id?: number | null;
+            /** Quantity */
+            quantity: number;
+        };
+        /** RemovalLineOut */
+        RemovalLineOut: {
+            /** Offer Id */
+            offer_id: number;
+            /** Variant Id */
+            variant_id: number | null;
+            /** Sku */
+            sku: string;
+            /** Variant Label */
+            variant_label: string;
+            /** Product Title */
+            product_title: string;
+            /** Id */
+            id: number;
+            /** Quantity */
+            quantity: number;
+            /** Prepared Quantity */
+            prepared_quantity: number | null;
+        };
+        /** RemovalOut */
+        RemovalOut: {
+            /** Id */
+            id: number;
+            /** Code */
+            code: string;
+            seller: components["schemas"]["SellerOut"];
+            status: components["schemas"]["RemovalStatus"];
+            reason: components["schemas"]["RemovalReason"];
+            /** Note */
+            note: string;
+            /** Lines */
+            lines: components["schemas"]["RemovalLineOut"][];
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Ready At */
+            ready_at: string | null;
+            /** Collected At */
+            collected_at: string | null;
+        };
+        /** RemovalPrepareIn */
+        RemovalPrepareIn: {
+            /** Lines */
+            lines: components["schemas"]["RemovalPrepareLineIn"][];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** RemovalPrepareLineIn */
+        RemovalPrepareLineIn: {
+            /** Line Id */
+            line_id: number;
+            /** Prepared Quantity */
+            prepared_quantity: number;
+        };
+        /**
+         * RemovalReason
+         * @enum {string}
+         */
+        RemovalReason: "unsellable" | "unsold";
+        /**
+         * RemovalStatus
+         * @enum {string}
+         */
+        RemovalStatus: "requested" | "ready" | "collected" | "cancelled";
         /** ReturnIn */
         ReturnIn: {
             /** Order Item Id */
@@ -2580,6 +3008,24 @@ export interface components {
             location_enabled: boolean;
             /** Night Mode */
             night_mode: boolean;
+        };
+        /**
+         * ShelfOut
+         * @description What the ledger says, what is promised, and what is left to sell.
+         */
+        ShelfOut: {
+            /** Offer Id */
+            offer_id: number;
+            /** Variant Id */
+            variant_id: number | null;
+            /** Variant Label */
+            variant_label: string;
+            /** On Hand */
+            on_hand: number;
+            /** Reserved */
+            reserved: number;
+            /** Sellable */
+            sellable: number;
         };
         /**
          * SlotCreateIn
@@ -2868,6 +3314,88 @@ export interface components {
             /** Capacity Left */
             capacity_left: number;
         };
+        /** StockCountCloseIn */
+        StockCountCloseIn: {
+            /** Lines */
+            lines: components["schemas"]["StockCountLineIn"][];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** StockCountCreateIn */
+        StockCountCreateIn: {
+            /** Offer Id */
+            offer_id: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** StockCountLineIn */
+        StockCountLineIn: {
+            /** Variant Id */
+            variant_id?: number | null;
+            /** Counted */
+            counted: number;
+        };
+        /** StockCountLineOut */
+        StockCountLineOut: {
+            /** Id */
+            id: number;
+            /** Variant Id */
+            variant_id: number | null;
+            /** Sku */
+            sku: string;
+            /** Variant Label */
+            variant_label: string;
+            /** Expected */
+            expected: number;
+            /** Counted */
+            counted: number | null;
+            /** Difference */
+            difference: number | null;
+        };
+        /** StockCountOut */
+        StockCountOut: {
+            /** Id */
+            id: number;
+            /** Code */
+            code: string;
+            /** Offer Id */
+            offer_id: number;
+            /** Product Title */
+            product_title: string;
+            seller: components["schemas"]["SellerOut"];
+            status: components["schemas"]["StockCountStatus"];
+            /** Note */
+            note: string;
+            /** Lines */
+            lines: components["schemas"]["StockCountLineOut"][];
+            /**
+             * Opened At
+             * Format: date-time
+             */
+            opened_at: string;
+            /** Closed At */
+            closed_at: string | null;
+        };
+        /**
+         * StockCountStatus
+         * @enum {string}
+         */
+        StockCountStatus: "open" | "closed" | "cancelled";
+        /**
+         * StockMovementKind
+         * @description Why a count moved. Every movement has one; there is no other kind.
+         *
+         *     A shelf figure used to be a number somebody wrote. Now it is the sum of
+         *     these, which means a disputed count is not an opinion — it is a list.
+         * @enum {string}
+         */
+        StockMovementKind: "opening" | "intake" | "sale" | "cancel_return" | "customer_return" | "write_off" | "count_adjustment" | "seller_return";
         /** SuggestionOut */
         SuggestionOut: {
             /** Product Id */
@@ -2879,6 +3407,97 @@ export interface components {
             /** Image Url */
             image_url: string | null;
         };
+        /**
+         * SupplyCreateIn
+         * @description A batch a seller says is coming.
+         *
+         *     No label from the seller: their own reference belongs to their system, may
+         *     repeat, and two sellers may use the same one on the same day. The code
+         *     comes back from us and goes on the pallet.
+         */
+        SupplyCreateIn: {
+            /** Lines */
+            lines: components["schemas"]["SupplyLineIn"][];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /** Seller Id */
+            seller_id?: number | null;
+        };
+        /** SupplyLineIn */
+        SupplyLineIn: {
+            /** Offer Id */
+            offer_id: number;
+            /** Variant Id */
+            variant_id?: number | null;
+            /** Quantity */
+            quantity: number;
+        };
+        /** SupplyLineOut */
+        SupplyLineOut: {
+            /** Offer Id */
+            offer_id: number;
+            /** Variant Id */
+            variant_id: number | null;
+            /** Sku */
+            sku: string;
+            /** Variant Label */
+            variant_label: string;
+            /** Product Title */
+            product_title: string;
+            /** Id */
+            id: number;
+            /** Declared Quantity */
+            declared_quantity: number;
+            /** Received Quantity */
+            received_quantity: number | null;
+            /** Difference */
+            difference: number | null;
+        };
+        /** SupplyOut */
+        SupplyOut: {
+            /** Id */
+            id: number;
+            /** Code */
+            code: string;
+            seller: components["schemas"]["SellerOut"];
+            status: components["schemas"]["SupplyStatus"];
+            /** Note */
+            note: string;
+            /** Lines */
+            lines: components["schemas"]["SupplyLineOut"][];
+            /**
+             * Declared At
+             * Format: date-time
+             */
+            declared_at: string;
+            /** Received At */
+            received_at: string | null;
+        };
+        /** SupplyReceiveIn */
+        SupplyReceiveIn: {
+            /** Lines */
+            lines: components["schemas"]["SupplyReceiveLineIn"][];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** SupplyReceiveLineIn */
+        SupplyReceiveLineIn: {
+            /** Line Id */
+            line_id: number;
+            /** Received Quantity */
+            received_quantity: number;
+        };
+        /**
+         * SupplyStatus
+         * @enum {string}
+         */
+        SupplyStatus: "declared" | "received" | "cancelled";
         /** TokenPair */
         TokenPair: {
             /** Access Token */
@@ -2977,6 +3596,22 @@ export interface components {
             stock_left?: number | null;
             /** Parent Id */
             parent_id?: number | null;
+        };
+        /**
+         * WriteOffIn
+         * @description Goods that are gone: damaged, lost, spoiled.
+         *
+         *     A reason is required for the same reason it is on a stocktake correction —
+         *     stock that left without one is indistinguishable from stock that was
+         *     stolen.
+         */
+        WriteOffIn: {
+            /** Variant Id */
+            variant_id?: number | null;
+            /** Quantity */
+            quantity: number;
+            /** Reason */
+            reason: string;
         };
     };
     responses: never;
@@ -5990,7 +6625,7 @@ export interface operations {
             };
         };
     };
-    set_offer_stock_api_v1_staff_offers__offer_id__stock_put: {
+    adjust_offer_stock_api_v1_staff_offers__offer_id__stock_put: {
         parameters: {
             query?: never;
             header?: {
@@ -6014,6 +6649,592 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffOfferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_supplies_api_v1_staff_supplies_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["SupplyStatus"] | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplyOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    declare_supply_api_v1_staff_supplies_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplyCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_supply_api_v1_staff_supplies__supply_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                supply_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    receive_supply_api_v1_staff_supplies__supply_id__receive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                supply_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplyReceiveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_supply_api_v1_staff_supplies__supply_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                supply_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SupplyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_counts_api_v1_staff_stock_counts_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["StockCountStatus"] | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_count_api_v1_staff_stock_counts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StockCountCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_count_api_v1_staff_stock_counts__count_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                count_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_count_api_v1_staff_stock_counts__count_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                count_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StockCountCloseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockCountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_removals_api_v1_staff_removals_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["RemovalStatus"] | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_removal_api_v1_staff_removals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemovalCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_removal_api_v1_staff_removals__removal_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                removal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    prepare_removal_api_v1_staff_removals__removal_id__prepare_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                removal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemovalPrepareIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collect_removal_api_v1_staff_removals__removal_id__collect_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                removal_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemovalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_off_api_v1_staff_offers__offer_id__write_off_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                offer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteOffIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShelfOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_shelf_api_v1_staff_offers__offer_id__shelf_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                offer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShelfOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_movements_api_v1_staff_stock_movements_get: {
+        parameters: {
+            query?: {
+                offer_id?: number | null;
+                kind?: components["schemas"]["StockMovementKind"] | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_MovementOut_"];
                 };
             };
             /** @description Validation Error */

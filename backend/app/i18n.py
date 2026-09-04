@@ -176,6 +176,21 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Товара нет в наличии",
         "en": "That product is out of stock",
     },
+    "variant_required": {
+        "uz": "Qaysi rang va o'lchamligini ko'rsating",
+        "ru": "Укажите, какой это цвет и размер",
+        "en": "Say which colour and size this is",
+    },
+    "choose_a_size": {
+        "uz": "O'lchamni tanlang",
+        "ru": "Выберите размер",
+        "en": "Choose a size",
+    },
+    "choose_a_colour": {
+        "uz": "Rangni tanlang",
+        "ru": "Выберите цвет",
+        "en": "Choose a colour",
+    },
     "variant_invalid": {
         "uz": "Variant noto'g'ri",
         "ru": "Неверный вариант",

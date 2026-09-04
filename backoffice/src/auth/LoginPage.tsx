@@ -35,7 +35,7 @@ export function LoginPage({ reason }: { reason?: string }) {
       <div className="w-full max-w-xs">
         <div className="mb-5">
           <p className="text-[15px] font-semibold text-ink">Mini Bozor</p>
-          <p className="text-[12px] text-ink-soft">Operator paneli</p>
+          <p className="text-[12px] text-ink-soft">Backoffice</p>
         </div>
 
         {reason ? (

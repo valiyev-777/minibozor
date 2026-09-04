@@ -52,3 +52,21 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* Warehouse density.
+ *
+ * The operator's panel is read at a desk; this one is read on a tablet at
+ * arm's length by somebody wearing gloves. Same tokens, same components —
+ * the rows and the type just get bigger, so nothing has to be built twice. */
+.floor {
+  font-size: 15px;
+}
+
+.floor td {
+  padding-top: 0.6rem;
+  padding-bottom: 0.6rem;
+}
+
+.floor th {
+  font-size: 12px;
+}

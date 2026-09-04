@@ -144,6 +144,39 @@ correction: it takes a required `reason` and writes the difference. For a full
 recount use a `stock-count`, which snapshots what was expected first so a sale
 during the count is not mistaken for a discrepancy.
 
+### A basket line has to name a cell
+
+A product with variants is counted on its **leaves** — the sizes where there
+are sizes, the colours otherwise. So `POST /cart/items` requires one:
+
+```
+POST /cart/items {"product_id": 1}                      → 422  O'lchamni tanlang
+POST /cart/items {"product_id": 1, "color_variant_id": 55} → 422  (the colours have sizes)
+POST /cart/items {"product_id": 1, "variant_id": 59}    → 201
+```
+
+Not pedantry. A sale that names no leaf comes off the offer's total and off no
+colour at all: the ledger still adds up, and the colour figures drift away from
+it by exactly that much — permanently, because there is no working out
+afterwards which colour the shirt was. Guessing one on the customer's behalf is
+the same lie told earlier.
+
+Both apps send a leaf in the ordinary flow. The one case they do not is a
+colour whose every size has gone, and there the answer stays **409 out of
+stock** — which is the answer they are written to expect. The same rule applies
+on the way in: a supply line, a removal line and a write-off all have to name
+a cell.
+
+The suite checks two invariants everywhere, side by side
+(`_stock_is_consistent()`):
+
+1. an offer's running total equals the sum of its movements;
+2. an offer's total equals the sum of its colours, and a colour equals the sum
+   of its sizes.
+
+The second is the one that cannot be repaired after the fact, which is why it
+is checked rather than trusted.
+
 ### Holding
 
 Goods in a basket, on an unpaid order, or picked for a seller to collect are

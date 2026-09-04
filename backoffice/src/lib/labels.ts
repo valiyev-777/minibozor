@@ -63,6 +63,70 @@ export const REVIEW_TONE: Record<ReviewStatus, Tone> = {
   rejected: "danger",
 }
 
+export const MOVEMENT_KIND: Record<
+  | "opening" | "intake" | "sale" | "cancel_return"
+  | "customer_return" | "write_off" | "count_adjustment" | "seller_return",
+  string
+> = {
+  opening: "Boshlang'ich qoldiq",
+  intake: "Kirim",
+  sale: "Sotuv",
+  cancel_return: "Bekor qilindi",
+  customer_return: "Mijoz qaytardi",
+  write_off: "Yaroqsizga chiqarildi",
+  count_adjustment: "Sanoq tuzatishi",
+  seller_return: "Sotuvchiga qaytarildi",
+}
+
+export const SUPPLY_STATUS: Record<"declared" | "received" | "cancelled", string> = {
+  declared: "Kutilmoqda",
+  received: "Qabul qilingan",
+  cancelled: "Bekor qilingan",
+}
+
+export const SUPPLY_TONE: Record<"declared" | "received" | "cancelled", Tone> = {
+  declared: "accent",
+  received: "good",
+  cancelled: "neutral",
+}
+
+export const COUNT_STATUS: Record<"open" | "closed" | "cancelled", string> = {
+  open: "Ochiq",
+  closed: "Yopilgan",
+  cancelled: "Bekor qilingan",
+}
+
+export const COUNT_TONE: Record<"open" | "closed" | "cancelled", Tone> = {
+  open: "warn",
+  closed: "good",
+  cancelled: "neutral",
+}
+
+export const REMOVAL_STATUS: Record<
+  "requested" | "ready" | "collected" | "cancelled",
+  string
+> = {
+  requested: "So'ralgan",
+  ready: "Tayyorlangan",
+  collected: "Olib ketilgan",
+  cancelled: "Bekor qilingan",
+}
+
+export const REMOVAL_TONE: Record<
+  "requested" | "ready" | "collected" | "cancelled",
+  Tone
+> = {
+  requested: "accent",
+  ready: "warn",
+  collected: "good",
+  cancelled: "neutral",
+}
+
+export const REMOVAL_REASON: Record<"unsellable" | "unsold", string> = {
+  unsellable: "Yaroqsiz",
+  unsold: "Sotilmadi",
+}
+
 /** The verb for a move, so a button reads as an action rather than a state. */
 export const ORDER_ACTION: Record<OrderStatus, string> = {
   placed: "Qabul qilindi deb belgilash",

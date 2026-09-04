@@ -22,6 +22,7 @@ from app.models import (
     DeliverySlot,
     Notification,
     Offer,
+    OfferVariant,
     Order,
     OrderItem,
     Product,
@@ -33,6 +34,7 @@ from app.models import (
     StockMovementKind,
     User,
     UserRole,
+    VariantKind,
     utcnow,
 )
 
@@ -162,7 +164,7 @@ def test_cart_lifecycle(client: TestClient, auth: dict[str, str]) -> None:
 
     product = client.get(f"{API}/products", params={"q": "futbolka"}).json()["items"][0]
     added = client.post(
-        f"{API}/cart/items", json={"product_id": product["id"], "quantity": 2}, headers=auth
+        f"{API}/cart/items", json=_pick(product["id"], 2), headers=auth
     )
     assert added.status_code == 201
     cart = added.json()
@@ -186,13 +188,13 @@ def test_free_delivery_threshold(client: TestClient, auth: dict[str, str]) -> No
     cheap = client.get(f"{API}/products", params={"sort": "price_asc"}).json()["items"][0]
 
     cart = client.post(
-        f"{API}/cart/items", json={"product_id": cheap["id"], "quantity": 1}, headers=auth
+        f"{API}/cart/items", json=_pick(cheap["id"], 1), headers=auth
     ).json()
     assert cart["totals"]["delivery_fee"] > 0
 
     expensive = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
     cart = client.post(
-        f"{API}/cart/items", json={"product_id": expensive["id"], "quantity": 1}, headers=auth
+        f"{API}/cart/items", json=_pick(expensive["id"], 1), headers=auth
     ).json()
     assert cart["totals"]["subtotal"] >= cart["totals"]["free_delivery_threshold"]
     assert cart["totals"]["delivery_fee"] == 0
@@ -201,7 +203,7 @@ def test_free_delivery_threshold(client: TestClient, auth: dict[str, str]) -> No
 def test_promo_code(client: TestClient, auth: dict[str, str]) -> None:
     client.delete(f"{API}/cart", headers=auth)
     product = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
-    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
 
     ok = client.post(f"{API}/cart/promo", json={"code": "MINI10"}, headers=auth).json()
     assert ok["totals"]["discount"] == round(ok["totals"]["subtotal"] * 0.1)
@@ -221,7 +223,7 @@ def test_a_free_slot_does_not_make_delivery_free(
     """
     client.delete(f"{API}/cart", headers=auth)
     product = client.get(f"{API}/products", params={"sort": "price_asc"}).json()["items"][0]
-    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
 
     cart = client.get(f"{API}/cart", headers=auth).json()
     base = cart["totals"]["delivery_fee"]
@@ -248,7 +250,7 @@ def test_a_paid_slot_adds_to_the_standard_fee(
 ) -> None:
     client.delete(f"{API}/cart", headers=auth)
     product = client.get(f"{API}/products", params={"sort": "price_asc"}).json()["items"][0]
-    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
 
     base = client.get(f"{API}/cart", headers=auth).json()["totals"]["delivery_fee"]
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
@@ -267,7 +269,7 @@ def test_a_paid_slot_adds_to_the_standard_fee(
 def test_checkout_places_an_order(client: TestClient, auth: dict[str, str]) -> None:
     client.delete(f"{API}/cart", headers=auth)
     product = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
-    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
 
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     slot = client.get(f"{API}/delivery/slots", headers=auth).json()[1]["slots"][0]
@@ -297,6 +299,53 @@ def test_checkout_places_an_order(client: TestClient, auth: dict[str, str]) -> N
     assert client.get(f"{API}/cart", headers=auth).json()["items"] == []
 
 
+def _pick(product_id: int, quantity: int = 1, *, colour_id: int | None = None) -> dict:
+    """The body for POST /cart/items, naming a leaf.
+
+    A product with variants will not go into a basket without one: a sale that
+    names no colour takes the count off the offer's total and off no colour at
+    all, and there is no working out afterwards which one it was. So the tests
+    choose the same way the apps do — the leaf with the most of it left, so
+    that "add N" has somewhere to come from.
+    """
+    body: dict = {"product_id": product_id, "quantity": quantity}
+    with Session(engine) as session:
+        leaves = of.leaf_variants(session, product_id)
+        if not leaves:
+            return body
+        pool = [
+            leaf for leaf in leaves if colour_id is None or leaf.parent_id == colour_id
+        ] or leaves
+        offer = of.winning_offer(session, product_id)
+        chosen = max(
+            pool,
+            key=lambda leaf: st.sellable(session, offer, leaf.id) if offer else 0,
+        )
+        if chosen.kind is VariantKind.SIZE:
+            body["variant_id"] = chosen.id
+            if chosen.parent_id is not None:
+                body["color_variant_id"] = chosen.parent_id
+        else:
+            body["color_variant_id"] = chosen.id
+    return body
+
+
+def _variantless_product(client: TestClient) -> dict:
+    """A product counted once, for the tests that talk about a whole shelf.
+
+    A product with colours has its shelf counted per colour, so emptying it
+    means buying every cell of the grid. These tests are about the product's
+    own figure, so they take one that has no cells.
+    """
+    listing = client.get(f"{API}/products", params={"page_size": 60}).json()["items"]
+    with Session(engine) as session:
+        return next(
+            item
+            for item in listing
+            if item["in_stock"] and not of.leaf_variants(session, item["id"])
+        )
+
+
 def test_the_basket_cannot_hold_more_than_the_shelf(
     client: TestClient, auth: dict[str, str]
 ) -> None:
@@ -304,12 +353,12 @@ def test_the_basket_cannot_hold_more_than_the_shelf(
     would hold thirty of something there were three of, and the shortfall
     surfaced at checkout or not at all."""
     client.delete(f"{API}/cart", headers=auth)
-    product = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
+    product = _variantless_product(client)
     left = client.get(f"{API}/products/{product['id']}").json()["stock_left"]
 
     added = client.post(
         f"{API}/cart/items",
-        json={"product_id": product["id"], "quantity": left + 10},
+        json=_pick(product["id"], left + 10),
         headers=auth,
     ).json()
     item = added["items"][0]
@@ -331,15 +380,11 @@ def test_buying_takes_the_item_off_the_shelf(client: TestClient, auth: dict[str,
     was not, so a product could be bought any number of times and still claim
     the same 25 remaining."""
     client.delete(f"{API}/cart", headers=auth)
-    product = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
+    product = _variantless_product(client)
     before = client.get(f"{API}/products/{product['id']}").json()
     quantity = 3
 
-    client.post(
-        f"{API}/cart/items",
-        json={"product_id": product["id"], "quantity": quantity},
-        headers=auth,
-    )
+    client.post(f"{API}/cart/items", json=_pick(product["id"], quantity), headers=auth)
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     created = client.post(f"{API}/orders", json={"address_id": address["id"]}, headers=auth)
     assert created.status_code == 201
@@ -348,7 +393,11 @@ def test_buying_takes_the_item_off_the_shelf(client: TestClient, auth: dict[str,
     assert after["stock_left"] == before["stock_left"] - quantity
     assert after["sold_count"] == before["sold_count"] + quantity
     # And the card carries it too, so a tile can say when there are few.
-    card = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
+    card = next(
+        item
+        for item in client.get(f"{API}/products", params={"page_size": 60}).json()["items"]
+        if item["id"] == product["id"]
+    )
     assert card["stock_left"] == after["stock_left"]
 
 
@@ -356,22 +405,19 @@ def test_the_last_one_sold_goes_out_of_stock(client: TestClient, auth: dict[str,
     """Nothing was setting in_stock, so a product could sit at zero remaining
     and still offer a basket button on every tile in the catalogue."""
     client.delete(f"{API}/cart", headers=auth)
-    product = client.get(f"{API}/products", params={"sort": "price_desc"}).json()["items"][0]
+    product = _variantless_product(client)
     left = client.get(f"{API}/products/{product['id']}").json()["stock_left"]
 
-    client.post(
-        f"{API}/cart/items",
-        json={"product_id": product["id"], "quantity": left},
-        headers=auth,
-    )
+    client.post(f"{API}/cart/items", json=_pick(product["id"], left), headers=auth)
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
-    assert client.post(f"{API}/orders", json={"address_id": address["id"]}, headers=auth).status_code == 201
+    placed = client.post(f"{API}/orders", json={"address_id": address["id"]}, headers=auth)
+    assert placed.status_code == 201
 
     sold_out = client.get(f"{API}/products/{product['id']}").json()
     assert sold_out["stock_left"] == 0
     assert sold_out["in_stock"] is False
     # And it cannot be put back in the basket.
-    rejected = client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    rejected = client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
     assert rejected.status_code == 409
 
 
@@ -407,15 +453,13 @@ def test_buying_a_colour_takes_it_off_that_colour(
 
     added = client.post(
         f"{API}/cart/items",
-        json={
-            "product_id": product["id"],
-            "color_variant_id": chosen["id"],
-            "quantity": quantity,
-        },
+        json=_pick(product["id"], quantity, colour_id=chosen["id"]),
         headers=auth,
     ).json()
-    # The stepper's ceiling is the colour's shelf, not the product's.
-    assert added["items"][0]["stock_left"] == chosen["stock_left"]
+    # The stepper's ceiling is the chosen cell of the grid, not the product's
+    # whole shelf — and that cell belongs to the colour under test.
+    assert added["items"][0]["color_variant_id"] == chosen["id"]
+    assert 0 < added["items"][0]["stock_left"] <= chosen["stock_left"]
 
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     assert client.post(
@@ -814,7 +858,7 @@ def _place_an_order(client: TestClient, auth: dict[str, str]) -> dict:
     """An order of this customer's own, in ``placed``, to push around."""
     client.delete(f"{API}/cart", headers=auth)
     product = client.get(f"{API}/products", params={"sort": "price_asc"}).json()["items"][0]
-    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     created = client.post(
         f"{API}/orders", json={"address_id": address["id"]}, headers=auth
@@ -1479,17 +1523,10 @@ def test_a_sold_out_product_is_on_sale_again_once_it_is_cancelled(
 ) -> None:
     """A shelf emptied by an order that never happened is not empty."""
     client.delete(f"{API}/cart", headers=auth)
-    listing = client.get(f"{API}/products", params={"page_size": 60}).json()
-    product = next(
-        p for p in listing["items"] if p["in_stock"] and 0 < p["stock_left"] <= 30
-    )
+    product = _variantless_product(client)
     left = client.get(f"{API}/products/{product['id']}").json()["stock_left"]
 
-    client.post(
-        f"{API}/cart/items",
-        json={"product_id": product["id"], "quantity": left},
-        headers=auth,
-    )
+    client.post(f"{API}/cart/items", json=_pick(product["id"], left), headers=auth)
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     order = client.post(
         f"{API}/orders", json={"address_id": address["id"]}, headers=auth
@@ -1693,7 +1730,7 @@ def test_only_the_named_line_comes_back_on_a_partial_return(
     ).json()["items"][:2]
     for product in (cheap, dear):
         client.post(
-            f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth
+            f"{API}/cart/items", json=_pick(product["id"]), headers=auth
         )
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     order = client.post(
@@ -1892,11 +1929,9 @@ def test_selling_a_winner_out_hands_the_card_to_the_next_seller(
     _offer(product["id"], seller="Chilonzor Savdo", price=mid, stock=8)
 
     client.delete(f"{API}/cart", headers=auth)
-    added = client.post(
-        f"{API}/cart/items",
-        json={"product_id": product["id"], "quantity": 2},
-        headers=auth,
-    ).json()
+    response = client.post(f"{API}/cart/items", json=_pick(product["id"], 2), headers=auth)
+    assert response.status_code == 201, response.text
+    added = response.json()
     # The basket is capped by the chosen seller's shelf, not the catalogue's.
     assert added["items"][0]["unit_price"] == low
     assert added["items"][0]["stock_left"] == 2
@@ -1927,7 +1962,7 @@ def test_the_order_line_says_who_sold_it(
     seller_id = _seller("Toshkent Elektronika")
 
     client.delete(f"{API}/cart", headers=auth)
-    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     order = client.post(
         f"{API}/orders", json={"address_id": address["id"]}, headers=auth
@@ -1952,11 +1987,8 @@ def test_cancelling_gives_the_stock_back_to_the_seller_it_came_from(
     dear_id = _offer(product["id"], seller="Chilonzor Savdo", price=product["price"], stock=7)
 
     client.delete(f"{API}/cart", headers=auth)
-    client.post(
-        f"{API}/cart/items",
-        json={"product_id": product["id"], "quantity": 3},
-        headers=auth,
-    )
+    added = client.post(f"{API}/cart/items", json=_pick(product["id"], 3), headers=auth)
+    assert added.status_code == 201, added.text
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     order = client.post(
         f"{API}/orders", json={"address_id": address["id"]}, headers=auth
@@ -1978,26 +2010,26 @@ def test_the_cache_follows_the_offer_that_changed(client: TestClient) -> None:
     it in step. One function writes it, and everything that can change the
     answer calls that function."""
     product = _untouched_product(client)
-    _offer(
-        product["id"], seller="Toshkent Elektronika",
-        price=900_000, stock=3, old_price=1_200_000,
-    )
+    # Under the house's price, whatever the house's price happens to be: this
+    # catalogue runs from a few thousand so'm to a few million.
+    was = product["price"]
+    low, mid = _undercuts(was)
+    _offer(product["id"], seller="Toshkent Elektronika", price=mid, stock=3, old_price=was)
 
     card = client.get(f"{API}/products/{product['id']}").json()
-    assert (card["price"], card["old_price"], card["discount_percent"]) == (900_000, 1_200_000, 25)
+    assert (card["price"], card["old_price"]) == (mid, was)
+    assert card["discount_percent"] == round((was - mid) / was * 100)
 
     # A seller cutting their price.
-    _offer(
-        product["id"], seller="Toshkent Elektronika",
-        price=600_000, stock=3, old_price=1_200_000,
-    )
+    _offer(product["id"], seller="Toshkent Elektronika", price=low, stock=3, old_price=was)
     cut = client.get(f"{API}/products/{product['id']}").json()
-    assert (cut["price"], cut["discount_percent"]) == (600_000, 50)
+    assert cut["price"] == low
+    assert cut["discount_percent"] == round((was - low) / was * 100)
 
     # And withdrawing it altogether, which hands the card back.
-    _offer(product["id"], seller="Toshkent Elektronika", price=600_000, stock=3, active=False)
+    _offer(product["id"], seller="Toshkent Elektronika", price=low, stock=3, active=False)
     withdrawn = client.get(f"{API}/products/{product['id']}").json()
-    assert withdrawn["price"] != 600_000
+    assert withdrawn["price"] != low
     assert withdrawn["seller"] == "Mini Bozor"
 
 
@@ -2502,7 +2534,7 @@ def test_the_commission_is_snapshotted_on_the_order_line(
     )
 
     client.delete(f"{API}/cart", headers=auth)
-    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     order = client.post(
         f"{API}/orders", json={"address_id": address["id"]}, headers=auth
@@ -2525,7 +2557,7 @@ def test_the_commission_is_snapshotted_on_the_order_line(
         assert session.get(Seller, seller_id).commission_percent == 20
 
     # And the next sale is at the new rate.
-    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
     later = client.post(
         f"{API}/orders", json={"address_id": address["id"]}, headers=auth
     ).json()
@@ -2673,19 +2705,62 @@ def test_a_preflight_answers_the_backoffice_by_name(client: TestClient) -> None:
 # --------------------------------------------------------- the shelf as a ledger
 
 
-def _ledger_is_consistent() -> list[tuple[int, int, int]]:
-    """Every offer whose running total disagrees with the sum of its movements.
+def _stock_is_consistent() -> list[str]:
+    """Everything the warehouse must never contain, as a list of complaints.
 
-    The invariant the whole warehouse rests on. A shelf figure is no longer a
-    number anybody wrote, so if this list is ever non-empty something has
-    assigned to one instead of recording why it changed.
+    Two invariants, and both of them hold everywhere or the shelf is lying:
+
+    * **The ledger.** An offer's running total is the sum of its movements. A
+      figure is no longer a number anybody writes, so a disagreement here
+      means something assigned to one instead of recording why it changed.
+    * **The roll-up.** An offer's total is the sum of its colours, and a
+      colour is the sum of its sizes. This one is not repairable after the
+      fact: a sale that named no colour comes off the total and off no colour,
+      and afterwards there is no working out which colour the shirt was. So it
+      is checked beside the ledger rather than trusted.
     """
+    complaints: list[str] = []
     with Session(engine) as session:
-        return [
-            (offer.id, offer.stock_left, st.on_hand(session, offer.id))
-            for offer in session.exec(select(Offer)).all()
-            if offer.stock_left != st.on_hand(session, offer.id)
-        ]
+        for offer in session.exec(select(Offer)).all():
+            ledger = st.on_hand(session, offer.id)
+            if offer.stock_left != ledger:
+                complaints.append(
+                    f"offer {offer.id}: total {offer.stock_left} but ledger {ledger}"
+                )
+
+            variants = session.exec(
+                select(ProductVariant).where(ProductVariant.product_id == offer.product_id)
+            ).all()
+            colours = [v for v in variants if v.kind is VariantKind.COLOR]
+            sizes = [v for v in variants if v.kind is VariantKind.SIZE]
+            counts = {
+                row.variant_id: row.stock_left
+                for row in session.exec(
+                    select(OfferVariant).where(OfferVariant.offer_id == offer.id)
+                ).all()
+            }
+            if not counts:
+                continue
+
+            for colour in colours:
+                children = [z for z in sizes if z.parent_id == colour.id]
+                if not children or colour.id not in counts:
+                    continue
+                total = sum(counts.get(z.id, 0) for z in children)
+                if counts[colour.id] != total:
+                    complaints.append(
+                        f"offer {offer.id} colour {colour.id}: "
+                        f"{counts[colour.id]} but its sizes hold {total}"
+                    )
+
+            if colours and all(c.id in counts for c in colours):
+                across = sum(counts[c.id] for c in colours)
+                if offer.stock_left != across:
+                    complaints.append(
+                        f"offer {offer.id}: total {offer.stock_left} "
+                        f"but its colours hold {across}"
+                    )
+    return complaints
 
 
 def _stocked_offer(
@@ -2786,7 +2861,7 @@ def test_goods_reach_the_shelf_only_by_being_counted_in(
     assert movement.quantity == 8
     assert movement.reason == "2 tasi kelmadi"
     assert movement.actor_id is not None, "somebody counted it"
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
 
 def test_the_shelf_is_always_the_sum_of_its_movements(
@@ -2800,18 +2875,18 @@ def test_the_shelf_is_always_the_sum_of_its_movements(
     product, offer, seller, warehouse = _stocked_offer(
         client, staff, "Zarafshon Savdo", "+998900020111", units=9
     )
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
     client.delete(f"{API}/cart", headers=auth)
-    client.post(f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth)
+    client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     order = client.post(
         f"{API}/orders", json={"address_id": address["id"]}, headers=auth
     ).json()
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
     client.post(f"{API}/orders/{order['id']}/cancel", json={}, headers=auth)
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
     with Session(engine) as session:
         leaves = [v.id for v in of.leaf_variants(session, product["id"])]
@@ -2822,7 +2897,7 @@ def test_the_shelf_is_always_the_sum_of_its_movements(
         f"{API}/staff/offers/{offer['id']}/write-off", json=body, headers=warehouse
     )
     assert written.status_code == 200
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
     corrected = client.put(
         f"{API}/staff/offers/{offer['id']}/stock",
@@ -2830,7 +2905,7 @@ def test_the_shelf_is_always_the_sum_of_its_movements(
         headers=warehouse,
     )
     assert corrected.status_code == 200
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
     # And the whole story is readable, oldest reason first.
     ledger = client.get(
@@ -2860,7 +2935,10 @@ def test_a_correction_records_the_difference_and_not_the_figure(
                 StockMovement.kind == StockMovementKind.COUNT_ADJUSTMENT,
             )
         ).all()
-    assert rows and all(row.quantity == 2 for row in rows), "the difference, not the seven"
+    # The leaf that held five moves by two, not to seven. The empty ones jump
+    # the whole way, which is also a difference and also recorded as one.
+    assert rows and 2 in {row.quantity for row in rows}, "the difference, not the seven"
+    assert all(row.quantity != 7 or row.variant_id is not None for row in rows)
     assert all(row.reason for row in rows)
 
     # And a correction with no reason is refused.
@@ -2893,13 +2971,10 @@ def test_what_is_in_one_basket_is_not_offered_to_the_next_shopper(
     client.delete(f"{API}/cart", headers=mine)
     client.delete(f"{API}/cart", headers=theirs)
 
-    with Session(engine) as session:
-        leaves = of.leaf_variants(session, product["id"])
-        pick: dict = {"product_id": product["id"], "quantity": 2}
-        if leaves:
-            pick["variant_id"] = leaves[0].id
-    everything = client.post(f"{API}/cart/items", json=pick, headers=mine).json()
-    assert everything["items"][0]["quantity"] == 2
+    pick = _pick(product["id"], 2)
+    response = client.post(f"{API}/cart/items", json=pick, headers=mine)
+    assert response.status_code == 201, response.text
+    assert response.json()["items"][0]["quantity"] == 2
 
     # The card stops offering what is already promised.
     card = client.get(f"{API}/products/{product['id']}").json()
@@ -2914,7 +2989,7 @@ def test_what_is_in_one_basket_is_not_offered_to_the_next_shopper(
     with Session(engine) as session:
         assert session.get(Offer, offer["id"]).stock_left == 2
         assert st.reserved(session, offer["id"]) == 2
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
 
 def test_a_hold_that_has_run_out_lets_go(
@@ -2932,11 +3007,7 @@ def test_a_hold_that_has_run_out_lets_go(
     client.delete(f"{API}/cart", headers=mine)
     client.delete(f"{API}/cart", headers=theirs)
 
-    with Session(engine) as session:
-        leaves = of.leaf_variants(session, product["id"])
-        pick: dict = {"product_id": product["id"], "quantity": 1}
-        if leaves:
-            pick["variant_id"] = leaves[0].id
+    pick = _pick(product["id"], 1)
     client.post(f"{API}/cart/items", json=pick, headers=mine)
     assert client.post(f"{API}/cart/items", json=pick, headers=theirs).status_code == 409
 
@@ -2969,11 +3040,8 @@ def test_an_unpaid_order_holds_the_goods_until_the_courier_is_paid(
         client, staff, "Jizzax Savdo", "+998900020151", units=5
     )
     client.delete(f"{API}/cart", headers=auth)
-    client.post(
-        f"{API}/cart/items",
-        json={"product_id": product["id"], "quantity": 2},
-        headers=auth,
-    )
+    added = client.post(f"{API}/cart/items", json=_pick(product["id"], 2), headers=auth)
+    assert added.status_code == 201, added.text
     address = client.get(f"{API}/addresses", headers=auth).json()[0]
     order = client.post(
         f"{API}/orders",
@@ -2989,7 +3057,7 @@ def test_an_unpaid_order_holds_the_goods_until_the_courier_is_paid(
         assert session.get(Offer, offer["id"]).stock_left == 5
         assert st.reserved(session, offer["id"]) == 2
     assert client.get(f"{API}/products/{product['id']}").json()["stock_left"] == 3
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
     for target in ("packing", "shipped", "delivered"):
         moved = client.post(
@@ -3008,7 +3076,7 @@ def test_an_unpaid_order_holds_the_goods_until_the_courier_is_paid(
             )
         ).one()
     assert sale.quantity == -2
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
 
 # --------------------------------------------------------- stocktakes and removals
@@ -3058,7 +3126,7 @@ def test_a_stocktake_writes_its_difference_as_a_movement(
     assert rows and sum(row.quantity for row in rows) == -1
     assert all(row.kind is StockMovementKind.COUNT_ADJUSTMENT for row in rows)
     assert all(row.reason == "bittasi yo'q" for row in rows)
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
     # Closing twice is not counting twice.
     assert client.post(
@@ -3118,7 +3186,7 @@ def test_a_removal_holds_the_goods_then_takes_them_away(
         assert session.get(Offer, offer["id"]).stock_left == 6
         assert st.reserved(session, offer["id"]) == 4
         assert st.sellable(session, session.get(Offer, offer["id"])) == 2
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
     collected = client.post(
         f"{API}/staff/removals/{removal['id']}/collect", headers=warehouse
@@ -3134,7 +3202,7 @@ def test_a_removal_holds_the_goods_then_takes_them_away(
         ).one()
     assert movement.kind is StockMovementKind.SELLER_RETURN
     assert movement.quantity == -4
-    assert not _ledger_is_consistent()
+    assert not _stock_is_consistent()
 
     # And it cannot be collected twice.
     assert client.post(
@@ -3170,7 +3238,7 @@ def test_a_seller_sees_their_own_batches_and_nobody_elses(
         f"{API}/staff/supplies",
         json={"lines": [{"offer_id": mine_offer["id"], "quantity": 1}]},
         headers=theirs,
-    ).status_code == 403
+    ).status_code == 403, "whose offer it is comes before what it names"
 
     # The ledger is scoped the same way.
     mine_ledger = client.get(f"{API}/staff/stock/movements", headers=mine).json()
@@ -3197,11 +3265,10 @@ def test_only_the_warehouse_moves_a_count(
     )
     with Session(engine) as session:
         leaves = [v.id for v in of.leaf_variants(session, product["id"])]
-    supply = client.post(
-        f"{API}/staff/supplies",
-        json={"lines": [{"offer_id": offer["id"], "quantity": 1}]},
-        headers=seller,
-    ).json()
+    line: dict = {"offer_id": offer["id"], "quantity": 1}
+    if leaves:
+        line["variant_id"] = leaves[0]
+    supply = client.post(f"{API}/staff/supplies", json={"lines": [line]}, headers=seller).json()
     receipt = {"lines": [{"line_id": supply["lines"][0]["id"], "received_quantity": 1}]}
 
     for headers, expected in ((None, 401), (auth, 403), (seller, 403)):
@@ -3229,3 +3296,127 @@ def test_only_the_warehouse_moves_a_count(
     shelf = client.get(f"{API}/staff/offers/{offer['id']}/shelf", headers=warehouse).json()
     total = next(row for row in shelf if row["variant_id"] is None)
     assert total["on_hand"] == total["sellable"] + total["reserved"]
+
+
+def test_a_counted_product_will_not_go_into_a_basket_unnamed(
+    client: TestClient, auth: dict[str, str]
+) -> None:
+    """A sale that names no colour comes off the offer's total and off no
+    colour at all, and afterwards there is no working out which colour the
+    shirt was. The choice is required rather than guessed."""
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(f"{API}/products/1").json()
+    sizes = [v for v in product["variants"] if v["kind"] == "size"]
+    assert sizes, "seeded with a colour × size grid"
+
+    bare = client.post(
+        f"{API}/cart/items", json={"product_id": product["id"]}, headers=auth
+    )
+    assert bare.status_code == 422
+    assert bare.json()["detail"] == "O'lchamni tanlang"
+
+    # A colour on its own is not a leaf either, where the colours have sizes.
+    colour = next(v for v in product["variants"] if v["kind"] == "color")
+    half = client.post(
+        f"{API}/cart/items",
+        json={"product_id": product["id"], "color_variant_id": colour["id"]},
+        headers=auth,
+    )
+    assert half.status_code == 422
+
+    # And with the size, it goes in.
+    named = client.post(
+        f"{API}/cart/items", json=_pick(product["id"]), headers=auth
+    )
+    assert named.status_code == 201, named.text
+    line = named.json()["items"][0]
+    assert line["variant_id"] is not None
+    assert line["color_variant_id"] is not None
+
+    # A product nobody counts by variant still goes in on its own.
+    plain = _variantless_product(client)
+    assert client.post(
+        f"{API}/cart/items", json={"product_id": plain["id"]}, headers=auth
+    ).status_code == 201
+
+    assert not _stock_is_consistent()
+
+
+def test_a_colour_with_nothing_left_is_out_of_stock_not_a_question(
+    client: TestClient,
+    auth: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The one case both apps send no size: a colour whose every size has
+    gone. Asking them to choose one would be asking for something that is not
+    there, so the answer stays the one they are written to expect."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900020211")
+    client.delete(f"{API}/cart", headers=auth)
+
+    # The winning offer's own shelf, because that is the one a shopper buys
+    # from — emptying somebody else's cell would leave the colour perfectly
+    # buyable and the question perfectly sensible.
+    product_id = 1
+    with Session(engine) as session:
+        assert of.winning_offer(session, product_id) is not None
+        colour = next(
+            leaf.parent_id
+            for leaf in of.leaf_variants(session, product_id)
+            if leaf.parent_id is not None
+        )
+        # Every seller's, not only the winner's: emptying one shelf hands the
+        # card to the next, and the colour would still be for sale.
+        cells = [
+            (offer.id, leaf.id, of.variant_stock(session, offer.id, leaf.id) or 0)
+            for offer in of.offers_for(session, product_id, active_only=False)
+            for leaf in of.leaf_variants(session, product_id)
+            if leaf.parent_id == colour
+        ]
+
+    for shelf_id, variant_id, held in cells:
+        if held:
+            written = client.post(
+                f"{API}/staff/offers/{shelf_id}/write-off",
+                json={"variant_id": variant_id, "quantity": held, "reason": "suv ketgan"},
+                headers=warehouse,
+            )
+            assert written.status_code == 200, written.text
+
+    # Every size of that colour is gone, so there is no size to choose. Both
+    # apps ask exactly this, and the answer they expect is the true one.
+    refused = client.post(
+        f"{API}/cart/items",
+        json={"product_id": product_id, "color_variant_id": colour},
+        headers=auth,
+    )
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"] == "Mahsulot mavjud emas"
+    # The other half of the pair — a colour that *does* still have sizes gets
+    # asked rather than refused — is
+    # `test_a_counted_product_will_not_go_into_a_basket_unnamed`.
+    assert not _stock_is_consistent()
+
+
+def test_the_warehouse_can_see_the_shelves_it_counts(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Reading which offers exist is not pricing them — a warehouse that
+    cannot list a shelf cannot go and count it."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900020221")
+
+    listed = client.get(f"{API}/staff/offers", headers=warehouse)
+    assert listed.status_code == 200
+    assert listed.json(), "every shelf, not one seller's"
+    assert len({row["seller"]["id"] for row in listed.json()}) >= 1
+
+    # Still nobody else's business.
+    assert client.get(f"{API}/staff/offers", headers=auth).status_code == 403
+    assert client.get(f"{API}/staff/offers", headers=operator).status_code == 403
+    # And reading is not writing.
+    offer_id = listed.json()[0]["id"]
+    assert client.patch(
+        f"{API}/staff/offers/{offer_id}", json={"price": 1}, headers=warehouse
+    ).status_code == 403

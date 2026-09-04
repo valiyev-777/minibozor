@@ -1,5 +1,15 @@
 import { NavLink, Outlet } from "react-router-dom"
-import { CalendarClock, LogOut, PackageCheck, Star, Undo2 } from "lucide-react"
+import {
+  CalendarClock,
+  ClipboardList,
+  Layers,
+  LogOut,
+  PackageCheck,
+  ScrollText,
+  Star,
+  Truck,
+  Undo2,
+} from "lucide-react"
 import type { UserRole } from "@/api/types"
 import { useSession } from "@/auth/session"
 import { Badge } from "@/components/ui/badge"
@@ -30,6 +40,21 @@ const NAV: NavItem[] = [
     label: "Yetkazish oynalari",
     icon: CalendarClock,
     roles: ["operator", "admin"],
+  },
+  { to: "/shelf", label: "Javon", icon: Layers, roles: ["warehouse", "admin"] },
+  { to: "/supplies", label: "Partiyalar", icon: Truck, roles: ["warehouse", "admin"] },
+  {
+    to: "/counts",
+    label: "Inventarizatsiya",
+    icon: ClipboardList,
+    roles: ["warehouse", "admin"],
+  },
+  { to: "/removals", label: "Qaytarib olish", icon: Undo2, roles: ["warehouse", "admin"] },
+  {
+    to: "/movements",
+    label: "Harakatlar",
+    icon: ScrollText,
+    roles: ["warehouse", "admin"],
   },
 ]
 
@@ -99,15 +124,22 @@ export function Page({
   title,
   hint,
   actions,
+  floor,
   children,
 }: {
   title: string
   hint?: string
   actions?: React.ReactNode
+  /**
+   * Warehouse density: bigger type and taller rows, for a tablet held at
+   * arm's length by somebody wearing gloves. Not a second design system —
+   * the same tokens and the same table, scaled.
+   */
+  floor?: boolean
   children: React.ReactNode
 }) {
   return (
-    <div className="px-5 py-4">
+    <div className={cn("px-5 py-4", floor && "floor")}>
       <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-[15px] font-semibold text-ink">{title}</h1>

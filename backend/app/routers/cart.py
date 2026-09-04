@@ -9,7 +9,7 @@ from app import schemas as s
 from app import services as sv
 from app import stock as st
 from app.deps import CurrentUser, SessionDep
-from app.models import CartItem, Offer, Product, ProductVariant
+from app.models import CartItem, Offer, Product, ProductVariant, VariantKind
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
@@ -60,6 +60,53 @@ def _chosen(
     return (
         session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None,
         session.get(ProductVariant, item.variant_id) if item.variant_id else None,
+    )
+
+
+def _require_a_leaf(
+    session: SessionDep,
+    product: Product,
+    offer: Offer,
+    color: ProductVariant | None,
+    size: ProductVariant | None,
+    color_id: int | None,
+) -> None:
+    """A basket line for a counted product has to say which one.
+
+    The shelf of a product with variants is counted on its leaves — the sizes
+    where there are sizes, the colours otherwise — and a sale that names none
+    of them takes the count off the offer's total and off no leaf at all. The
+    ledger still adds up, but the colour figures drift away from it by exactly
+    that much, permanently: there is no working out afterwards which colour
+    the shirt was. So the choice is required rather than defaulted, because
+    guessing a colour on the customer's behalf is the same lie told earlier.
+
+    Except when there is nothing to choose. Both apps send a leaf in the
+    ordinary flow, and the one case they do not is a colour whose every size
+    has gone — there the honest answer is that it is out of stock, which is
+    also the answer they are written to expect.
+    """
+    leaves = of.leaf_variants(session, product.id)
+    if not leaves:
+        return
+
+    by_colour = leaves[0].kind is VariantKind.COLOR
+    named = color_id if by_colour else (size.id if size is not None else None)
+    if named is not None:
+        return
+
+    candidates = [
+        leaf
+        for leaf in leaves
+        if color is None or by_colour or leaf.parent_id == color.id
+    ] or leaves
+    if not any(st.sellable(session, offer, leaf.id) > 0 for leaf in candidates):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock")
+        )
+    raise HTTPException(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        i18n.label("choose_a_colour" if by_colour else "choose_a_size"),
     )
 
 
@@ -122,6 +169,8 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
     offer = of.winning_offer(session, product.id)
     if offer is None:
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock"))
+
+    _require_a_leaf(session, product, offer, color, size, color_id)
 
     existing = session.exec(
         select(CartItem).where(
