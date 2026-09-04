@@ -19,11 +19,14 @@ from app.routers import (
     delivery,
     favorites,
     home,
+    merchandising,
     notifications,
+    operations,
     orders,
     profile,
     reviews,
     search,
+    staff,
 )
 
 MEDIA_DIR = Path(__file__).resolve().parent.parent / "media"
@@ -91,6 +94,9 @@ for router in (
     notifications.router,
     profile.router,
     content.router,
+    staff.router,
+    operations.router,
+    merchandising.router,
 ):
     app.include_router(router, prefix=API)
 

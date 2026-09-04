@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, or_, select
 
 from app import i18n
+from app import offers as of
 from app import schemas as s
 from app import services as sv
 from app.deps import OptionalUser, SessionDep
@@ -202,6 +203,29 @@ def get_product(product_id: int, session: SessionDep, user: OptionalUser) -> s.P
     if product is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     return sv.product_out(session, product, sv.favorite_ids(session, user))
+
+
+@router.get(
+    "/products/{product_id}/offers",
+    response_model=list[s.OfferOut],
+    summary="Every seller offering this product, cheapest first",
+)
+def product_offers(product_id: int, session: SessionDep) -> list[s.OfferOut]:
+    """The list behind the one price on the card.
+
+    Sold-out offers are included and marked: a shopper comparing sellers is
+    entitled to see that the cheapest one has run out, which is why the price
+    on the card is the one it is. Withdrawn offers are not — an inactive offer
+    is not on sale, and listing it would invite a question nobody can answer.
+    """
+    product = session.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
+    winner = of.winning_offer(session, product_id)
+    return [
+        sv.offer_out(session, offer, winner_id=winner.id if winner else None)
+        for offer in of.offers_for(session, product_id)
+    ]
 
 
 @router.get("/products/{product_id}/similar", response_model=list[s.ProductCardOut])

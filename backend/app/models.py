@@ -28,6 +28,29 @@ class Language(StrEnum):
     EN = "en"
 
 
+class UserRole(StrEnum):
+    """What a person is allowed to do, and which backoffice they see.
+
+    One account, one role. Staff sign in through the same OTP flow customers
+    use — the role is the only difference, so there is no second password
+    store, no second login screen, and no way for the two to drift apart.
+    """
+
+    CUSTOMER = "customer"      # the app
+    ADMIN = "admin"            # everything
+    OPERATOR = "operator"      # orders, calls, cancellations
+    WAREHOUSE = "warehouse"    # picking, stock counts
+    COURIER = "courier"        # a delivery round
+    SELLER = "seller"          # one seller's own products and payouts
+
+
+# Everyone who works here. Handy as the default guard on a backoffice
+# endpoint, where "not a customer" is the real question.
+STAFF_ROLES: frozenset[UserRole] = frozenset(
+    r for r in UserRole if r is not UserRole.CUSTOMER
+)
+
+
 class OrderStatus(StrEnum):
     PLACED = "placed"          # Buyurtma qabul qilindi
     PACKING = "packing"        # Yig'ilmoqda
@@ -92,6 +115,8 @@ class User(SQLModel, table=True):
     birth_date: date | None = None
     gender: str | None = None
     avatar_url: str | None = None
+
+    role: UserRole = Field(default=UserRole.CUSTOMER, index=True)
 
     pin_hash: str | None = None
     biometrics_enabled: bool = False
@@ -159,6 +184,32 @@ class Brand(SQLModel, table=True):
     name: str
 
 
+class Seller(SQLModel, table=True):
+    """Somebody who sells here.
+
+    The goods sit in our warehouse and we deliver them, so a seller is a
+    price, a stock figure and a bank account rather than a shop with its own
+    logistics. What they are not is a column on ``Product``: that field held
+    the string "Mini Bozor" on every row, which is a shop, not a marketplace.
+    """
+
+    __tablename__ = "sellers"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    phone: str = Field(default="", max_length=20)
+    # The account that signs in as this seller. Staff come through the same OTP
+    # flow as everybody else and the role is the only difference, so a seller
+    # holding UserRole.SELLER still needs this to answer "which of these offers
+    # are mine". The house seller has nobody: it is us.
+    user_id: int | None = Field(default=None, foreign_key="users.id", index=True)
+    # What we keep of each item sold. Per seller, because the rate is what a
+    # contract says and contracts differ; five per cent is the standard one.
+    commission_percent: int = 5
+    active: bool = True
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Product(SQLModel, table=True):
     __tablename__ = "products"
 
@@ -170,18 +221,26 @@ class Product(SQLModel, table=True):
     category_id: int = Field(foreign_key="categories.id", index=True)
     brand_id: int | None = Field(default=None, foreign_key="brands.id", index=True)
 
+    # Price and stock are a CACHE of the winning offer — the cheapest active
+    # offer with something left. They are not the source of truth any more;
+    # ``offers`` is. They stay columns because every listing filters and sorts
+    # on them in SQL (``catalog.py``), and the alternative is a correlated
+    # subquery per row with paging computed over it. ``app.offers.refresh``
+    # recomputes them, and everything that changes an offer calls it.
     price: int                       # so'm, integer
     old_price: int | None = None
     rating: float = 0.0
     reviews_count: int = 0
+    # Across every seller: how many of this thing have gone, whoever sold it.
     sold_count: int = 0
 
     badge: str | None = None         # "Bestseller", "Yangi", "Original", "Kafolat 1 yil"
+    # The winning seller's name, cached alongside the price it won with.
     seller: str = "Mini Bozor"
     warranty: str | None = None
 
     in_stock: bool = True
-    stock_left: int = 25
+    stock_left: int = 25             # cache: what the winning offer has left
     is_original: bool = True
     free_delivery: bool = True
     next_day_delivery: bool = True
@@ -222,8 +281,72 @@ class ProductVariant(SQLModel, table=True):
     # of it wearing one colour, so picking a colour on the page answers "how
     # many" about the thing actually being looked at rather than about the
     # sum of every colour. None on a size, and on a colour nobody counted.
+    #
+    # A cache too, of the winning offer's ``offer_variants`` row: the variant
+    # describes the thing, and how many of it there are is a fact about whose
+    # shelf it is standing on.
     stock_left: int | None = None
+    # Which colour this size belongs to.
+    #
+    # The shelf used to be counted twice over: the colours split the product's
+    # total between them, the sizes split the same total again, and the answer
+    # for a pair of them was whichever of the two was scarcer. It kept the
+    # arithmetic tidy and it was not true — a shop that has sold its last black
+    # 41 has sold it in black, and the page went on offering it because there
+    # were still three 41s somewhere in blue.
+    #
+    # So a size is a cell of the grid: one row per colour per size, pointing at
+    # the colour it is a size of, holding its own count. Null on a product
+    # with no colours, where the sizes are the product's own.
+    parent_id: int | None = Field(
+        default=None, foreign_key="product_variants.id", index=True
+    )
     sort: int = 0
+
+
+class Offer(SQLModel, table=True):
+    """One seller's price for one product — where the money now lives.
+
+    Several sellers may offer the same thing. The cheapest active offer with
+    something left on the shelf wins, and the winner's figures are copied onto
+    the ``Product`` row so the listings can still sort and filter in SQL. An
+    offer with nothing left does not compete: it is not a price anyone can pay.
+    """
+
+    __tablename__ = "offers"
+    __table_args__ = (UniqueConstraint("seller_id", "product_id", name="uq_offer"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    seller_id: int = Field(foreign_key="sellers.id", index=True)
+    product_id: int = Field(foreign_key="products.id", index=True)
+
+    price: int
+    old_price: int | None = None
+    stock_left: int = 0
+    # A seller withdrawing an offer without deleting it — the price and the
+    # history stay, the offer stops competing.
+    active: bool = True
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class OfferVariant(SQLModel, table=True):
+    """How many of one colour, or one size of one colour, this seller has.
+
+    The same shape as the stock figure on ``ProductVariant``, one level down:
+    the variant says what the thing is and this says whose shelf it is on and
+    how much of it is there. Absent for a variant nobody counts apart, which
+    is what ``None`` means on the variant itself.
+    """
+
+    __tablename__ = "offer_variants"
+    __table_args__ = (
+        UniqueConstraint("offer_id", "variant_id", name="uq_offer_variant"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    offer_id: int = Field(foreign_key="offers.id", index=True)
+    variant_id: int = Field(foreign_key="product_variants.id", index=True)
+    stock_left: int = 0
 
 
 class ProductSpec(SQLModel, table=True):
@@ -291,6 +414,11 @@ class CartItem(SQLModel, table=True):
     # picker sheet lets the customer choose both before adding.
     variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
     color_variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
+    # Whose offer is in the basket. Chosen when the line is added — the
+    # cheapest one with stock at that moment — and held, so a shopper is
+    # charged the price they were shown rather than whatever is winning by the
+    # time they reach the till. Null on a line added before offers existed.
+    offer_id: int | None = Field(default=None, foreign_key="offers.id", index=True)
     quantity: int = 1
     selected: bool = True
     created_at: datetime = Field(default_factory=utcnow)
@@ -403,6 +531,10 @@ class Order(SQLModel, table=True):
     address_meta: str = ""
     pickup_point_id: int | None = Field(default=None, foreign_key="pickup_points.id")
 
+    # Which window was booked, as well as its hours. The hours are a snapshot
+    # and stay readable after the window is gone; the id is what makes the
+    # seat returnable, and without it a cancelled order held its slot for ever.
+    slot_id: int | None = Field(default=None, foreign_key="delivery_slots.id")
     delivery_day: date | None = None
     delivery_start: str | None = None
     delivery_end: str | None = None
@@ -434,6 +566,29 @@ class OrderItem(SQLModel, table=True):
     product_id: int | None = Field(default=None, foreign_key="products.id")
     title: str
     image_url: str = ""
+    # Which colour and which size, beside the words for them. The label is for
+    # reading ("Ko'k · 42"); the ids are what a count can be put back onto.
+    # They used to live only on the cart line, which is deleted the moment the
+    # order is placed — so a cancelled order knew it had taken two of
+    # something blue and could not say two of what.
+    variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
+    color_variant_id: int | None = Field(
+        default=None, foreign_key="product_variants.id"
+    )
+    # Who sold it and on which offer. Without the seller there is no answering
+    # "who is owed this money", which is the whole point of a marketplace; the
+    # offer is what the counts come off and go back onto.
+    seller_id: int | None = Field(default=None, foreign_key="sellers.id", index=True)
+    offer_id: int | None = Field(default=None, foreign_key="offers.id", index=True)
+    # What we keep of this line, as the rate stood the day it was sold.
+    #
+    # Read off ``Seller.commission_percent`` at the time and then left alone.
+    # A rate is a term of a contract and contracts get renegotiated; a payout
+    # computed later against today's rate would quietly restate what a seller
+    # was owed for something they sold last year. There is no payout module
+    # yet, which is exactly why the figure has to be captured now — afterwards
+    # it is not a column to add but a number nobody can recover.
+    commission_percent: int = 0
     variant_label: str = ""
     unit_price: int = 0
     quantity: int = 1
@@ -487,6 +642,15 @@ class ReturnRequest(SQLModel, table=True):
     comment: str = ""
     photos: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     status: ReturnStatus = Field(default=ReturnStatus.SUBMITTED)
+    # What the operator decided and why — the sentence the customer is owed
+    # when a request is refused. Who decided it and when are in ``audit_log``;
+    # this is the part the customer eventually gets to read, so it lives on
+    # the request itself rather than in a log nobody outside can query.
+    resolution: str = ""
+    # How much was actually paid back. The figure was only ever in the audit
+    # log, which the customer cannot read — so the request itself could not
+    # answer the one question the customer has about it.
+    refund_amount: int = 0
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -606,3 +770,42 @@ class Translation(SQLModel, table=True):
     field: str                               # "name", "subtitle", "description", …
     lang: str = Field(index=True)            # "ru" | "en"
     value: str
+
+
+# --------------------------------------------------------------------------- audit
+
+
+class AuditLog(SQLModel, table=True):
+    """Who changed what, when, and from which value to which.
+
+    Money and stock are the two things nobody may quietly alter: a price, a
+    refund, a shelf count, an order total. Every staff action that touches
+    either writes a row here before it commits, so a disputed number can be
+    traced back to a person and a moment rather than argued about.
+
+    Values are kept as text, not typed columns. One table has to hold a price
+    in so'm, an order status, a boolean and a null side by side, and the point
+    of the row is to be read by a human later — not summed.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: int | None = Field(default=None, primary_key=True)
+
+    # Null when the actor is the system itself — a scheduled job, a payment
+    # webhook — rather than a signed-in person.
+    actor_id: int | None = Field(default=None, foreign_key="users.id", index=True)
+    # The role as it was at the time. Roles get reassigned; the log must still
+    # say what authority the change was made under.
+    actor_role: UserRole | None = None
+
+    action: str = Field(index=True)        # "order.cancel", "product.price"
+    entity: str = Field(index=True)        # "order", "product", "product_variant"
+    entity_id: int | None = Field(default=None, index=True)
+    field: str = ""                        # "total", "stock_left", "status"
+
+    old_value: str | None = None
+    new_value: str | None = None
+    note: str = ""                         # a reason, a ticket number, a phone call
+
+    created_at: datetime = Field(default_factory=utcnow, index=True)

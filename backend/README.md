@@ -65,6 +65,49 @@ Phone + SMS code, then a JWT pair.
 3. `POST /api/v1/auth/refresh` rotates: a refresh token is single use, and the
    old one is rejected afterwards.
 
+### Two callers, two ways to hold the refresh token
+
+`/auth/verify` also sets the refresh token as a cookie — `mb_refresh`,
+HttpOnly, SameSite=Lax, scoped to `/api/v1/auth` — and `/auth/refresh` accepts
+it from either place, body first.
+
+The mobile apps go on sending it in the body and their response shape is
+unchanged: they have a keychain and no document to inject script into. A
+browser has neither, and a refresh token readable from JavaScript is one
+successful XSS away from being somebody else's session for the next sixty days.
+So the backoffice sends no body at all and lets the cookie do it.
+
+`/auth/logout` clears the cookie along with revoking the tokens.
+
+### CORS
+
+`MB_CORS_ORIGINS` is a comma-separated list of exact origins and defaults to
+`http://localhost:5173,http://127.0.0.1:5173` — where the backoffice runs in
+dev. A wildcard is *dropped* rather than honoured: the API answers with
+credentials, and a browser refuses `Access-Control-Allow-Origin: *` together
+with credentials, so `*` would not be permissive — it would be broken, and
+broken in the browser's console rather than in ours.
+
+```bash
+MB_CORS_ORIGINS=http://localhost:5173,https://ofis.minibozor.uz uvicorn app.main:app
+```
+
+## Staff accounts
+
+Staff sign in through the same OTP flow customers use — the role is the only
+difference, so there is no second password store and no second login screen.
+
+```bash
+.venv/bin/python -m tools.make_staff +998900000002 operator "Dilnoza Rasulova"
+.venv/bin/python -m tools.make_staff +998900000005 seller "Anvar Qodirov" --seller="Yunusobod Savdo"
+.venv/bin/python -m tools.make_staff --list
+```
+
+Roles: `customer`, `admin`, `operator`, `warehouse`, `courier`, `seller`. The
+seed writes one admin (`+998900000001`).
+
+The backoffice that consumes these endpoints is in [`../backoffice`](../backoffice).
+
 The optional PIN (screens 40–44) is a *local* re-entry lock, hashed with argon2
 server-side so it can be verified across devices. It never replaces the JWT.
 

@@ -21,6 +21,7 @@ from app.models import (
     PaymentMethod,
     ReturnStatus,
     ReviewStatus,
+    UserRole,
     VariantKind,
 )
 
@@ -173,10 +174,14 @@ class VariantOut(BaseModel):
     # hex swatches. None for sizes, and for a colour nobody photographed.
     image_url: str | None = None
     in_stock: bool
-    # How many of this colour are left, when they are counted apart. None means
-    # the shelf is only counted as a whole, and the product's own stock_left is
-    # the answer.
+    # How many of this colour, or of this size in this colour, are left. None
+    # means the shelf is only counted as a whole, and the product's own
+    # stock_left is the answer.
     stock_left: int | None = None
+    # The colour a size belongs to: sizes are counted per colour, so a page
+    # showing one colour shows that colour's sizes. Null on a colour, and on a
+    # size of a product that has no colours.
+    parent_id: int | None = None
 
 
 class SpecOut(BaseModel):
@@ -193,6 +198,10 @@ class ProductCardOut(BaseModel):
     old_price: int | None
     discount_percent: int | None
     image_url: str | None
+    # Every photograph the card may swipe through, the first of them being
+    # `image_url` again. A client that does not know about this field shows the
+    # one picture it always did.
+    images: list[str] = []
     rating: float
     reviews_count: int
     badge: str | None
@@ -335,6 +344,14 @@ class CartItemOut(BaseModel):
     title: str
     image_url: str | None
     variant_label: str
+    # Which size and which colour this line is, and not only what they are
+    # called. The label is one joined string for reading; a client deciding
+    # whether *this* line is the one the product page is currently showing
+    # needs the ids it was added with, and without them the page could only
+    # match on the product — so a shirt in the basket in medium left no way to
+    # add a large.
+    variant_id: int | None = None
+    color_variant_id: int | None = None
     unit_price: int
     old_unit_price: int | None
     quantity: int
@@ -572,7 +589,113 @@ class ReturnOut(BaseModel):
     reason: str
     comment: str
     status: ReturnStatus
+    # Added rather than changed: the apps read the fields they know and ignore
+    # this one until they are taught about it. Nought until a refund is made.
+    refund_amount: int = 0
     created_at: datetime
+
+
+# --------------------------------------------------------------------------- offers
+
+
+class SellerOut(BaseModel):
+    id: int
+    name: str
+
+
+class OfferOut(BaseModel):
+    """One seller's price for a product.
+
+    An addition, not a change: every existing response still carries the
+    winning offer's figures in the fields it always did. This is the list
+    behind that one number.
+    """
+
+    id: int
+    seller: SellerOut
+    price: int
+    old_price: int | None
+    discount_percent: int | None
+    stock_left: int
+    in_stock: bool
+    # Whose price the product card is showing. Exactly one offer has it, and
+    # only while it has something left.
+    is_winner: bool
+
+
+class StaffOfferVariantOut(BaseModel):
+    variant_id: int
+    kind: VariantKind
+    label: str
+    parent_id: int | None
+    stock_left: int
+
+
+class StaffOfferOut(BaseModel):
+    """An offer as the seller who owns it, or an admin, needs to see it."""
+
+    id: int
+    seller: SellerOut
+    product_id: int
+    product_title: str
+    price: int
+    old_price: int | None
+    stock_left: int
+    active: bool
+    is_winner: bool
+    variants: list[StaffOfferVariantOut]
+    created_at: datetime
+
+
+class OfferCreateIn(BaseModel):
+    """Offering a product at a price.
+
+    ``variant_ids`` is what closes a hole rather than ceremony. An offer that
+    named no variants used to win the card and leave every colour of the
+    product without a count, because a colour with no row on the winning offer
+    reads as "nobody counts this apart". Listing them says which colours and
+    sizes this offer is for; how many of each is the warehouse's answer, and
+    starts at nought.
+    """
+
+    product_id: int
+    price: int = Field(gt=0)
+    old_price: int | None = Field(None, gt=0)
+    active: bool = True
+    # Admin only. A seller offers as themselves and may not say otherwise.
+    seller_id: int | None = None
+    variant_ids: list[int] = Field(default_factory=list, max_length=200)
+
+
+class OfferUpdateIn(BaseModel):
+    """What a seller may change: the price, and whether they are still selling.
+
+    ``old_price`` set to 0 removes the struck-through price; omitted leaves it
+    as it was. Stock is deliberately absent — see ``PUT .../stock``.
+    """
+
+    price: int | None = Field(None, gt=0)
+    old_price: int | None = Field(None, ge=0)
+    active: bool | None = None
+
+
+class OfferVariantStockIn(BaseModel):
+    variant_id: int
+    stock_left: int = Field(ge=0)
+
+
+class OfferStockIn(BaseModel):
+    """Warehouse intake: the counts, and nothing else about the offer.
+
+    Only the leaves are given — the sizes of a product that has sizes, its
+    colours otherwise. Colour totals and the offer's own total are computed
+    from them, so a shelf cannot be left disagreeing with itself.
+    ``stock_left`` is for a product with no variants at all, where the offer
+    *is* the leaf.
+    """
+
+    stock_left: int | None = Field(None, ge=0)
+    variants: list[OfferVariantStockIn] = Field(default_factory=list, max_length=200)
 
 
 # --------------------------------------------------------------------------- misc
@@ -619,3 +742,159 @@ class ProfileOverviewOut(BaseModel):
     addresses_count: int
     cards_count: int
     unread_notifications: int
+
+
+# --------------------------------------------------------------------------- staff
+
+
+class StaffMeOut(BaseModel):
+    """Who the backoffice is talking to, and therefore which one to show.
+
+    Separate from ``UserOut`` on purpose: the apps' shape must not change, and
+    a backoffice asks a different question — not "what is my profile" but
+    "what am I allowed to do here".
+    """
+
+    id: int
+    phone: str
+    full_name: str
+    role: UserRole
+
+
+# ------------------------------------------------------------------ backoffice
+
+# The customer's shapes above are shipped and read by two apps, so none of
+# them changes. A backoffice asks different questions of the same rows — whose
+# order is this, what may I do to it next — and gets its own shapes for them.
+
+
+class StaffReturnOut(BaseModel):
+    id: int
+    order_id: int
+    order_code: str
+    order_item_id: int | None
+    customer_name: str
+    customer_phone: str
+    reason: str
+    comment: str
+    photos: list[str]
+    status: ReturnStatus
+    resolution: str
+    refund_amount: int
+    next_statuses: list[ReturnStatus]
+    created_at: datetime
+
+
+class StaffReviewOut(BaseModel):
+    id: int
+    product_id: int
+    product_title: str
+    author_name: str
+    author_phone: str
+    rating: int
+    text: str
+    photos: list[str]
+    status: ReviewStatus
+    next_statuses: list[ReviewStatus]
+    created_at: datetime
+
+
+class DecisionIn(BaseModel):
+    """A refusal, or a note on an approval.
+
+    ``reason`` is what the customer is told and is required to refuse
+    something; ``note`` is internal and lands in the audit log — a ticket
+    number, who rang, what they said.
+    """
+
+    reason: str = ""
+    note: str = ""
+
+
+class RefundIn(DecisionIn):
+    """Paying a return back, and saying where the goods went.
+
+    ``restock`` is required. Returned goods are inspected first: what came
+    back whole goes on the shelf, what came back damaged goes on nobody's
+    count. There is no sensible default for that, and a default would mean a
+    count moving by omission.
+    """
+
+    restock: bool
+
+
+class StaffOrderOut(BaseModel):
+    """One row of the operator's queue."""
+
+    id: int
+    code: str
+    status: OrderStatus
+    status_label: str
+    customer_name: str
+    customer_phone: str
+    delivery_kind: DeliveryKind
+    address_line: str
+    delivery_day: date | None
+    delivery_window: str
+    items_count: int
+    total: int
+    paid: bool
+    # What this order may become next. The backoffice draws its buttons from
+    # this rather than from its own copy of the rules, so the two cannot drift.
+    next_statuses: list[OrderStatus]
+    created_at: datetime
+
+
+class OrderStatusIn(BaseModel):
+    status: OrderStatus
+    note: str = ""
+
+
+class StaffSlotOut(BaseModel):
+    id: int
+    day: date
+    start_time: str
+    end_time: str
+    note: str
+    price: int
+    express: bool
+    capacity_left: int
+
+
+class SlotWindowIn(BaseModel):
+    start_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$", examples=["09:00"])
+    end_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$", examples=["13:00"])
+    note: str = ""
+    price: int = Field(0, ge=0)
+    express: bool = False
+    capacity: int = Field(20, ge=0)
+
+
+class SlotCreateIn(BaseModel):
+    """Open the same windows across a set of days.
+
+    A day at a time would mean four calls per day and twenty-eight to fill a
+    week, which is why the shop ran out of slots in the first place. Days that
+    already have a window with the same hours are left alone, so "top up the
+    next fortnight" can be run again tomorrow without doubling anything.
+    """
+
+    days: list[date] = Field(min_length=1, max_length=60)
+    windows: list[SlotWindowIn] = Field(min_length=1, max_length=12)
+
+    @field_validator("windows")
+    @classmethod
+    def _ends_after_it_starts(cls, windows: list[SlotWindowIn]) -> list[SlotWindowIn]:
+        for w in windows:
+            if w.end_time <= w.start_time:
+                raise ValueError("a window has to end after it starts")
+        return windows
+
+
+class SlotUpdateIn(BaseModel):
+    """Only what is given is changed — an absent field is not "set to nothing"."""
+
+    capacity_left: int | None = Field(None, ge=0)
+    price: int | None = Field(None, ge=0)
+    note: str | None = None
+    express: bool | None = None

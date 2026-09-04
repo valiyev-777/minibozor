@@ -95,7 +95,9 @@ def delete_notification(
 ) -> s.Message:
     row = session.get(Notification, notification_id)
     if row is None or row.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bildirishnoma topilmadi")
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, i18n.label("notification_not_found")
+        )
     session.delete(row)
     session.commit()
     return s.Message(message=i18n.label("deleted"))

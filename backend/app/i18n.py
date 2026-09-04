@@ -89,6 +89,47 @@ LABELS: dict[str, dict[str, str]] = {
     "support_hours": {"uz": "Har kuni 08:00–22:00", "ru": "Ежедневно 08:00–22:00",
                       "en": "Every day 08:00–22:00"},
     # messages returned by the routers
+    "auth_required": {
+        "uz": "Avtorizatsiya talab qilinadi",
+        "ru": "Требуется авторизация",
+        "en": "You need to sign in",
+    },
+    "forbidden": {
+        "uz": "Bu amal uchun ruxsatingiz yo'q",
+        "ru": "Недостаточно прав для этого действия",
+        "en": "You don't have permission for this",
+    },
+    "refresh_invalid": {
+        "uz": "Refresh token yaroqsiz",
+        "ru": "Refresh-токен недействителен",
+        "en": "That refresh token isn't valid",
+    },
+    "refresh_revoked": {
+        "uz": "Refresh token bekor qilingan",
+        "ru": "Refresh-токен отозван",
+        "en": "That refresh token has been revoked",
+    },
+    "pin_verified": {"uz": "Tasdiqlandi", "ru": "Подтверждено", "en": "Confirmed"},
+    "notification_not_found": {
+        "uz": "Bildirishnoma topilmadi",
+        "ru": "Уведомление не найдено",
+        "en": "Notification not found",
+    },
+    "review_already_left": {
+        "uz": "Siz bu mahsulotga sharh qoldirgansiz",
+        "ru": "Вы уже оставили отзыв на этот товар",
+        "en": "You've already reviewed this product",
+    },
+    "address_required": {
+        "uz": "Yetkazish manzilini tanlang",
+        "ru": "Выберите адрес доставки",
+        "en": "Choose a delivery address",
+    },
+    "promo_invalid": {
+        "uz": "Promokod yaroqsiz",
+        "ru": "Промокод недействителен",
+        "en": "That promo code isn't valid",
+    },
     "otp_expired": {
         "uz": "Kod eskirgan — qaytadan so'rang",
         "ru": "Код устарел — запросите новый",
@@ -211,6 +252,149 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "{code} отменён. Оплата вернётся за 1–3 дня.",
         "en": "{code} cancelled. The payment returns within 1–3 days.",
     },
+    # what an operator is told when a move is not allowed
+    "bad_transition": {
+        "uz": "{from_} holatidan {to} holatiga o'tib bo'lmaydi",
+        "ru": "Переход из «{from_}» в «{to}» невозможен",
+        "en": "{from_} cannot become {to}",
+    },
+    "reason_required": {
+        "uz": "Rad etish sababini yozing",
+        "ru": "Укажите причину отказа",
+        "en": "Give a reason for the refusal",
+    },
+    "return_not_found": {
+        "uz": "Ariza topilmadi",
+        "ru": "Заявка не найдена",
+        "en": "Request not found",
+    },
+    "slot_not_found": {
+        "uz": "Yetkazish oynasi topilmadi",
+        "ru": "Интервал доставки не найден",
+        "en": "Delivery window not found",
+    },
+    "slot_window_invalid": {
+        "uz": "Oynaning tugash vaqti boshlanishidan keyin bo'lishi kerak",
+        "ru": "Конец интервала должен быть позже начала",
+        "en": "A window has to end after it starts",
+    },
+    # offers
+    "offer_not_found": {
+        "uz": "Taklif topilmadi",
+        "ru": "Предложение не найдено",
+        "en": "Offer not found",
+    },
+    "offer_exists": {
+        "uz": "Bu mahsulotga taklifingiz allaqachon bor",
+        "ru": "У вас уже есть предложение на этот товар",
+        "en": "You already have an offer on this product",
+    },
+    "not_your_offer": {
+        "uz": "Bu sizning taklifingiz emas",
+        "ru": "Это не ваше предложение",
+        "en": "That offer is not yours",
+    },
+    "seller_account_missing": {
+        "uz": "Hisobingiz sotuvchiga bog'lanmagan",
+        "ru": "Ваш аккаунт не привязан к продавцу",
+        "en": "Your account is not linked to a seller",
+    },
+    "seller_required": {
+        "uz": "Qaysi sotuvchi uchun ekanini ko'rsating",
+        "ru": "Укажите, для какого продавца",
+        "en": "Say which seller this is for",
+    },
+    "seller_not_found": {
+        "uz": "Sotuvchi topilmadi",
+        "ru": "Продавец не найден",
+        "en": "Seller not found",
+    },
+    "variants_required": {
+        "uz": "Mahsulotning har bir variantini ko'rsatish shart: {missing}",
+        "ru": "Нужно указать каждый вариант товара: {missing}",
+        "en": "Every variant of the product has to be listed: {missing}",
+    },
+    "variant_not_of_product": {
+        "uz": "Variant bu mahsulotga tegishli emas",
+        "ru": "Вариант не принадлежит этому товару",
+        "en": "That variant does not belong to this product",
+    },
+    "stock_is_the_warehouses": {
+        "uz": "Qoldiqni ombor kirimi belgilaydi, sotuvchi emas",
+        "ru": "Остаток задаётся приёмкой на склад, а не продавцом",
+        "en": "Stock is set by warehouse intake, not by the seller",
+    },
+    # what the customer is told when somebody finally answers
+    "order_packing_note": {
+        "uz": "{code} omborda yig'ilmoqda",
+        "ru": "{code} собирается на складе",
+        "en": "{code} is being picked at the warehouse",
+    },
+    "order_shipped_note": {
+        "uz": "{code} kuryerga topshirildi",
+        "ru": "{code} передан курьеру",
+        "en": "{code} has been handed to the courier",
+    },
+    "order_delivered_note": {
+        "uz": "{code} yetkazildi — sharh qoldirasizmi?",
+        "ru": "{code} доставлен — оставите отзыв?",
+        "en": "{code} delivered — would you leave a review?",
+    },
+    "order_returned_note": {
+        "uz": "{code} qaytarildi",
+        "ru": "{code} возвращён",
+        "en": "{code} has been returned",
+    },
+    "return_approved": {
+        "uz": "Qaytarish tasdiqlandi",
+        "ru": "Возврат одобрен",
+        "en": "Return approved",
+    },
+    "return_approved_note": {
+        "uz": "{code} bo'yicha arizangiz tasdiqlandi — pul tez orada qaytariladi",
+        "ru": "Заявка по {code} одобрена — деньги вернутся в ближайшее время",
+        "en": "Your request for {code} is approved — the money follows shortly",
+    },
+    "return_rejected": {
+        "uz": "Qaytarish rad etildi",
+        "ru": "Возврат отклонён",
+        "en": "Return refused",
+    },
+    "return_rejected_note": {
+        "uz": "{code} bo'yicha arizangiz rad etildi: {reason}",
+        "ru": "Заявка по {code} отклонена: {reason}",
+        "en": "Your request for {code} was refused: {reason}",
+    },
+    "return_refunded": {
+        "uz": "Pul qaytarildi",
+        "ru": "Деньги возвращены",
+        "en": "Refunded",
+    },
+    "return_refunded_note": {
+        "uz": "{code} bo'yicha {amount} so'm qaytarildi",
+        "ru": "По {code} возвращено {amount} сум",
+        "en": "{amount} UZS returned for {code}",
+    },
+    "review_published": {
+        "uz": "Sharhingiz e'lon qilindi",
+        "ru": "Ваш отзыв опубликован",
+        "en": "Your review is published",
+    },
+    "review_published_note": {
+        "uz": "{product} bo'yicha sharhingiz endi hammaga ko'rinadi",
+        "ru": "Ваш отзыв о «{product}» теперь виден всем",
+        "en": "Your review of {product} is now visible to everyone",
+    },
+    "review_rejected": {
+        "uz": "Sharhingiz e'lon qilinmadi",
+        "ru": "Отзыв не опубликован",
+        "en": "Your review wasn't published",
+    },
+    "review_rejected_note": {
+        "uz": "{product} bo'yicha sharhingiz e'lon qilinmadi: {reason}",
+        "ru": "Отзыв о «{product}» не опубликован: {reason}",
+        "en": "Your review of {product} wasn't published: {reason}",
+    },
     # order status pills and timeline
     "status_placed": {"uz": "QABUL QILINDI", "ru": "ПРИНЯТ", "en": "PLACED"},
     "status_packing": {"uz": "YIG'ILMOQDA", "ru": "СОБИРАЕТСЯ", "en": "PACKING"},
@@ -225,6 +409,9 @@ LABELS: dict[str, dict[str, str]] = {
     "event_shipped": {"uz": "Kuryerga topshirildi", "ru": "Передан курьеру",
                       "en": "Handed to the courier"},
     "event_delivered": {"uz": "Yetkazildi", "ru": "Доставлен", "en": "Delivered"},
+    "event_cancelled": {"uz": "Bekor qilindi", "ru": "Заказ отменён",
+                        "en": "Order cancelled"},
+    "event_returned": {"uz": "Qaytarildi", "ru": "Возвращён", "en": "Returned"},
     # delivery slots
     "slot_express": {
         "uz": "2 soat ichida",

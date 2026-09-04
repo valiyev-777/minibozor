@@ -4,15 +4,18 @@ from fastapi import APIRouter, HTTPException, status
 from sqlmodel import Session, select
 
 from app import i18n
+from app import offers as of
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
-from app.models import CartItem, Product, ProductVariant
+from app.models import CartItem, Offer, Product, ProductVariant
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
 
 def _cap(
+    session: Session,
+    offer: Offer | None,
     product: Product,
     quantity: int,
     color: ProductVariant | None = None,
@@ -28,9 +31,16 @@ def _cap(
 
     The variants chosen are the shelf that counts: a basket holding six of a
     colour there are two of is the same shortfall one level down, and the same
-    goes for a size.
+    goes for a size. And the shelf is the seller's, not the catalogue's —
+    holding three of something the chosen seller has one of is the same
+    shortfall again, a level sideways.
     """
-    left = sv.shelf_left(product, color, size)
+    if offer is not None:
+        left = of.shelf_left(
+            session, offer, color.id if color else None, size.id if size else None
+        )
+    else:
+        left = sv.shelf_left(product, color, size)
     return max(1, min(quantity, left)) if left else 1
 
 
@@ -69,17 +79,45 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
         else:
             size = variant
 
+    # A size belongs to a colour, so the line is the pair of them.
+    #
+    # Sent on its own, the size says which colour it is a size of — a client
+    # that only tracks the size still lands in the right line. Sent with a
+    # colour that is not the one it belongs to, it is a pair this shop does not
+    # stock, and quietly filing it under one of the two would sell something
+    # nobody has.
+    color_id = payload.color_variant_id
+    if size is not None and size.parent_id is not None:
+        if color is None:
+            color = session.get(ProductVariant, size.parent_id)
+            color_id = size.parent_id
+        elif size.parent_id != color.id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("variant_invalid"))
+
+    # Whose offer this is. The cheapest with something left, which is the one
+    # the card was showing — the product's own price is a copy of it.
+    offer = of.winning_offer(session, product.id)
+    if offer is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock"))
+
     existing = session.exec(
         select(CartItem).where(
             CartItem.user_id == user.id,
             CartItem.product_id == payload.product_id,
             CartItem.variant_id == payload.variant_id,
-            CartItem.color_variant_id == payload.color_variant_id,
+            CartItem.color_variant_id == color_id,
         )
     ).first()
 
     if existing:
-        existing.quantity = _cap(product, existing.quantity + payload.quantity, color, size)
+        # The line keeps the offer it was opened with. Adding another of
+        # something already in the basket is not a fresh decision about who to
+        # buy it from, and re-pricing the line under the shopper would be.
+        held = session.get(Offer, existing.offer_id) if existing.offer_id else offer
+        existing.offer_id = existing.offer_id or offer.id
+        existing.quantity = _cap(
+            session, held, product, existing.quantity + payload.quantity, color, size
+        )
         session.add(existing)
     else:
         session.add(
@@ -87,8 +125,9 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
                 user_id=user.id,
                 product_id=payload.product_id,
                 variant_id=payload.variant_id,
-                color_variant_id=payload.color_variant_id,
-                quantity=_cap(product, payload.quantity, color, size),
+                color_variant_id=color_id,
+                offer_id=offer.id,
+                quantity=_cap(session, offer, product, payload.quantity, color, size),
             )
         )
     session.commit()
@@ -108,8 +147,9 @@ def update_item(
             session.delete(item)
         else:
             product = session.get(Product, item.product_id)
+            offer = session.get(Offer, item.offer_id) if item.offer_id else None
             item.quantity = (
-                _cap(product, payload.quantity, *_chosen(session, item))
+                _cap(session, offer, product, payload.quantity, *_chosen(session, item))
                 if product
                 else payload.quantity
             )
@@ -144,5 +184,5 @@ def clear_cart(user: CurrentUser, session: SessionDep) -> s.CartOut:
 def apply_promo(payload: s.PromoIn, user: CurrentUser, session: SessionDep) -> s.CartOut:
     cart = sv.build_cart(session, user, payload.code)
     if cart.totals.promo_code is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Promokod yaroqsiz")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("promo_invalid"))
     return cart

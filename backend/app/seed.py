@@ -13,8 +13,9 @@ import sys
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
-from sqlmodel import Session, SQLModel, delete, select
+from sqlmodel import Session, SQLModel, col, delete, select
 
+from app import offers as of
 from app.core.security import hash_secret
 from app.db import engine, init_db
 from app.models import (
@@ -32,6 +33,7 @@ from app.models import (
     LegalDoc,
     Notification,
     NotificationKind,
+    Offer,
     Order,
     OrderEvent,
     OrderItem,
@@ -49,13 +51,20 @@ from app.models import (
     Review,
     ReviewStatus,
     ReviewTag,
+    Seller,
     User,
+    UserRole,
     VariantKind,
 )
 from app.seed_i18n import seed_translations
 
 DEMO_PHONE = "+998901234567"
 DEMO_PIN = "1234"
+
+# The one account that can reach the backoffice on a fresh database. It signs
+# in the same way every customer does — the SMS code, in dev the fixed one —
+# so there is nothing here that could become a second way in.
+ADMIN_PHONE = "+998900000001"
 
 
 def _at(day_offset: int, hh: int, mm: int) -> datetime:
@@ -610,6 +619,12 @@ def seed(session: Session) -> None:
     categories = _seed_categories(session)
     brands = _seed_brands(session)
     products = _seed_products(session, categories, brands)
+    # The price and the stock go onto an offer, and the product row keeps a
+    # copy of them for the listings to sort on. One seller for now — the shop
+    # itself — so every product has exactly one offer and the apps see the
+    # catalogue they saw before.
+    house = of.house_seller(session)
+    _seed_offers(session, house)
     _seed_home(session)
     _seed_content(session)
     _seed_delivery(session)
@@ -620,8 +635,10 @@ def seed(session: Session) -> None:
     translated = seed_translations(session)
 
     print(f"Seeded {len(products)} products, {len(categories)} categories.")
+    print(f"Seeded {_offer_count(session)} offers from 1 seller ({house.name}).")
     print(f"Seeded {translated} translation rows (ru, en).")
     print(f"Demo login: {DEMO_PHONE} · SMS code 123456 (dev) · PIN {DEMO_PIN}")
+    print(f"Admin login: {ADMIN_PHONE} · SMS code 123456 (dev) · role admin")
 
 
 def _seed_categories(session: Session) -> dict[str, Category]:
@@ -731,23 +748,16 @@ def _seed_products(
         for url in spec.get("images", []):
             if url not in shipped:
                 print(f"  eksport qilinmagan rasm o'tkazib yuborildi: {url}")
+        # The shelf as a grid: the colours divide the product's stock between
+        # them, and each colour's share divides again between its sizes. One
+        # size row per colour, so the last black 41 runs out in black and the
+        # three blue ones are still there to sell.
+        #
+        # Colours first, because the sizes have to point at them.
         sizes = spec.get("sizes", [])
-        # Sizes are counted apart from the shelf the same way colours are, and
-        # from the same total: they are two views of one stock rather than a
-        # colour-by-size grid, so a shopper is told how many 42s are left
-        # without the catalogue pretending to know how many are left in blue 42.
-        size_stock = _split_stock(product.stock_left, len(sizes))
-        for i, label in enumerate(sizes):
-            left = size_stock[i]
-            session.add(
-                ProductVariant(
-                    product_id=product.id, kind=VariantKind.SIZE,
-                    label=label, value=label, sort=i,
-                    stock_left=left, in_stock=left > 0,
-                )
-            )
         colors = spec.get("colors", [])
         color_stock = _split_stock(product.stock_left, len(colors))
+        color_rows: list[ProductVariant] = []
         for i, color in enumerate(colors):
             # ("Qora", "#0E0F12") or ("Qora", "#0E0F12", "products/af1-black.png").
             label, value, *rest = color
@@ -759,17 +769,125 @@ def _seed_products(
             if image and not _image_exists(image):
                 image = None
             left = color_stock[i]
-            session.add(
-                ProductVariant(
-                    product_id=product.id, kind=VariantKind.COLOR,
-                    label=label, value=value, image_url=image, sort=i,
-                    stock_left=left, in_stock=left > 0,
-                )
+            row = ProductVariant(
+                product_id=product.id, kind=VariantKind.COLOR,
+                label=label, value=value, image_url=image, sort=i,
+                stock_left=left, in_stock=left > 0,
             )
+            session.add(row)
+            color_rows.append(row)
+        # Committed here so the colours have ids for their sizes to carry.
+        session.commit()
+
+        if sizes and color_rows:
+            for color_row in color_rows:
+                cells = _split_stock(color_row.stock_left or 0, len(sizes))
+                for i, label in enumerate(sizes):
+                    left = cells[i]
+                    session.add(
+                        ProductVariant(
+                            product_id=product.id, kind=VariantKind.SIZE,
+                            label=label, value=label, sort=i,
+                            parent_id=color_row.id,
+                            stock_left=left, in_stock=left > 0,
+                        )
+                    )
+        elif sizes:
+            # No colours to belong to: the sizes divide the product's own shelf.
+            size_stock = _split_stock(product.stock_left, len(sizes))
+            for i, label in enumerate(sizes):
+                left = size_stock[i]
+                session.add(
+                    ProductVariant(
+                        product_id=product.id, kind=VariantKind.SIZE,
+                        label=label, value=label, sort=i,
+                        stock_left=left, in_stock=left > 0,
+                    )
+                )
         for i, (key, value) in enumerate(spec.get("specs", [])):
             session.add(ProductSpec(product_id=product.id, key=key, value=value, sort=i))
     session.commit()
+    _hang_family_photos(session)
     return out
+
+
+# How many photographs one card may swipe through, its own included.
+FAMILY_PHOTOS = 4
+
+
+def _hang_family_photos(session: Session) -> None:
+    """Give each product the photographs of the things beside it on its shelf.
+
+    Almost every product came in with exactly one picture, which is a card with
+    nothing to swipe and a product page with a pager of one. Meanwhile the
+    catalogue holds four Rolex Datejusts that differ only in the dial, three Air
+    Force 1s that differ only in the colour, and two Uniqlo tees — four
+    photographs of very nearly the same thing, filed under four separate
+    products, each showing one of them.
+
+    A shelf here is a brand within a category, which is as close as this
+    catalogue gets to saying "these are versions of each other": same maker,
+    same kind of thing. Every member of a shelf keeps its own photograph first —
+    the card has to show what it is selling — and then carries its neighbours'
+    in id order, up to [FAMILY_PHOTOS].
+
+    Products with no brand keep to themselves: "Stol chirog'i" and "Bolalar stol
+    chirog'i" share a category and nothing else.
+    """
+    products = session.exec(select(Product).order_by(col(Product.id))).all()
+    shelves: dict[tuple[int, int], list[Product]] = {}
+    for product in products:
+        if product.brand_id is None:
+            continue
+        shelves.setdefault((product.brand_id, product.category_id), []).append(product)
+
+    for shelf in shelves.values():
+        if len(shelf) < 2:
+            continue
+        # One photograph per neighbour — the one it leads with, not its whole
+        # gallery, or a shelf of four would hand every card the same sixteen.
+        lead = {}
+        for product in shelf:
+            first = session.exec(
+                select(ProductImage)
+                .where(ProductImage.product_id == product.id)
+                .order_by(col(ProductImage.sort))
+            ).first()
+            if first:
+                lead[product.id] = first.url
+
+        for product in shelf:
+            own = session.exec(
+                select(ProductImage)
+                .where(ProductImage.product_id == product.id)
+                .order_by(col(ProductImage.sort))
+            ).all()
+            seen = {row.url for row in own}
+            sort = len(own)
+            for neighbour in shelf:
+                if sort >= FAMILY_PHOTOS:
+                    break
+                url = lead.get(neighbour.id)
+                if neighbour.id == product.id or url is None or url in seen:
+                    continue
+                session.add(ProductImage(product_id=product.id, url=url, sort=sort))
+                seen.add(url)
+                sort += 1
+    session.commit()
+
+
+def _seed_offers(session: Session, seller: Seller) -> None:
+    """One offer per product, read back out of the product's own figures.
+
+    The same function the live database was migrated with, so a fresh seed and
+    a migrated one end up in the same shape rather than in two shapes that
+    happen to agree today.
+    """
+    of.mirror_catalogue(session, seller)
+
+
+def _offer_count(session: Session) -> int:
+    return len(session.exec(select(Offer)).all())
 
 
 def _seed_home(session: Session) -> None:
@@ -859,12 +977,18 @@ def _seed_users(session: Session) -> dict[str, User]:
     )
     madina = User(phone="+998901112233", full_name="Madina Karimova")
     bekzod = User(phone="+998934445566", full_name="Bekzod Tursunov")
-    for user in (demo, madina, bekzod):
+    admin = User(
+        phone=ADMIN_PHONE,
+        full_name="Mini Bozor administratori",
+        role=UserRole.ADMIN,
+    )
+    people = (demo, madina, bekzod, admin)
+    for user in people:
         session.add(user)
     session.commit()
-    for user in (demo, madina, bekzod):
+    for user in people:
         session.refresh(user)
-    return {"demo": demo, "madina": madina, "bekzod": bekzod}
+    return {"demo": demo, "madina": madina, "bekzod": bekzod, "admin": admin}
 
 
 def _seed_reviews(
@@ -942,7 +1066,40 @@ def _seed_user_data(session: Session, user: User, products: dict[str, Product]) 
         )
 
     for sku, qty in (("MB-4001", 2), ("MB-3001", 1), ("MB-2001", 1)):
-        session.add(CartItem(user_id=user.id, product_id=products[sku].id, quantity=qty))
+        product = products[sku]
+        # A line the shop can actually pick off the shelf: the first colour it
+        # stocks, and the first size of that colour. These carried neither, so
+        # the basket opened on lines whose "variant" was really the product's
+        # subtitle and whose stepper counted against the whole shelf instead of
+        # against the one cell being bought.
+        color = session.exec(
+            select(ProductVariant)
+            .where(
+                ProductVariant.product_id == product.id,
+                ProductVariant.kind == VariantKind.COLOR,
+                ProductVariant.in_stock.is_(True),
+            )
+            .order_by(col(ProductVariant.sort))
+        ).first()
+        size = session.exec(
+            select(ProductVariant)
+            .where(
+                ProductVariant.product_id == product.id,
+                ProductVariant.kind == VariantKind.SIZE,
+                ProductVariant.in_stock.is_(True),
+                ProductVariant.parent_id == (color.id if color else None),
+            )
+            .order_by(col(ProductVariant.sort))
+        ).first()
+        session.add(
+            CartItem(
+                user_id=user.id,
+                product_id=product.id,
+                quantity=qty,
+                variant_id=size.id if size else None,
+                color_variant_id=color.id if color else None,
+            )
+        )
 
     _seed_orders(session, user, products, home, humo)
     _seed_notifications(session, user)
@@ -991,10 +1148,23 @@ def _seed_orders(
             image = session.exec(
                 select(ProductImage).where(ProductImage.product_id == product.id)
             ).first()
+            # Who sold it. One seller for now, so it is the only offer on the
+            # product — but the line records it rather than assuming it, which
+            # is what makes a second seller a data change and not a code one.
+            offer = session.exec(
+                select(Offer).where(Offer.product_id == product.id)
+            ).first()
+            commission = 0
+            if offer is not None:
+                seller_row = session.get(Seller, offer.seller_id)
+                commission = seller_row.commission_percent if seller_row else 0
             session.add(
                 OrderItem(
                     order_id=order.id, product_id=product.id, title=product.title,
                     image_url=image.url if image else "", variant_label=variant,
+                    seller_id=offer.seller_id if offer else None,
+                    offer_id=offer.id if offer else None,
+                    commission_percent=commission,
                     unit_price=product.price, quantity=qty,
                 )
             )

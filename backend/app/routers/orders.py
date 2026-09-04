@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import i18n
+from app import i18n, inventory
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
@@ -14,16 +14,16 @@ from app.models import (
     DeliverySlot,
     Notification,
     NotificationKind,
+    Offer,
     Order,
     OrderItem,
     OrderStatus,
     PaymentCard,
     PaymentMethod,
     PickupPoint,
-    Product,
-    ProductVariant,
     ReturnReason,
     ReturnRequest,
+    Seller,
 )
 
 router = APIRouter(tags=["orders"])
@@ -81,7 +81,9 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
     preview = checkout_preview(payload, user, session)
 
     if payload.pickup_point_id is None and preview.address is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Yetkazish manzilini tanlang")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, i18n.label("address_required")
+        )
 
     slot = session.get(DeliverySlot, payload.slot_id) if payload.slot_id else None
     card = _resolve_card(session, user.id, payload.payment_card_id, payload.payment_method)
@@ -101,6 +103,7 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         address_line=address_line,
         address_meta=address_meta,
         pickup_point_id=payload.pickup_point_id,
+        slot_id=slot.id if slot else None,
         delivery_day=slot.day if slot else None,
         delivery_start=slot.start_time if slot else None,
         delivery_end=slot.end_time if slot else None,
@@ -119,49 +122,37 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
     session.refresh(order)
 
     for item in preview.items:
-        product = session.get(Product, item.product_id)
-        session.add(
-            OrderItem(
-                order_id=order.id,
-                product_id=item.product_id,
-                title=item.title,
-                image_url=_raw_image(session, item.product_id),
-                variant_label=item.variant_label,
-                unit_price=item.unit_price,
-                quantity=item.quantity,
-            )
+        # The cart line is about to be deleted, so which colour and which size
+        # were chosen is copied onto the order line first. Not for display —
+        # ``variant_label`` already reads well — but so that a cancellation
+        # later knows which counts to put back.
+        cart_item = session.get(CartItem, item.id)
+        offer = (
+            session.get(Offer, cart_item.offer_id)
+            if cart_item and cart_item.offer_id
+            else None
         )
-        if product:
-            product.sold_count += item.quantity
-            # What is left, kept in step with what has gone. The sold count was
-            # being raised here already and the stock beside it was not, so a
-            # product could be bought any number of times and still claim the
-            # same 25 remaining — and never fall out of stock on its own.
-            product.stock_left = max(0, product.stock_left - item.quantity)
-            if product.stock_left == 0:
-                product.in_stock = False
-            session.add(product)
-            # And the same one level down, for both variants. A colour and a
-            # size are each counted apart from the shelf they stand on, so
-            # buying two blue 42s has to come off the blue and off the 42 as
-            # well as off the total — otherwise the page keeps offering a
-            # colour or a size that has gone while the product looks fine.
-            cart_item = session.get(CartItem, item.id)
-            chosen = (
-                (cart_item.color_variant_id, cart_item.variant_id)
-                if cart_item is not None
-                else (None, None)
-            )
-            for variant_id in chosen:
-                if variant_id is None:
-                    continue
-                variant = session.get(ProductVariant, variant_id)
-                if variant is None or variant.stock_left is None:
-                    continue
-                variant.stock_left = max(0, variant.stock_left - item.quantity)
-                if variant.stock_left == 0:
-                    variant.in_stock = False
-                session.add(variant)
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=item.product_id,
+            title=item.title,
+            image_url=_raw_image(session, item.product_id),
+            variant_id=cart_item.variant_id if cart_item else None,
+            color_variant_id=cart_item.color_variant_id if cart_item else None,
+            # Who is owed for this line, snapshotted with everything else about
+            # it. The offer may be withdrawn or re-priced tomorrow; who sold it
+            # today does not change with it.
+            seller_id=offer.seller_id if offer else None,
+            offer_id=offer.id if offer else None,
+            commission_percent=_commission(session, offer),
+            variant_label=item.variant_label,
+            unit_price=item.unit_price,
+            quantity=item.quantity,
+        )
+        session.add(order_item)
+        # Off the shelf, onto the sold count — the same function a cancellation
+        # runs backwards, so the two cannot drift apart again.
+        inventory.take(session, order_item)
 
     sv.seed_order_events(session, order)
 
@@ -274,8 +265,18 @@ def cancel_order(
         row = session.get(CancelReason, payload.reason_id)
         reason = row.label if row else reason
 
-    order.status = OrderStatus.CANCELLED
     order.cancel_reason = " · ".join(x for x in (reason, payload.comment) if x)
+    # Before the status changes, because that is what makes this reachable
+    # once. Nothing of a cancelled order happened: the goods are on the shelf,
+    # they were never sold, and the delivery window is free again.
+    inventory.restore_order(
+        session,
+        order,
+        actor=user,
+        action="order.cancel",
+        note=order.cancel_reason,
+    )
+    order.status = OrderStatus.CANCELLED
     order.updated_at = sv.utcnow()
     session.add(order)
     session.add(
@@ -330,6 +331,7 @@ def request_return(
         reason=request.reason,
         comment=request.comment,
         status=request.status,
+        refund_amount=request.refund_amount,
         created_at=request.created_at,
     )
 
@@ -351,6 +353,7 @@ def list_returns(user: CurrentUser, session: SessionDep) -> list[s.ReturnOut]:
                 reason=r.reason,
                 comment=r.comment,
                 status=r.status,
+                refund_amount=r.refund_amount,
                 created_at=r.created_at,
             )
         )
@@ -395,6 +398,18 @@ def _resolve_card(
         .where(PaymentCard.user_id == user_id)
         .order_by(col(PaymentCard.is_default).desc())
     ).first()
+
+
+def _commission(session: SessionDep, offer: Offer | None) -> int:
+    """The seller's rate as it stands right now, to be kept with the line.
+
+    Nought when there is no seller to owe — a line with no offer behind it is
+    not somebody's sale.
+    """
+    if offer is None:
+        return 0
+    seller = session.get(Seller, offer.seller_id)
+    return seller.commission_percent if seller else 0
 
 
 def _raw_image(session: SessionDep, product_id: int | None) -> str:

@@ -15,6 +15,7 @@ from app.models import (
     Category,
     DeliverySlot,
     Favorite,
+    Offer,
     Order,
     OrderEvent,
     OrderItem,
@@ -80,6 +81,16 @@ def media_url(path: str | None) -> str | None:
     return path.lstrip("/")
 
 
+def money(amount: int) -> str:
+    """``1090000`` as ``1 090 000``.
+
+    The apps format their own figures — every price they are sent is an
+    integer. This is for the few strings the server writes as prose, where the
+    number has to arrive already readable.
+    """
+    return f"{amount:,}".replace(",", "\u00a0")
+
+
 def uz_date(d: date) -> str:
     """Kept under the old name; the wording follows the request's language."""
     return i18n.format_date(d)
@@ -118,6 +129,25 @@ def primary_image(session: Session, product_id: int) -> str | None:
     return media_url(img.url) if img else None
 
 
+def card_images(session: Session, product_id: int, limit: int = 4) -> list[str]:
+    """Every photograph a card may swipe through, in the order they are stored.
+
+    The first is the product's own; the rest are the ones the seed hung on it
+    from the same shelf — the other three dials of the same watch, the other two
+    Air Force 1s. A shopper deciding between four colours of one thing should
+    not have to open four pages to see them.
+
+    Capped, because a card is a card: four is what the eye counts as dots
+    without reading them.
+    """
+    rows = session.exec(
+        select(ProductImage)
+        .where(ProductImage.product_id == product_id)
+        .order_by(col(ProductImage.sort))
+    ).all()
+    return [u for u in (media_url(r.url) for r in rows[:limit]) if u]
+
+
 def favorite_ids(session: Session, user: User | None) -> set[int]:
     if user is None:
         return set()
@@ -133,6 +163,7 @@ def product_card(session: Session, p: Product, favs: set[int]) -> s.ProductCardO
         old_price=p.old_price,
         discount_percent=p.discount_percent,
         image_url=primary_image(session, p.id),
+        images=card_images(session, p.id),
         rating=round(p.rating, 1),
         reviews_count=p.reviews_count,
         badge=i18n.t(session, "product", p.id, "badge", p.badge) if p.badge else None,
@@ -202,7 +233,10 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
         note += i18n.label("eta_free_suffix")
 
     return s.ProductOut(
-        **card.model_dump(),
+        # Without the card's own photographs: the product page carries the whole
+        # gallery, uncapped, on the line below, and passing both hands the same
+        # keyword twice.
+        **card.model_dump(exclude={"images"}),
         sku=p.sku,
         subtitle=i18n.t(session, "product", p.id, "subtitle", p.subtitle),
         description=i18n.t(session, "product", p.id, "description", p.description),
@@ -218,6 +252,7 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
                 image_url=media_url(v.image_url),
                 in_stock=v.in_stock,
                 stock_left=v.stock_left,
+                parent_id=v.parent_id,
             )
             for v in variants
         ],
@@ -344,22 +379,52 @@ def shelf_left(
     How many of the thing actually chosen are left.
 
     A cart line is for one colour in one size, not for the product, so the
-    stepper's ceiling and the page's count are the smallest shelf the choice
-    stands on. Colours and sizes are counted apart from the same total rather
-    than as a grid, so the honest answer for a pair of them is whichever is
-    scarcer — never more than either. Falls back to the whole shelf for a
-    variant nobody counted.
+    answer is the shelf the choice actually stands on.
+
+    A size row *is* that shelf: it is one cell of the colour × size grid and
+    knows which colour it belongs to, so where there is a size there is nothing
+    left to combine. Colours and sizes used to be two separate splits of one
+    total and the answer was whichever was scarcer — which meant the last black
+    41 could be sold twice over, once for every blue one still in the stockroom.
+
+    Falls back to the colour, and then to the whole shelf, for a choice nobody
+    counted apart.
     """
-    counted = [v.stock_left for v in (color, size) if v is not None and v.stock_left is not None]
-    return min(counted) if counted else product.stock_left
+    if size is not None and size.stock_left is not None:
+        return size.stock_left
+    if color is not None and color.stock_left is not None:
+        return color.stock_left
+    return product.stock_left
 
 
 def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
+    from app import offers as of
+
     product = session.get(Product, item.product_id)
     if product is None:
         return None
     color = session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None
     size = session.get(ProductVariant, item.variant_id) if item.variant_id else None
+
+    # The offer this line was added on, held rather than looked up again: a
+    # shopper is charged the price they were shown, even if a cheaper seller
+    # has since undercut it or the one they picked has since put theirs up.
+    # Its own shelf is what caps the quantity, too — the product's cached
+    # figure belongs to whichever offer is winning, which may not be this one.
+    offer = session.get(Offer, item.offer_id) if item.offer_id else None
+    if offer is not None:
+        unit_price, old_unit_price = offer.price, offer.old_price
+        left = of.shelf_left(session, offer, item.color_variant_id, item.variant_id)
+        available = offer.active and left > 0
+    else:
+        unit_price, old_unit_price = product.price, product.old_price
+        left = shelf_left(product, color, size)
+        available = (
+            product.in_stock
+            and (color is None or color.in_stock)
+            and (size is None or size.in_stock)
+        )
+
     labels = [
         i18n.t(session, "variant", v.id, "label", v.label)
         for v in (color, size)
@@ -373,15 +438,15 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
         variant_label=" · ".join(labels)
         if labels
         else i18n.t(session, "product", product.id, "subtitle", product.subtitle),
-        unit_price=product.price,
-        old_unit_price=product.old_price,
+        variant_id=item.variant_id,
+        color_variant_id=item.color_variant_id,
+        unit_price=unit_price,
+        old_unit_price=old_unit_price,
         quantity=item.quantity,
         selected=item.selected,
-        in_stock=product.in_stock
-        and (color is None or color.in_stock)
-        and (size is None or size.in_stock),
-        stock_left=shelf_left(product, color, size),
-        line_total=product.price * item.quantity,
+        in_stock=available,
+        stock_left=left,
+        line_total=unit_price * item.quantity,
     )
 
 
@@ -540,7 +605,6 @@ def order_out(session: Session, o: Order) -> s.OrderOut:
     events = session.exec(
         select(OrderEvent).where(OrderEvent.order_id == o.id).order_by(col(OrderEvent.sort))
     ).all()
-    reached = ORDER_FLOW.index(o.status) if o.status in ORDER_FLOW else len(ORDER_FLOW)
     return s.OrderOut(
         **summary.model_dump(),
         delivery_kind=o.delivery_kind,
@@ -577,7 +641,7 @@ def order_out(session: Session, o: Order) -> s.OrderOut:
                 title=order_event_title(e.status),
                 happened_at=e.happened_at,
                 note=e.note,
-                done=(e.status in ORDER_FLOW and ORDER_FLOW.index(e.status) <= reached),
+                done=e.happened_at is not None,
             )
             for e in events
         ],
@@ -603,5 +667,58 @@ def seed_order_events(session: Session, order: Order) -> None:
         )
 
 
+def stamp_order_event(session: Session, order: Order, note: str = "") -> OrderEvent:
+    """Mark the order's current status as having happened, now.
+
+    The four steps of the flow are written as blank rows when the order is
+    placed, so reaching one is a matter of filling in its time. Cancelled and
+    returned have no row waiting — they are not steps on the way to anywhere —
+    so they are appended when they occur, and the timeline ends where the
+    order actually ended.
+    """
+    row = session.exec(
+        select(OrderEvent).where(
+            OrderEvent.order_id == order.id, OrderEvent.status == order.status
+        )
+    ).first()
+    if row is None:
+        last = session.exec(
+            select(func.max(OrderEvent.sort)).where(OrderEvent.order_id == order.id)
+        ).one()
+        row = OrderEvent(
+            order_id=order.id,
+            status=order.status,
+            title="",   # rendered from the status at read time
+            sort=(last if last is not None else -1) + 1,
+        )
+    row.happened_at = utcnow()
+    if note:
+        row.note = note
+    session.add(row)
+    return row
+
+
 def utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def offer_out(session: Session, o, *, winner_id: int | None) -> s.OfferOut:
+    from app.models import Seller
+
+    seller = session.get(Seller, o.seller_id)
+    discount = (
+        round((o.old_price - o.price) / o.old_price * 100)
+        if o.old_price and o.old_price > o.price
+        else None
+    )
+    return s.OfferOut(
+        id=o.id,
+        seller=s.SellerOut(id=seller.id, name=seller.name) if seller else
+        s.SellerOut(id=0, name=""),
+        price=o.price,
+        old_price=o.old_price,
+        discount_percent=discount,
+        stock_left=o.stock_left,
+        in_stock=o.stock_left > 0,
+        is_winner=o.id == winner_id,
+    )
