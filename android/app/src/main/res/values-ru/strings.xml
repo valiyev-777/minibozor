@@ -418,4 +418,14 @@
         <item quantity="other">До заказа осталось %1$d шага</item>
     </plurals>
     <string name="yetkazish_narxi_punktdan_keyin">Стоимость доставки станет известна после выбора пункта</string>
+    <!-- Sellers on a product page, and the sum a return paid back. -->
+    <string name="boshqa_sotuvchilar">Другие продавцы</string>
+    <plurals name="n_sotuvchi">
+        <item quantity="one">%1$d продавец</item>
+        <item quantity="few">%1$d продавца</item>
+        <item quantity="many">%1$d продавцов</item>
+        <item quantity="other">%1$d продавца</item>
+    </plurals>
+    <string name="kartadagi_narx">Цена на карточке</string>
+    <string name="qaytarilgan_summa">Возвращено</string>
 </resources>

@@ -426,4 +426,12 @@
         <item quantity="other">Buyurtma uchun %1$d qadam qoldi</item>
     </plurals>
     <string name="yetkazish_narxi_punktdan_keyin">Yetkazish narxi punkt tanlangandan keyin aniqlanadi</string>
+    <!-- Sellers on a product page, and the sum a return paid back. -->
+    <string name="boshqa_sotuvchilar">Boshqa sotuvchilar</string>
+    <plurals name="n_sotuvchi">
+        <item quantity="one">%1$d sotuvchi</item>
+        <item quantity="other">%1$d sotuvchi</item>
+    </plurals>
+    <string name="kartadagi_narx">Kartadagi narx</string>
+    <string name="qaytarilgan_summa">Qaytarilgan summa</string>
 </resources>

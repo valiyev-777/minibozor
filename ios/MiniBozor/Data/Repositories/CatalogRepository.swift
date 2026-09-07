@@ -37,6 +37,11 @@ struct CatalogRepository {
         await run { try await api.get("products/\(id)/similar") }
     }
 
+    /// Every seller offering this product, cheapest first.
+    func offers(productId id: Int) async -> Outcome<[OfferDTO]> {
+        await run { try await api.get("products/\(id)/offers") }
+    }
+
     func searchLanding() async -> Outcome<SearchLandingDTO> {
         await run { try await api.get("search") }
     }

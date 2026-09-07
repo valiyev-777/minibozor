@@ -48,6 +48,9 @@ class CatalogRepository @Inject constructor(private val api: MiniBozorApi) {
 
     suspend fun similar(id: Int): Outcome<List<ProductCardDto>> = apiCall { api.similar(id) }
 
+    /** Every seller offering this product, cheapest first. */
+    suspend fun offers(id: Int): Outcome<List<OfferDto>> = apiCall { api.offers(id) }
+
     suspend fun searchLanding(): Outcome<SearchLandingDto> = apiCall { api.searchLanding() }
 
     suspend fun suggest(q: String): Outcome<List<SuggestionDto>> = apiCall { api.suggest(q) }

@@ -404,4 +404,12 @@
         <item quantity="other">%1$d steps left before ordering</item>
     </plurals>
     <string name="yetkazish_narxi_punktdan_keyin">Delivery is priced once there is a pickup point</string>
+    <!-- Sellers on a product page, and the sum a return paid back. -->
+    <string name="boshqa_sotuvchilar">Other sellers</string>
+    <plurals name="n_sotuvchi">
+        <item quantity="one">%1$d seller</item>
+        <item quantity="other">%1$d sellers</item>
+    </plurals>
+    <string name="kartadagi_narx">Shown price</string>
+    <string name="qaytarilgan_summa">Refunded</string>
 </resources>

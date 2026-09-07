@@ -193,6 +193,34 @@ data class VariantDto(
 @Serializable
 data class SpecDto(val key: String, val value: String)
 
+// --------------------------------------------------------------------- offers
+
+@Immutable
+@Serializable
+data class SellerDto(val id: Int, val name: String)
+
+/**
+ * One seller's price for a product.
+ *
+ * The card carries one price because one offer wins it; this is the list behind
+ * that number. Several sellers put the same thing on the same card, so "who am
+ * I buying from" is a question the page has to be able to answer, and until
+ * this was fetched it could not.
+ */
+@Immutable
+@Serializable
+data class OfferDto(
+    val id: Int,
+    val seller: SellerDto,
+    val price: Long,
+    @SerialName("old_price") val oldPrice: Long? = null,
+    @SerialName("discount_percent") val discountPercent: Int? = null,
+    @SerialName("stock_left") val stockLeft: Int = 0,
+    @SerialName("in_stock") val inStock: Boolean = true,
+    /** Whose price the card is showing. Exactly one offer has it, or none. */
+    @SerialName("is_winner") val isWinner: Boolean = false,
+)
+
 @Immutable
 @Serializable
 data class ProductCardDto(
@@ -645,6 +673,14 @@ data class ReturnDto(
     val reason: String,
     val comment: String = "",
     val status: String,
+    /**
+     * What was actually paid back, once somebody paid it back.
+     *
+     * Nought until then, and nought on a request that was refused — so the
+     * screen prints it only when there is a sum to print. Defaulted, because a
+     * server that predates the field simply leaves it out.
+     */
+    @SerialName("refund_amount") val refundAmount: Long = 0,
     @SerialName("created_at") val createdAt: String,
 )
 

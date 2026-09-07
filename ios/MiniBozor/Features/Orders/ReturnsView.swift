@@ -75,6 +75,30 @@ struct ReturnsView: View {
                                             .mbFont(MB.type.caption)
                                             .foregroundStyle(MB.color.textSecondary)
                                     }
+                                    // What actually came back, once something
+                                    // did.
+                                    //
+                                    // A status pill saying "Qaytarildi" is the
+                                    // shop telling the customer it is done
+                                    // without telling them what was done: a
+                                    // return of one item out of four is not the
+                                    // whole order's money, and the sum is the
+                                    // fact they are waiting to hear. Nought
+                                    // until a refund is made, and nought
+                                    // forever on a request that was refused —
+                                    // so the line appears only when there is a
+                                    // number to print.
+                                    if request.refunded > 0 {
+                                        Spacer().frame(height: 10)
+                                        MBDivider()
+                                        Spacer().frame(height: 6)
+                                        MBTotalRow(
+                                            label: L("qaytarilgan_summa"),
+                                            value: Format.sum(request.refunded),
+                                            strong: true,
+                                            valueColor: MB.color.success
+                                        )
+                                    }
                                     if let created = UzDate.parseDateTime(request.createdAt) {
                                         Spacer().frame(height: 8)
                                         Text(UzDate.dayTime(created))

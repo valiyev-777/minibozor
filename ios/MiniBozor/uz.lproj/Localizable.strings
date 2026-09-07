@@ -344,3 +344,7 @@
 "rating_words.3" = "Yaxshi";
 "rating_words.4" = "Juda yaxshi";
 "rating_words.5" = "Ajoyib";
+/* Sellers on a product page, and the sum a return paid back. */
+"boshqa_sotuvchilar" = "Boshqa sotuvchilar";
+"kartadagi_narx" = "Kartadagi narx";
+"qaytarilgan_summa" = "Qaytarilgan summa";
