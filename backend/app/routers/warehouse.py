@@ -34,6 +34,7 @@ from app.deps import SellerUser, SessionDep, StockViewer, WarehouseUser
 from app.models import (
     Offer,
     Product,
+    ProductStatus,
     ProductVariant,
     RemovalLine,
     RemovalOrder,
@@ -203,8 +204,61 @@ def receive_supply(
     for product_id in touched:
         of.refresh(session, product_id)
     session.commit()
+
+    # Counting the goods in is what puts the seller's product on sale.
+    #
+    # "Approval" in this shop does not mean the platform deciding whether a
+    # card may exist — a seller owns their own product. It means somebody
+    # confirming the goods actually turned up. That confirmation happens here,
+    # at the moment the box is counted, so this is where a product waiting on
+    # its first batch stops waiting.
+    #
+    # Only the seller's own products, only ones still waiting, and only when
+    # something was actually found: a batch that arrived empty has confirmed
+    # nothing.
+    for product_id in sorted(touched):
+        _publish_on_arrival(session, supply, product_id, user)
+    session.commit()
+
     session.refresh(supply)
     return _supply_out(session, supply)
+
+
+def _publish_on_arrival(
+    session: SessionDep, supply: Supply, product_id: int, actor: User
+) -> None:
+    """Put a newly arrived product in the shop, once.
+
+    Guarded rather than trusting the caller: a product belonging to another
+    seller, or one an admin has refused, or one already published, is left
+    exactly as it is. ``MODERATING → PUBLISHED`` is the only move made, and it
+    is a legal one in ``transitions.PRODUCT_TRANSITIONS``.
+    """
+    product = session.get(Product, product_id)
+    if product is None or product.status is not ProductStatus.MODERATING:
+        return
+    if product.proposed_by_id != supply.seller_id:
+        return
+
+    audit.record(
+        session,
+        actor=actor,
+        action="product.status",
+        entity="product",
+        entity_id=product.id,
+        field="status",
+        old=ProductStatus.MODERATING,
+        new=ProductStatus.PUBLISHED,
+        note=f"{supply.code} omborga keldi va sanaldi",
+    )
+    product.status = ProductStatus.PUBLISHED
+    product.moderation_note = ""
+    session.add(product)
+    session.commit()
+    # The card's cached price and stock follow the offers, and it has just
+    # become visible — so recompute rather than leave it describing a product
+    # that was not in the shop.
+    of.refresh(session, product.id)
 
 
 @router.post(

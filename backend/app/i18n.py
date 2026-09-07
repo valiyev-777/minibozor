@@ -645,6 +645,59 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "An admin has no shop of their own — open a seller from the "
               "sellers list instead",
     },
+    "images_required": {
+        "uz": "Kamida bitta rasm kerak — rasmsiz mahsulotni hech kim bosmaydi",
+        "ru": "Нужно хотя бы одно фото — товар без фото никто не откроет",
+        "en": "At least one picture — a card with no photo is a card nobody taps",
+    },
+    "sizes_all_or_none": {
+        "uz": "Yo hamma rangda razmer bo'lsin, yo hech qaysisida: qoldiq eng "
+              "pastki bo'g'inda sanaladi va ikki darajani aralashtirib bo'lmaydi",
+        "ru": "Либо размеры у всех цветов, либо ни у одного: остаток считается "
+              "на нижнем уровне, и смешивать два уровня нельзя",
+        "en": "Either every colour has sizes or none does — stock is counted on "
+              "the leaves and the two levels cannot be mixed",
+    },
+    "sizes_repeat": {
+        "uz": "Bitta rangda bir razmer ikki marta berilgan",
+        "ru": "В одном цвете размер указан дважды",
+        "en": "A size is repeated within one colour",
+    },
+    "colors_repeat": {
+        "uz": "Bir rang ikki marta berilgan",
+        "ru": "Цвет указан дважды",
+        "en": "A colour is repeated",
+    },
+    "stage_awaiting_warehouse": {
+        "uz": "Omborga kutilmoqda",
+        "ru": "Ожидается на складе",
+        "en": "Awaiting the warehouse",
+    },
+    "stage_in_warehouse": {
+        "uz": "Omborda sanaldi",
+        "ru": "Принято на складе",
+        "en": "Counted in at the warehouse",
+    },
+    "stage_on_sale": {
+        "uz": "Sotuvda",
+        "ru": "В продаже",
+        "en": "On sale",
+    },
+    "stage_sold_out": {
+        "uz": "Sotuvda — qoldiq tugadi",
+        "ru": "В продаже — нет в наличии",
+        "en": "On sale — nothing left",
+    },
+    "stage_rejected": {
+        "uz": "Rad etildi",
+        "ru": "Отклонён",
+        "en": "Refused",
+    },
+    "stage_archived": {
+        "uz": "Arxivlangan",
+        "ru": "В архиве",
+        "en": "Archived",
+    },
     "seller_account_missing": {
         "uz": "Hisobingiz sotuvchiga bog'lanmagan",
         "ru": "Ваш аккаунт не привязан к продавцу",

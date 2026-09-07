@@ -7723,3 +7723,350 @@ def test_every_column_type_survives_the_round_trip_on_this_database() -> None:
         session.delete(session.get(Review, review_id))
         session.delete(session.get(ReturnRequest, request_id))
         session.commit()
+
+
+# ============================================ a seller's own product, end to end
+
+# The catalogue is not the platform's alone. A seller opens their own product,
+# photographs it, prices it and says what colours and sizes they have; what the
+# warehouse confirms is that the goods turned up, not that the listing was
+# permitted. These hold that whole line together, because it is one line and
+# breaking it anywhere leaves a seller with a product nobody can buy.
+
+
+def _listing_body(
+    client: TestClient, seller: dict[str, str], title: str, **over
+) -> dict:
+    """A two-colour, five-size listing with real uploaded photographs."""
+    images = []
+    for name in ("front.jpg", "back.jpg"):
+        got = client.post(
+            f"{API}/staff/media",
+            files={"file": (name, _photograph(900, 900), "image/jpeg")},
+            headers=seller,
+        )
+        assert got.status_code == 201, got.text
+        images.append(got.json()["media_url"])
+
+    sizes = (("S", 6), ("M", 9), ("L", 7), ("XL", 4), ("XXL", 2))
+    body = {
+        "title": title,
+        "subtitle": "Yumshoq trikotaj",
+        "description": "Kunlik kiyish uchun.",
+        "category_slug": client.get(f"{API}/categories").json()[0]["slug"],
+        "price": 149_000,
+        "weight_grams": 300,
+        "images": images,
+        "colors": [
+            {
+                "label": "Oq",
+                "value": "#FFFFFF",
+                "image_url": images[0],
+                "sizes": [{"label": s, "quantity": q} for s, q in sizes],
+            },
+            {
+                "label": "Qora",
+                "value": "#111113",
+                "image_url": images[1],
+                "sizes": [{"label": s, "quantity": q - 1} for s, q in sizes],
+            },
+        ],
+    }
+    body.update(over)
+    return body
+
+
+def test_a_seller_adds_their_own_product_and_the_warehouse_confirms_it_arrived(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The whole line, in the order it happens.
+
+    A seller adds a product with its photographs; it reaches the warehouse as
+    *their* goods, declared and not yet counted; the warehouse counts it and
+    **that** is what puts it in the shop. Approval here is not the platform
+    deciding whether a card may exist — it is somebody confirming the box
+    turned up.
+
+    Six calls decomposed into one on purpose: create the card, post each
+    image, post each colour, post each size, open the offer, declare the batch.
+    Each of those is a chance to be the last one that worked, and the result of
+    a half-run is a seller staring at a product nobody can buy with no way to
+    tell which half is missing.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, "+998900120001")
+    seller_id, mine = _linked_seller(staff, "Sotuvchi Do'kon", "+998900120002")
+
+    made = client.post(
+        f"{API}/staff/catalog/listings",
+        json=_listing_body(client, mine, "Mening futbolkam"),
+        headers=mine,
+    )
+    assert made.status_code == 201, made.text
+    listing = made.json()
+    product_id = listing["id"]
+
+    # The SKU is ours: a seller does not think in stock codes and should not
+    # have to invent a unique one.
+    assert listing["sku"].startswith("S"), listing["sku"]
+    assert listing["price"] == 149_000
+
+    # Two colours, five sizes each — ten cells that get counted.
+    assert len(listing["stock"]) == 10
+    assert {cell["color_label"] for cell in listing["stock"]} == {"Oq", "Qora"}
+    assert sum(cell["declared"] for cell in listing["stock"]) == 28 + 23
+
+    # Declared is a promise. Nothing is on the shelf, and the quantities in the
+    # request went onto supply lines rather than onto a stock figure.
+    assert listing["on_hand_total"] == 0
+    assert all(cell["on_hand"] == 0 for cell in listing["stock"])
+    assert listing["supply_code"] and listing["supply_status"] == "declared"
+
+    # The pictures survived in the order they were given, first one primary.
+    assert len(listing["images"]) == 2
+
+    # Waiting on the warehouse, and the seller is told so in their own words.
+    assert listing["stage"] == "awaiting_warehouse"
+    assert listing["stage_label"]
+
+    # And it is not in the shop. Not the listing, not the product page.
+    assert client.get(f"{API}/products/{product_id}").status_code == 404
+    shop = client.get(
+        f"{API}/products", params={"q": "Mening futbolkam", "show_sold_out": True}
+    ).json()
+    assert product_id not in [row["id"] for row in shop["items"]]
+
+    # The warehouse sees the batch, and whose goods it is.
+    queue = client.get(
+        f"{API}/staff/supplies", params={"status": "declared"}, headers=warehouse
+    )
+    assert queue.status_code == 200, queue.text
+    batch = next(
+        row for row in queue.json() if row["code"] == listing["supply_code"]
+    )
+    assert batch["seller"]["id"] == seller_id
+    assert len(batch["lines"]) == 10
+
+    # Counting it in is the confirmation, and the confirmation is what sells it.
+    received = client.post(
+        f"{API}/staff/supplies/{batch['id']}/receive",
+        json={
+            "lines": [
+                {"line_id": row["id"], "received_quantity": row["declared_quantity"]}
+                for row in batch["lines"]
+            ]
+        },
+        headers=warehouse,
+    )
+    assert received.status_code == 200, received.text
+
+    assert client.get(f"{API}/products/{product_id}").status_code == 200
+    now = client.get(
+        f"{API}/staff/catalog/listings/{product_id}", headers=mine
+    ).json()
+    assert now["stage"] == "on_sale"
+    assert now["on_hand_total"] == 51
+    # The card's own figures are a cache of the offers, and they were
+    # recomputed when it became visible rather than left describing a product
+    # that was not in the shop.
+    page = client.get(f"{API}/products/{product_id}").json()
+    assert page["price"] == 149_000
+    assert page["in_stock"] is True
+    assert len([v for v in page["variants"] if v["kind"] == "color"]) == 2
+
+    # The move is logged as a status change like any other, with the reason.
+    rows = _audit_rows("product.status", product_id)
+    assert rows and listing["supply_code"] in rows[-1].note
+    assert not _stock_is_consistent()
+
+
+def test_buying_one_size_takes_it_off_that_size_and_no_other(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The invariant the grid exists for.
+
+    A shop that has sold its last white M has sold it in white. If the count
+    came off the product's total, or off the colour, the page would go on
+    offering that M out of the black ones — and there is no working out
+    afterwards which shirt the customer got.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, "+998900120011")
+    _, mine = _linked_seller(staff, "Razmer Do'kon", "+998900120012")
+
+    made = client.post(
+        f"{API}/staff/catalog/listings",
+        json=_listing_body(client, mine, "Razmer futbolkasi"),
+        headers=mine,
+    )
+    assert made.status_code == 201, made.text
+    product_id = made.json()["id"]
+    batch_code = made.json()["supply_code"]
+
+    batch = next(
+        row
+        for row in client.get(f"{API}/staff/supplies", headers=warehouse).json()
+        if row["code"] == batch_code
+    )
+    client.post(
+        f"{API}/staff/supplies/{batch['id']}/receive",
+        json={
+            "lines": [
+                {"line_id": row["id"], "received_quantity": row["declared_quantity"]}
+                for row in batch["lines"]
+            ]
+        },
+        headers=warehouse,
+    )
+
+    variants = client.get(f"{API}/products/{product_id}").json()["variants"]
+    white = next(v for v in variants if v["label"] == "Oq")
+    black = next(v for v in variants if v["label"] == "Qora")
+    white_m = next(
+        v
+        for v in variants
+        if v["kind"] == "size" and v["label"] == "M" and v["parent_id"] == white["id"]
+    )
+    black_m = next(
+        v
+        for v in variants
+        if v["kind"] == "size" and v["label"] == "M" and v["parent_id"] == black["id"]
+    )
+    white_l = next(
+        v
+        for v in variants
+        if v["kind"] == "size" and v["label"] == "L" and v["parent_id"] == white["id"]
+    )
+
+    def cells() -> dict[int, int]:
+        rows = client.get(
+            f"{API}/staff/catalog/listings/{product_id}", headers=mine
+        ).json()["stock"]
+        return {row["variant_id"]: row["on_hand"] for row in rows}
+
+    before = cells()
+    assert before[white_m["id"]] == 9
+    assert before[black_m["id"]] == 8
+    assert before[white_l["id"]] == 7
+
+    client.delete(f"{API}/cart", headers=auth)
+    added = client.post(
+        f"{API}/cart/items",
+        json={
+            "product_id": product_id,
+            "variant_id": white_m["id"],
+            "color_variant_id": white["id"],
+            "quantity": 2,
+        },
+        headers=auth,
+    )
+    assert added.status_code == 201, added.text
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    placed = client.post(
+        f"{API}/orders", json={"address_id": address["id"]}, headers=auth
+    )
+    assert placed.status_code == 201, placed.text
+
+    after = cells()
+    assert after[white_m["id"]] == 7, "the white M, and by exactly two"
+    assert after[black_m["id"]] == 8, "the black M did not move"
+    assert after[white_l["id"]] == 7, "nor did the white L"
+    assert sum(after.values()) == sum(before.values()) - 2
+    assert not _stock_is_consistent()
+
+
+def test_a_listing_refuses_what_would_make_the_shelf_uncountable(
+    client: TestClient,
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The three refusals, each protecting a warehouse invariant.
+
+    Mixing sized and unsized colours puts some counts a level above where the
+    ledger looks for them, with no way to say how a colour's stock divides
+    between sizes it has not got. A repeated colour or size makes two cells
+    that mean the same thing, and the sum of the colours stops equalling the
+    offer's total the first time either is counted.
+    """
+    _, mine = _linked_seller(staff, "Qoida Do'kon", "+998900120022")
+    body = _listing_body(client, mine, "Qoida futbolkasi")
+
+    mixed = {**body, "colors": [
+        {**body["colors"][0]},
+        {**body["colors"][1], "sizes": []},
+    ]}
+    refused = client.post(f"{API}/staff/catalog/listings", json=mixed, headers=mine)
+    assert refused.status_code == 400
+    assert "razmer" in refused.json()["detail"].lower()
+
+    twice = {**body, "colors": [body["colors"][0], {**body["colors"][1], "label": "Oq"}]}
+    assert client.post(
+        f"{API}/staff/catalog/listings", json=twice, headers=mine
+    ).status_code == 400
+
+    dup_size = {**body, "colors": [
+        {**body["colors"][0],
+         "sizes": [{"label": "M", "quantity": 1}, {"label": "m", "quantity": 2}]},
+    ]}
+    assert client.post(
+        f"{API}/staff/catalog/listings", json=dup_size, headers=mine
+    ).status_code == 400
+
+    # A picture is not optional: a card with no photograph is a card nobody taps.
+    assert client.post(
+        f"{API}/staff/catalog/listings", json={**body, "images": []}, headers=mine
+    ).status_code == 400
+
+    # Somebody else's door.
+    assert client.post(
+        f"{API}/staff/catalog/listings", json=body, headers=admin
+    ).status_code == 400, "an admin has no shop of their own"
+    assert client.get(f"{API}/staff/catalog/listings").status_code == 401
+
+
+def test_a_seller_reads_the_reason_their_product_was_refused(
+    client: TestClient,
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A refusal is a sentence the seller is owed.
+
+    They are being asked to fix something; without the reason they are being
+    asked to guess. `moderation_note` has always been on the row — what was
+    missing was anywhere for a seller to read it.
+    """
+    _, mine = _linked_seller(staff, "Rad Do'kon", "+998900120032")
+    made = client.post(
+        f"{API}/staff/catalog/listings",
+        json=_listing_body(client, mine, "Rad etiladigan futbolka"),
+        headers=mine,
+    )
+    assert made.status_code == 201, made.text
+    product_id = made.json()["id"]
+
+    refused = client.post(
+        f"{API}/staff/catalog/products/{product_id}/status",
+        json={"status": "rejected", "reason": "Rasmda tovar ko'rinmaydi"},
+        headers=admin,
+    )
+    assert refused.status_code == 200, refused.text
+
+    mine_rows = client.get(f"{API}/staff/catalog/listings", headers=mine)
+    assert mine_rows.status_code == 200, mine_rows.text
+    row = next(r for r in mine_rows.json() if r["id"] == product_id)
+    assert row["stage"] == "rejected"
+    assert row["moderation_note"] == "Rasmda tovar ko'rinmaydi"
+    assert row["stage_label"]
+
+    # And a refused product is nobody else's to read.
+    _, theirs = _linked_seller(staff, "Boshqa Do'kon", "+998900120042")
+    assert product_id not in [
+        r["id"] for r in client.get(f"{API}/staff/catalog/listings", headers=theirs).json()
+    ]
+    assert client.get(
+        f"{API}/staff/catalog/listings/{product_id}", headers=theirs
+    ).status_code == 404

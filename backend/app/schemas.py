@@ -1573,6 +1573,145 @@ class SellerVariantOut(BaseModel):
     is_leaf: bool
 
 
+# ------------------------------------------------ a seller's own listing, whole
+
+# The catalogue is not the platform's alone. A seller opens their own product,
+# photographs it, prices it, and says what colours and sizes they have — and
+# what the warehouse then confirms is that the goods *arrived*, not that the
+# listing was allowed.
+#
+# So these shapes describe one product as one thing. The alternative was the
+# five calls it decomposes into — create the card, post each image, post each
+# colour, post each size, open the offer, declare the batch — which is five
+# chances to end up with half a product and no way to tell which half.
+
+
+class ListingSizeIn(BaseModel):
+    """One size of one colour, and how many of it are coming.
+
+    ``quantity`` is what the seller says is in the box. It is *not* a stock
+    figure and is not written to one: it becomes the declared quantity on a
+    supply line, and the shelf moves when the warehouse counts it. Nothing in
+    this codebase assigns to ``stock_left`` — see ``app.stock``.
+    """
+
+    label: str = Field(min_length=1, max_length=20)          # "M", "42"
+    value: str = ""                                          # defaults to label
+    quantity: int = Field(0, ge=0)
+
+
+class ListingColorIn(BaseModel):
+    """One colour, and the sizes it comes in.
+
+    ``sizes`` may be empty for a product that has colours and nothing below
+    them — then the colour is the leaf and the count sits on it. A product with
+    sizes under its colours is counted on the sizes, because a shop that has
+    sold its last black M has sold it in black and the page must not go on
+    offering it out of the blue Ms.
+    """
+
+    label: str = Field(min_length=1, max_length=40)          # "Oq"
+    value: str = Field("", max_length=40)                    # "#FFFFFF"
+    # The photograph of the goods in this colour. A colour is chosen by
+    # looking at the thing, not at a hex circle.
+    image_url: str | None = None
+    sizes: list[ListingSizeIn] = Field(default_factory=list, max_length=40)
+
+
+class ListingCreateIn(BaseModel):
+    """Everything a seller's new product is, in one request.
+
+    ``images`` are media paths from ``POST /staff/media`` — upload first, send
+    the paths here. **The first is the primary one**: it is the picture in
+    every listing, every basket line and every order row, so the order of this
+    list is a decision and not an accident of which file dialog opened first.
+    """
+
+    title: str = Field(min_length=2, max_length=200)
+    subtitle: str = ""
+    description: str = ""
+    category_slug: str
+    brand_slug: str | None = None
+
+    # The seller's own price. It reaches the shop through the offer this
+    # creates, and `offers.refresh` copies it onto the card — the card's own
+    # `price` is a cache and never a source.
+    price: int = Field(gt=0)
+    old_price: int | None = Field(None, gt=0)
+    # What it costs us to handle, which decides the fulfilment band. Zero means
+    # undeclared and is charged as one kilogram; see ``app.settlement``.
+    weight_grams: int = Field(0, ge=0)
+
+    images: list[str] = Field(default_factory=list, max_length=12)
+    colors: list[ListingColorIn] = Field(default_factory=list, max_length=20)
+
+    @field_validator("images")
+    @classmethod
+    def _no_blanks(cls, value: list[str]) -> list[str]:
+        cleaned = [v.strip() for v in value if v and v.strip()]
+        if len(cleaned) != len(set(cleaned)):
+            raise ValueError("bir rasm ikki marta berilgan")
+        return cleaned
+
+
+class ListingStockOut(BaseModel):
+    """One countable cell of a listing, as the seller reads it."""
+
+    variant_id: int
+    color_label: str
+    size_label: str | None
+    # What the seller declared on the batch that is coming, and what is on the
+    # shelf now. Both, because the gap between them is the only thing either
+    # party will want to talk about.
+    declared: int
+    on_hand: int
+    sellable: int
+
+
+class SellerListingOut(BaseModel):
+    """A seller's own product, and where it has got to.
+
+    ``stage`` is derived rather than stored, from the card's status and the
+    batch behind it, because it is a sentence about two different rows and
+    neither of them owns it:
+
+    * ``awaiting_warehouse`` — declared, the goods have not arrived
+    * ``in_warehouse`` — counted in, and on the shelf
+    * ``on_sale`` — in the shop, with something to sell
+    * ``sold_out`` — in the shop, and nothing left
+    * ``rejected`` — refused, and ``moderation_note`` says why
+    * ``archived`` — withdrawn; the orders that named it survive
+    """
+
+    id: int
+    sku: str
+    title: str
+    subtitle: str
+    status: ProductStatus
+    stage: Literal[
+        "awaiting_warehouse", "in_warehouse", "on_sale", "sold_out",
+        "rejected", "archived",
+    ]
+    # The sentence a refusal owes the seller. Empty on everything else.
+    moderation_note: str
+    stage_label: str
+
+    category_slug: str
+    price: int
+    old_price: int | None
+    images: list[str]
+    offer_id: int | None
+    # The batch the warehouse is expecting, or counted. Null once there has
+    # never been one.
+    supply_code: str | None
+    supply_status: SupplyStatus | None
+
+    stock: list[ListingStockOut]
+    on_hand_total: int
+    sellable_total: int
+    created_at: datetime
+
+
 class SellerCatalogOut(BaseModel):
     """A card as somebody deciding whether to stock it sees it.
 
