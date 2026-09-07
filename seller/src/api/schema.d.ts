@@ -1386,6 +1386,93 @@ export interface paths {
         patch: operations["update_slot_api_v1_staff_delivery_slots__slot_id__patch"];
         trace?: never;
     };
+    "/api/v1/staff/sellers/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which shop am I
+         * @description The seller's own row, and the first thing their cabinet asks for.
+         *
+         *     ``/staff/me`` answers with the user — a phone number and a role — and
+         *     nothing about the shop behind it, so a seller who had just been taken on
+         *     could not confirm they were linked to the right one.
+         *
+         *     Declared here rather than in ``admin.py`` beside ``/sellers/{seller_id}``,
+         *     and this router is registered first, so ``me`` is matched as a literal
+         *     before that path's integer. An admin has no shop of their own; they read
+         *     any seller's row through the admin door.
+         */
+        get: operations["my_seller_api_v1_staff_sellers_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/browse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The catalogue as a seller looking for something to stock sees it
+         * @description Published cards only.
+         *
+         *     A draft, a proposal in moderation, a refused card and a withdrawn one are
+         *     somebody else's unfinished work; a seller attaching an offer to one would
+         *     be pricing something that is not in the shop and may never be. This goes
+         *     through the same ``in_the_shop`` narrowing every customer path uses, which
+         *     is why there is one function for it rather than a ``where`` repeated here.
+         *
+         *     Not the admin's listing. That one answers with the Uzbek on the row
+         *     because an editor is about to write it back, and includes every state so
+         *     the moderation queue has somewhere to live. This is read to recognise a
+         *     product, so it is translated and carries the photograph.
+         */
+        get: operations["browse_catalogue_api_v1_staff_catalog_browse_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/browse/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One card, with the leaves an offer has to name
+         * @description Everything the offer form binds to, in one request.
+         *
+         *     ``leaf_ids`` is the field that closes the gap this endpoint exists for:
+         *     an offer must name every leaf and nothing told a seller what the leaves
+         *     were, so the rule could only be discovered by being refused with a 422.
+         *
+         *     The offers list is the same one the shop shows to anybody, with the same
+         *     seller names on it — see ``SellerCatalogOut`` for why that is not hidden.
+         */
+        get: operations["browse_product_api_v1_staff_catalog_browse__product_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/staff/offers": {
         parameters: {
             query?: never;
@@ -3930,6 +4017,19 @@ export interface components {
             /** Has More */
             has_more: boolean;
         };
+        /** Page[SellerCatalogOut] */
+        Page_SellerCatalogOut_: {
+            /** Items */
+            items: components["schemas"]["SellerCatalogOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+            /** Has More */
+            has_more: boolean;
+        };
         /** Page[StaffOrderOut] */
         Page_StaffOrderOut_: {
             /** Items */
@@ -4738,6 +4838,106 @@ export interface components {
             active: boolean;
         };
         /**
+         * SellerCatalogDetailOut
+         * @description One card with everything the offer form needs in one request.
+         *
+         *     ``leaf_ids`` is the answer to the rule above, in the shape the write
+         *     endpoint takes: read it, send it as ``variant_ids``, and the offer covers
+         *     the whole card. Deriving it from ``variants`` is possible and inviting a
+         *     client to re-derive a backend rule is how the two drift.
+         */
+        SellerCatalogDetailOut: {
+            /** Id */
+            id: number;
+            /** Sku */
+            sku: string;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Category Slug */
+            category_slug: string;
+            /** Category Name */
+            category_name: string;
+            /** Brand Name */
+            brand_name: string | null;
+            /** Price */
+            price: number;
+            /** Old Price */
+            old_price: number | null;
+            /** In Stock */
+            in_stock: boolean;
+            /** Offer Count */
+            offer_count: number;
+            /** Variant Count */
+            variant_count: number;
+            /** Mine */
+            mine: boolean;
+            /** My Offer Id */
+            my_offer_id: number | null;
+            /** My Price */
+            my_price: number | null;
+            /** Description */
+            description: string;
+            /** Variants */
+            variants: components["schemas"]["SellerVariantOut"][];
+            /** Leaf Ids */
+            leaf_ids: number[];
+            /** Offers */
+            offers: components["schemas"]["OfferOut"][];
+        };
+        /**
+         * SellerCatalogOut
+         * @description A card as somebody deciding whether to stock it sees it.
+         *
+         *     Not the admin's shape. That one answers with the Uzbek on the row because
+         *     an editor is about to write it back; this one is read to *recognise* a
+         *     product, so it is translated and carries the photograph.
+         *
+         *     **The shop price is here on purpose.** Every seller's name, price and
+         *     stock is already returned by ``GET /products/{id}/offers``, which needs no
+         *     token at all — so withholding it would protect nothing and only make a
+         *     seller price blind or price by opening the shop in another tab. What it
+         *     tells them is the thing they actually need: what this goes for, and how
+         *     many people are already selling it.
+         */
+        SellerCatalogOut: {
+            /** Id */
+            id: number;
+            /** Sku */
+            sku: string;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Category Slug */
+            category_slug: string;
+            /** Category Name */
+            category_name: string;
+            /** Brand Name */
+            brand_name: string | null;
+            /** Price */
+            price: number;
+            /** Old Price */
+            old_price: number | null;
+            /** In Stock */
+            in_stock: boolean;
+            /** Offer Count */
+            offer_count: number;
+            /** Variant Count */
+            variant_count: number;
+            /** Mine */
+            mine: boolean;
+            /** My Offer Id */
+            my_offer_id: number | null;
+            /** My Price */
+            my_price: number | null;
+        };
+        /**
          * SellerCreateIn
          * @description A seller, and optionally the account that signs in as them.
          *
@@ -4760,6 +4960,41 @@ export interface components {
             commission_percent: number;
             /** User Phone */
             user_phone?: string | null;
+        };
+        /**
+         * SellerMeOut
+         * @description Which shop am I.
+         *
+         *     ``/staff/me`` answers with the *user* — a phone number and a role — and
+         *     says nothing about the ``sellers`` row behind it. So the cabinet greeted
+         *     people by phone number, and a seller who had just been taken on had no way
+         *     to confirm they were linked to the right shop, which is the one thing they
+         *     would want to check first.
+         *
+         *     The commission rate is here because it is a term of their own contract and
+         *     they are entitled to read it. It is also the figure every statement is
+         *     computed from, so a seller who cannot see it cannot check a payout.
+         */
+        SellerMeOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Phone */
+            phone: string;
+            /** Commission Percent */
+            commission_percent: number;
+            /** Active */
+            active: boolean;
+            /** Linked At */
+            linked_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Offer Count */
+            offer_count: number;
         };
         /** SellerOut */
         SellerOut: {
@@ -4897,6 +5132,31 @@ export interface components {
             active?: boolean | null;
             /** User Phone */
             user_phone?: string | null;
+        };
+        /**
+         * SellerVariantOut
+         * @description A colour or a size, and whether an offer must name it.
+         *
+         *     ``is_leaf`` is the whole point. An offer has to name every leaf — the
+         *     sizes of a product that has sizes, its colours otherwise — and naming
+         *     some of them is refused, because an offer covering half a card leaves the
+         *     rest of it without figures. The rule was already enforced with a 422 and
+         *     there was no way for a seller to find out what the leaves were.
+         */
+        SellerVariantOut: {
+            /** Id */
+            id: number;
+            kind: components["schemas"]["VariantKind"];
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Parent Id */
+            parent_id: number | null;
+            /** Is Leaf */
+            is_leaf: boolean;
         };
         /** SettingsIn */
         SettingsIn: {
@@ -8722,6 +8982,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffSlotOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_seller_api_v1_staff_sellers_me_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerMeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    browse_catalogue_api_v1_staff_catalog_browse_get: {
+        parameters: {
+            query?: {
+                /** @description Part of a title or a SKU */
+                q?: string | null;
+                /** @description Category slug */
+                category?: string | null;
+                /** @description true: only cards I already offer; false: only the rest */
+                mine?: boolean | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SellerCatalogOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    browse_product_api_v1_staff_catalog_browse__product_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerCatalogDetailOut"];
                 };
             };
             /** @description Validation Error */

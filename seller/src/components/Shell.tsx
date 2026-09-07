@@ -1,7 +1,16 @@
 import * as React from "react"
 import { NavLink, Outlet } from "react-router-dom"
-import { Boxes, LayoutDashboard, LogOut, Tag, Truck } from "lucide-react"
+import {
+  Boxes,
+  LayoutDashboard,
+  LogOut,
+  Receipt,
+  Search,
+  Tag,
+  Truck,
+} from "lucide-react"
 import { useSession } from "@/auth/session"
+import { useShop } from "@/auth/shop"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -15,22 +24,49 @@ import { cn } from "@/lib/utils"
  */
 const NAV = [
   { to: "/", label: "Boshqaruv", icon: LayoutDashboard },
+  { to: "/catalog", label: "Katalog", icon: Search },
   { to: "/offers", label: "Takliflarim", icon: Tag },
   { to: "/stock", label: "Qoldiq", icon: Boxes },
   { to: "/supplies", label: "Partiyalar", icon: Truck },
+  { to: "/statements", label: "Hisobotlar", icon: Receipt },
 ]
 
 export function Shell() {
   const session = useSession()
   const user = session.status === "signed-in" ? session.user : null
+  const shop = useShop()
 
   return (
     <div className="flex min-h-full flex-col">
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          {/* The shop's name, not the platform's. A seller opening this wants
+              to know which shop they are looking at before anything else —
+              and the commission rate beside it, because every statement is
+              computed from that figure and one they cannot read is one they
+              cannot check. */}
           <div className="min-w-0">
-            <p className="text-[16px] font-semibold text-ink">Mini Bozor</p>
-            <p className="text-[13px] text-ink-soft">Sotuvchi kabineti</p>
+            {shop.data ? (
+              <>
+                <p className="truncate text-[16px] font-semibold text-ink">
+                  {shop.data.name}
+                </p>
+                <p className="text-[13px] text-ink-soft">
+                  Komissiya{" "}
+                  <span className="tabular font-medium text-brand-ink">
+                    {shop.data.commission_percent}%
+                  </span>
+                  {shop.data.active ? null : (
+                    <span className="ml-1.5 font-medium text-danger">· to'xtatilgan</span>
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[16px] font-semibold text-ink">Mini Bozor</p>
+                <p className="text-[13px] text-ink-soft">Sotuvchi kabineti</p>
+              </>
+            )}
           </div>
           {user ? (
             <div className="flex items-center gap-3">

@@ -2,8 +2,11 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { LoginPage } from "@/auth/LoginPage"
 import { useSession } from "@/auth/session"
 import { Shell } from "@/components/Shell"
+import { CatalogPage } from "@/pages/CatalogPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import { OffersPage } from "@/pages/OffersPage"
+import { StatementPage } from "@/pages/StatementPage"
+import { StatementsPage } from "@/pages/StatementsPage"
 import { StockPage } from "@/pages/StockPage"
 import { SuppliesPage } from "@/pages/SuppliesPage"
 
@@ -29,8 +32,12 @@ export function App() {
         <Route path="/offers" element={<OffersPage />} />
         <Route path="/stock" element={<StockPage />} />
         <Route path="/supplies" element={<SuppliesPage />} />
-        {/* Statements and proposing a product are the next stage; anything
-            else goes to the dashboard rather than to an empty frame. */}
+        <Route path="/catalog" element={<CatalogPage />} />
+        <Route path="/statements" element={<StatementsPage />} />
+        {/* One period's account is long enough to be its own screen, and it
+            is reached from a row rather than from the menu. */}
+        <Route path="/statements/:id" element={<StatementPage />} />
+        {/* Anything else goes to the dashboard rather than an empty frame. */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

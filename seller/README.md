@@ -108,44 +108,44 @@ should be answerable with a list of movements rather than an argument.
 
 ## Endpoints this needs and the API does not have
 
-Each of these is a screen or a figure that is missing rather than approximated.
+Three of the four gaps this cabinet opened with were closed in the backend
+stage before this one — `GET /staff/sellers/me`, `GET /staff/catalog/browse`
+and `.../browse/{id}` with the variant leaves on it. What is still missing:
 
-- **`GET /staff/sellers/me`** — a seller cannot learn their own shop's name,
-  commission rate or contact details. `/staff/me` answers with the *user*
-  (phone, role) and nothing about the `sellers` row behind it, so the header
-  greets a phone number and the cabinet cannot show "Chorsu Bozori · 8%
-  komissiya". A brand-new seller with no offers yet has no way at all to
-  confirm they are linked to the right shop.
-- **A sales figure for the current period.** The dashboard deliberately leaves
-  this out. It lives in a `SellerStatement`, which only exists once an admin
-  generates the period, and computing an approximation here from order lines
-  would put a number on screen that disagrees with the one the seller is paid
-  against. Better a missing figure than two that differ. Something like
-  `GET /staff/payouts/current` — sales so far this open period, unfrozen and
-  labelled as provisional — would fill it honestly.
-- **`GET /staff/catalog/products`** for sellers, or a narrower search.
-  Creating an offer means naming a `product_id`, and the catalogue listing is
-  admin-only. So this build has no "add an offer" screen at all: a seller can
-  edit the offers an admin made for them and cannot make one. Proposing a
-  *new* product works (`POST /staff/catalog/proposals`) but that is a
-  different act.
-- **`variant_ids` guidance on `POST /staff/offers`.** An offer on a product
-  with colours must name every leaf, and there is no endpoint a seller can
-  call to find out what the leaves are.
+- **A sales figure for the current period.** The dashboard deliberately
+  leaves it out. It lives in a `SellerStatement`, which only exists once an
+  admin generates the period, and computing an approximation here from order
+  lines would put a number on screen that disagrees with the one the seller
+  is paid against. Better a missing figure than two that differ. Something
+  like `GET /staff/payouts/current` — sales so far this open period, labelled
+  provisional — would fill it honestly.
+- **A seller's own proposals.** `POST /staff/catalog/proposals` works and the
+  response carries the card as submitted, but nothing lists a seller's
+  proposals afterwards: `GET /staff/catalog/products` is admin-only and
+  `/staff/catalog/browse` shows published cards only. So an **approved**
+  proposal turns up in the catalogue by itself and can be priced, while a
+  **refused** one is invisible from here — including its `moderation_note`,
+  which is the sentence written for the seller to read. The submit dialog
+  says so rather than pretending. `GET /staff/catalog/proposals` scoped to
+  the caller would close it.
 
-## What is not built yet
+## Screens
 
-Items 5 and 6 of this stage, deliberately left for their own session because
-each is independent of the four here:
+| | |
+|---|---|
+| **Boshqaruv** | Four figures and two lists, all of them work to do. |
+| **Katalog** | A grid of photographs: search, category, and "mine / not yet mine". Where a seller finds something to sell and prices it. |
+| **Takliflarim** | Price and struck-through price. Stock is shown and locked — see below. |
+| **Qoldiq** | On hand, held, sellable, at colour and size level, with the movement ledger. |
+| **Partiyalar** | Declare a batch; declared against counted once received. |
+| **Hisobotlar** | One period's account and every line that adds up to it. |
 
-- **Hisobotlar** — the seller's own statements and their lines. The endpoints
-  exist and are already scoped to the caller (`GET /staff/payouts/statements`,
-  `.../statements/{id}`), so this is a screen with no backend work. It needs
-  the same rigour as the backoffice's: nothing rounded, and the sum of the
-  lines shown beside the total.
-- **Mahsulot taklif qilish** — `POST /staff/catalog/proposals`, plus showing
-  `moderation_note` when a proposal comes back refused. Needs a category and
-  brand list a seller can read; see the gap above.
+`Hisobotlar` detail is the one screen here built as a table rather than
+cards, and deliberately: every other screen is read by recognising things,
+that one by comparing figures down a column. Same rigour as the backoffice's,
+for the same reason — nothing rounded, every line names its source, and the
+sum of the lines is printed beside the total so the invariant is checkable
+rather than trusted.
 
 ## Scripts
 

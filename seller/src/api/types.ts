@@ -36,3 +36,29 @@ export type SupplyCreateIn = S["SupplyCreateIn"]
 // What handling and storage cost, by weight band. Readable because a fee
 // somebody is charged and cannot look up is a fee they can only dispute.
 export type Tariff = S["FulfilmentTariffOut"]
+
+// Which shop am I. `/staff/me` answers with the user — a phone and a role —
+// and says nothing about the `sellers` row behind it.
+export type Shop = S["SellerMeOut"]
+
+// The catalogue as somebody looking for something to stock reads it.
+export type CatalogCard = S["SellerCatalogOut"]
+export type CatalogCardPage = S["Page_SellerCatalogOut_"]
+export type CatalogCardDetail = S["SellerCatalogDetailOut"]
+export type CatalogVariant = S["SellerVariantOut"]
+export type PublicOffer = S["OfferOut"]
+export type OfferCreateIn = S["OfferCreateIn"]
+
+// My own account for a settlement period, and what adds up to it.
+export type Statement = S["SellerStatementOut"]
+export type StatementDetail = S["SellerStatementDetailOut"]
+export type StatementLine = S["StatementLineOut"]
+export type StatementLineKind = S["StatementLineKind"]
+export type SettlementStatus = S["SettlementStatus"]
+
+// Suggesting a card for the platform's catalogue. A seller does not write to
+// it directly — the catalogue belongs to the platform.
+export type ProposeIn = S["ProductProposeIn"]
+export type Proposal = S["AdminProductOut"]
+export type Category = S["CategoryOut"]
+export type Brand = S["BrandOut"]
