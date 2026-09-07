@@ -66,6 +66,7 @@ interface MiniBozorApi {
         @Query("free_delivery") freeDelivery: Boolean? = null,
         @Query("discounted") discounted: Boolean? = null,
         @Query("is_original") isOriginal: Boolean? = null,
+        @Query("show_sold_out") showSoldOut: Boolean? = null,
         @Query("sort") sort: String = "popular",
         @Query("page") page: Int = 1,
         @Query("page_size") pageSize: Int = 20,
@@ -79,6 +80,10 @@ interface MiniBozorApi {
 
     @GET("products/{id}/similar")
     suspend fun similar(@Path("id") id: Int): List<ProductCardDto>
+
+    /** Every seller offering this product, cheapest first. */
+    @GET("products/{id}/offers")
+    suspend fun offers(@Path("id") id: Int): List<OfferDto>
 
     @GET("brands")
     suspend fun brands(): List<BrandDto>

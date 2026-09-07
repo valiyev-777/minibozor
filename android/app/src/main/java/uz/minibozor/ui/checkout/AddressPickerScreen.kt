@@ -28,8 +28,18 @@ import uz.minibozor.core.design.component.MbTopBar
 import uz.minibozor.core.design.icon.MbIcon
 
 /**
- * Choosing where an order goes: the saved addresses first, then the pick-up
- * points, with the form one step further in.
+ * Choosing where an order goes: one question at a time.
+ *
+ * It used to ask both at once — every saved address, and under them every
+ * pick-up point in the city. So a customer who had chosen "Kuryer" and pressed
+ * "Manzil qo'shish" was handed a page of counters to collect from, and picking
+ * one silently turned their order into a collection: the courier tile above
+ * unselected itself, the delivery time they had chosen was dropped, and nothing
+ * on the screen had asked whether that was what they wanted.
+ *
+ * The delivery method is chosen on the checkout screen and this screen answers
+ * only for the one that was chosen. The other way is still available, where it
+ * belongs — one card up, on the two tiles that are about exactly that.
  *
  * Tapping "manzil" during checkout used to open the *form* directly, which
  * meant anyone with saved addresses had to type one again to get past it.
@@ -41,6 +51,7 @@ fun AddressPickerScreen(
     onAddNew: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val courier = state.delivery == DeliveryMethod.Courier
 
     // Coming back from the form should show what was just added.
     LifecycleResumeEffect(Unit) {
@@ -49,18 +60,29 @@ fun AddressPickerScreen(
     }
 
     MbScreen(
-        topBar = { MbTopBar(stringResource(R.string.yetkazish_manzili), onBack = onBack) },
+        topBar = {
+            MbTopBar(
+                stringResource(
+                    if (courier) R.string.yetkazish_manzili else R.string.punkt_tanlash
+                ),
+                onBack = onBack,
+            )
+        },
         bottomBar = {
             MbBottomBar {
                 MbPrimaryButton(
                     text = stringResource(R.string.tasdiqlash),
                     onClick = onBack,
-                    enabled = state.addressId != null || state.pickupPointId != null,
+                    enabled = if (courier) {
+                        state.addressId != null
+                    } else {
+                        state.pickupPointId != null
+                    },
                 )
             }
         },
     ) { padding ->
-        if (state.addresses.isEmpty() && state.pickupPoints.isEmpty()) {
+        if (courier && state.addresses.isEmpty()) {
             MbEmptyState(
                 glyph = "pin",
                 title = stringResource(R.string.manzil_yoq),
@@ -79,7 +101,7 @@ fun AddressPickerScreen(
             contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (state.addresses.isNotEmpty()) {
+            if (courier && state.addresses.isNotEmpty()) {
                 item {
                     MbCard(padding = 6.dp) {
                         state.addresses.forEachIndexed { index, address ->
@@ -99,10 +121,10 @@ fun AddressPickerScreen(
                 }
             }
 
-            if (state.pickupPoints.isNotEmpty()) {
+            if (!courier && state.pickupPoints.isNotEmpty()) {
                 item {
                     MbText(
-                        stringResource(R.string.yoki_punktdan_olib_ketish),
+                        stringResource(R.string.ozingizga_qulay_punktni_tanlang),
                         MbTheme.type.captionBold,
                         MbTheme.colors.textSecondary,
                         modifier = Modifier.padding(start = 6.dp),
@@ -129,15 +151,19 @@ fun AddressPickerScreen(
                 }
             }
 
-            item {
-                MbCard(padding = 6.dp) {
-                    MbListRow(
-                        label = stringResource(R.string.yangi_manzil_qoshish),
-                        glyph = "pin",
-                        tint = MbTheme.colors.accent,
-                        onClick = onAddNew,
-                        contentPadding = 10.dp,
-                    )
+            // Only where a new one can be added: a customer cannot open a
+            // pick-up counter.
+            if (courier) {
+                item {
+                    MbCard(padding = 6.dp) {
+                        MbListRow(
+                            label = stringResource(R.string.yangi_manzil_qoshish),
+                            glyph = "pin",
+                            tint = MbTheme.colors.accent,
+                            onClick = onAddNew,
+                            contentPadding = 10.dp,
+                        )
+                    }
                 }
             }
         }

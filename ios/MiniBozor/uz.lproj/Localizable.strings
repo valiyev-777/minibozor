@@ -246,6 +246,7 @@
 "savat_va_sevimlilar_hisobingizda_saqlanadi" = "Savat va sevimlilar hisobingizda saqlanadi — qaytib kirsangiz hammasi joyida bo'ladi.";
 "savatga" = "Savatga";
 "savatga_qoshildi" = "Savatga qo'shildi";
+"savatga_qoshish" = "Savatga qo'shish";
 "sevimlilar" = "Sevimlilar";
 "sevimlilar_bosh" = "Sevimlilar bo'sh";
 "sevimlilar_narxi" = "Sevimlilar narxi";
@@ -299,6 +300,8 @@
 "tugadi" = "TUGADI";
 "tugagan" = "Tugagan";
 "tugagan_buyurtma_yoq" = "Tugagan buyurtma yo'q";
+"tugaganlar_odatda_royxatda_korinmaydi" = "Sotuvda yo'q tovarlar odatda ro'yxatda ko'rinmaydi";
+"tugaganlarni_korsatish" = "Tugaganlarni ko'rsatish";
 "tugilgan_sana" = "Tug'ilgan sana";
 "tugmani_bosish_orqali_ommaviy_oferta" = "Tugmani bosish orqali ommaviy oferta shartlariga rozilik bildirasiz.";
 "tungi_rejim" = "Tungi rejim";
@@ -341,3 +344,7 @@
 "rating_words.3" = "Yaxshi";
 "rating_words.4" = "Juda yaxshi";
 "rating_words.5" = "Ajoyib";
+/* Sellers on a product page, and the sum a return paid back. */
+"boshqa_sotuvchilar" = "Boshqa sotuvchilar";
+"kartadagi_narx" = "Kartadagi narx";
+"qaytarilgan_summa" = "Qaytarilgan summa";

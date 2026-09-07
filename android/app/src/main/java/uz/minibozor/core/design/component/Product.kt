@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
@@ -173,6 +174,95 @@ fun MbProductImage(
 
 
 /**
+ * How many times a card's photographs are repeated so the pager can run on.
+ *
+ * The same trick the home banner uses. A pager over four real pages stops dead
+ * at the fourth and the customer's next flick does nothing; over four thousand
+ * it never reaches an end, and starting in the middle means it never reaches
+ * the beginning either — so the strip runs on in both directions and the fourth
+ * dial is followed by the first.
+ */
+private const val PhotoLoops = 1000
+
+/**
+ * The card's photographs, as something to swipe.
+ *
+ * A shopper deciding between four dials of the same watch had to open four
+ * pages to see them, because each was a separate product showing its own single
+ * picture. The server now hangs a shelf's photographs on every member of it, and
+ * this is where they are looked at — on the card, before anything is opened.
+ *
+ * [swipeable] is off inside a rail, and that is the one place it is off. A pager
+ * is a horizontal drag inside a horizontal list: the card would take the flick
+ * meant for the rail, and a rail that only scrolls if you grab it by the price
+ * is worse than a rail whose cards show one picture each.
+ */
+@Composable
+fun MbCardPhotos(
+    photos: List<String>,
+    modifier: Modifier = Modifier,
+    swipeable: Boolean = true,
+    shape: Shape = MbTheme.shapes.tileSmall,
+) {
+    if (photos.size < 2 || !swipeable) {
+        MbProductImage(photos.firstOrNull(), modifier = modifier, shape = shape)
+        return
+    }
+    val pager = rememberPagerState(
+        initialPage = PhotoLoops / 2 * photos.size,
+        pageCount = { photos.size * PhotoLoops },
+    )
+    Box(modifier) {
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+            MbProductImage(
+                photos[page % photos.size],
+                modifier = Modifier.fillMaxSize(),
+                shape = shape,
+            )
+        }
+        PhotoDots(
+            count = photos.size,
+            current = pager.currentPage % photos.size,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 7.dp),
+        )
+    }
+}
+
+/**
+ * Which of the photographs is showing, on a pill of the card's own surface.
+ *
+ * Bare dots would be laid straight on the seller's photograph, which is
+ * whatever colour they chose to shoot against — pale on half the catalogue and
+ * black on the rest. The pill is the card's ground, mostly opaque, so the dots
+ * read on both without a shadow under them.
+ */
+@Composable
+private fun PhotoDots(count: Int, current: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .clip(MbTheme.shapes.chip)
+            .background(MbTheme.colors.surface.copy(alpha = 0.86f))
+            .padding(horizontal = 5.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(count) { index ->
+            val here = index == current
+            Box(
+                Modifier
+                    .size(if (here) 5.dp else 4.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (here) MbTheme.colors.accent else MbTheme.colors.hairlineStrong
+                    )
+            )
+        }
+    }
+}
+
+/**
  * What a photograph looks like when the thing in it cannot be bought.
  *
  * A wash of the card's own surface over the picture rather than a grey filter
@@ -208,7 +298,7 @@ private fun BoxScope.SoldOutVeil(shape: Shape) {
 }
 
 /** Under this many left, the count stops being a fact and becomes a reason. */
-private const val LowStock = 5
+const val MbLowStock = 5
 
 /**
  * How many are left, on the card.
@@ -224,7 +314,7 @@ private const val LowStock = 5
 @Composable
 fun StockLine(stockLeft: Int) {
     if (stockLeft <= 0) return
-    val low = stockLeft <= LowStock
+    val low = stockLeft <= MbLowStock
     MbText(
         stringResource(R.string.n_dona_qoldi, stockLeft),
         MbTheme.type.micro,
@@ -279,8 +369,8 @@ fun MbDiscountPill(
  */
 @Composable
 fun MbPriceRow(
-    price: Int,
-    oldPrice: Int? = null,
+    price: Long,
+    oldPrice: Long? = null,
     discountPercent: Int? = null,
     modifier: Modifier = Modifier,
     priceStyle: TextStyle = MbTheme.type.price,
@@ -385,8 +475,8 @@ fun MbStars(rating: Double, modifier: Modifier = Modifier, size: Dp = 15.dp) {
  */
 @Composable
 fun MbHeroPrice(
-    price: Int,
-    oldPrice: Int? = null,
+    price: Long,
+    oldPrice: Long? = null,
     discountPercent: Int? = null,
     /**
      * A step smaller, for the bar at the top of the product page.
@@ -435,7 +525,7 @@ fun MbHeroPrice(
  * many rather than as three separate pictures.
  */
 @Composable
-fun MbReviewPhotoStack(
+fun MbPhotoStack(
     photos: List<String>,
     total: Int,
     modifier: Modifier = Modifier,
@@ -530,22 +620,24 @@ fun MbCartButton(
 }
 
 /**
- * The two-per-row grid tile from the home screen and search results: a square
- * photograph with the heart in one corner and the cart in the other, then the
- * price, then the name.
+ * The product card: a square photograph with the heart on it, then the price,
+ * then the name with the cart disc at the end of it.
  *
- * Both corner controls are optional, and [MbDealTile] is this same card with
- * neither — the two used to be separate copies of the same column and had
- * already drifted by a gap and a text style.
+ * There is one of these in the app. The grid uses it two to a row, the deals
+ * pair uses it two to a row, and a rail uses it at a fixed width — see
+ * [MbRailTile], which is this call with a width on it. The three used to be
+ * three separate copies of the same column and had drifted apart by a width, a
+ * corner radius, two type styles and both of the controls.
  */
 @Composable
 fun MbProductTile(
     title: String,
-    price: Int,
-    oldPrice: Int?,
+    price: Long,
+    oldPrice: Long?,
     discountPercent: Int?,
     imageUrl: String?,
     isFavorite: Boolean,
+    images: List<String> = emptyList(),
     inStock: Boolean = true,
     stockLeft: Int = 0,
     onClick: () -> Unit,
@@ -559,41 +651,14 @@ fun MbProductTile(
         oldPrice = oldPrice,
         discountPercent = discountPercent,
         imageUrl = imageUrl,
+        images = images,
+        swipePhotos = true,
         isFavorite = isFavorite,
         inStock = inStock,
         stockLeft = stockLeft,
         onClick = onClick,
         onToggleFavorite = onToggleFavorite,
         onAddToCart = onAddToCart,
-        modifier = modifier,
-    )
-}
-
-/** Wide "Bugungi tanlov" tile: the same card without the rating or the toggles. */
-@Composable
-fun MbDealTile(
-    title: String,
-    price: Int,
-    oldPrice: Int?,
-    discountPercent: Int?,
-    imageUrl: String?,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    inStock: Boolean = true,
-    stockLeft: Int = 0,
-) {
-    ProductTileBody(
-        title = title,
-        price = price,
-        oldPrice = oldPrice,
-        discountPercent = discountPercent,
-        imageUrl = imageUrl,
-        isFavorite = false,
-        inStock = inStock,
-        stockLeft = stockLeft,
-        onClick = onClick,
-        onToggleFavorite = null,
-        onAddToCart = null,
         modifier = modifier,
     )
 }
@@ -616,10 +681,14 @@ fun MbDealTile(
 @Composable
 private fun ProductTileBody(
     title: String,
-    price: Int,
-    oldPrice: Int?,
+    price: Long,
+    oldPrice: Long?,
     discountPercent: Int?,
     imageUrl: String?,
+    /** Every photograph of this product; empty falls back to [imageUrl]. */
+    images: List<String>,
+    /** Off in a rail — see [MbCardPhotos]. */
+    swipePhotos: Boolean,
     isFavorite: Boolean,
     inStock: Boolean,
     stockLeft: Int,
@@ -635,15 +704,17 @@ private fun ProductTileBody(
             .padding(8.dp),
     ) {
         Box {
-            MbProductImage(
-                imageUrl,
+            MbCardPhotos(
+                // The whole shelf where the server sent one, and the one
+                // picture where it did not.
+                photos = images.ifEmpty { listOfNotNull(imageUrl) },
+                swipeable = swipePhotos,
                 modifier = Modifier
                     // Square, like the rail tiles: the catalogue photos are
                     // 1:1 with their own baked-in backdrop, so a letterboxed
                     // strip of tile shows through any other ratio.
                     .fillMaxWidth()
                     .aspectRatio(1f),
-                shape = MbTheme.shapes.tileSmall,
             )
             if (!inStock) SoldOutVeil(MbTheme.shapes.tileSmall)
             if (onToggleFavorite != null) {
@@ -700,89 +771,52 @@ private fun ProductTileBody(
 }
 
 /**
- * One product in a horizontal rail: the photograph, and what it costs under it.
+ * One product in a horizontal rail: the grid's card, given a width.
  *
- * The tile used to be a picture inside a rounded box inside a rounded card, with
- * 7 dp of warm ground showing between the two — three edges to read before the
- * shoe, on a card narrow enough that the shoe was the smallest thing on it. The
- * photograph runs to the card's own edges now and the card's clip rounds its top
- * corners, so there is one edge and the picture is what the card is.
+ * It was its own drawing once — a narrower card, a tighter corner, the picture
+ * run to the card's edges, the saving pinned to the photograph instead of
+ * sitting under the price, and both the name and the price a type step down.
+ * Every one of those was defensible on a 112 dp card and none of them survived
+ * the card being read next to the grid tile above it: one scroll of the home
+ * page showed the same shoe as two different kinds of card.
  *
- * The saving moved onto the photograph with it. It had been sitting under the
- * price on a line of its own, which is a percentage placed as far from the
- * picture as the card allows; on the photograph it is where the eye already is,
- * and the line it left behind now carries the price it is a percentage of.
+ * So the rail holds the card the rest of the app holds, at the width the grid
+ * gives it. The rail stops being a different shelf and becomes the same shelf,
+ * sideways.
  */
 @Composable
 fun MbRailTile(
     title: String,
-    price: Int,
-    oldPrice: Int?,
+    price: Long,
+    oldPrice: Long?,
     discountPercent: Int?,
     imageUrl: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isFavorite: Boolean = false,
     inStock: Boolean = true,
     stockLeft: Int = 0,
+    onToggleFavorite: (() -> Unit)? = null,
+    onAddToCart: (() -> Unit)? = null,
 ) {
-    val was = oldPrice?.takeIf { it > price }
-    Column(
-        modifier
-            .width(MbTheme.dimens.railTileWidth)
-            // A step less round than the grid tile: the same 18 dp corner on a
-            // card this narrow is half its width in arcs.
-            .productCard(onClick = onClick, shape = MbTheme.shapes.tile),
-    ) {
-        Box {
-            MbProductImage(
-                imageUrl,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f),
-                // Square: the card is already clipped to its own corners, and a
-                // second rounding here would draw the picture's arcs inside them.
-                shape = RectangleShape,
-                background = MbTheme.colors.photoWarm,
-            )
-            if (!inStock) {
-                SoldOutVeil(RectangleShape)
-            } else if (discountPercent != null) {
-                // One label over the photograph, not two. The grid tile keeps
-                // its saving because there it sits in the text block below the
-                // picture; here both would be pinned to the same small square,
-                // which is more chrome than photograph.
-                MbDiscountPill(
-                    discountPercent,
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding(7.dp),
-                )
-            }
-        }
-        Column(Modifier.padding(start = 10.dp, end = 10.dp, top = 9.dp, bottom = 11.dp)) {
-            MbText(price.grouped(), MbTheme.type.priceSmall, maxLines = 1)
-            // The line is held whether or not there is anything to put on it, so
-            // a discounted tile and a full-price one beside it end at the same
-            // height. A minimum rather than a fixed height, so it still has
-            // somewhere to go when the customer has turned their font size up.
-            Box(Modifier.defaultMinSize(minHeight = 15.dp)) {
-                if (was != null) {
-                    MbText(
-                        was.grouped(),
-                        MbTheme.type.strikePrice
-                            .copy(textDecoration = TextDecoration.LineThrough),
-                        MbTheme.colors.textQuaternary,
-                        maxLines = 1,
-                    )
-                }
-            }
-            StockLine(stockLeft)
-            Spacer(Modifier.height(3.dp))
-            // A step up from meta: the tile is the narrowest card in the app, so
-            // a name gets two short lines and needs both of them to be readable.
-            MbText(title, MbTheme.type.caption, MbTheme.colors.inkSoft, maxLines = 2, minLines = 2)
-        }
-    }
+    ProductTileBody(
+        title = title,
+        price = price,
+        oldPrice = oldPrice,
+        discountPercent = discountPercent,
+        imageUrl = imageUrl,
+        images = emptyList(),
+        // The one place the photographs do not swipe: the card is already
+        // inside something that scrolls sideways. See [MbCardPhotos].
+        swipePhotos = false,
+        isFavorite = isFavorite,
+        inStock = inStock,
+        stockLeft = stockLeft,
+        onClick = onClick,
+        onToggleFavorite = onToggleFavorite,
+        onAddToCart = onAddToCart,
+        modifier = modifier.width(MbTheme.dimens.productCardWidth),
+    )
 }
 
 /**
@@ -843,7 +877,7 @@ fun MbLineItem(
     title: String,
     imageUrl: String?,
     meta: String,
-    price: Int,
+    price: Long,
     quantity: Int? = null,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,

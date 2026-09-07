@@ -90,7 +90,15 @@ fun VariantSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 MbText(
-                    stringResource(R.string.xususiyatlarni_tanlang),
+                    stringResource(
+                        // Nothing to choose on a product without variants, so
+                        // it does not ask the customer to choose anything.
+                        if (state.colors.isEmpty() && state.sizes.isEmpty()) {
+                            R.string.savatga_qoshish
+                        } else {
+                            R.string.xususiyatlarni_tanlang
+                        }
+                    ),
                     MbTheme.type.title2,
                     modifier = Modifier.weight(1f),
                 )
@@ -135,6 +143,22 @@ fun VariantSheet(
                         )
                         Spacer(Modifier.height(10.dp))
                         SizeRow(state.sizes, state.sizeId, viewModel::selectSize)
+                        // The same note the product page puts under its size
+                        // row: how many of the one in hand.
+                        val left = state.selectedSize?.stockLeft
+                        if (left != null && left > 0) {
+                            Spacer(Modifier.height(9.dp))
+                            MbText(
+                                stringResource(R.string.n_dona_qoldi, left),
+                                MbTheme.type.caption,
+                                if (left <= SheetLowStock) {
+                                    MbTheme.colors.danger
+                                } else {
+                                    MbTheme.colors.textTertiary
+                                },
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
 
@@ -148,6 +172,7 @@ fun VariantSheet(
             BottomBar(
                 state = state,
                 onAdd = viewModel::addToCart,
+                onPendingQuantity = viewModel::setPendingQuantity,
                 onQuantity = viewModel::setQuantity,
                 onOpenCart = onOpenCart,
             )
@@ -268,6 +293,9 @@ private fun ColorRow(colors: List<VariantDto>, selectedId: Int?, onSelect: (Int)
     }
 }
 
+/** Under this many left, the count stops being a fact and becomes a reason. */
+private const val SheetLowStock = 5
+
 @Composable
 private fun SizeRow(sizes: List<VariantDto>, selectedId: Int?, onSelect: (Int) -> Unit) {
     Row(
@@ -316,6 +344,7 @@ private fun SizeRow(sizes: List<VariantDto>, selectedId: Int?, onSelect: (Int) -
 private fun BottomBar(
     state: VariantSheetState,
     onAdd: () -> Unit,
+    onPendingQuantity: (Int) -> Unit,
     onQuantity: (Int) -> Unit,
     onOpenCart: () -> Unit,
 ) {
@@ -326,12 +355,29 @@ private fun BottomBar(
             .padding(horizontal = 20.dp, vertical = 14.dp),
     ) {
         if (state.cartItemId == null) {
-            MbPrimaryButton(
-                text = stringResource(R.string.savatga),
-                onClick = onAdd,
-                enabled = state.ready && !state.busy,
-                loading = state.busy,
-            )
+            // How many, before it goes in rather than after. Every product
+            // opens this sheet now, including the ones with nothing to choose,
+            // and for those the count is the only choice there is to make —
+            // without it the sheet would be a confirmation with no question on
+            // it. For the rest it saves adding one and immediately reaching for
+            // the stepper.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MbQuantityStepper(
+                    quantity = state.quantity,
+                    onChange = onPendingQuantity,
+                    min = 1,
+                    max = state.shelfLeft.coerceAtLeast(1),
+                    size = MbTheme.dimens.buttonHeight,
+                )
+                Spacer(Modifier.width(12.dp))
+                MbPrimaryButton(
+                    text = stringResource(R.string.savatga),
+                    onClick = onAdd,
+                    enabled = state.ready && !state.busy,
+                    loading = state.busy,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 MbQuantityStepper(
@@ -339,8 +385,9 @@ private fun BottomBar(
                     onChange = onQuantity,
                     min = 0,
                     // Where the shelf ends, as everywhere else the count can be
-                    // raised.
-                    max = (state.product?.stockLeft ?: 1).coerceAtLeast(1),
+                    // raised — and it is the chosen colour's shelf, since that
+                    // is what this sheet is adding.
+                    max = state.shelfLeft.coerceAtLeast(1),
                     // Matches the button beside it, so the two sit as one bar.
                     size = MbTheme.dimens.buttonHeight,
                 )

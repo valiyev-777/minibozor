@@ -149,9 +149,11 @@ fun ListingScreen(
                     else -> LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         state = gridState,
-                        contentPadding = PaddingValues(14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                        // The home page's edge and the home page's gap, so a card
+                        // here is the same card at the same width as a card there.
+                        contentPadding = PaddingValues(MbTheme.dimens.homeEdge),
+                        horizontalArrangement = Arrangement.spacedBy(MbTheme.dimens.cardGap),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         items(state.items, key = { it.id }) { product ->
                             MbProductTile(
@@ -160,17 +162,32 @@ fun ListingScreen(
                                 oldPrice = product.oldPrice,
                                 discountPercent = product.discountPercent,
                                 imageUrl = product.imageUrl,
+                                images = product.images,
                                 isFavorite = product.isFavorite,
                                 inStock = product.inStock,
                                 stockLeft = product.stockLeft,
                                 onClick = { onOpenProduct(product.id) },
                                 onToggleFavorite = { viewModel.toggleFavorite(product) },
                                 onAddToCart = {
-                                    if (product.hasVariants) {
-                                        picking = product
-                                    } else {
-                                        viewModel.addToCart(product.id) { toast.value = it }
-                                    }
+                                    // Nothing else while a picker is on its
+                                    // way. Setting `picking` only composes the
+                                    // sheet on the next frame, and its scrim
+                                    // arrives a frame after that — so a second
+                                    // tap landing in between reached the grid
+                                    // behind it and added that product outright.
+                                    // Asking for one thing and having a
+                                    // different one go into the basket without
+                                    // a word is about the worst a shop can do.
+                                    // Every product, not only the ones with
+                                    // something to choose. Two tiles side by
+                                    // side where one asks and the other puts
+                                    // itself in the basket is a grid you cannot
+                                    // press with any confidence — and the ones
+                                    // that did not ask were the ones a tap
+                                    // could not be taken back on. The sheet
+                                    // carries a count, so there is a choice to
+                                    // make even when there are no variants.
+                                    if (picking == null) picking = product
                                 },
                             )
                         }
@@ -198,6 +215,12 @@ fun ListingScreen(
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = MbTheme.colors.surface,
             shape = MbTheme.shapes.sheet,
+            // The panel draws its own header, with the title and the way out on
+            // it. Material's handle is a dark stub in the middle of the top
+            // edge belonging to nothing else on the sheet — and the variant
+            // picker had already turned it off, so leaving it here made the
+            // app's two sheets open differently.
+            dragHandle = null,
         ) {
             FiltersSheet(
                 filters = state.filters,
@@ -239,14 +262,19 @@ private fun Toolbar(
         }
         Row(
             Modifier
-                .mbClickable(MbTheme.shapes.chip, onClick = onOpenFilters)
+                .clip(MbTheme.shapes.chip)
+                // Background first, then the click: `clickable` draws its
+                // ripple where it sits in the chain, and behind a background it
+                // is a ripple nobody sees. The chip was the one control in the
+                // app that answered a tap with nothing at all.
                 .background(if (filterCount > 0) MbTheme.colors.inverse else MbTheme.colors.fill)
+                .mbClickable(MbTheme.shapes.chip, onClick = onOpenFilters)
                 .padding(horizontal = 14.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             MbIcon(
-                "gear",
+                "filter",
                 size = 14.dp,
                 tint = if (filterCount > 0) MbTheme.colors.onInverse else MbTheme.colors.ink,
             )

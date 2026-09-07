@@ -19,8 +19,10 @@ def list_favorites(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=60),
 ) -> s.Page[s.ProductCardOut]:
+    # A card withdrawn from the shop drops out of the list rather than sitting
+    # in it un-openable: the row would link to a 404.
     stmt = (
-        select(Product)
+        sv.in_the_shop(select(Product))
         .join(Favorite, col(Favorite.product_id) == col(Product.id))
         .where(Favorite.user_id == user.id)
         .order_by(col(Favorite.created_at).desc())

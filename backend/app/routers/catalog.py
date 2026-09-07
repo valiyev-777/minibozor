@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, or_, select
 
 from app import i18n
+from app import offers as of
 from app import schemas as s
 from app import services as sv
 from app.deps import OptionalUser, SessionDep
@@ -72,11 +73,27 @@ def list_products(
     free_delivery: bool | None = None,
     discounted: bool | None = None,
     is_original: bool | None = None,
+    show_sold_out: bool = Query(
+        False,
+        description="Include products with nothing left. Off by default: a shelf "
+        "shows what can be bought.",
+    ),
     sort: SortKey = "popular",
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=60),
 ) -> s.Page[s.ProductCardOut]:
-    stmt = select(Product)
+    # Only what is in the shop. A draft, a proposal waiting on moderation, a
+    # refused card and a withdrawn one are all invisible here — the apps see
+    # exactly the catalogue they saw before, because everything in it is
+    # published.
+    stmt = sv.in_the_shop(select(Product))
+
+    # What cannot be bought is not on the shelf. A sold-out product used to sit
+    # in the grid behind its veil, taking a slot in every listing and every page
+    # of results from the products that could actually be sold — and the filter
+    # sheet can put them back for anyone who wants to see them.
+    if not show_sold_out:
+        stmt = stmt.where(Product.in_stock.is_(True))
 
     if q:
         needle = f"%{q.lower()}%"
@@ -130,7 +147,9 @@ def list_products(
 
 @router.get("/products/filters", response_model=s.FiltersOut, summary="Screen 13 — filter sheet")
 def product_filters(session: SessionDep, category: str | None = None) -> s.FiltersOut:
-    stmt = select(Product)
+    # The same window as the listing, or the price slider would span cards the
+    # listing cannot show and the brand counts would not add up.
+    stmt = sv.in_the_shop(select(Product))
     if category:
         stmt = stmt.where(col(Product.category_id).in_(_category_tree_ids(session, category)))
     products = session.exec(stmt).all()
@@ -142,7 +161,7 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
         if p.brand_id:
             brand_counts[p.brand_id] = brand_counts.get(p.brand_id, 0) + 1
     brands = [
-        s.BrandOut(id=b.id, slug=b.slug, name=b.name, product_count=brand_counts[b.id])
+        sv.brand_out(session, b, product_count=brand_counts[b.id])
         for b in session.exec(select(Brand).where(col(Brand.id).in_(brand_counts or {-1}))).all()
     ]
     brands.sort(key=lambda b: -b.product_count)
@@ -187,9 +206,33 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
 @router.get("/products/{product_id}", response_model=s.ProductOut, summary="Screen 14 — product")
 def get_product(product_id: int, session: SessionDep, user: OptionalUser) -> s.ProductOut:
     product = session.get(Product, product_id)
-    if product is None:
+    # Not in the shop is not found. A card in moderation has a real id, and
+    # answering with its contents would publish it by the back door.
+    if not sv.is_in_the_shop(product):
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     return sv.product_out(session, product, sv.favorite_ids(session, user))
+
+
+@router.get(
+    "/products/{product_id}/offers",
+    response_model=list[s.OfferOut],
+    summary="Every seller offering this product, cheapest first",
+)
+def product_offers(product_id: int, session: SessionDep) -> list[s.OfferOut]:
+    """The list behind the one price on the card.
+
+    Sold-out offers are included and marked: a shopper comparing sellers is
+    entitled to see that the cheapest one has run out, which is why the price
+    on the card is the one it is. Withdrawn offers are not — an inactive offer
+    is not on sale, and listing it would invite a question nobody can answer.
+    """
+    if not sv.is_in_the_shop(session.get(Product, product_id)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
+    winner = of.winning_offer(session, product_id)
+    return [
+        sv.offer_out(session, offer, winner_id=winner.id if winner else None)
+        for offer in of.offers_for(session, product_id)
+    ]
 
 
 @router.get("/products/{product_id}/similar", response_model=list[s.ProductCardOut])
@@ -197,11 +240,17 @@ def similar_products(
     product_id: int, session: SessionDep, user: OptionalUser, limit: int = Query(8, le=20)
 ) -> list[s.ProductCardOut]:
     product = session.get(Product, product_id)
-    if product is None:
+    if not sv.is_in_the_shop(product):
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     rows = session.exec(
-        select(Product)
-        .where(Product.category_id == product.category_id, Product.id != product_id)
+        sv.in_the_shop(select(Product))
+        .where(
+            Product.category_id == product.category_id,
+            Product.id != product_id,
+            # A recommendation is a suggestion to buy something. One that cannot
+            # be bought is not a recommendation.
+            Product.in_stock.is_(True),
+        )
         .order_by(col(Product.rating).desc())
         .limit(limit)
     ).all()
@@ -255,8 +304,40 @@ def product_reviews(
 
 @router.get("/brands", response_model=list[s.BrandOut])
 def list_brands(session: SessionDep) -> list[s.BrandOut]:
+    """Every brand, with how many cards in the shop carry it.
+
+    The field was always in the shape and was always nought: the figure was
+    only ever computed in ``/products/filters``, where it is scoped to one
+    listing so the tick-boxes add up to the grid beside them. Here it is the
+    whole shop, which is what a brand index is for — an A-to-Z of marques with
+    "(0)" against every one of them tells a shopper nothing and reads like a
+    bug.
+
+    Counted in one grouped query rather than per row: this list is the length
+    of the brand table, and a COUNT each would be a query per marque to draw
+    one screen.
+
+    Published cards only, through the same ``in_the_shop`` narrowing every
+    customer path uses. A brand whose only cards are drafts or refusals counts
+    nought here and that is correct — tapping it would open an empty listing,
+    because the listing is narrowed the same way. Brands with nothing in the
+    shop are still listed: the index is a directory, and dropping rows out of
+    it would change what an existing app is shown.
+    """
+    counts = dict(
+        session.exec(
+            sv.in_the_shop(
+                select(Product.brand_id, func.count()).where(
+                    col(Product.brand_id).is_not(None)
+                )
+            ).group_by(col(Product.brand_id))
+        ).all()
+    )
     rows = session.exec(select(Brand).order_by(col(Brand.name))).all()
-    return [s.BrandOut(id=b.id, slug=b.slug, name=b.name) for b in rows]
+    return [
+        sv.brand_out(session, b, product_count=int(counts.get(b.id, 0)))
+        for b in rows
+    ]
 
 
 # --------------------------------------------------------------------------- helpers

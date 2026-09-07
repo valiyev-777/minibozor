@@ -9,6 +9,12 @@ final class ProductModel {
     var summary: ReviewSummaryDTO?
     var topReviews: [ReviewDTO] = []
     var similar: [ProductCardDTO] = []
+    /// Every seller offering this product, cheapest first.
+    ///
+    /// Empty while it is being fetched and on a product only the house sells,
+    /// so the page shows the section when there is more than one of them and
+    /// says nothing otherwise.
+    var offers: [OfferDTO] = []
     var selectedSizeId: Int?
     var selectedColorId: Int?
     var adding = false
@@ -36,6 +42,10 @@ final class ProductModel {
             topReviews = Array(page.items.prefix(2))
         }
         if case .success(let items) = await catalog.similar(to: id) { similar = items }
+        // Alongside the rest of the page rather than gating it: a product page
+        // whose price and photographs have arrived should draw, and the list of
+        // sellers is an addition to it, not a precondition.
+        if case .success(let rows) = await catalog.offers(productId: id) { offers = rows }
     }
 
     @MainActor
@@ -73,10 +83,11 @@ private enum Block {
     static let hero = 0
     static let identity = 1
     static let options = 2
-    static let description = 3
-    static let smallPrint = 4
-    static let reviews = 5
-    static let similar = 6
+    static let offers = 3
+    static let description = 4
+    static let smallPrint = 5
+    static let reviews = 6
+    static let similar = 7
 }
 
 /// Screen 14 — Mahsulot.
@@ -139,6 +150,38 @@ struct ProductView: View {
 
     private var shelfInStock: Bool {
         (model.product?.inStock ?? false) && (selectedColour?.inStock ?? true)
+    }
+
+    private var selectedSize: VariantDTO? {
+        (model.product?.sizes ?? []).first { $0.id == model.selectedSizeId }
+    }
+
+    /// What can actually be bought, which is a narrower question than what is
+    /// on the shelf. The line under the rating answers about the colour in the
+    /// photograph above it; the bar at the bottom is buying one colour in one
+    /// size, so its ceiling is whichever of the two is scarcer. Seventeen in
+    /// blue and one in a 45 is one pair to sell.
+    private var buyableLeft: Int {
+        [selectedColour?.stockLeft, selectedSize?.stockLeft].compactMap { $0 }.min() ?? shelfLeft
+    }
+
+    /// Who the price at the top of the page belongs to.
+    ///
+    /// `product.seller` is a line of the product's own, and on a card several
+    /// sellers offer it names none of them — it says "Mini Bozor" whoever is
+    /// actually quoting. The winning offer is the one whose price the page is
+    /// showing, so its seller is the honest answer to "who am I buying from",
+    /// and the product's own line is only the fallback for a card no offer has
+    /// been attached to yet.
+    private var sellerName: String {
+        if let winner = model.offers.first(where: \.isWinner), !winner.seller.name.isEmpty {
+            return winner.seller.name
+        }
+        return model.product?.seller ?? ""
+    }
+
+    private var buyable: Bool {
+        shelfInStock && (selectedSize?.inStock ?? true)
     }
 
     /// The photograph a tap opened, and the frame it was sitting in.
@@ -259,7 +302,7 @@ struct ProductView: View {
                 // price it would vanish exactly when the customer is choosing
                 // how many to take, which is the moment it matters most.
                 HStack {
-                    StockLine(stockLeft: shelfLeft)
+                    StockLine(stockLeft: buyableLeft)
                     Spacer()
                 }
                 HStack(spacing: 12) {
@@ -270,7 +313,7 @@ struct ProductView: View {
                         MBQuantityStepper(
                             quantity: line.quantity,
                             minimum: 0,
-                            maximum: Swift.max(shelfLeft, 1),
+                            maximum: Swift.max(buyableLeft, 1),
                             size: 44
                         ) { quantity in
                             Task { await cart.setQuantity(itemId: line.id, quantity: quantity) }
@@ -290,8 +333,8 @@ struct ProductView: View {
                         )
                         .fixedSize(horizontal: true, vertical: false)
                         MBPrimaryButton(
-                            shelfInStock ? L("savatga") : L("mavjud_emas"),
-                            enabled: shelfInStock,
+                            buyable ? L("savatga") : L("mavjud_emas"),
+                            enabled: buyable,
                             loading: model.adding
                         ) {
                             Task { toast = await model.addToCart(using: cart) }
@@ -350,6 +393,14 @@ struct ProductView: View {
 
                 options(product)
                     .mbReveal(Block.options, leaving: leaving)
+
+                // Every seller offering this, straight after the choice of size
+                // and colour and before the prose. One offer means there is no
+                // choice to make and the section stays away.
+                if model.offers.count > 1 {
+                    offers()
+                        .mbReveal(Block.offers, leaving: leaving)
+                }
 
                 description(product)
                     .mbReveal(Block.description, leaving: leaving)
@@ -436,6 +487,15 @@ struct ProductView: View {
                 soldCount: product.sold,
                 inStock: shelfInStock
             )
+            // And who is selling it, on the panel rather than folded away in
+            // the small print. On a marketplace the seller is part of what is
+            // being bought — a price with no name against it is half a sentence
+            // — and the row three sections down was behind a "Batafsil" nobody
+            // taps.
+            if !sellerName.isEmpty {
+                Spacer().frame(height: 7)
+                SellerLine(name: sellerName, offersCount: model.offers.count)
+            }
             if product.isOriginal {
                 Spacer().frame(height: 12)
                 MBStatusPill(
@@ -549,8 +609,40 @@ struct ProductView: View {
                     // The seller, and only the seller. What is left moved to the
                     // buy bar, where the count is a reason rather than a clause
                     // in a row about delivery.
-                    subtitle: product.seller
+                    //
+                    // The same name the panel at the top prints: whoever is
+                    // actually quoting the price, not the product's own line.
+                    subtitle: sellerName
                 )
+            }
+        }
+        .padding(.top, 12)
+    }
+
+    /// Every seller offering this product, cheapest first.
+    ///
+    /// The one price at the top of the page belongs to one seller, and on a
+    /// marketplace that is a fact the page has been keeping to itself: the same
+    /// thing sits on the same card at four prices and the customer saw one of
+    /// them with no way to know there were others, or who any of them were.
+    /// This is the list behind that number — a name, a price and what is left
+    /// of it per row, with the row the card is quoting marked so the two
+    /// numbers are seen to be the same number rather than a contradiction.
+    ///
+    /// Read-only. Choosing a seller is a thing the API has no way to say yet,
+    /// so the rows do not pretend to be buttons.
+    private func offers() -> some View {
+        MBCard(cornerRadius: 0) {
+            SectionHeader(
+                title: L("boshqa_sotuvchilar"),
+                subtitle: LPlural("n_sotuvchi", count: model.offers.count,
+                                  "\(model.offers.count)")
+            )
+            Spacer().frame(height: 4)
+            ForEach(model.offers) { offer in
+                // A rule between rows, not above the first one.
+                if offer.id != model.offers.first?.id { MBDivider() }
+                OfferRow(offer: offer)
             }
         }
         .padding(.top, 12)

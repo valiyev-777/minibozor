@@ -372,6 +372,8 @@ fun MiniBozorNavHost(
                     onEditAddress = { navController.navigate(Routes.ADDRESS_PICKER) },
                     onEditTime = { navController.navigate(Routes.DELIVERY_TIME) },
                     onEditPayment = { navController.navigate(Routes.PAYMENT_METHOD) },
+                    onAddCard = { navController.navigate("add_card") },
+                    onOpenCart = { navController.popBackStack() },
                     onConfirm = { navController.navigate(Routes.CONFIRM) },
                 )
             }
@@ -524,6 +526,7 @@ fun MiniBozorNavHost(
                 onBack = { navController.popBackStack() },
                 onOpenProduct = { id -> navController.navigate(Routes.product(id)) },
                 onStartShopping = { switchTab(Routes.HOME) },
+                onOpenCart = { switchTab(Routes.CART) },
             )
         }
 

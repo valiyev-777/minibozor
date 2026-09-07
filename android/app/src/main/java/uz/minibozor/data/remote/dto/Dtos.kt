@@ -187,21 +187,67 @@ data class VariantDto(
      * the shop does not count apart — then the product's own count answers.
      */
     @SerialName("stock_left") val stockLeft: Int? = null,
+    /**
+     * The colour a size belongs to.
+     *
+     * Sizes are counted per colour: one row per colour per size, each with its
+     * own count, so the page shows the sizes of the colour on screen. Null on a
+     * colour, and on a size of a product that has no colours — then the sizes
+     * are the product's own.
+     */
+    @SerialName("parent_id") val parentId: Int? = null,
 )
 
 @Immutable
 @Serializable
 data class SpecDto(val key: String, val value: String)
 
+// --------------------------------------------------------------------- offers
+
+@Immutable
+@Serializable
+data class SellerDto(val id: Int, val name: String)
+
+/**
+ * One seller's price for a product.
+ *
+ * The card carries one price because one offer wins it; this is the list behind
+ * that number. Several sellers put the same thing on the same card, so "who am
+ * I buying from" is a question the page has to be able to answer, and until
+ * this was fetched it could not.
+ */
+@Immutable
+@Serializable
+data class OfferDto(
+    val id: Int,
+    val seller: SellerDto,
+    val price: Long,
+    @SerialName("old_price") val oldPrice: Long? = null,
+    @SerialName("discount_percent") val discountPercent: Int? = null,
+    @SerialName("stock_left") val stockLeft: Int = 0,
+    @SerialName("in_stock") val inStock: Boolean = true,
+    /** Whose price the card is showing. Exactly one offer has it, or none. */
+    @SerialName("is_winner") val isWinner: Boolean = false,
+)
+
 @Immutable
 @Serializable
 data class ProductCardDto(
     val id: Int,
     val title: String,
-    val price: Int,
-    @SerialName("old_price") val oldPrice: Int? = null,
+    val price: Long,
+    @SerialName("old_price") val oldPrice: Long? = null,
     @SerialName("discount_percent") val discountPercent: Int? = null,
     @SerialName("image_url") val imageUrl: String? = null,
+    /**
+     * Every photograph the card may swipe through, the first being [imageUrl].
+     *
+     * The catalogue files four dials of one watch as four products with one
+     * picture each; the server hangs a shelf's photographs on every member of
+     * it, so the card can show what the choice actually looks like without the
+     * shopper opening four pages to find out.
+     */
+    val images: List<String> = emptyList(),
     val rating: Double = 0.0,
     @SerialName("reviews_count") val reviewsCount: Int = 0,
     val badge: String? = null,
@@ -221,8 +267,8 @@ data class ProductDto(
     val title: String,
     val subtitle: String = "",
     val description: String = "",
-    val price: Int,
-    @SerialName("old_price") val oldPrice: Int? = null,
+    val price: Long,
+    @SerialName("old_price") val oldPrice: Long? = null,
     @SerialName("discount_percent") val discountPercent: Int? = null,
     @SerialName("image_url") val imageUrl: String? = null,
     val images: List<String> = emptyList(),
@@ -293,8 +339,8 @@ data class FilterFlagDto(
 @Immutable
 @Serializable
 data class FiltersDto(
-    @SerialName("price_min") val priceMin: Int,
-    @SerialName("price_max") val priceMax: Int,
+    @SerialName("price_min") val priceMin: Long,
+    @SerialName("price_max") val priceMax: Long,
     val brands: List<BrandDto>,
     val sizes: List<String>,
     val ratings: List<String>,
@@ -307,7 +353,7 @@ data class FiltersDto(
 data class SuggestionDto(
     @SerialName("product_id") val productId: Int,
     val title: String,
-    val price: Int,
+    val price: Long,
     @SerialName("image_url") val imageUrl: String? = null,
 )
 
@@ -371,24 +417,35 @@ data class CartItemDto(
     val title: String,
     @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("variant_label") val variantLabel: String = "",
-    @SerialName("unit_price") val unitPrice: Int,
-    @SerialName("old_unit_price") val oldUnitPrice: Int? = null,
+    /**
+     * The size and the colour this line was added for.
+     *
+     * The label above is one joined string for reading. These are what tell a
+     * product page whether the line in the basket is the one it is currently
+     * showing: without them it could only match on the product, so a shirt
+     * already in the basket in medium turned the buy button into a stepper for
+     * that line and there was no way left to add a large.
+     */
+    @SerialName("variant_id") val variantId: Int? = null,
+    @SerialName("color_variant_id") val colorVariantId: Int? = null,
+    @SerialName("unit_price") val unitPrice: Long,
+    @SerialName("old_unit_price") val oldUnitPrice: Long? = null,
     val quantity: Int,
     val selected: Boolean,
     @SerialName("in_stock") val inStock: Boolean,
     /** What the stepper may reach, so plus stops where the shelf does. */
     @SerialName("stock_left") val stockLeft: Int = 0,
-    @SerialName("line_total") val lineTotal: Int,
+    @SerialName("line_total") val lineTotal: Long,
 )
 
 @Immutable
 @Serializable
 data class CartTotalsDto(
     @SerialName("items_count") val itemsCount: Int,
-    val subtotal: Int,
-    val discount: Int,
-    @SerialName("delivery_fee") val deliveryFee: Int,
-    val total: Int,
+    val subtotal: Long,
+    val discount: Long,
+    @SerialName("delivery_fee") val deliveryFee: Long,
+    val total: Long,
     @SerialName("free_delivery_threshold") val freeDeliveryThreshold: Int,
     @SerialName("promo_code") val promoCode: String? = null,
 )
@@ -471,7 +528,7 @@ data class SlotDto(
     @SerialName("end_time") val endTime: String,
     val label: String,
     val note: String = "",
-    val price: Int = 0,
+    val price: Long = 0,
     val express: Boolean = false,
     val available: Boolean = true,
 )
@@ -522,9 +579,9 @@ data class OrderItemDto(
     val title: String,
     @SerialName("image_url") val imageUrl: String = "",
     @SerialName("variant_label") val variantLabel: String = "",
-    @SerialName("unit_price") val unitPrice: Int,
+    @SerialName("unit_price") val unitPrice: Long,
     val quantity: Int,
-    @SerialName("line_total") val lineTotal: Int,
+    @SerialName("line_total") val lineTotal: Long,
     val reviewed: Boolean = false,
 )
 
@@ -545,7 +602,7 @@ data class OrderSummaryDto(
     val code: String,
     val status: String,
     @SerialName("status_label") val statusLabel: String,
-    val total: Int,
+    val total: Long,
     @SerialName("items_count") val itemsCount: Int,
     @SerialName("preview_images") val previewImages: List<String> = emptyList(),
     @SerialName("eta_label") val etaLabel: String = "",
@@ -561,7 +618,7 @@ data class OrderDto(
     val code: String,
     val status: String,
     @SerialName("status_label") val statusLabel: String,
-    val total: Int,
+    val total: Long,
     @SerialName("items_count") val itemsCount: Int,
     @SerialName("preview_images") val previewImages: List<String> = emptyList(),
     @SerialName("eta_label") val etaLabel: String = "",
@@ -579,9 +636,9 @@ data class OrderDto(
     val paid: Boolean = false,
     @SerialName("recipient_name") val recipientName: String = "",
     @SerialName("recipient_phone") val recipientPhone: String = "",
-    val subtotal: Int = 0,
-    @SerialName("delivery_fee") val deliveryFee: Int = 0,
-    val discount: Int = 0,
+    val subtotal: Long = 0,
+    @SerialName("delivery_fee") val deliveryFee: Long = 0,
+    val discount: Long = 0,
     val items: List<OrderItemDto> = emptyList(),
     val events: List<OrderEventDto> = emptyList(),
 )
@@ -645,6 +702,14 @@ data class ReturnDto(
     val reason: String,
     val comment: String = "",
     val status: String,
+    /**
+     * What was actually paid back, once somebody paid it back.
+     *
+     * Nought until then, and nought on a request that was refused — so the
+     * screen prints it only when there is a sum to print. Defaulted, because a
+     * server that predates the field simply leaves it out.
+     */
+    @SerialName("refund_amount") val refundAmount: Long = 0,
     @SerialName("created_at") val createdAt: String,
 )
 

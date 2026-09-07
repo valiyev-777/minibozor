@@ -10,19 +10,37 @@
 #   * the dev backend published over the tailnet:
 #     sudo tailscale serve --bg --https=443 http://127.0.0.1:8000
 #
+#   * the account's identifiers copied into ios/testflight.env — see
+#     testflight.env.example
+#
 # Every value below can be overridden from the environment.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-KEY_ID="${KEY_ID:-U6S2R838PK}"
-ISSUER_ID="${ISSUER_ID:-5beb79f1-a332-49ee-82b0-8f69625ee37a}"
-TEAM_ID="${TEAM_ID:-CZVV6G7NQ4}"
+# The identifiers are read, never written here. This repository is public, and
+# a key id sitting in it next to an issuer id leaves the .p8 as the only thing
+# between a stranger and the developer account — so testflight.env is
+# gitignored and its absence is an error rather than a default.
+if [ -f testflight.env ]; then
+	set -a
+	. ./testflight.env
+	set +a
+fi
+
+for required in KEY_ID ISSUER_ID TEAM_ID; do
+	if [ -z "${!required:-}" ]; then
+		echo "$required is not set. Copy testflight.env.example to" >&2
+		echo "ios/testflight.env and fill it in, or pass $required=... here." >&2
+		exit 1
+	fi
+done
+
 KEY_PATH="${KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8}"
 
 # Where the test build looks for the backend. Tailscale fronts the FastAPI dev
 # server with a real certificate on the tailnet name, so App Transport Security
 # needs no exception and the phone reaches it from any network.
-API_HOST="${API_HOST:-https://solos-mac-mini.tailb76576.ts.net}"
+API_HOST="${API_HOST:?set API_HOST in ios/testflight.env}"
 
 # TestFlight rejects a build number it has already seen.
 BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}"

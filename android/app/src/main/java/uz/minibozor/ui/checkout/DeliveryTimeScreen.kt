@@ -126,8 +126,8 @@ fun DeliveryTimeScreen(
                             subtitle = slot.note.ifBlank { null },
                             selected = slot.id == state.slotId,
                             onSelect = { viewModel.selectSlot(slot.id) },
-                            trailingLabel = if (slot.price == 0) stringResource(R.string.bepul) else "+${slot.price.sum()}",
-                            trailingColor = if (slot.price == 0) MbTheme.colors.success
+                            trailingLabel = if (slot.price == 0L) stringResource(R.string.bepul) else "+${slot.price.sum()}",
+                            trailingColor = if (slot.price == 0L) MbTheme.colors.success
                             else MbTheme.colors.ink,
                             contentPadding = 10.dp,
                         )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlmodel import col, select
 
 from app import i18n
@@ -33,6 +33,21 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 RESEND_AFTER_SECONDS = 30
 
+# The refresh token, for a browser.
+#
+# The mobile apps hold it themselves and send it in the body, which is fine:
+# they have a keychain and no document to inject script into. A browser has
+# neither, and a refresh token readable from JavaScript is one successful XSS
+# away from being somebody else's session for the next sixty days. So the same
+# token is also set as a cookie the page cannot read.
+#
+# Scoped to the auth prefix because those are the only two endpoints that need
+# it — nothing else should carry a long-lived credential — and ``lax`` because
+# the backoffice is a first-party app and no cross-site form should be able to
+# refresh anybody's session.
+REFRESH_COOKIE = "mb_refresh"
+REFRESH_COOKIE_PATH = "/api/v1/auth"
+
 
 @router.post("/otp/request", response_model=OtpRequested, summary="Screen 05 — send an SMS code")
 def request_otp(payload: PhoneIn, session: SessionDep) -> OtpRequested:
@@ -62,7 +77,9 @@ def request_otp(payload: PhoneIn, session: SessionDep) -> OtpRequested:
 
 
 @router.post("/otp/verify", response_model=TokenPair, summary="Screen 06 — verify the code")
-def verify_otp(payload: OtpVerifyIn, session: SessionDep) -> TokenPair:
+def verify_otp(
+    payload: OtpVerifyIn, session: SessionDep, response: Response
+) -> TokenPair:
     otp = session.exec(
         select(OtpCode)
         .where(OtpCode.phone == payload.phone, OtpCode.consumed.is_(False))
@@ -93,33 +110,53 @@ def verify_otp(payload: OtpVerifyIn, session: SessionDep) -> TokenPair:
         session.commit()
         session.refresh(user)
 
-    pair = _issue_tokens(session, user)
+    pair = _issue_tokens(session, user, response=response)
     pair.is_new_user = is_new
     return pair
 
 
 @router.post("/refresh", response_model=TokenPair)
-def refresh(payload: RefreshIn, session: SessionDep) -> TokenPair:
-    claims = decode_token(payload.refresh_token, "refresh")
+def refresh(
+    session: SessionDep,
+    request: Request,
+    response: Response,
+    payload: RefreshIn | None = None,
+) -> TokenPair:
+    """A new access token, from the body or from the cookie.
+
+    The body comes first because that is what the shipped apps send and their
+    behaviour must not change. The cookie is for the backoffice, which sends no
+    body at all — so the body is optional here, which is the only thing about
+    this endpoint that moved.
+    """
+    token = (payload.refresh_token if payload else None) or request.cookies.get(
+        REFRESH_COOKIE
+    )
+    claims = decode_token(token, "refresh") if token else None
     if not claims:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh token yaroqsiz")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, i18n.label("refresh_invalid"))
 
     user = session.get(User, int(claims["sub"]))
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, i18n.label("user_not_found"))
 
-    stored = _find_refresh(session, user.id, payload.refresh_token)
+    stored = _find_refresh(session, user.id, token)
     if stored is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Refresh token bekor qilingan")
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, i18n.label("refresh_revoked")
+        )
 
     # Rotate: a refresh token is single use.
     stored.revoked = True
     session.add(stored)
-    return _issue_tokens(session, user)
+    return _issue_tokens(session, user, response=response)
 
 
 @router.post("/logout", response_model=Message, summary="Screen 47 — sign out")
-def logout(user: CurrentUser, session: SessionDep) -> Message:
+def logout(user: CurrentUser, session: SessionDep, response: Response) -> Message:
+    response.delete_cookie(
+        REFRESH_COOKIE, path=REFRESH_COOKIE_PATH, httponly=True, samesite="lax"
+    )
     for token in session.exec(
         select(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked.is_(False))
     ).all():
@@ -145,7 +182,7 @@ def set_pin(payload: PinChangeIn, user: CurrentUser, session: SessionDep) -> Mes
 def verify_pin(payload: PinIn, user: CurrentUser) -> Message:
     if not user.pin_hash or not verify_secret(payload.pin, user.pin_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("pin_wrong"))
-    return Message(message="Tasdiqlandi")
+    return Message(message=i18n.label("pin_verified"))
 
 
 @router.delete("/pin", response_model=Message)
@@ -161,7 +198,9 @@ def remove_pin(payload: PinIn, user: CurrentUser, session: SessionDep) -> Messag
 # --------------------------------------------------------------------------- helpers
 
 
-def _issue_tokens(session: SessionDep, user: User) -> TokenPair:
+def _issue_tokens(
+    session: SessionDep, user: User, *, response: Response | None = None
+) -> TokenPair:
     access = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)
     session.add(
@@ -172,6 +211,20 @@ def _issue_tokens(session: SessionDep, user: User) -> TokenPair:
         )
     )
     session.commit()
+    if response is not None:
+        # Set on every issue, not only the first: the token rotates on each
+        # refresh, so a cookie left holding the old one would be a session
+        # that works once.
+        response.set_cookie(
+            REFRESH_COOKIE,
+            refresh_token,
+            max_age=settings.refresh_token_days * 24 * 60 * 60,
+            path=REFRESH_COOKIE_PATH,
+            httponly=True,
+            samesite="lax",
+            # Off in dev so http://localhost works; on everywhere else.
+            secure=not settings.is_dev,
+        )
     return TokenPair(
         access_token=access,
         refresh_token=refresh_token,

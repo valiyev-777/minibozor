@@ -249,6 +249,108 @@ struct SizeOptionsRow: View {
                 }
                 .padding(.vertical, 1)
             }
+            // How many of the size in hand, under the row rather than on the
+            // chips. A 38-point chip holds two digits and nothing else, and a
+            // count on every one of eight of them is a wall of numbers to read
+            // before choosing — this answers about the one actually chosen. A
+            // size with none left is struck through above and says nothing here.
+            if let left = selected?.stockLeft, left > 0 {
+                Spacer().frame(height: 9)
+                Text(String(format: L("n_dona_qoldi"), left))
+                    .mbFont(MB.type.caption)
+                    .foregroundStyle(left <= lowStock ? MB.color.danger : MB.color.textTertiary)
+                    .lineLimit(1)
+            }
         }
+    }
+}
+
+/// Who is selling the thing at the price above, on the panel itself.
+///
+/// On a marketplace the seller is part of what is being bought, and until now
+/// the page carried the name in a delivery row folded behind "Batafsil" three
+/// sections down. The count beside it is the point of the section further down:
+/// "and three others are selling it" is a reason to keep scrolling, and one
+/// seller says nothing at all.
+struct SellerLine: View {
+    let name: String
+    let offersCount: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            MBIcon("basket", size: 14, tint: MB.color.icon)
+            Text(name)
+                .mbFont(MB.type.label)
+                .foregroundStyle(MB.color.inkMuted)
+                .lineLimit(1)
+            if offersCount > 1 {
+                Text("·")
+                    .mbFont(MB.type.caption)
+                    .foregroundStyle(MB.color.hairlineStrong)
+                Text(LPlural("n_sotuvchi", count: offersCount, "\(offersCount)"))
+                    .mbFont(MB.type.caption)
+                    .foregroundStyle(MB.color.textSecondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// One seller's row in the list behind the price.
+///
+/// A sold-out seller stays in the list, greyed: a cheaper price that has run
+/// out is the reason the price above is the one it is, and hiding it turns an
+/// explanation into a mystery. A seller who has withdrawn is not here at all —
+/// the server does not send them.
+struct OfferRow: View {
+    let offer: OfferDTO
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(offer.seller.name)
+                        .mbFont(MB.type.bodyBold)
+                        .foregroundStyle(offer.gone ? MB.color.textTertiary : MB.color.ink)
+                        .lineLimit(1)
+                    // Which of these rows the page above is quoting. Only ever
+                    // one, and only while it still has something to sell.
+                    if offer.isWinner && !offer.gone {
+                        MBStatusPill(
+                            L("kartadagi_narx"),
+                            background: MB.color.successBg,
+                            contentColor: MB.color.success
+                        )
+                    }
+                }
+                Text(offer.gone
+                     ? L("tugagan")
+                     : String(format: L("n_dona_qoldi"), offer.stockLeft))
+                    .mbFont(MB.type.caption)
+                    .foregroundStyle(stockColour)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(Format.sum(offer.price))
+                    .mbFont(MB.type.priceSmall)
+                    .foregroundStyle(offer.gone ? MB.color.textTertiary : MB.color.ink)
+                    .lineLimit(1)
+                if let was = offer.oldPrice, was > offer.price {
+                    Text(Format.grouped(was))
+                        .font(MB.type.meta.font)
+                        .foregroundStyle(MB.color.textQuaternary)
+                        .strikethrough()
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.vertical, 10)
+    }
+
+    private var stockColour: Color {
+        if offer.gone { return MB.color.textTertiary }
+        return offer.stockLeft <= lowStock ? MB.color.danger : MB.color.textSecondary
     }
 }

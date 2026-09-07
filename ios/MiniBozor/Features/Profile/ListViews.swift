@@ -178,9 +178,11 @@ final class FavoritesModel {
 struct FavoritesView: View {
     @Environment(Router.self) var router
     @Environment(CartRepository.self) var cart
+    @Environment(TabSelection.self) private var tabSelection
 
     @State var model = FavoritesModel()
     @State var toast: String?
+    @State private var picking: ProductCardDTO?
 
     var body: some View {
         MBScreen {
@@ -207,11 +209,13 @@ struct FavoritesView: View {
                                     product: product,
                                     onOpen: { router.push(.product(id: product.id)) },
                                     onToggleFavorite: { Task { await model.remove(product.id) } },
+                                    // The sheet, as everywhere else. This was
+                                    // the worst of the direct-add screens: a
+                                    // favourite with sizes went into the basket
+                                    // with no size chosen at all, because
+                                    // nothing here ever opened a picker.
                                     onAddToCart: {
-                                        Task {
-                                            let outcome = await cart.add(productId: product.id)
-                                            toast = outcome.errorMessage ?? L("savatga_qoshildi")
-                                        }
+                                        if picking == nil { picking = product }
                                     }
                                 )
                             }
@@ -223,6 +227,19 @@ struct FavoritesView: View {
         }
         .navigationBarBackButtonHidden()
         .mbToast($toast)
+        .sheet(item: $picking) { card in
+            VariantSheet(
+                card: card,
+                onDismiss: { picking = nil },
+                onOpenCart: {
+                    picking = nil
+                    tabSelection.select("cart")
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(MB.metric.radiusSheet)
+        }
         .task { await model.load() }
     }
 }

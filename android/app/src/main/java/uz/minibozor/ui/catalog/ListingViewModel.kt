@@ -104,15 +104,6 @@ class ListingViewModel @Inject constructor(
         }
     }
 
-    fun addToCart(productId: Int, onDone: (String) -> Unit) {
-        viewModelScope.launch {
-            when (val result = cart.add(productId, null)) {
-                is Outcome.Success -> onDone(AppStrings[R.string.savatga_qoshildi])
-                is Outcome.Failure -> onDone(result.message)
-            }
-        }
-    }
-
     private fun loadFilters() {
         viewModelScope.launch {
             val result = catalog.filters(_state.value.query.category)

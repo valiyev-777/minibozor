@@ -22,7 +22,11 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     otp_dev_code: str = "123456"
 
-    cors_origins: str = "*"
+    # Named origins, not a wildcard. The API answers with credentials — the
+    # backoffice's refresh cookie rides on them — and a browser refuses
+    # ``Access-Control-Allow-Origin: *`` together with credentials outright.
+    # Comma-separated; the dev backoffice runs on Vite's default port.
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @property
     def is_dev(self) -> bool:
@@ -30,7 +34,15 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        """The configured origins, with any wildcard dropped.
+
+        Dropped rather than honoured: with ``allow_credentials`` on, a browser
+        treats a wildcard as no permission at all, so a deployment that sets
+        ``*`` would not be permissive — it would be broken, and broken in the
+        browser's console rather than in ours.
+        """
+        named = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        return [o for o in named if o != "*"]
 
 
 @lru_cache

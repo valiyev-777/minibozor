@@ -98,7 +98,11 @@ fun ConfirmScreen(
                         else stringResource(R.string.karta_niqob, preview.card?.last4.orEmpty()),
                         glyph = "card",
                         subtitle = if (state.paymentMethod == "cash") {
-                            stringResource(R.string.kuryerga_topshirishda)
+                            if (state.delivery == DeliveryMethod.Courier) {
+                                stringResource(R.string.kuryerga_topshirishda)
+                            } else {
+                                stringResource(R.string.punktda_tolash)
+                            }
                         } else preview.card?.brand,
                         showChevron = false,
                         contentPadding = 10.dp,
@@ -121,7 +125,7 @@ fun ConfirmScreen(
                     }
                     MbTotalRow(
                         stringResource(R.string.yetkazish),
-                        if (preview.totals.deliveryFee == 0) stringResource(R.string.bepul)
+                        if (preview.totals.deliveryFee == 0L) stringResource(R.string.bepul)
                         else preview.totals.deliveryFee.sum(),
                     )
                     MbDivider(Modifier.padding(vertical = 8.dp))

@@ -70,10 +70,12 @@ import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.ui.common.MbToastHost
 import uz.minibozor.ui.common.rememberToast
 import uz.minibozor.ui.product.component.ColorPicker
+import uz.minibozor.ui.product.component.OfferRow
 import uz.minibozor.ui.product.component.RatingPanel
 import uz.minibozor.ui.product.component.ReviewRow
-import uz.minibozor.ui.product.component.SizePicker
+import uz.minibozor.ui.product.component.SellerLine
 import uz.minibozor.ui.product.component.ShelfLine
+import uz.minibozor.ui.product.component.SizePicker
 
 /**
  * The share of the scroll the photograph sits out.
@@ -105,10 +107,11 @@ private val SectionGap = Modifier.padding(top = 12.dp)
 private const val BlockHero = 0
 private const val BlockIdentity = 1
 private const val BlockOptions = 2
-private const val BlockDescription = 3
-private const val BlockSmallPrint = 4
-private const val BlockReviews = 5
-private const val BlockSimilar = 6
+private const val BlockOffers = 3
+private const val BlockDescription = 4
+private const val BlockSmallPrint = 5
+private const val BlockReviews = 6
+private const val BlockSimilar = 7
 
 /** Screen 14 — Mahsulot. */
 @Composable
@@ -155,7 +158,10 @@ fun ProductScreen(
     BackHandler(enabled = viewerPage == null) { leave() }
 
     val density = LocalDensity.current
-    val statusBarPx = WindowInsets.statusBars.getTop(density).toFloat()
+    // The held inset, the same one the bar pads itself with: read live, the
+    // whole page's scroll maths would shift the moment another window took the
+    // focus. See [statusBarTop].
+    val statusBarPx = with(density) { statusBarTop().toPx() }
     val heroHeight = heroHeight()
     val heroHeightPx = with(density) { heroHeight.toPx() }
     val closePx = heroHeightPx * 0.55f
@@ -278,6 +284,31 @@ fun ProductScreen(
     val shelfLeft = selectedColor?.stockLeft ?: product?.stockLeft ?: 0
     val shelfInStock = product?.inStock == true && (selectedColor?.inStock ?: true)
 
+    // And what can actually be bought, which is a narrower question than what
+    // is on the shelf. The line under the rating answers about the colour in
+    // the photograph above it; the bar at the bottom is buying one colour in
+    // one size, and that pair is a cell of the shelf with a count of its own —
+    // so where a size is chosen, the size is the whole answer. The two used to
+    // be separate splits of one total and the ceiling was whichever was
+    // scarcer, which offered the last black 41 for as long as a blue one was
+    // left. The server counts it the same way, in `shelf_left`.
+    val selectedSize = product?.variants.orEmpty()
+        .firstOrNull { it.kind == "size" && it.id == state.selectedSizeId }
+    val buyableLeft = selectedSize?.stockLeft ?: shelfLeft
+    val buyable = shelfInStock && (selectedSize?.inStock ?: true)
+
+    // Who the price at the top of the page belongs to.
+    //
+    // `product.seller` is a line of the product's own, and on a card several
+    // sellers offer it names none of them — it says "Mini Bozor" whoever is
+    // actually quoting. The winning offer is the one whose price the page is
+    // showing, so its seller is the honest answer to "who am I buying from",
+    // and the product's own line is only the fallback for a card no offer has
+    // been attached to yet.
+    val winner = state.offers.firstOrNull { it.isWinner }
+    val sellerName = winner?.seller?.name?.takeIf { it.isNotBlank() }
+        ?: product?.seller.orEmpty()
+
     Box(
         Modifier
             .fillMaxSize()
@@ -291,7 +322,16 @@ fun ProductScreen(
                     Modifier.windowInsetsPadding(WindowInsets.statusBars),
                 )
                 else -> product?.let { product ->
-                    val sizes = product.variants.filter { it.kind == "size" }
+                    // The sizes of the colour on screen, not of the product.
+                    //
+                    // A size belongs to a colour and holds that pair's own
+                    // count, so a shirt with two colours has two sets of size
+                    // rows. Showing them all put "L" on the page twice and let
+                    // the last black L be sold as long as a white one was left.
+                    val sizes = product.variants.filter {
+                        it.kind == "size" &&
+                            (it.parentId == null || it.parentId == state.selectedColorId)
+                    }
                     val colors = product.variants.filter { it.kind == "color" }
                     val hasOptions = sizes.isNotEmpty() || colors.isNotEmpty()
 
@@ -404,6 +444,17 @@ fun ProductScreen(
                                         soldCount = product.soldCount,
                                         inStock = shelfInStock,
                                     )
+                                    // And who is selling it, on the panel
+                                    // rather than folded away in the small
+                                    // print. On a marketplace the seller is
+                                    // part of what is being bought — a price
+                                    // with no name against it is half a
+                                    // sentence — and the row three sections
+                                    // down was behind a "Batafsil" nobody taps.
+                                    if (sellerName.isNotBlank()) {
+                                        Spacer(Modifier.height(7.dp))
+                                        SellerLine(sellerName, state.offers.size)
+                                    }
                                 }
                             }
                         }
@@ -435,6 +486,39 @@ fun ProductScreen(
                                                 selectedId = state.selectedSizeId,
                                                 onSelect = viewModel::selectSize,
                                             )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Every seller offering this, straight after the
+                        // choice of size and colour and before the prose.
+                        //
+                        // One card, several sellers — that is the whole of what
+                        // makes this a marketplace rather than a shop, and the
+                        // customer's side of it did not show a trace of it. The
+                        // page picked one price and named nobody. So: the list
+                        // behind the number, at the point where somebody has
+                        // decided what they want and is deciding what to pay
+                        // for it. One offer means there is no choice to make
+                        // and the section stays away.
+                        if (state.offers.size > 1) {
+                            item(key = "offers") {
+                                MbReveal(reveal, "offers", BlockOffers, modifier = SectionGap) {
+                                    MbCard(shape = RectangleShape) {
+                                        SectionHeader(
+                                            title = stringResource(R.string.boshqa_sotuvchilar),
+                                            subtitle = pluralStringResource(
+                                                R.plurals.n_sotuvchi,
+                                                state.offers.size,
+                                                state.offers.size,
+                                            ),
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        state.offers.forEachIndexed { index, offer ->
+                                            if (index > 0) MbDivider()
+                                            OfferRow(offer)
                                         }
                                     }
                                 }
@@ -538,7 +622,12 @@ fun ProductScreen(
                                                 // is a reason rather than a
                                                 // clause in a row about
                                                 // delivery.
-                                                product.seller,
+                                                //
+                                                // The same name the panel at
+                                                // the top prints: whoever is
+                                                // actually quoting the price,
+                                                // not the product's own line.
+                                                sellerName,
                                             )
                                         }
                                     }
@@ -630,8 +719,8 @@ fun ProductScreen(
                 product?.let {
                     BuyBar(
                         product = it,
-                        stockLeft = shelfLeft,
-                        inStock = shelfInStock,
+                        stockLeft = buyableLeft,
+                        inStock = buyable,
                         adding = state.adding,
                         line = cartLine,
                         onAdd = { viewModel.addToCart { message -> toast.value = message } },

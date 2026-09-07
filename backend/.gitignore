@@ -7,3 +7,8 @@ __pycache__/
 
 # dev server output
 server.log
+
+# Runtime uploads. What people send through /staff/media is data the
+# deployment holds, not source the repository ships; the seeded catalogue
+# pictures beside it are.
+media/uploads/

@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import i18n
+from app import i18n, inventory, settlement
+from app import offers as of
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
@@ -14,6 +15,7 @@ from app.models import (
     DeliverySlot,
     Notification,
     NotificationKind,
+    Offer,
     Order,
     OrderItem,
     OrderStatus,
@@ -21,9 +23,9 @@ from app.models import (
     PaymentMethod,
     PickupPoint,
     Product,
-    ProductVariant,
     ReturnReason,
     ReturnRequest,
+    Seller,
 )
 
 router = APIRouter(tags=["orders"])
@@ -81,7 +83,9 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
     preview = checkout_preview(payload, user, session)
 
     if payload.pickup_point_id is None and preview.address is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Yetkazish manzilini tanlang")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, i18n.label("address_required")
+        )
 
     slot = session.get(DeliverySlot, payload.slot_id) if payload.slot_id else None
     card = _resolve_card(session, user.id, payload.payment_card_id, payload.payment_method)
@@ -101,6 +105,7 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         address_line=address_line,
         address_meta=address_meta,
         pickup_point_id=payload.pickup_point_id,
+        slot_id=slot.id if slot else None,
         delivery_day=slot.day if slot else None,
         delivery_start=slot.start_time if slot else None,
         delivery_end=slot.end_time if slot else None,
@@ -118,44 +123,64 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
     session.commit()
     session.refresh(order)
 
+    # Every product this order touched. The cached figure is the shelf less
+    # what is held, and both sides of that move here — the goods leave the
+    # shelf and the basket line that was holding them is deleted — so the
+    # figure is recomputed once at the end rather than halfway through, when
+    # it would count the same three items as both sold and still held.
+    touched: set[int] = set()
+
     for item in preview.items:
-        product = session.get(Product, item.product_id)
-        session.add(
-            OrderItem(
-                order_id=order.id,
-                product_id=item.product_id,
-                title=item.title,
-                image_url=_raw_image(session, item.product_id),
-                variant_label=item.variant_label,
-                unit_price=item.unit_price,
-                quantity=item.quantity,
-            )
+        # The cart line is about to be deleted, so which colour and which size
+        # were chosen is copied onto the order line first. Not for display —
+        # ``variant_label`` already reads well — but so that a cancellation
+        # later knows which counts to put back.
+        cart_item = session.get(CartItem, item.id)
+        offer = (
+            session.get(Offer, cart_item.offer_id)
+            if cart_item and cart_item.offer_id
+            else None
         )
-        if product:
-            product.sold_count += item.quantity
-            # What is left, kept in step with what has gone. The sold count was
-            # being raised here already and the stock beside it was not, so a
-            # product could be bought any number of times and still claim the
-            # same 25 remaining — and never fall out of stock on its own.
-            product.stock_left = max(0, product.stock_left - item.quantity)
-            if product.stock_left == 0:
-                product.in_stock = False
-            session.add(product)
-            # And the same one level down. A colour is counted apart from the
-            # shelf it stands on, so buying two blue has to come off the blue
-            # as well as off the total — otherwise the page keeps offering a
-            # colour that has gone while the product as a whole looks fine.
-            cart_item = session.get(CartItem, item.id)
-            color = (
-                session.get(ProductVariant, cart_item.color_variant_id)
-                if cart_item is not None and cart_item.color_variant_id
-                else None
-            )
-            if color is not None and color.stock_left is not None:
-                color.stock_left = max(0, color.stock_left - item.quantity)
-                if color.stock_left == 0:
-                    color.in_stock = False
-                session.add(color)
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=item.product_id,
+            title=item.title,
+            image_url=_raw_image(session, item.product_id),
+            variant_id=cart_item.variant_id if cart_item else None,
+            color_variant_id=cart_item.color_variant_id if cart_item else None,
+            # Who is owed for this line, snapshotted with everything else about
+            # it. The offer may be withdrawn or re-priced tomorrow; who sold it
+            # today does not change with it.
+            seller_id=offer.seller_id if offer else None,
+            offer_id=offer.id if offer else None,
+            commission_percent=_commission(session, offer),
+            # The second fee, captured for the same reason as the first: a
+            # tariff is renegotiated, and a payout worked out later against
+            # today's bands would restate what a seller was owed for a sale
+            # they made last year. See ``app.settlement``.
+            fulfilment_fee=settlement.fulfilment_fee(
+                session, session.get(Product, item.product_id)
+            ),
+            variant_label=item.variant_label,
+            unit_price=item.unit_price,
+            quantity=item.quantity,
+        )
+        session.add(order_item)
+        # Paid, so it is a sale: the goods leave the shelf and the ledger says
+        # why. An unpaid order — cash to the courier — has not been sold yet,
+        # so nothing leaves; the goods are held for it instead, which
+        # ``app.stock.reserved`` reads off the order itself. Selling on
+        # promise-of-cash is how an undelivered order used to consume stock
+        # that a refusal at the door then never gave back.
+        if order_item.product_id is not None:
+            touched.add(order_item.product_id)
+        if order.paid:
+            inventory.take(session, order_item)
+        else:
+            product = session.get(Product, order_item.product_id)
+            if product is not None:
+                product.sold_count += order_item.quantity
+                session.add(product)
 
     sv.seed_order_events(session, order)
 
@@ -179,6 +204,10 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         )
     )
     session.commit()
+    for product_id in touched:
+        of.refresh(session, product_id)
+    if touched:
+        session.commit()
     session.refresh(order)
     return sv.order_out(session, order)
 
@@ -268,8 +297,21 @@ def cancel_order(
         row = session.get(CancelReason, payload.reason_id)
         reason = row.label if row else reason
 
-    order.status = OrderStatus.CANCELLED
     order.cancel_reason = " · ".join(x for x in (reason, payload.comment) if x)
+    # Before the status changes, because that is what makes this reachable
+    # once. Nothing of a cancelled order happened: the goods are on the shelf,
+    # they were never sold, and the delivery window is free again.
+    inventory.restore_order(
+        session,
+        order,
+        actor=user,
+        action="order.cancel",
+        note=order.cancel_reason,
+        # An unpaid order never took the goods off the shelf — they were held
+        # for it — so there is nothing there to put back.
+        shelf=order.paid,
+    )
+    order.status = OrderStatus.CANCELLED
     order.updated_at = sv.utcnow()
     session.add(order)
     session.add(
@@ -324,6 +366,7 @@ def request_return(
         reason=request.reason,
         comment=request.comment,
         status=request.status,
+        refund_amount=request.refund_amount,
         created_at=request.created_at,
     )
 
@@ -345,6 +388,7 @@ def list_returns(user: CurrentUser, session: SessionDep) -> list[s.ReturnOut]:
                 reason=r.reason,
                 comment=r.comment,
                 status=r.status,
+                refund_amount=r.refund_amount,
                 created_at=r.created_at,
             )
         )
@@ -389,6 +433,18 @@ def _resolve_card(
         .where(PaymentCard.user_id == user_id)
         .order_by(col(PaymentCard.is_default).desc())
     ).first()
+
+
+def _commission(session: SessionDep, offer: Offer | None) -> int:
+    """The seller's rate as it stands right now, to be kept with the line.
+
+    Nought when there is no seller to owe — a line with no offer behind it is
+    not somebody's sale.
+    """
+    if offer is None:
+        return 0
+    seller = session.get(Seller, offer.seller_id)
+    return seller.commission_percent if seller else 0
 
 
 def _raw_image(session: SessionDep, product_id: int | None) -> str:

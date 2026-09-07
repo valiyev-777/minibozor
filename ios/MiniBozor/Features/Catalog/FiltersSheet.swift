@@ -143,18 +143,26 @@ struct FiltersSheet: View {
 
     @ViewBuilder
     private var flagSection: some View {
-        if let flags = filters?.flags, !flags.isEmpty {
-            Spacer().frame(height: 22)
-            SectionHeader(title: L("qoshimcha"))
-            ForEach(flags) { flag in
-                MBCheckRow(
-                    label: flag.label,
-                    subtitle: flag.subtitle.isEmpty ? nil : flag.subtitle,
-                    count: flag.count > 0 ? "\(flag.count)" : nil,
-                    checked: draft.flags[flag.key] == true,
-                    onToggle: { draft.toggleFlag(flag.key) }
-                )
-            }
+        Spacer().frame(height: 22)
+        SectionHeader(title: L("qoshimcha"))
+        ForEach(filters?.flags ?? []) { flag in
+            MBCheckRow(
+                label: flag.label,
+                subtitle: flag.subtitle.isEmpty ? nil : flag.subtitle,
+                count: flag.count > 0 ? "\(flag.count)" : nil,
+                checked: draft.flags[flag.key] == true,
+                onToggle: { draft.toggleFlag(flag.key) }
+            )
         }
+        // Last in the section, and the only row here that is about the listing
+        // rather than about the products: everything else narrows what is
+        // shown, and this one widens it.
+        MBCheckRow(
+            label: L("tugaganlarni_korsatish"),
+            subtitle: L("tugaganlar_odatda_royxatda_korinmaydi"),
+            count: nil,
+            checked: draft.showSoldOut,
+            onToggle: { draft.showSoldOut.toggle() }
+        )
     }
 }

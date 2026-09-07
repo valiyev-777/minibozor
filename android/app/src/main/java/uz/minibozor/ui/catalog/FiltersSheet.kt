@@ -1,7 +1,7 @@
 package uz.minibozor.ui.catalog
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -21,18 +22,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbClickable
 import uz.minibozor.core.design.component.MbCheckRow
 import uz.minibozor.core.design.component.MbChip
 import uz.minibozor.core.design.component.MbDivider
 import uz.minibozor.core.design.component.MbPrimaryButton
+import uz.minibozor.core.design.component.MbSecondaryButton
 import uz.minibozor.core.design.component.MbSizeChip
 import uz.minibozor.core.design.component.MbTextField
 import uz.minibozor.core.design.component.SectionHeader
+import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.util.grouped
 import uz.minibozor.data.remote.dto.FiltersDto
 
@@ -53,31 +58,49 @@ fun FiltersSheet(
     var minPrice by remember { mutableStateOf(initial.minPrice?.toString().orEmpty()) }
     var maxPrice by remember { mutableStateOf(initial.maxPrice?.toString().orEmpty()) }
 
+    // Two thirds of the screen rather than a fixed 640 points. On a tall
+    // phone that fixed number was most of the display: the sheet opened
+    // almost at the status bar and read as a page that had replaced the
+    // listing rather than as a panel over it, with nothing of the grid left
+    // behind it to dismiss back to. A share of the screen keeps the same
+    // proportion on every device, and the sections inside still scroll.
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     Column(
         Modifier
             .fillMaxWidth()
-            .heightIn(max = 640.dp)
+            .heightIn(max = (screenHeight * 0.66f).coerceIn(420.dp, 640.dp))
     ) {
+        // The sheet's own header, and the reason the panel no longer opens
+        // under a stray black bar.
+        //
+        // Material draws a drag handle over any sheet that does not say
+        // otherwise — a dark stub floating in the middle of the top edge, which
+        // is the one thing on this panel that belongs to nothing on it. The
+        // variant picker had already turned it off; this one had not, so the
+        // two sheets in the same app opened differently. It is off here too,
+        // and what stands at the top instead is a title and a way out.
+        //
+        // A way out it did not have at all: the only thing in the corner was
+        // "Tozalash", which is where a close button belongs and does very
+        // nearly the opposite of closing. It has moved down beside "Ko'rsatish"
+        // where the two decisions about a set of filters — throw them away, or
+        // use them — sit together.
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 6.dp),
+                .padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MbText(stringResource(R.string.filtrlar), MbTheme.type.title2)
             Spacer(Modifier.weight(1f))
-            MbText(
-                stringResource(R.string.tozalash),
-                MbTheme.type.label,
-                MbTheme.colors.accent,
-                modifier = Modifier
-                    .clickable {
-                        draft = draft.cleared()
-                        minPrice = ""
-                        maxPrice = ""
-                    }
-                    .padding(8.dp),
-            )
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .mbClickable(MbTheme.shapes.chip, onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                MbIcon("close", size = 20.dp, tint = MbTheme.colors.inkSoft)
+            }
         }
         MbDivider()
 
@@ -178,26 +201,49 @@ fun FiltersSheet(
                 }
             }
 
-            if (!filters?.flags.isNullOrEmpty()) {
-                Spacer(Modifier.height(22.dp))
-                SectionHeader(stringResource(R.string.qoshimcha))
-                Spacer(Modifier.height(4.dp))
-                filters!!.flags.forEach { flag ->
-                    MbCheckRow(
-                        label = flag.label,
-                        subtitle = flag.subtitle.ifBlank { null },
-                        checked = draft.flags[flag.key] == true,
-                        onToggle = { draft = draft.toggleFlag(flag.key) },
-                        count = flag.count.takeIf { it > 0 }?.toString(),
-                    )
-                }
+            Spacer(Modifier.height(22.dp))
+            SectionHeader(stringResource(R.string.qoshimcha))
+            Spacer(Modifier.height(4.dp))
+            filters?.flags.orEmpty().forEach { flag ->
+                MbCheckRow(
+                    label = flag.label,
+                    subtitle = flag.subtitle.ifBlank { null },
+                    checked = draft.flags[flag.key] == true,
+                    onToggle = { draft = draft.toggleFlag(flag.key) },
+                    count = flag.count.takeIf { it > 0 }?.toString(),
+                )
             }
+            // Last in the section, and the only row here that is about the
+            // listing rather than about the products: everything else narrows
+            // what is shown, and this one widens it.
+            MbCheckRow(
+                label = stringResource(R.string.tugaganlarni_korsatish),
+                subtitle = stringResource(R.string.tugaganlar_odatda_royxatda_korinmaydi),
+                checked = draft.showSoldOut,
+                onToggle = { draft = draft.copy(showSoldOut = !draft.showSoldOut) },
+            )
 
             Spacer(Modifier.height(20.dp))
         }
 
         MbDivider()
-        Column(Modifier.padding(20.dp)) {
+        // Both decisions on one line: throw the filters away, or use them.
+        // "Tozalash" is the quieter of the two and is drawn as the quieter of
+        // the two, which it never was up in the corner where it looked like the
+        // way to close the panel.
+        Row(
+            Modifier.padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MbSecondaryButton(
+                text = stringResource(R.string.tozalash),
+                onClick = {
+                    draft = draft.cleared()
+                    minPrice = ""
+                    maxPrice = ""
+                },
+                modifier = Modifier.weight(1f),
+            )
             MbPrimaryButton(
                 text = if (resultCount > 0) {
                     stringResource(R.string.korsatish_n, resultCount.grouped())
@@ -210,6 +256,9 @@ fun FiltersSheet(
                         )
                     )
                 },
+                // Twice the room of the button beside it: applying is what the
+                // panel is for.
+                modifier = Modifier.weight(2f),
             )
         }
     }

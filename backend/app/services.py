@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+from sqlalchemy import Integer
 from sqlmodel import Session, col, func, select
 
 from app import i18n
@@ -15,6 +16,7 @@ from app.models import (
     Category,
     DeliverySlot,
     Favorite,
+    Offer,
     Order,
     OrderEvent,
     OrderItem,
@@ -25,6 +27,7 @@ from app.models import (
     Product,
     ProductImage,
     ProductSpec,
+    ProductStatus,
     ProductVariant,
     PromoCode,
     Review,
@@ -80,6 +83,16 @@ def media_url(path: str | None) -> str | None:
     return path.lstrip("/")
 
 
+def money(amount: int) -> str:
+    """``1090000`` as ``1 090 000``.
+
+    The apps format their own figures — every price they are sent is an
+    integer. This is for the few strings the server writes as prose, where the
+    number has to arrive already readable.
+    """
+    return f"{amount:,}".replace(",", "\u00a0")
+
+
 def uz_date(d: date) -> str:
     """Kept under the old name; the wording follows the request's language."""
     return i18n.format_date(d)
@@ -109,6 +122,26 @@ def short_name(name: str) -> str:
 # --------------------------------------------------------------------------- catalog
 
 
+def in_the_shop(stmt):
+    """Narrow a product query to the cards that are actually in the shop.
+
+    Every customer-facing path goes through this. A card that is a draft, in
+    moderation, refused or withdrawn is not for sale, and a shopper who can
+    find one has been shown something that does not exist yet — or does not
+    exist any more, which is worse, because they may already own one.
+
+    One function rather than a repeated ``where`` so that a new listing cannot
+    be written that forgets: there is a test that walks every product-returning
+    endpoint and holds them all to it.
+    """
+    return stmt.where(Product.status == ProductStatus.PUBLISHED)
+
+
+def is_in_the_shop(product: Product | None) -> bool:
+    """The same question about one row we already have in hand."""
+    return product is not None and product.status is ProductStatus.PUBLISHED
+
+
 def primary_image(session: Session, product_id: int) -> str | None:
     img = session.exec(
         select(ProductImage)
@@ -116,6 +149,25 @@ def primary_image(session: Session, product_id: int) -> str | None:
         .order_by(col(ProductImage.sort))
     ).first()
     return media_url(img.url) if img else None
+
+
+def card_images(session: Session, product_id: int, limit: int = 4) -> list[str]:
+    """Every photograph a card may swipe through, in the order they are stored.
+
+    The first is the product's own; the rest are the ones the seed hung on it
+    from the same shelf — the other three dials of the same watch, the other two
+    Air Force 1s. A shopper deciding between four colours of one thing should
+    not have to open four pages to see them.
+
+    Capped, because a card is a card: four is what the eye counts as dots
+    without reading them.
+    """
+    rows = session.exec(
+        select(ProductImage)
+        .where(ProductImage.product_id == product_id)
+        .order_by(col(ProductImage.sort))
+    ).all()
+    return [u for u in (media_url(r.url) for r in rows[:limit]) if u]
 
 
 def favorite_ids(session: Session, user: User | None) -> set[int]:
@@ -133,6 +185,7 @@ def product_card(session: Session, p: Product, favs: set[int]) -> s.ProductCardO
         old_price=p.old_price,
         discount_percent=p.discount_percent,
         image_url=primary_image(session, p.id),
+        images=card_images(session, p.id),
         rating=round(p.rating, 1),
         reviews_count=p.reviews_count,
         badge=i18n.t(session, "product", p.id, "badge", p.badge) if p.badge else None,
@@ -181,6 +234,23 @@ def category_out(session: Session, c: Category) -> s.CategoryOut:
     )
 
 
+def brand_out(session: Session, b: Brand, product_count: int = 0) -> s.BrandOut:
+    """A brand in the language asked for.
+
+    Most brand names are the same in all three — a Latin-alphabet marque is
+    read as itself — which is why the row's own name is the fallback and why
+    nothing seeded carries a translation. The ones that are not are the local
+    names, written in Uzbek on the row and spelt in Cyrillic by a Russian
+    speaker; those are the rows an admin fills in.
+    """
+    return s.BrandOut(
+        id=b.id,
+        slug=b.slug,
+        name=i18n.t(session, "brand", b.id, "name", b.name),
+        product_count=product_count,
+    )
+
+
 def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
     card = product_card(session, p, favs)
     images = session.exec(
@@ -202,13 +272,16 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
         note += i18n.label("eta_free_suffix")
 
     return s.ProductOut(
-        **card.model_dump(),
+        # Without the card's own photographs: the product page carries the whole
+        # gallery, uncapped, on the line below, and passing both hands the same
+        # keyword twice.
+        **card.model_dump(exclude={"images"}),
         sku=p.sku,
         subtitle=i18n.t(session, "product", p.id, "subtitle", p.subtitle),
         description=i18n.t(session, "product", p.id, "description", p.description),
         images=[media_url(i.url) for i in images],
         category=category_out(session, category),
-        brand=s.BrandOut(id=brand.id, slug=brand.slug, name=brand.name) if brand else None,
+        brand=brand_out(session, brand) if brand else None,
         variants=[
             s.VariantOut(
                 id=v.id,
@@ -218,6 +291,7 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
                 image_url=media_url(v.image_url),
                 in_stock=v.in_stock,
                 stock_left=v.stock_left,
+                parent_id=v.parent_id,
             )
             for v in variants
         ],
@@ -335,30 +409,79 @@ def cart_items(session: Session, user: User) -> list[CartItem]:
     ).all()
 
 
-def shelf_left(product: Product, color: ProductVariant | None) -> int:
+def shelf_left(
+    product: Product,
+    color: ProductVariant | None,
+    size: ProductVariant | None = None,
+) -> int:
     """
     How many of the thing actually chosen are left.
 
-    A cart line is for one colour, not for the product, so the stepper's ceiling
-    and the page's count both have to be that colour's share of the shelf. Falls
-    back to the whole shelf when the colours are not counted apart.
+    A cart line is for one colour in one size, not for the product, so the
+    answer is the shelf the choice actually stands on.
+
+    A size row *is* that shelf: it is one cell of the colour × size grid and
+    knows which colour it belongs to, so where there is a size there is nothing
+    left to combine. Colours and sizes used to be two separate splits of one
+    total and the answer was whichever was scarcer — which meant the last black
+    41 could be sold twice over, once for every blue one still in the stockroom.
+
+    Falls back to the colour, and then to the whole shelf, for a choice nobody
+    counted apart.
     """
+    if size is not None and size.stock_left is not None:
+        return size.stock_left
     if color is not None and color.stock_left is not None:
         return color.stock_left
     return product.stock_left
 
 
 def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
+    from app import offers as of
+
     product = session.get(Product, item.product_id)
     if product is None:
         return None
     color = session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None
+    size = session.get(ProductVariant, item.variant_id) if item.variant_id else None
+
+    # The offer this line was added on, held rather than looked up again: a
+    # shopper is charged the price they were shown, even if a cheaper seller
+    # has since undercut it or the one they picked has since put theirs up.
+    # Its own shelf is what caps the quantity, too — the product's cached
+    # figure belongs to whichever offer is winning, which may not be this one.
+    offer = session.get(Offer, item.offer_id) if item.offer_id else None
+    if offer is not None:
+        unit_price, old_unit_price = offer.price, offer.old_price
+        # This shopper's own hold does not count against them: the line they
+        # are looking at is the reason the goods are held.
+        left = of.shelf_left(
+            session,
+            offer,
+            item.color_variant_id,
+            item.variant_id,
+            for_user_id=item.user_id,
+        )
+        available = offer.active and left > 0
+    else:
+        unit_price, old_unit_price = product.price, product.old_price
+        left = shelf_left(product, color, size)
+        available = (
+            product.in_stock
+            and (color is None or color.in_stock)
+            and (size is None or size.in_stock)
+        )
+
+    # A card withdrawn from the shop cannot be bought, whatever its offers say.
+    # The line stays in the basket and reads as unavailable rather than
+    # disappearing: the shopper put it there, and a basket that quietly loses
+    # a row is a basket nobody trusts.
+    if not is_in_the_shop(product):
+        available = False
+
     labels = [
         i18n.t(session, "variant", v.id, "label", v.label)
-        for v in (
-            color,
-            session.get(ProductVariant, item.variant_id) if item.variant_id else None,
-        )
+        for v in (color, size)
         if v is not None
     ]
     return s.CartItemOut(
@@ -369,13 +492,15 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
         variant_label=" · ".join(labels)
         if labels
         else i18n.t(session, "product", product.id, "subtitle", product.subtitle),
-        unit_price=product.price,
-        old_unit_price=product.old_price,
+        variant_id=item.variant_id,
+        color_variant_id=item.color_variant_id,
+        unit_price=unit_price,
+        old_unit_price=old_unit_price,
         quantity=item.quantity,
         selected=item.selected,
-        in_stock=product.in_stock and (color is None or color.in_stock),
-        stock_left=shelf_left(product, color),
-        line_total=product.price * item.quantity,
+        in_stock=available,
+        stock_left=left,
+        line_total=unit_price * item.quantity,
     )
 
 
@@ -534,7 +659,6 @@ def order_out(session: Session, o: Order) -> s.OrderOut:
     events = session.exec(
         select(OrderEvent).where(OrderEvent.order_id == o.id).order_by(col(OrderEvent.sort))
     ).all()
-    reached = ORDER_FLOW.index(o.status) if o.status in ORDER_FLOW else len(ORDER_FLOW)
     return s.OrderOut(
         **summary.model_dump(),
         delivery_kind=o.delivery_kind,
@@ -571,16 +695,37 @@ def order_out(session: Session, o: Order) -> s.OrderOut:
                 title=order_event_title(e.status),
                 happened_at=e.happened_at,
                 note=e.note,
-                done=(e.status in ORDER_FLOW and ORDER_FLOW.index(e.status) <= reached),
+                done=e.happened_at is not None,
             )
             for e in events
         ],
     )
 
 
+# Where the order numbers start. Chosen so the first order of a fresh
+# deployment does not look like the first order ever placed.
+ORDER_CODE_BASE = 104_688
+
+
 def next_order_code(session: Session) -> str:
-    last = session.exec(select(func.count()).select_from(Order)).one()
-    return f"#A-{104_688 + last + 1}"
+    """One past the highest code issued, not one past the number of orders.
+
+    It used to be ``base + count + 1``, which is right only while every code
+    ever issued is contiguous — and the seeded catalogue's are not: it writes
+    ``#A-104512``, ``#A-104688``, ``#A-104692``, ``#A-104693`` and
+    ``#A-104729``. So on the fortieth order the count reached 104729, a code
+    already taken, and the insert failed on the unique index. That is the
+    164th order this system would ever have accepted, and it would have
+    failed in a customer's checkout.
+
+    Read off the maximum instead, so a gap in the sequence costs a number
+    rather than a collision. Done in SQL because it runs in every checkout;
+    a non-numeric tail casts to nought in SQLite, which is harmless.
+    """
+    highest = session.exec(
+        select(func.max(func.cast(func.substr(Order.code, 4), Integer)))
+    ).one()
+    return f"#A-{max(int(highest or 0), ORDER_CODE_BASE) + 1}"
 
 
 def seed_order_events(session: Session, order: Order) -> None:
@@ -597,5 +742,58 @@ def seed_order_events(session: Session, order: Order) -> None:
         )
 
 
+def stamp_order_event(session: Session, order: Order, note: str = "") -> OrderEvent:
+    """Mark the order's current status as having happened, now.
+
+    The four steps of the flow are written as blank rows when the order is
+    placed, so reaching one is a matter of filling in its time. Cancelled and
+    returned have no row waiting — they are not steps on the way to anywhere —
+    so they are appended when they occur, and the timeline ends where the
+    order actually ended.
+    """
+    row = session.exec(
+        select(OrderEvent).where(
+            OrderEvent.order_id == order.id, OrderEvent.status == order.status
+        )
+    ).first()
+    if row is None:
+        last = session.exec(
+            select(func.max(OrderEvent.sort)).where(OrderEvent.order_id == order.id)
+        ).one()
+        row = OrderEvent(
+            order_id=order.id,
+            status=order.status,
+            title="",   # rendered from the status at read time
+            sort=(last if last is not None else -1) + 1,
+        )
+    row.happened_at = utcnow()
+    if note:
+        row.note = note
+    session.add(row)
+    return row
+
+
 def utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def offer_out(session: Session, o, *, winner_id: int | None) -> s.OfferOut:
+    from app.models import Seller
+
+    seller = session.get(Seller, o.seller_id)
+    discount = (
+        round((o.old_price - o.price) / o.old_price * 100)
+        if o.old_price and o.old_price > o.price
+        else None
+    )
+    return s.OfferOut(
+        id=o.id,
+        seller=s.SellerOut(id=seller.id, name=seller.name) if seller else
+        s.SellerOut(id=0, name=""),
+        price=o.price,
+        old_price=o.old_price,
+        discount_percent=discount,
+        stock_left=o.stock_left,
+        in_stock=o.stock_left > 0,
+        is_winner=o.id == winner_id,
+    )

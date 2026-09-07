@@ -28,8 +28,15 @@ private fun weekdayName(isoDay: Int): String =
         .getDisplayName(TextStyle.FULL_STANDALONE, locale())
         .replaceFirstChar { it.titlecase(locale()) }
 
-/** `1090000` → `1 090 000`, grouped exactly the way the design writes prices. */
-fun Int.grouped(): String {
+/**
+ * `1090000` → `1 090 000`, grouped exactly the way the design writes prices.
+ *
+ * Long, not Int. Prices here are in so'm, where a wristwatch is 168 000 000 of
+ * them — so a basket needed only thirteen of one before the line total passed
+ * what a 32-bit Int can hold, and the response stopped being readable at all:
+ * "Failed to parse int for input '2688000000'".
+ */
+fun Long.grouped(): String {
     val digits = kotlin.math.abs(this).toString()
     val sb = StringBuilder()
     for ((index, ch) in digits.withIndex()) {
@@ -39,8 +46,13 @@ fun Int.grouped(): String {
     return if (this < 0) "−$sb" else sb.toString()
 }
 
+/** For the call sites that hold a count rather than a sum of money. */
+fun Int.grouped(): String = toLong().grouped()
+
 /** `1090000` → `1 090 000 so'm`. */
-fun Int.sum(): String = "${grouped()}$NBSP${AppStrings[R.string.currency_sum]}"
+fun Long.sum(): String = "${grouped()}$NBSP${AppStrings[R.string.currency_sum]}"
+
+fun Int.sum(): String = toLong().sum()
 
 /** `29` → `−29%`, the discount pill. */
 fun Int.discountPill(): String = "−$this%"

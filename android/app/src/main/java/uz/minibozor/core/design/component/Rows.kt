@@ -28,8 +28,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import uz.minibozor.core.design.MbPressAlpha
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
+import uz.minibozor.core.design.mbPressable
 import uz.minibozor.core.design.mbClickable
 import uz.minibozor.core.design.icon.MbIcon
 
@@ -233,7 +235,21 @@ fun MbCheckRow(
     Row(
         modifier
             .fillMaxWidth()
-            .mbClickable(MbTheme.shapes.field, onClick = onToggle)
+            // Named rather than inherited: a modal sheet is its own window,
+            // and a row that falls back to Foundation's debugging indication
+            // washes the whole width in flat black.
+            //
+            // And named *with its alpha on*, which it was not. The highlight
+            // paints the colour it is handed at full strength, so passing bare
+            // ink turned the whole row solid black under a finger — the very
+            // thing naming it was supposed to prevent. Every checkbox row in
+            // the app pressed that way: the cart's "hammasini tanlash", the
+            // brands in the filter sheet, the flags under them.
+            .mbPressable(
+                MbTheme.shapes.field,
+                MbTheme.colors.ink.copy(alpha = MbPressAlpha),
+                onClick = onToggle,
+            )
             .padding(horizontal = contentPadding, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

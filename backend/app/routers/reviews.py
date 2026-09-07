@@ -42,7 +42,9 @@ def create_review(
         select(Review).where(Review.user_id == user.id, Review.product_id == product_id)
     ).first()
     if existing:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Siz bu mahsulotga sharh qoldirgansiz")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("review_already_left")
+        )
 
     order_item = None
     if payload.order_item_id:

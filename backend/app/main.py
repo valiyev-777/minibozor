@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,23 +9,31 @@ from fastapi.staticfiles import StaticFiles
 from app import i18n
 from app.core.config import settings
 from app.db import init_db
+from app.images import MEDIA_DIR
 from app.routers import (
+    admin,
     auth,
     cards,
     cart,
     catalog,
     content,
+    courier,
     delivery,
     favorites,
     home,
+    media,
+    merchandising,
     notifications,
+    operations,
     orders,
+    payouts,
     profile,
     reviews,
     search,
+    showcase,
+    staff,
+    warehouse,
 )
-
-MEDIA_DIR = Path(__file__).resolve().parent.parent / "media"
 
 DESCRIPTION = """
 API for the **Mini Bozor** marketplace apps (Android + iOS).
@@ -91,6 +98,15 @@ for router in (
     notifications.router,
     profile.router,
     content.router,
+    staff.router,
+    media.router,
+    operations.router,
+    merchandising.router,
+    warehouse.router,
+    admin.router,
+    payouts.router,
+    showcase.router,
+    courier.router,
 ):
     app.include_router(router, prefix=API)
 

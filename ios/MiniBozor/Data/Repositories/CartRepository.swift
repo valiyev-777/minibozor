@@ -23,14 +23,49 @@ final class CartRepository {
         return await store { try await api.get("cart", query: items) }
     }
 
+    /// The triple the server folds a repeat add into.
+    private struct CartLine: Hashable {
+        let productId: Int
+        let variantId: Int?
+        let colorVariantId: Int?
+    }
+
+    /// Lines currently being added, so a second tap on one of them is dropped.
+    ///
+    /// The guard lives here rather than in each screen because there are five
+    /// ways to add the same line — the tile in the grid, the tile in a rail,
+    /// search results, the product page and the picker sheet — and only the
+    /// product page had a flag of its own. Everywhere else a finger resting a
+    /// moment too long put the thing in the basket twice, and the server, which
+    /// folds a repeat add into the existing line by raising its quantity, could
+    /// not tell the difference between two taps and a customer wanting two.
+    ///
+    /// Keyed on the line rather than held as one lock: adding a shirt should
+    /// not be blocked because a kettle is still in flight.
+    private var adding: Set<CartLine> = []
+
     @discardableResult
+    @MainActor
     func add(
         productId: Int,
         variantId: Int? = nil,
         colorVariantId: Int? = nil,
         quantity: Int = 1
     ) async -> Outcome<CartDTO> {
-        await store {
+        let line = CartLine(
+            productId: productId,
+            variantId: variantId,
+            colorVariantId: colorVariantId
+        )
+        // On the main actor, so the check and the claim cannot interleave.
+        guard adding.insert(line).inserted else {
+            // A dropped tap is not an error to report — the line is on its way
+            // in, which is exactly what the tap asked for. The caller gets the
+            // cart it last saw and shows the same "added" it would have shown.
+            return cart.map { .success($0) } ?? .failure(L("savatga_qoshildi"))
+        }
+        defer { adding.remove(line) }
+        return await store {
             try await api.post(
                 "cart/items",
                 body: CartAddRequest(

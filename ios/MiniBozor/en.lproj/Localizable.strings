@@ -246,6 +246,7 @@
 "savat_va_sevimlilar_hisobingizda_saqlanadi" = "Your cart and favourites are kept in your account — come back and they'll be there.";
 "savatga" = "Add to cart";
 "savatga_qoshildi" = "Added to cart";
+"savatga_qoshish" = "Add to cart";
 "sevimlilar" = "Favourites";
 "sevimlilar_bosh" = "No favourites yet";
 "sevimlilar_narxi" = "Favourite prices";
@@ -299,6 +300,8 @@
 "tugadi" = "SOLD OUT";
 "tugagan" = "Completed";
 "tugagan_buyurtma_yoq" = "No completed orders";
+"tugaganlar_odatda_royxatda_korinmaydi" = "Products with none left are normally left out of the listing";
+"tugaganlarni_korsatish" = "Show sold out";
 "tugilgan_sana" = "Date of birth";
 "tugmani_bosish_orqali_ommaviy_oferta" = "By tapping the button you agree to the terms of the public offer.";
 "tungi_rejim" = "Dark mode";
@@ -341,3 +344,7 @@
 "rating_words.3" = "Good";
 "rating_words.4" = "Very good";
 "rating_words.5" = "Excellent";
+/* Sellers on a product page, and the sum a return paid back. */
+"boshqa_sotuvchilar" = "Other sellers";
+"kartadagi_narx" = "Shown price";
+"qaytarilgan_summa" = "Refunded";

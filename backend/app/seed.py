@@ -13,8 +13,9 @@ import sys
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
-from sqlmodel import Session, SQLModel, delete, select
+from sqlmodel import Session, SQLModel, col, delete, select
 
+from app import offers as of
 from app.core.security import hash_secret
 from app.db import engine, init_db
 from app.models import (
@@ -28,10 +29,12 @@ from app.models import (
     DeliverySlot,
     FaqItem,
     Favorite,
+    FulfilmentTariff,
     HomeSection,
     LegalDoc,
     Notification,
     NotificationKind,
+    Offer,
     Order,
     OrderEvent,
     OrderItem,
@@ -43,19 +46,27 @@ from app.models import (
     Product,
     ProductImage,
     ProductSpec,
+    ProductStatus,
     ProductVariant,
     PromoCode,
     ReturnReason,
     Review,
     ReviewStatus,
     ReviewTag,
+    Seller,
     User,
+    UserRole,
     VariantKind,
 )
 from app.seed_i18n import seed_translations
 
 DEMO_PHONE = "+998901234567"
 DEMO_PIN = "1234"
+
+# The one account that can reach the backoffice on a fresh database. It signs
+# in the same way every customer does — the SMS code, in dev the fixed one —
+# so there is nothing here that could become a second way in.
+ADMIN_PHONE = "+998900000001"
 
 
 def _at(day_offset: int, hh: int, mm: int) -> datetime:
@@ -609,7 +620,14 @@ def seed(session: Session) -> None:
 
     categories = _seed_categories(session)
     brands = _seed_brands(session)
+    _seed_fulfilment_tariffs(session)
     products = _seed_products(session, categories, brands)
+    # The price and the stock go onto an offer, and the product row keeps a
+    # copy of them for the listings to sort on. One seller for now — the shop
+    # itself — so every product has exactly one offer and the apps see the
+    # catalogue they saw before.
+    house = of.house_seller(session)
+    _seed_offers(session, house)
     _seed_home(session)
     _seed_content(session)
     _seed_delivery(session)
@@ -620,8 +638,70 @@ def seed(session: Session) -> None:
     translated = seed_translations(session)
 
     print(f"Seeded {len(products)} products, {len(categories)} categories.")
+    print(f"Seeded {len(FULFILMENT_BANDS)} fulfilment weight bands.")
+    print(f"Seeded {_offer_count(session)} offers from 1 seller ({house.name}).")
     print(f"Seeded {translated} translation rows (ru, en).")
     print(f"Demo login: {DEMO_PHONE} · SMS code 123456 (dev) · PIN {DEMO_PIN}")
+    print(f"Admin login: {ADMIN_PHONE} · SMS code 123456 (dev) · role admin")
+
+
+# What one unit costs us physically, by how heavy it is.
+#
+# The shipment figures are the reason a second fee exists at all. A Tashkent
+# delivery costs money that does not scale with the price of what is in the
+# box: five per cent of the catalogue's cheapest card is 1 950 so'm against a
+# run that costs many times that, and five per cent of its dearest is
+# 9 100 000 for carrying one small watch the same distance. Commission
+# follows value; this follows weight.
+#
+# The daily figures are the same argument about shelf space. A washing machine
+# and a pair of earphones do not occupy the same warehouse, so they do not pay
+# the same rent — a flat rate per unit would be the price mistake again in a
+# different place.
+# (max_grams, fee per shipment, storage per unit-day, label)
+FULFILMENT_BANDS: tuple[tuple[int, int, int, str], ...] = (
+    (500, 8_000, 20, "0,5 kg gacha"),
+    (2_000, 14_000, 60, "2 kg gacha"),
+    (10_000, 22_000, 200, "10 kg gacha"),
+    (30_000, 35_000, 600, "30 kg gacha"),
+    # The heaviest band takes a very large number rather than a null, so
+    # "which band is this" stays one comparison with no special case.
+    (10_000_000, 60_000, 1_500, "30 kg dan ortiq"),
+)
+
+
+# A typical weight per category, in grams. Enough to put each card in a
+# sensible band; a real weight is declared per product by whoever packs it.
+CATEGORY_WEIGHTS: dict[str, int] = {
+    "quloqchinlar": 250,
+    "quvvat-aksessuar": 350,
+    "elektronika": 1_500,
+    "kozoynaklar": 200,
+    "soatlar": 300,
+    "krossovkalar": 900,
+    "kiyim-poyabzal": 400,
+    "maishiy-texnika": 25_000,
+    "uy-bog": 4_000,
+    "oyinchoqlar": 700,
+    "gozallik": 300,
+    "oziq-ovqat": 1_200,
+    "avto": 3_000,
+    "sport": 1_500,
+    "maktab-bozori": 800,
+    "yoruglik": 1_200,
+    "chet-eldan": 1_000,
+    "taom-yetkazish": 800,
+}
+
+
+def _seed_fulfilment_tariffs(session: Session) -> None:
+    for max_grams, fee, storage, label in FULFILMENT_BANDS:
+        session.add(
+            FulfilmentTariff(
+                max_grams=max_grams, fee=fee, storage_per_day=storage, label=label
+            )
+        )
+    session.commit()
 
 
 def _seed_categories(session: Session) -> dict[str, Category]:
@@ -719,6 +799,17 @@ def _seed_products(
             badge=spec.get("badge"),
             warranty=spec.get("warranty"),
             stock_left=spec.get("stock_left", 25),
+            # Roughly what one of these weighs, which is what decides its
+            # handling fee. Per category rather than per card because that is
+            # the honest precision of a seed: a real one is declared by
+            # whoever packs it.
+            weight_grams=spec.get(
+                "weight_grams", CATEGORY_WEIGHTS.get(spec["category"], 1_000)
+            ),
+            # The catalogue the design describes is a shop that is open, so it
+            # seeds published. A card only starts as a draft when somebody
+            # writes one, or as `moderating` when a seller proposes one.
+            status=ProductStatus.PUBLISHED,
         )
         session.add(product)
         session.commit()
@@ -731,15 +822,16 @@ def _seed_products(
         for url in spec.get("images", []):
             if url not in shipped:
                 print(f"  eksport qilinmagan rasm o'tkazib yuborildi: {url}")
-        for i, label in enumerate(spec.get("sizes", [])):
-            session.add(
-                ProductVariant(
-                    product_id=product.id, kind=VariantKind.SIZE,
-                    label=label, value=label, sort=i,
-                )
-            )
+        # The shelf as a grid: the colours divide the product's stock between
+        # them, and each colour's share divides again between its sizes. One
+        # size row per colour, so the last black 41 runs out in black and the
+        # three blue ones are still there to sell.
+        #
+        # Colours first, because the sizes have to point at them.
+        sizes = spec.get("sizes", [])
         colors = spec.get("colors", [])
         color_stock = _split_stock(product.stock_left, len(colors))
+        color_rows: list[ProductVariant] = []
         for i, color in enumerate(colors):
             # ("Qora", "#0E0F12") or ("Qora", "#0E0F12", "products/af1-black.png").
             label, value, *rest = color
@@ -751,17 +843,125 @@ def _seed_products(
             if image and not _image_exists(image):
                 image = None
             left = color_stock[i]
-            session.add(
-                ProductVariant(
-                    product_id=product.id, kind=VariantKind.COLOR,
-                    label=label, value=value, image_url=image, sort=i,
-                    stock_left=left, in_stock=left > 0,
-                )
+            row = ProductVariant(
+                product_id=product.id, kind=VariantKind.COLOR,
+                label=label, value=value, image_url=image, sort=i,
+                stock_left=left, in_stock=left > 0,
             )
+            session.add(row)
+            color_rows.append(row)
+        # Committed here so the colours have ids for their sizes to carry.
+        session.commit()
+
+        if sizes and color_rows:
+            for color_row in color_rows:
+                cells = _split_stock(color_row.stock_left or 0, len(sizes))
+                for i, label in enumerate(sizes):
+                    left = cells[i]
+                    session.add(
+                        ProductVariant(
+                            product_id=product.id, kind=VariantKind.SIZE,
+                            label=label, value=label, sort=i,
+                            parent_id=color_row.id,
+                            stock_left=left, in_stock=left > 0,
+                        )
+                    )
+        elif sizes:
+            # No colours to belong to: the sizes divide the product's own shelf.
+            size_stock = _split_stock(product.stock_left, len(sizes))
+            for i, label in enumerate(sizes):
+                left = size_stock[i]
+                session.add(
+                    ProductVariant(
+                        product_id=product.id, kind=VariantKind.SIZE,
+                        label=label, value=label, sort=i,
+                        stock_left=left, in_stock=left > 0,
+                    )
+                )
         for i, (key, value) in enumerate(spec.get("specs", [])):
             session.add(ProductSpec(product_id=product.id, key=key, value=value, sort=i))
     session.commit()
+    _hang_family_photos(session)
     return out
+
+
+# How many photographs one card may swipe through, its own included.
+FAMILY_PHOTOS = 4
+
+
+def _hang_family_photos(session: Session) -> None:
+    """Give each product the photographs of the things beside it on its shelf.
+
+    Almost every product came in with exactly one picture, which is a card with
+    nothing to swipe and a product page with a pager of one. Meanwhile the
+    catalogue holds four Rolex Datejusts that differ only in the dial, three Air
+    Force 1s that differ only in the colour, and two Uniqlo tees — four
+    photographs of very nearly the same thing, filed under four separate
+    products, each showing one of them.
+
+    A shelf here is a brand within a category, which is as close as this
+    catalogue gets to saying "these are versions of each other": same maker,
+    same kind of thing. Every member of a shelf keeps its own photograph first —
+    the card has to show what it is selling — and then carries its neighbours'
+    in id order, up to [FAMILY_PHOTOS].
+
+    Products with no brand keep to themselves: "Stol chirog'i" and "Bolalar stol
+    chirog'i" share a category and nothing else.
+    """
+    products = session.exec(select(Product).order_by(col(Product.id))).all()
+    shelves: dict[tuple[int, int], list[Product]] = {}
+    for product in products:
+        if product.brand_id is None:
+            continue
+        shelves.setdefault((product.brand_id, product.category_id), []).append(product)
+
+    for shelf in shelves.values():
+        if len(shelf) < 2:
+            continue
+        # One photograph per neighbour — the one it leads with, not its whole
+        # gallery, or a shelf of four would hand every card the same sixteen.
+        lead = {}
+        for product in shelf:
+            first = session.exec(
+                select(ProductImage)
+                .where(ProductImage.product_id == product.id)
+                .order_by(col(ProductImage.sort))
+            ).first()
+            if first:
+                lead[product.id] = first.url
+
+        for product in shelf:
+            own = session.exec(
+                select(ProductImage)
+                .where(ProductImage.product_id == product.id)
+                .order_by(col(ProductImage.sort))
+            ).all()
+            seen = {row.url for row in own}
+            sort = len(own)
+            for neighbour in shelf:
+                if sort >= FAMILY_PHOTOS:
+                    break
+                url = lead.get(neighbour.id)
+                if neighbour.id == product.id or url is None or url in seen:
+                    continue
+                session.add(ProductImage(product_id=product.id, url=url, sort=sort))
+                seen.add(url)
+                sort += 1
+    session.commit()
+
+
+def _seed_offers(session: Session, seller: Seller) -> None:
+    """One offer per product, read back out of the product's own figures.
+
+    The same function the live database was migrated with, so a fresh seed and
+    a migrated one end up in the same shape rather than in two shapes that
+    happen to agree today.
+    """
+    of.mirror_catalogue(session, seller)
+
+
+def _offer_count(session: Session) -> int:
+    return len(session.exec(select(Offer)).all())
 
 
 def _seed_home(session: Session) -> None:
@@ -851,12 +1051,18 @@ def _seed_users(session: Session) -> dict[str, User]:
     )
     madina = User(phone="+998901112233", full_name="Madina Karimova")
     bekzod = User(phone="+998934445566", full_name="Bekzod Tursunov")
-    for user in (demo, madina, bekzod):
+    admin = User(
+        phone=ADMIN_PHONE,
+        full_name="Mini Bozor administratori",
+        role=UserRole.ADMIN,
+    )
+    people = (demo, madina, bekzod, admin)
+    for user in people:
         session.add(user)
     session.commit()
-    for user in (demo, madina, bekzod):
+    for user in people:
         session.refresh(user)
-    return {"demo": demo, "madina": madina, "bekzod": bekzod}
+    return {"demo": demo, "madina": madina, "bekzod": bekzod, "admin": admin}
 
 
 def _seed_reviews(
@@ -934,11 +1140,90 @@ def _seed_user_data(session: Session, user: User, products: dict[str, Product]) 
         )
 
     for sku, qty in (("MB-4001", 2), ("MB-3001", 1), ("MB-2001", 1)):
-        session.add(CartItem(user_id=user.id, product_id=products[sku].id, quantity=qty))
+        product = products[sku]
+        # A line the shop can actually pick off the shelf: the first colour it
+        # stocks, and the first size of that colour. These carried neither, so
+        # the basket opened on lines whose "variant" was really the product's
+        # subtitle and whose stepper counted against the whole shelf instead of
+        # against the one cell being bought.
+        color = session.exec(
+            select(ProductVariant)
+            .where(
+                ProductVariant.product_id == product.id,
+                ProductVariant.kind == VariantKind.COLOR,
+                ProductVariant.in_stock.is_(True),
+            )
+            .order_by(col(ProductVariant.sort))
+        ).first()
+        size = session.exec(
+            select(ProductVariant)
+            .where(
+                ProductVariant.product_id == product.id,
+                ProductVariant.kind == VariantKind.SIZE,
+                ProductVariant.in_stock.is_(True),
+                ProductVariant.parent_id == (color.id if color else None),
+            )
+            .order_by(col(ProductVariant.sort))
+        ).first()
+        session.add(
+            CartItem(
+                user_id=user.id,
+                product_id=product.id,
+                quantity=qty,
+                variant_id=size.id if size else None,
+                color_variant_id=color.id if color else None,
+            )
+        )
 
     _seed_orders(session, user, products, home, humo)
     _seed_notifications(session, user)
     session.commit()
+
+
+def _resolve_variants(
+    session: Session, product: Product, label: str
+) -> tuple[int | None, int | None, str]:
+    """Turn "Qora · L" into the rows it names, and say what it really is.
+
+    The design's order lines were written as display text, and some of them
+    name things that are not variants at all ("Oq · 3 rejim" is a mode, not a
+    size). Whatever resolves is used; whatever does not falls back to the
+    product's first counted cell, so every line is attributable — and the
+    label is rebuilt from what was found, so it cannot promise a colour the
+    ids do not carry.
+    """
+    variants = session.exec(
+        select(ProductVariant)
+        .where(ProductVariant.product_id == product.id)
+        .order_by(col(ProductVariant.sort), col(ProductVariant.id))
+    ).all()
+    if not variants:
+        return None, None, label
+
+    wanted = {part.strip() for part in label.split("·")}
+    colours = [v for v in variants if v.kind == VariantKind.COLOR]
+    sizes = [v for v in variants if v.kind == VariantKind.SIZE]
+
+    colour = next((v for v in colours if v.label in wanted), None)
+    of_colour = [z for z in sizes if colour is None or z.parent_id == colour.id]
+    size = next((z for z in of_colour if z.label in wanted), None)
+
+    if size is None and of_colour:
+        size = next((z for z in of_colour if (z.stock_left or 0) > 0), of_colour[0])
+    if colour is None and size is not None and size.parent_id is not None:
+        colour = session.get(ProductVariant, size.parent_id)
+    if colour is None and size is None:
+        colour = next(
+            (v for v in colours if (v.stock_left or 0) > 0),
+            colours[0] if colours else None,
+        )
+
+    words = [v.label for v in (colour, size) if v is not None]
+    return (
+        colour.id if colour else None,
+        size.id if size else None,
+        " · ".join(words) or label,
+    )
 
 
 def _seed_orders(
@@ -983,10 +1268,31 @@ def _seed_orders(
             image = session.exec(
                 select(ProductImage).where(ProductImage.product_id == product.id)
             ).first()
+            # Who sold it. One seller for now, so it is the only offer on the
+            # product — but the line records it rather than assuming it, which
+            # is what makes a second seller a data change and not a code one.
+            offer = session.exec(
+                select(Offer).where(Offer.product_id == product.id)
+            ).first()
+            # And *which* one, not only what it was called. A line that carries
+            # a label and no ids cannot be put back on the right colour when it
+            # is returned, and the shelf drifts away from its colours by that
+            # much for good. The label is rewritten from what was resolved, so
+            # the words and the ids say the same thing.
+            colour_id, size_id, variant = _resolve_variants(session, product, variant)
+            commission = 0
+            if offer is not None:
+                seller_row = session.get(Seller, offer.seller_id)
+                commission = seller_row.commission_percent if seller_row else 0
             session.add(
                 OrderItem(
                     order_id=order.id, product_id=product.id, title=product.title,
                     image_url=image.url if image else "", variant_label=variant,
+                    variant_id=size_id,
+                    color_variant_id=colour_id,
+                    seller_id=offer.seller_id if offer else None,
+                    offer_id=offer.id if offer else None,
+                    commission_percent=commission,
                     unit_price=product.price, quantity=qty,
                 )
             )

@@ -3,3 +3,6 @@ build/
 *.xcarchive
 xcuserdata/
 *.xcuserstate
+
+# Local App Store Connect identifiers — see testflight.env.example
+testflight.env
