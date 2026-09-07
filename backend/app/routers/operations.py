@@ -158,6 +158,10 @@ def _decide_return(
         lines = _returned_lines(session, request, order)
         amount = _refund_amount(request, order, lines)
         request.refund_amount = amount
+        # When, not just how much. A settlement buckets a refund by the day it
+        # was paid; with only ``created_at`` a refund granted in February
+        # would land in January's account, and January may be closed.
+        request.refunded_at = sv.utcnow()
         audit.record(
             session,
             actor=actor,

@@ -29,6 +29,7 @@ from app.models import (
     DeliverySlot,
     FaqItem,
     Favorite,
+    FulfilmentTariff,
     HomeSection,
     LegalDoc,
     Notification,
@@ -619,6 +620,7 @@ def seed(session: Session) -> None:
 
     categories = _seed_categories(session)
     brands = _seed_brands(session)
+    _seed_fulfilment_tariffs(session)
     products = _seed_products(session, categories, brands)
     # The price and the stock go onto an offer, and the product row keeps a
     # copy of them for the listings to sort on. One seller for now — the shop
@@ -636,10 +638,70 @@ def seed(session: Session) -> None:
     translated = seed_translations(session)
 
     print(f"Seeded {len(products)} products, {len(categories)} categories.")
+    print(f"Seeded {len(FULFILMENT_BANDS)} fulfilment weight bands.")
     print(f"Seeded {_offer_count(session)} offers from 1 seller ({house.name}).")
     print(f"Seeded {translated} translation rows (ru, en).")
     print(f"Demo login: {DEMO_PHONE} · SMS code 123456 (dev) · PIN {DEMO_PIN}")
     print(f"Admin login: {ADMIN_PHONE} · SMS code 123456 (dev) · role admin")
+
+
+# What one unit costs us physically, by how heavy it is.
+#
+# The shipment figures are the reason a second fee exists at all. A Tashkent
+# delivery costs money that does not scale with the price of what is in the
+# box: five per cent of the catalogue's cheapest card is 1 950 so'm against a
+# run that costs many times that, and five per cent of its dearest is
+# 9 100 000 for carrying one small watch the same distance. Commission
+# follows value; this follows weight.
+#
+# The daily figures are the same argument about shelf space. A washing machine
+# and a pair of earphones do not occupy the same warehouse, so they do not pay
+# the same rent — a flat rate per unit would be the price mistake again in a
+# different place.
+# (max_grams, fee per shipment, storage per unit-day, label)
+FULFILMENT_BANDS: tuple[tuple[int, int, int, str], ...] = (
+    (500, 8_000, 20, "0,5 kg gacha"),
+    (2_000, 14_000, 60, "2 kg gacha"),
+    (10_000, 22_000, 200, "10 kg gacha"),
+    (30_000, 35_000, 600, "30 kg gacha"),
+    # The heaviest band takes a very large number rather than a null, so
+    # "which band is this" stays one comparison with no special case.
+    (10_000_000, 60_000, 1_500, "30 kg dan ortiq"),
+)
+
+
+# A typical weight per category, in grams. Enough to put each card in a
+# sensible band; a real weight is declared per product by whoever packs it.
+CATEGORY_WEIGHTS: dict[str, int] = {
+    "quloqchinlar": 250,
+    "quvvat-aksessuar": 350,
+    "elektronika": 1_500,
+    "kozoynaklar": 200,
+    "soatlar": 300,
+    "krossovkalar": 900,
+    "kiyim-poyabzal": 400,
+    "maishiy-texnika": 25_000,
+    "uy-bog": 4_000,
+    "oyinchoqlar": 700,
+    "gozallik": 300,
+    "oziq-ovqat": 1_200,
+    "avto": 3_000,
+    "sport": 1_500,
+    "maktab-bozori": 800,
+    "yoruglik": 1_200,
+    "chet-eldan": 1_000,
+    "taom-yetkazish": 800,
+}
+
+
+def _seed_fulfilment_tariffs(session: Session) -> None:
+    for max_grams, fee, storage, label in FULFILMENT_BANDS:
+        session.add(
+            FulfilmentTariff(
+                max_grams=max_grams, fee=fee, storage_per_day=storage, label=label
+            )
+        )
+    session.commit()
 
 
 def _seed_categories(session: Session) -> dict[str, Category]:
@@ -737,6 +799,13 @@ def _seed_products(
             badge=spec.get("badge"),
             warranty=spec.get("warranty"),
             stock_left=spec.get("stock_left", 25),
+            # Roughly what one of these weighs, which is what decides its
+            # handling fee. Per category rather than per card because that is
+            # the honest precision of a seed: a real one is declared by
+            # whoever packs it.
+            weight_grams=spec.get(
+                "weight_grams", CATEGORY_WEIGHTS.get(spec["category"], 1_000)
+            ),
             # The catalogue the design describes is a shop that is open, so it
             # seeds published. A card only starts as a draft when somebody
             # writes one, or as `moderating` when a seller proposes one.

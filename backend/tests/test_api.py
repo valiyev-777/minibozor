@@ -5275,3 +5275,630 @@ def test_the_editor_is_told_what_it_may_not_do_before_it_tries(
     # Its size is a leaf with nothing against it, so that one may go.
     assert next(v for v in tree["variants"] if v["id"] == leaf_id)["can_delete"] is True
     assert not _stock_is_consistent()
+
+
+# --------------------------------------------------------- paying the sellers
+
+
+def _period(
+    client: TestClient, admin: dict[str, str], *, starts: str, ends: str, label: str
+) -> dict:
+    made = client.post(
+        f"{API}/staff/payouts/periods",
+        json={"starts_on": starts, "ends_on": ends, "label": label},
+        headers=admin,
+    )
+    assert made.status_code == 201, made.text
+    return made.json()
+
+
+def _statement(
+    client: TestClient, admin: dict[str, str], period_id: int, seller_id: int
+) -> dict:
+    """Generate the run and return this seller's account, with its lines."""
+    made = client.post(
+        f"{API}/staff/payouts/periods/{period_id}/generate", headers=admin
+    )
+    assert made.status_code == 200, made.text
+    mine = next(row for row in made.json() if row["seller_id"] == seller_id)
+    full = client.get(f"{API}/staff/payouts/statements/{mine['id']}", headers=admin)
+    assert full.status_code == 200, full.text
+    return full.json()
+
+
+def _sell_and_deliver(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    operator: dict[str, str],
+    warehouse: dict[str, str],
+    *,
+    seller_id: int,
+    product_id: int,
+    price: int,
+    quantity: int = 1,
+) -> dict:
+    """One order for this seller's goods, carried all the way to the door.
+
+    A sale only counts once it is delivered — a placed order may be called off
+    and a cash order is not paid until the doorstep — so every one of these
+    walks the whole flow.
+    """
+    with Session(engine) as session:
+        leaves = [v.id for v in of.leaf_variants(session, product_id)]
+    offer = client.post(
+        f"{API}/staff/offers",
+        json={
+            "product_id": product_id,
+            "price": price,
+            "seller_id": seller_id,
+            "variant_ids": leaves,
+        },
+        headers=admin,
+    )
+    assert offer.status_code == 201, offer.text
+    offer_id = offer.json()["id"]
+
+    supply = client.post(
+        f"{API}/staff/supplies",
+        json={
+            "seller_id": seller_id,
+            "lines": [
+                {
+                    "offer_id": offer_id,
+                    **({"variant_id": leaves[0]} if leaves else {}),
+                    "quantity": quantity + 2,
+                }
+            ],
+        },
+        headers=admin,
+    )
+    assert supply.status_code == 201, supply.text
+    client.post(
+        f"{API}/staff/supplies/{supply.json()['id']}/receive",
+        json={
+            "lines": [
+                {
+                    "line_id": supply.json()["lines"][0]["id"],
+                    "received_quantity": quantity + 2,
+                }
+            ]
+        },
+        headers=warehouse,
+    )
+
+    client.delete(f"{API}/cart", headers=auth)
+    # `_pick` names the leaf the way the apps do, and this card has exactly
+    # one offer — the seller's — so that is the one the cart takes.
+    added = client.post(
+        f"{API}/cart/items", json=_pick(product_id, quantity), headers=auth
+    )
+    assert added.status_code == 201, added.text
+
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    order = client.post(
+        f"{API}/orders", json={"address_id": address["id"]}, headers=auth
+    )
+    assert order.status_code == 201, order.text
+    order = order.json()
+    for target in ("packing", "shipped", "delivered"):
+        moved = client.post(
+            f"{API}/staff/orders/{order['id']}/status",
+            json={"status": target},
+            headers=operator,
+        )
+        assert moved.status_code == 200, moved.text
+    return order
+
+
+def _lines(statement: dict, kind: str) -> list[dict]:
+    return [line for line in statement["lines"] if line["kind"] == kind]
+
+
+def test_a_sellers_two_orders_add_up_to_one_account(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Nobody was being paid. Everything the arithmetic needed was captured on
+    the order line and nothing added it up."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900060001")
+    seller_id, theirs = _linked_seller(staff, "Payout Bir", "+998900060002", commission=10)
+
+    first_id, _ = _card_with_a_colour(client, admin, "MB-PAY-1", with_a_size=False)
+    second_id, _ = _card_with_a_colour(client, admin, "MB-PAY-2", with_a_size=False)
+    _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=first_id, price=500_000,
+    )
+    _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=second_id, price=300_000, quantity=2,
+    )
+
+    # Its own window. Periods may not overlap — one sale falling into two
+    # runs is the thing that guard exists for — and every test here shares
+    # one database. A period's start date does not filter sales (see
+    # `_sale_lines`: anything delivered by the closing day and not yet
+    # settled belongs to it), so a far window still picks up today's sale.
+    period = _period(
+        client, admin, starts="2040-01-01", ends="2040-12-31", label="Sinov davri"
+    )
+    statement = _statement(client, admin, period["id"], seller_id)
+
+    # 500 000 + 2 × 300 000, and the commission is the rate on the line.
+    assert statement["gross_sales"] == 1_100_000
+    assert statement["commission"] == 110_000
+    assert statement["seller_name"] == "Payout Bir"
+
+    # The figure is the sum of its rows, the way the shelf is the sum of its
+    # movements. A total that can drift from its own composition is the thing
+    # this model exists to prevent.
+    assert statement["payable"] == sum(line["amount"] for line in statement["lines"])
+    assert (
+        statement["payable"]
+        == statement["gross_sales"]
+        - statement["commission"]
+        - statement["fulfilment"]
+        - statement["refunds"]
+        - statement["storage"]
+        + statement["adjustments"]
+    )
+
+    # Every line names what it came from. "9 100 000" is a number to argue
+    # with; this is an account to read.
+    sales = _lines(statement, "sale")
+    assert len(sales) == 2
+    assert all(line["order_item_id"] for line in sales)
+    assert all(line["title"].startswith("#") for line in sales)
+    for line in _lines(statement, "commission"):
+        assert "10%" in line["note"]
+        assert line["order_item_id"]
+
+    # The seller reads their own account, and only their own.
+    theirs_view = client.get(f"{API}/staff/payouts/statements", headers=theirs)
+    assert theirs_view.status_code == 200, theirs_view.text
+    assert {row["seller_id"] for row in theirs_view.json()} == {seller_id}
+    assert client.get(
+        f"{API}/staff/payouts/statements/{statement['id']}", headers=theirs
+    ).status_code == 200
+    assert client.get(f"{API}/staff/payouts/periods", headers=theirs).status_code == 403
+    assert not _stock_is_consistent()
+
+
+def test_the_commission_is_the_rate_it_was_sold_at_not_todays(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A payout computed against today's rate would quietly restate what
+    somebody was owed for something they sold last year."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900060011")
+    seller_id, _ = _linked_seller(staff, "Payout Ikki", "+998900060012", commission=8)
+    product_id, _ = _card_with_a_colour(client, admin, "MB-PAY-3", with_a_size=False)
+    _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=product_id, price=1_000_000,
+    )
+
+    past = _period(
+        client, admin, starts="2019-01-01", ends="2019-12-31", label="Bo'sh"
+    )
+    # A period that closes before the sale happened sees nothing of it — not
+    # the sale, and not a day of storage either.
+    empty = _statement(client, admin, past["id"], seller_id)
+    assert (empty["gross_sales"], empty["storage"], empty["payable"]) == (0, 0, 0)
+
+    wide = _period(
+        client, admin, starts="2041-01-01", ends="2041-12-31", label="Keng"
+    )
+    before = _statement(client, admin, wide["id"], seller_id)
+    assert before["commission"] == 80_000
+
+    # The contract is renegotiated upwards. What was already sold keeps the
+    # rate it was sold at.
+    changed = client.patch(
+        f"{API}/staff/sellers/{seller_id}", json={"commission_percent": 25}, headers=admin
+    )
+    assert changed.status_code == 200, changed.text
+    after = _statement(client, admin, wide["id"], seller_id)
+    assert after["commission"] == 80_000, "the snapshot, not the seller row"
+    assert "8%" in _lines(after, "commission")[0]["note"]
+    assert not _stock_is_consistent()
+
+
+def test_a_cheap_item_costs_more_to_handle_than_it_earns_in_commission(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The reason there are two fees at all.
+
+    Five per cent of the catalogue's cheapest card is 1 950 so'm against a
+    Tashkent delivery that costs many times that; five per cent of its dearest
+    is 9 100 000 for carrying one small box the same distance. A single
+    percentage is a loss at one end and an embarrassment at the other.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, "+998900060021")
+    seller_id, _ = _linked_seller(staff, "Payout Uch", "+998900060022", commission=5)
+
+    cheap_id, _ = _card_with_a_colour(client, admin, "MB-PAY-CHEAP", with_a_size=False)
+    dear_id, _ = _card_with_a_colour(client, admin, "MB-PAY-DEAR", with_a_size=False)
+    # Both light — a phone accessory and a watch weigh about the same, which
+    # is exactly why the fee cannot follow the price.
+    with Session(engine) as session:
+        for product_id in (cheap_id, dear_id):
+            row = session.get(Product, product_id)
+            row.weight_grams = 300
+            session.add(row)
+        session.commit()
+
+    _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=cheap_id, price=39_000,
+    )
+    _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=dear_id, price=182_000_000,
+    )
+
+    period = _period(
+        client, admin, starts="2042-01-01", ends="2042-12-31", label="Ikki haq"
+    )
+    statement = _statement(client, admin, period["id"], seller_id)
+
+    handling = {
+        line["order_item_id"]: -line["amount"] for line in _lines(statement, "fulfilment")
+    }
+    commission = {
+        line["order_item_id"]: -line["amount"] for line in _lines(statement, "commission")
+    }
+    sales = {line["order_item_id"]: line["amount"] for line in _lines(statement, "sale")}
+
+    cheap = next(item for item, gross in sales.items() if gross == 39_000)
+    dear = next(item for item, gross in sales.items() if gross == 182_000_000)
+
+    # The whole point, in one assertion: on the cheap card the handling fee is
+    # the larger of the two, and on the dear one it is a rounding error.
+    assert handling[cheap] > commission[cheap], (handling[cheap], commission[cheap])
+    assert commission[cheap] == 1_950
+    assert handling[dear] < commission[dear] // 1000
+
+    # Same weight, same handling fee — it does not follow the price.
+    assert handling[cheap] == handling[dear]
+
+    # And it is visible in the statement rather than buried in a net figure.
+    assert statement["fulfilment"] == handling[cheap] + handling[dear]
+    assert "yig'ish va yetkazish" in _lines(statement, "fulfilment")[0]["note"]
+    assert statement["payable"] == sum(line["amount"] for line in statement["lines"])
+    assert not _stock_is_consistent()
+
+
+def test_a_refund_comes_off_the_account_and_gives_the_commission_back(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A refunded sale was never a sale, so keeping our cut of it would be
+    charging for something that did not happen. The van still came, though, so
+    the handling fee is not given back."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900060031")
+    seller_id, _ = _linked_seller(staff, "Payout To'rt", "+998900060032", commission=10)
+    product_id, _ = _card_with_a_colour(client, admin, "MB-PAY-4", with_a_size=False)
+    order = _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=product_id, price=400_000,
+    )
+
+    request = client.post(
+        f"{API}/orders/{order['id']}/return",
+        json={"reason": "O'lchami to'g'ri kelmadi"},
+        headers=auth,
+    ).json()
+    client.post(f"{API}/staff/returns/{request['id']}/approve", json={}, headers=operator)
+    refunded = client.post(
+        f"{API}/staff/returns/{request['id']}/refund",
+        json={"restock": True, "note": "Butun holida qaytdi"},
+        headers=operator,
+    )
+    assert refunded.status_code == 200, refunded.text
+
+    period = _period(
+        client, admin, starts="2043-01-01", ends="2043-12-31", label="Qaytarish"
+    )
+    statement = _statement(client, admin, period["id"], seller_id)
+
+    # Sold, and unsold. The refund deduction is the goods less the commission
+    # we handed back — exactly what the seller had received for it.
+    assert statement["gross_sales"] == 400_000
+    assert statement["commission"] == 40_000
+    assert statement["refunds"] == 360_000
+
+    back = _lines(statement, "refund")
+    assert back and all(line["return_request_id"] == request["id"] for line in back)
+    assert all(line["amount"] == -400_000 for line in back)
+    given = _lines(statement, "refund_commission")
+    assert [line["amount"] for line in given] == [40_000]
+    assert "komissiya olinmaydi" in given[0]["note"]
+
+    # The handling fee stays deducted: it was really spent.
+    assert statement["fulfilment"] > 0
+    assert statement["payable"] == sum(line["amount"] for line in statement["lines"])
+    # Nothing left of the sale but the cost of having shipped it.
+    assert statement["payable"] == -statement["fulfilment"] - statement["storage"]
+    assert not _stock_is_consistent()
+
+
+def test_a_refund_after_the_period_closed_lands_in_the_next_one(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A seller who reads what they are owed and is shown a different number
+    next week has been told the first number was provisional — which makes
+    every number provisional."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900060041")
+    seller_id, _ = _linked_seller(staff, "Payout Besh", "+998900060042", commission=10)
+    product_id, _ = _card_with_a_colour(client, admin, "MB-PAY-5", with_a_size=False)
+    order = _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=product_id, price=700_000,
+    )
+
+    first = _period(
+        client, admin, starts="2044-01-01", ends="2044-12-31", label="Birinchi"
+    )
+    before = _statement(client, admin, first["id"], seller_id)
+    assert before["gross_sales"] == 700_000
+    assert before["refunds"] == 0
+    settled = before["payable"]
+
+    closed = client.post(
+        f"{API}/staff/payouts/periods/{first['id']}/close", headers=admin
+    )
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["status"] == "closed"
+
+    # The refund arrives afterwards.
+    request = client.post(
+        f"{API}/orders/{order['id']}/return",
+        json={"reason": "Kechikkan qaytarish"},
+        headers=auth,
+    ).json()
+    client.post(f"{API}/staff/returns/{request['id']}/approve", json={}, headers=operator)
+    client.post(
+        f"{API}/staff/returns/{request['id']}/refund",
+        json={"restock": True, "note": "Davr yopilgandan keyin"},
+        headers=operator,
+    )
+
+    # The closed account is untouched — the same figure the seller read.
+    frozen = client.get(
+        f"{API}/staff/payouts/statements/{before['id']}", headers=admin
+    ).json()
+    assert frozen["payable"] == settled
+    assert frozen["refunds"] == 0
+    assert frozen["gross_sales"] == 700_000
+
+    # A closed period will not be regenerated, and refuses to be reclosed.
+    assert client.post(
+        f"{API}/staff/payouts/periods/{first['id']}/generate", headers=admin
+    ).status_code == 409
+    assert client.post(
+        f"{API}/staff/payouts/periods/{first['id']}/close", headers=admin
+    ).status_code == 409
+
+    # It lands in the next one instead, and the sale is not counted twice.
+    second = _period(
+        client, admin, starts="2045-01-01", ends="2045-12-31", label="Ikkinchi"
+    )
+    later = _statement(client, admin, second["id"], seller_id)
+    assert later["refunds"] == 630_000, later
+    assert later["gross_sales"] == 0, "the sale was settled in the closed period"
+    assert later["payable"] == sum(line["amount"] for line in later["lines"])
+    assert later["payable"] < 0, "a period of refunds alone is a debt, not a zero"
+    assert not _stock_is_consistent()
+
+
+def test_storage_is_charged_per_unit_day_and_surcharged_when_nothing_moves(
+    client: TestClient,
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The only mechanism here that empties a shelf. Without a standing cost
+    the warehouse is a free storage unit, and the way to use one is to send
+    everything and let somebody else hold it."""
+    from datetime import timedelta
+
+    from app import settlement as settle
+    from app.models import StockMovement
+
+    warehouse = staff(UserRole.WAREHOUSE, "+998900060051")
+    seller_id, _ = _linked_seller(staff, "Payout Olti", "+998900060052")
+    product_id, leaf_id = _card_with_a_colour(
+        client, admin, "MB-PAY-6", with_a_size=False
+    )
+    _stock_a_leaf(client, admin, warehouse, product_id, leaf_id, 4)
+
+    with Session(engine) as session:
+        offer = session.exec(
+            select(Offer).where(
+                Offer.product_id == product_id, Offer.seller_id != seller_id
+            )
+        ).first()
+        # Hand the stocked offer to our seller so the storage lands on them.
+        offer.seller_id = seller_id
+        session.add(offer)
+        # And date the intake far enough back that it counts as stale.
+        movements = session.exec(
+            select(StockMovement).where(StockMovement.offer_id == offer.id)
+        ).all()
+        old = utcnow() - timedelta(days=settle.STALE_AFTER_DAYS + 40)
+        for movement in movements:
+            movement.created_at = old
+            session.add(movement)
+        session.commit()
+        offer_id = offer.id
+
+    starts = (utcnow() - timedelta(days=9)).date()
+    ends = (utcnow() - timedelta(days=1)).date()
+    period = _period(
+        client, admin, starts=str(starts), ends=str(ends), label="Saqlash"
+    )
+    statement = _statement(client, admin, period["id"], seller_id)
+
+    rows = [line for line in _lines(statement, "storage") if line["offer_id"] == offer_id]
+    assert rows, statement["lines"]
+    row = rows[0]
+    days = (ends - starts).days + 1
+    # The rate is the weight band's, not a flat number: a washing machine and
+    # a pair of earphones do not occupy the same warehouse.
+    with Session(engine) as session:
+        rate = settle.storage_rate(session, session.get(Product, product_id))
+    expected = 4 * days * rate * settle.STALE_MULTIPLIER
+    assert -row["amount"] == expected, (row, expected)
+
+    # The sum in words, so a seller can check it rather than only dispute it.
+    assert f"{4 * days} dona-kun" in row["note"]
+    assert f"{settle.STALE_MULTIPLIER}×" in row["note"]
+    assert "harakatsiz" in row["note"]
+    assert statement["storage"] >= expected
+    assert statement["payable"] == sum(line["amount"] for line in statement["lines"])
+    assert not _stock_is_consistent()
+
+
+def test_a_payout_is_marked_paid_once_with_a_date_and_a_reference(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Two transfers against one account is money gone that nobody notices
+    until the seller who was not paid rings up."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900060061")
+    seller_id, theirs = _linked_seller(staff, "Payout Yetti", "+998900060062")
+    product_id, _ = _card_with_a_colour(client, admin, "MB-PAY-7", with_a_size=False)
+    _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=product_id, price=900_000,
+    )
+
+    period = _period(
+        client, admin, starts="2046-01-01", ends="2046-12-31", label="To'lov"
+    )
+    statement = _statement(client, admin, period["id"], seller_id)
+    door = f"{API}/staff/payouts/statements/{statement['id']}"
+    body = {"method": "bank o'tkazmasi", "reference": "TR-99001", "note": "Oylik"}
+
+    # An open account cannot be paid: the figure is still being recomputed.
+    assert client.post(f"{door}/pay", json=body, headers=admin).status_code == 409
+
+    # A correction is the one line a person writes, so it must explain itself.
+    assert client.post(
+        f"{door}/adjust", json={"amount": -50_000, "note": ""}, headers=admin
+    ).status_code == 422
+    fixed = client.post(
+        f"{door}/adjust",
+        json={"amount": -50_000, "note": "Sinov uchun tuzatish"},
+        headers=admin,
+    )
+    assert fixed.status_code == 200, fixed.text
+    assert fixed.json()["adjustments"] == -50_000
+    assert fixed.json()["payable"] == sum(
+        line["amount"] for line in fixed.json()["lines"]
+    )
+
+    client.post(f"{API}/staff/payouts/periods/{period['id']}/close", headers=admin)
+    # Closed: no more corrections here — one goes in the next period, where it
+    # can be seen.
+    assert client.post(
+        f"{door}/adjust", json={"amount": -1, "note": "kech"}, headers=admin
+    ).status_code == 409
+
+    paid = client.post(f"{door}/pay", json=body, headers=admin)
+    assert paid.status_code == 200, paid.text
+    assert paid.json()["status"] == "paid"
+    assert paid.json()["payment_reference"] == "TR-99001"
+    assert paid.json()["paid_at"]
+
+    # Once, and only once.
+    assert client.post(f"{door}/pay", json=body, headers=admin).status_code == 409
+    # And not by the seller being paid.
+    assert client.post(f"{door}/pay", json=body, headers=theirs).status_code == 403
+    assert client.post(f"{door}/pay", json=body, headers=operator).status_code == 403
+
+    # Money leaving is logged with a name against it.
+    rows = _audit_rows("settlement.pay", statement["id"])
+    assert rows and rows[-1].actor_role is UserRole.ADMIN
+    assert "TR-99001" in rows[-1].note
+    assert _audit_rows("settlement.adjust", statement["id"])
+    assert not _stock_is_consistent()
+
+
+def test_two_periods_cannot_cover_the_same_day(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """One sale falling into two runs would either be paid twice or leave
+    nobody able to say which run it belonged to."""
+    _period(client, admin, starts="2031-01-01", ends="2031-01-31", label="Yanvar")
+    clash = client.post(
+        f"{API}/staff/payouts/periods",
+        json={"starts_on": "2031-01-15", "ends_on": "2031-02-15"},
+        headers=admin,
+    )
+    assert clash.status_code == 409
+    assert "davr" in clash.json()["detail"].lower()
+
+    # Backwards is refused too.
+    assert client.post(
+        f"{API}/staff/payouts/periods",
+        json={"starts_on": "2031-03-31", "ends_on": "2031-03-01"},
+        headers=admin,
+    ).status_code == 400
+
+    # The month after it is fine.
+    after = _period(
+        client, admin, starts="2031-02-01", ends="2031-02-28", label="Fevral"
+    )
+    assert after["status"] == "open"
+    assert client.post(
+        f"{API}/staff/payouts/periods",
+        json={"starts_on": "2032-01-01", "ends_on": "2032-01-31"},
+    ).status_code == 401
+
+
+def test_the_handling_tariff_is_readable_by_the_people_charged_it(
+    client: TestClient,
+    admin: dict[str, str],
+    auth: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A fee somebody is charged and cannot look up is a fee they can only
+    dispute."""
+    _, theirs = _linked_seller(staff, "Payout Sakkiz", "+998900060072")
+    bands = client.get(f"{API}/staff/payouts/tariffs", headers=theirs)
+    assert bands.status_code == 200, bands.text
+    rows = bands.json()
+    assert len(rows) >= 2
+    # Read top to bottom as "up to 500 g", "up to 2 kg", so the band a parcel
+    # falls into is the first that covers it.
+    assert rows == sorted(rows, key=lambda r: r["max_grams"])
+    assert all(r["fee"] > 0 and r["storage_per_day"] > 0 and r["label"] for r in rows)
+    # Both rates climb with the band, because both follow how big the thing is.
+    assert [r["fee"] for r in rows] == sorted(r["fee"] for r in rows)
+    assert [r["storage_per_day"] for r in rows] == sorted(
+        r["storage_per_day"] for r in rows
+    )
+    assert client.get(f"{API}/staff/payouts/tariffs", headers=admin).status_code == 200
+    assert client.get(f"{API}/staff/payouts/tariffs", headers=auth).status_code == 403

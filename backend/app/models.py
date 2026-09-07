@@ -283,6 +283,13 @@ class Product(SQLModel, table=True):
     category_id: int = Field(foreign_key="categories.id", index=True)
     brand_id: int | None = Field(default=None, foreign_key="brands.id", index=True)
 
+    # How heavy one of these is, which decides what handling it costs — see
+    # ``FulfilmentTariff``. Zero means nobody has said; ``app.settlement``
+    # charges an undeclared weight at a stated default band rather than at
+    # nothing, because free is the wrong answer and would make declaring it
+    # a thing sellers avoid.
+    weight_grams: int = 0
+
     # Price and stock are a CACHE of the winning offer — the cheapest active
     # offer with something left. They are not the source of truth any more;
     # ``offers`` is. They stay columns because every listing filters and sorts
@@ -671,6 +678,17 @@ class OrderItem(SQLModel, table=True):
     # yet, which is exactly why the figure has to be captured now — afterwards
     # it is not a column to add but a number nobody can recover.
     commission_percent: int = 0
+    # What handling one of these cost, as the tariff stood the day it sold.
+    #
+    # Snapshotted for exactly the reason above it is: a tariff is a term of a
+    # contract and gets renegotiated, and a payout computed later against
+    # today's bands would restate what a seller was owed for last year.
+    #
+    # Kept as so'm per unit rather than as a band id, so the line stays
+    # readable after the band it came from is edited or deleted. Zero on
+    # everything sold before there was a fee to charge, which is correct: we
+    # did not charge one.
+    fulfilment_fee: int = 0
     variant_label: str = ""
     unit_price: int = 0
     quantity: int = 1
@@ -733,6 +751,13 @@ class ReturnRequest(SQLModel, table=True):
     # log, which the customer cannot read — so the request itself could not
     # answer the one question the customer has about it.
     refund_amount: int = 0
+    # When the money actually went back, which is not when it was asked for.
+    #
+    # ``created_at`` is the customer opening a request; the refund happens
+    # after somebody decides. A settlement buckets a refund by the day it was
+    # paid, so with only ``created_at`` a refund granted in February would
+    # land in January's account — and January may already be closed.
+    refunded_at: datetime | None = None
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -1068,3 +1093,198 @@ class RemovalLine(SQLModel, table=True):
 
     quantity: int = 0                       # what the seller asked for
     prepared_quantity: int | None = None    # what the warehouse actually found
+
+
+# --------------------------------------------------------------------------- paying sellers
+
+# Nobody was being paid.
+#
+# The marketplace worked end to end — a seller was taken on, priced an offer,
+# the warehouse booked goods in, a customer bought them, and the commission
+# rate was snapshotted onto the order line. And then nothing. There was no
+# period, no statement, no payout, and no way to answer "what am I owed".
+#
+# Two decisions run through everything below.
+#
+# **A statement is a ledger, not a figure.** Its payable is the sum of its
+# lines and every line names what it came from — an order line, a return, an
+# offer sitting in the warehouse. A seller told "9 100 000" and nothing else
+# has been given a number to argue with rather than an account to read. This
+# is the same reason the shelf stopped being a number somebody wrote.
+#
+# **A closed statement never changes.** A seller who reads a figure and is
+# shown a different one next week has been told that the first figure meant
+# nothing. So closing freezes the lines, and anything that arrives afterwards
+# — a refund on a months-old order especially — lands in the next period
+# instead of rewriting the one already seen.
+
+
+class SettlementStatus(StrEnum):
+    """Where a period, or one seller's account within it, has got to."""
+
+    OPEN = "open"        # still gathering; may be rebuilt from the sources
+    CLOSED = "closed"    # frozen, and the seller may be shown it
+    PAID = "paid"        # the money has left, with a date and a method
+
+
+class StatementLineKind(StrEnum):
+    """What one row of a statement is.
+
+    Signed amounts, so the statement is the sum of its lines the way the shelf
+    is the sum of its movements: what is owed to the seller is positive and
+    what we keep or claw back is negative. Which *kind* it is stays separate
+    from the sign, because a refund's commission comes back and is still part
+    of the refund.
+    """
+
+    SALE = "sale"                            # goods delivered — owed
+    COMMISSION = "commission"                # our cut of that sale
+    FULFILMENT = "fulfilment"                # picking, packing, the van
+    REFUND = "refund"                        # a sale undone
+    REFUND_COMMISSION = "refund_commission"  # our cut of it, given back
+    STORAGE = "storage"                      # warehouse space, per unit-day
+    ADJUSTMENT = "adjustment"                # a correction somebody explained
+
+
+class FulfilmentTariff(SQLModel, table=True):
+    """What one unit costs us physically, by how heavy it is.
+
+    Two rates, because a weight band decides two different things: what it
+    costs to pick and carry one of these once, and what it costs to keep one
+    on a shelf for a day. Both follow the same physical fact — how big the
+    thing is — so they live on the same band rather than in two tables that
+    would have to be kept in step.
+
+    **This is the whole reason a second fee exists.** Commission is a
+    percentage, and a percentage of a cheap thing does not pay for a van. The
+    catalogue's cheapest card is 39 000 so'm: five per cent of it is 1 950,
+    against a Tashkent delivery that costs multiples of that. Thirty per cent
+    of the published catalogue loses money on every order under a flat
+    commission — and the more of it sells, the more is lost. Meanwhile five
+    per cent of a 182 000 000 so'm watch is 9 100 000 for carrying one small
+    box the same distance.
+
+    So the two are separated: commission scales with what the goods are worth,
+    and this scales with what they cost us to move. Weight bands rather than
+    measured volume because weight is one column and a seller can state it;
+    dimensions and volumetric weight are a bigger question and are deferred
+    deliberately rather than half-built.
+    """
+
+    __tablename__ = "fulfilment_tariffs"
+
+    id: int | None = Field(default=None, primary_key=True)
+    # The top of the band, inclusive. The heaviest band is given a very large
+    # number rather than a null, so "which band is this" is one comparison
+    # with no special case.
+    max_grams: int = Field(index=True)
+    # Per shipment: picking, packing and the van.
+    fee: int = 0
+    # Per unit per day on a shelf. Flat storage would charge a washing machine
+    # and a pair of earphones the same rent, which is the same mistake a flat
+    # commission makes about price — see the note above.
+    storage_per_day: int = 0
+    label: str = ""
+
+
+class SettlementPeriod(SQLModel, table=True):
+    """The calendar decision: which days one payout run covers.
+
+    Global rather than per seller. "Close January" has to mean the same dates
+    for everybody, or two sellers' accounts cannot be compared and a gap
+    between one seller's periods becomes days nobody is paid for.
+    """
+
+    __tablename__ = "settlement_periods"
+    __table_args__ = (
+        UniqueConstraint("starts_on", "ends_on", name="uq_settlement_period"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    label: str = ""                      # "2026-yil yanvar", "9-hafta"
+    starts_on: date = Field(index=True)
+    ends_on: date = Field(index=True)
+    status: SettlementStatus = Field(default=SettlementStatus.OPEN, index=True)
+    closed_at: datetime | None = None
+    closed_by_id: int | None = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class SellerStatement(SQLModel, table=True):
+    """One seller's account for one period.
+
+    The totals are columns as well as the sum of the lines, for the same
+    reason ``Offer.stock_left`` is a column: a list of statements is sorted
+    and filtered on them in SQL, and the alternative is summing every line of
+    every statement to draw one table. The invariant the tests hold us to is
+    that ``payable`` equals the sum of the lines — a figure that disagrees
+    with its own composition is the thing this whole model exists to prevent.
+    """
+
+    __tablename__ = "seller_statements"
+    __table_args__ = (
+        UniqueConstraint("period_id", "seller_id", name="uq_seller_statement"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    period_id: int = Field(foreign_key="settlement_periods.id", index=True)
+    seller_id: int = Field(foreign_key="sellers.id", index=True)
+    status: SettlementStatus = Field(default=SettlementStatus.OPEN, index=True)
+
+    # Each of these is a positive figure read as a heading, not a signed
+    # amount: "commission 420 000" is a deduction and reads as one. The signs
+    # live on the lines, where the arithmetic is.
+    gross_sales: int = 0
+    commission: int = 0
+    fulfilment: int = 0
+    refunds: int = 0
+    storage: int = 0
+    adjustments: int = 0     # signed: a correction can go either way
+    payable: int = 0
+
+    closed_at: datetime | None = None
+    paid_at: datetime | None = None
+    payment_method: str = ""       # "bank o'tkazmasi", "naqd"
+    payment_reference: str = ""    # a transfer number somebody can look up
+    note: str = ""
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class StatementLine(SQLModel, table=True):
+    """One row of a seller's account, and where it came from.
+
+    ``9 100 000`` is not an answer to a seller who disputes it; this is. Every
+    line carries the thing it was computed from — the order line that sold,
+    the return that came back, the offer that sat in the warehouse — so the
+    figure can be walked back to the event that caused it.
+    """
+
+    __tablename__ = "statement_lines"
+
+    id: int | None = Field(default=None, primary_key=True)
+    statement_id: int = Field(foreign_key="seller_statements.id", index=True)
+    kind: StatementLineKind = Field(index=True)
+
+    # Signed: positive is owed to the seller, negative is kept or clawed back.
+    amount: int = 0
+    quantity: int = 0
+
+    # What caused it. Exactly one is set on everything but an adjustment, and
+    # they are what makes the total followable in both directions.
+    order_item_id: int | None = Field(
+        default=None, foreign_key="order_items.id", index=True
+    )
+    return_request_id: int | None = Field(
+        default=None, foreign_key="return_requests.id", index=True
+    )
+    offer_id: int | None = Field(default=None, foreign_key="offers.id", index=True)
+
+    # Readable without joining: what sold, and the sum in words where the sum
+    # is a calculation ("4 dona × 31 kun × 60 so'm").
+    title: str = ""
+    note: str = ""
+
+    # When the thing happened, not when the line was written. This is what
+    # buckets an event into a period, and what lets a refund that arrives
+    # after its own period was closed fall into the next one instead.
+    occurred_at: datetime = Field(default_factory=utcnow, index=True)

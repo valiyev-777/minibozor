@@ -416,6 +416,60 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Это не ваше предложение",
         "en": "That offer is not yours",
     },
+    "period_backwards": {
+        "uz": "Davr oxiri boshidan keyin bo'lishi kerak",
+        "ru": "Конец периода должен быть позже начала",
+        "en": "A period has to end after it starts",
+    },
+    "period_overlaps": {
+        "uz": "Bu kunlarni qamragan davr allaqachon bor — bir sotuv ikki "
+              "davrga tushib qolmasligi kerak",
+        "ru": "Период на эти дни уже существует — одна продажа не должна "
+              "попасть в два периода",
+        "en": "A period already covers those days — one sale must not fall "
+              "into two of them",
+    },
+    "period_not_found": {
+        "uz": "Hisob-kitob davri topilmadi",
+        "ru": "Расчётный период не найден",
+        "en": "Settlement period not found",
+    },
+    "period_closed": {
+        "uz": "Bu davr yopilgan — sotuvchilar raqamni ko'rgan, u o'zgarmaydi. "
+              "Keyin kelgan narsa keyingi davrga tushadi.",
+        "ru": "Период закрыт — продавцы уже видели сумму, она не меняется. "
+              "Всё пришедшее позже попадёт в следующий период.",
+        "en": "That period is closed — the sellers have seen the figure and it "
+              "does not change. Anything later falls into the next one.",
+    },
+    "period_empty": {
+        "uz": "Avval hisobotlarni yig'ing — yopish uchun hech narsa yo'q",
+        "ru": "Сначала сформируйте отчёты — закрывать нечего",
+        "en": "Generate the statements first — there is nothing to close",
+    },
+    "statement_not_found": {
+        "uz": "Hisobot topilmadi",
+        "ru": "Отчёт не найден",
+        "en": "Statement not found",
+    },
+    "statement_open": {
+        "uz": "Hisobot hali yopilmagan — qayta hisoblanayotgan raqamni "
+              "to'lab bo'lmaydi",
+        "ru": "Отчёт ещё не закрыт — нельзя платить по сумме, которая ещё "
+              "пересчитывается",
+        "en": "That statement is not closed yet — a figure still being "
+              "recomputed cannot be paid",
+    },
+    "statement_closed": {
+        "uz": "Hisobot yopilgan — tuzatish keyingi davrga yoziladi",
+        "ru": "Отчёт закрыт — правка вносится в следующий период",
+        "en": "That statement is closed — a correction goes in the next period",
+    },
+    "statement_paid": {
+        "uz": "Bu hisobot allaqachon to'langan",
+        "ru": "По этому отчёту уже выплачено",
+        "en": "That statement has already been paid",
+    },
     "last_admin": {
         "uz": "Bu oxirgi admin — rolini tushirib bo'lmaydi, aks holda tizimga "
               "hech kim kira olmaydi. Avval boshqa admin tayinlang.",

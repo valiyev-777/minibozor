@@ -24,6 +24,8 @@ from app.models import (
     RemovalStatus,
     ReturnStatus,
     ReviewStatus,
+    SettlementStatus,
+    StatementLineKind,
     StockCountStatus,
     StockMovementKind,
     SupplyStatus,
@@ -1508,6 +1510,143 @@ class MediaOut(BaseModel):
     width: int
     height: int
     bytes: int
+
+
+# ------------------------------------------------------------------ payouts
+
+# What a seller is owed, and what it is made of.
+#
+# Every shape here is read by somebody who may be about to disagree with it,
+# which is why none of them is only a total. A statement carries its headings
+# and its lines; a line carries what it was computed from.
+
+
+class StatementLineOut(BaseModel):
+    """One row of an account, and its source.
+
+    ``amount`` is signed the way the ledger is: positive is owed to the
+    seller, negative is what we keep or claw back. The apps never see this —
+    it is a backoffice shape — so the sign convention can be the one the
+    arithmetic actually uses rather than one that reads nicely in a column.
+    """
+
+    id: int
+    kind: StatementLineKind
+    amount: int
+    quantity: int
+    title: str
+    note: str
+    occurred_at: datetime
+    # Which event this came from. Exactly one is set on everything but a
+    # manual adjustment.
+    order_item_id: int | None
+    return_request_id: int | None
+    offer_id: int | None
+
+
+class SellerStatementOut(BaseModel):
+    """A seller's account for one period.
+
+    The headings are positive figures read as deductions — "commission
+    420 000" — while ``payable`` is the signed arithmetic. It can be negative:
+    a period of refunds and storage against no sales means the seller owes us,
+    and rounding that up to zero would hide a debt rather than settle it.
+    """
+
+    id: int
+    period_id: int
+    period_label: str
+    starts_on: date
+    ends_on: date
+    seller_id: int
+    seller_name: str
+    status: SettlementStatus
+
+    gross_sales: int
+    commission: int
+    fulfilment: int
+    refunds: int
+    storage: int
+    adjustments: int
+    payable: int
+
+    line_count: int
+    closed_at: datetime | None
+    paid_at: datetime | None
+    payment_method: str
+    payment_reference: str
+    note: str
+
+
+class SellerStatementDetailOut(SellerStatementOut):
+    """The same account with its composition, which is the point of it.
+
+    A seller told "9 100 000" has a number to argue with. A seller shown the
+    order lines, the returns and the days of storage that add up to it has an
+    account to read.
+    """
+
+    lines: list[StatementLineOut]
+
+
+class SettlementPeriodOut(BaseModel):
+    id: int
+    label: str
+    starts_on: date
+    ends_on: date
+    status: SettlementStatus
+    closed_at: datetime | None
+    statement_count: int
+    # Across every seller in the period, so a run can be looked at whole.
+    total_payable: int
+
+
+class PeriodCreateIn(BaseModel):
+    """A payout run's dates.
+
+    Chosen rather than derived: a week and a month are both reasonable and
+    which one a marketplace uses is a business decision, not something to
+    infer from a calendar.
+    """
+
+    starts_on: date
+    ends_on: date
+    label: str = Field("", max_length=80)
+
+
+class StatementPayIn(BaseModel):
+    """Marking money as gone.
+
+    The reference is what makes this checkable later — a transfer number
+    somebody can look up when a seller says it never arrived. Not required,
+    because cash exists, but asked for.
+    """
+
+    method: str = Field(min_length=1, max_length=60, examples=["bank o'tkazmasi"])
+    reference: str = Field("", max_length=80)
+    note: str = Field("", max_length=200)
+
+
+class AdjustmentIn(BaseModel):
+    """A correction, with the reason attached.
+
+    Signed, and the note is required. An unexplained adjustment is the one
+    line of a statement nobody can defend, so the endpoint refuses a blank
+    one rather than accepting a number from nowhere.
+    """
+
+    amount: int
+    note: str = Field(min_length=1, max_length=200)
+
+
+class FulfilmentTariffOut(BaseModel):
+    """One weight band's two rates: per shipment, and per day on a shelf."""
+
+    id: int
+    max_grams: int
+    fee: int
+    storage_per_day: int
+    label: str
 
 
 # ------------------------------------------------------------------ backoffice

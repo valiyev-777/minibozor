@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import i18n, inventory
+from app import i18n, inventory, settlement
 from app import offers as of
 from app import schemas as s
 from app import services as sv
@@ -154,6 +154,13 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
             seller_id=offer.seller_id if offer else None,
             offer_id=offer.id if offer else None,
             commission_percent=_commission(session, offer),
+            # The second fee, captured for the same reason as the first: a
+            # tariff is renegotiated, and a payout worked out later against
+            # today's bands would restate what a seller was owed for a sale
+            # they made last year. See ``app.settlement``.
+            fulfilment_fee=settlement.fulfilment_fee(
+                session, session.get(Product, item.product_id)
+            ),
             variant_label=item.variant_label,
             unit_price=item.unit_price,
             quantity=item.quantity,

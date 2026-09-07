@@ -25,6 +25,7 @@ from app.routers import (
     notifications,
     operations,
     orders,
+    payouts,
     profile,
     reviews,
     search,
@@ -102,6 +103,7 @@ for router in (
     merchandising.router,
     warehouse.router,
     admin.router,
+    payouts.router,
     showcase.router,
 ):
     app.include_router(router, prefix=API)
