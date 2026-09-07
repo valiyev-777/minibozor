@@ -48,7 +48,17 @@
  * because the light sensor is looking at the same sky they are.
  */
 @media (prefers-color-scheme: dark) {
-  @theme {
+  /*
+   * Plain custom properties on `:root`, not a second `@theme`.
+   *
+   * Tailwind hoists every `@theme` block to the top level regardless of what
+   * it is nested in, so a dark `@theme` inside this media query does not
+   * become conditional — it becomes the only palette, and the app renders
+   * dark in full sun. The utilities generated from the block above already
+   * resolve through `var(--color-…)`, so overriding the variables here is both
+   * the smaller change and the one that actually switches.
+   */
+  :root {
     --color-page: #0b0f14;
     --color-panel: #171e26;
     --color-line: #3a444f;

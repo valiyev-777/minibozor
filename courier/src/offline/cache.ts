@@ -18,7 +18,18 @@ type Entry<T> = { key: string; at: number; data: T }
 
 export type CacheShape = {
   orders: CourierOrder[]
+  /** The shift the courier is on. Null when they are not out. */
   shift: Shift | null
+  /**
+   * The last shift seen, open or closed.
+   *
+   * `/courier/shifts/current` answers null once a shift is closed, which is
+   * correct and useless to the person who just closed it: they declared a
+   * figure thirty seconds ago and the screen would tell them there is no
+   * shift. This keeps the closing answer so the money they handed over stays
+   * readable until the next round starts.
+   */
+  lastShift: Shift | null
   pickups: PickupRun[]
   identity: StaffMe | null
 }

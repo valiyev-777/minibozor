@@ -1,6 +1,7 @@
 import * as React from "react"
 import { toast } from "sonner"
-import { Button, Empty, Field, Panel, Pill } from "@/components/ui"
+import type { Shift } from "@/api/types"
+import { Button, Field, Panel, Pill } from "@/components/ui"
 import { useOffline } from "@/offline/OfflineProvider"
 import { cash as cashView, shiftState } from "@/offline/derive"
 import { pendingFor } from "@/offline/outbox"
@@ -25,7 +26,7 @@ import { grouped, signedSum, stamp, sum } from "@/lib/format"
  */
 export function ShiftPage() {
   const courier = useCourier()
-  const { shift, rows, record, reachable, refresh } = useOffline()
+  const { shift, lastShift, rows, record, reachable, refresh } = useOffline()
   const state = shiftState(shift.data, rows)
   const money = cashView(shift.data, rows)
 
@@ -94,14 +95,18 @@ export function ShiftPage() {
         <>
           <Panel>
             <p className="text-xl font-bold">
-              {state === "closed" ? "Smena yopilgan" : "Smena ochilmagan"}
+              {lastShift?.status === "closed" ? "Smena yopildi" : "Smena ochilmagan"}
             </p>
             <p className="mt-1 text-base text-muted">
               Yetkazishni belgilash uchun smena ochiq bo'lishi shart — naqd pul shu smenaga
               yoziladi.
             </p>
           </Panel>
-          {state === "closed" && shift.data ? <ClosedSummary shift={shift.data} /> : null}
+          {/* The shift that has just been closed. `/courier/shifts/current`
+              answers null once it is, so this comes from the closing answer
+              itself — otherwise the courier who declared a figure a minute ago
+              is told there is no shift. */}
+          {lastShift && lastShift.status === "closed" ? <ClosedSummary shift={lastShift} /> : null}
           <Button onClick={() => void openShift()} busy={busy}>
             Smenani ochish
           </Button>
@@ -259,11 +264,12 @@ export function ShiftPage() {
   )
 }
 
-function ClosedSummary({ shift }: { shift: NonNullable<ReturnType<typeof useOffline>["shift"]["data"]> }) {
-  if (!shift) return <Empty>Yopilgan smena topilmadi.</Empty>
+function ClosedSummary({ shift }: { shift: Shift }) {
   return (
-    <Panel>
-      <p className="text-base text-muted">Oxirgi smena</p>
+    <Panel tone="good">
+      <p className="text-base text-muted">
+        Oxirgi smena{shift.closed_at ? ` · yopilgan ${stamp(shift.closed_at)}` : ""}
+      </p>
       <div className="mt-1 space-y-1 text-lg">
         <p>Kutilgan: {sum(shift.cash_expected)}</p>
         {shift.cash_declared !== null && shift.cash_declared !== undefined ? (

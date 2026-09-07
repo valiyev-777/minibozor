@@ -26,6 +26,8 @@ type OfflineValue = {
   rows: OutboxRow[]
   orders: Loaded<CourierOrder[]>
   shift: Loaded<Shift | null>
+  /** The last shift seen, open or closed — see `CacheShape.lastShift`. */
+  lastShift: Shift | null
   pickups: Loaded<PickupRun[]>
   /** Whether the last thing we asked the server actually got an answer. */
   reachable: boolean
@@ -52,6 +54,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [rows, setRows] = React.useState<OutboxRow[]>([])
   const [orders, setOrders] = React.useState<Loaded<CourierOrder[]>>({ data: [], at: null })
   const [shift, setShift] = React.useState<Loaded<Shift | null>>({ data: null, at: null })
+  const [lastShift, setLastShift] = React.useState<Shift | null>(null)
   const [pickups, setPickups] = React.useState<Loaded<PickupRun[]>>({ data: [], at: null })
   const [reachable, setReachable] = React.useState(navigator.onLine)
   const [syncing, setSyncing] = React.useState(false)
@@ -62,13 +65,15 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const reloadCache = React.useCallback(async () => {
-    const [cachedOrders, cachedShift, cachedPickups] = await Promise.all([
+    const [cachedOrders, cachedShift, cachedLast, cachedPickups] = await Promise.all([
       readCache("orders"),
       readCache("shift"),
+      readCache("lastShift"),
       readCache("pickups"),
     ])
     if (cachedOrders) setOrders({ data: cachedOrders.data, at: cachedOrders.at })
     if (cachedShift) setShift({ data: cachedShift.data, at: cachedShift.at })
+    if (cachedLast) setLastShift(cachedLast.data)
     if (cachedPickups) setPickups({ data: cachedPickups.data, at: cachedPickups.at })
   }, [])
 
@@ -85,7 +90,12 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         await patchOrder(order as CourierOrder)
       },
       onShift: async (updated) => {
-        await writeCache("shift", updated as Shift)
+        const answer = updated as Shift
+        await writeCache("lastShift", answer)
+        // A closed shift is not the current one. Writing it to `shift` would
+        // leave the app believing the courier is still out, and deliveries
+        // would be offered against a shift the server has finished with.
+        await writeCache("shift", answer.status === "open" ? answer : null)
       },
       onPickupRun: async (run) => {
         await patchPickupRun(run as PickupRun)
@@ -104,6 +114,17 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
    */
   const running = React.useRef(false)
 
+  /**
+   * Set when the queue has just landed something.
+   *
+   * A delivery changes more than the order it names: the shift's cash and its
+   * delivered count both move, and neither is in the answer this app gets
+   * back. Deriving them locally would be inventing a second source of truth
+   * for the figure a courier is counted against, so the app asks instead —
+   * once, after the queue drains, rather than after each row.
+   */
+  const needsRefresh = React.useRef(false)
+
   const sync = React.useCallback(async () => {
     if (running.current) return
     running.current = true
@@ -117,6 +138,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       setReachable(report.stoppedBy === null || report.sent > 0)
       await reloadRows()
       await reloadCache()
+      if (report.sent > 0) needsRefresh.current = true
       if (report.sent > 0) {
         toast.success(
           report.sent === 1 ? "1 amal serverga yuborildi." : `${report.sent} amal serverga yuborildi.`,
@@ -147,15 +169,20 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       const [freshOrders, freshShift, freshPickups] = await Promise.all([
         api<CourierOrder[]>("/courier/orders"),
         api<Shift | null>("/courier/shifts/current"),
-        api<PickupRun[]>("/courier/pickups"),
+        // `done` includes runs already handed in. A courier who has just given
+        // a run to the warehouse still wants to see it — dropping it off the
+        // list the moment it is collected reads as having lost it.
+        api<PickupRun[]>("/courier/pickups", { query: { done: true } }),
       ])
       await Promise.all([
         writeCache("orders", freshOrders),
         writeCache("shift", freshShift),
         writeCache("pickups", freshPickups),
+        ...(freshShift ? [writeCache("lastShift", freshShift)] : []),
       ])
       setOrders({ data: freshOrders, at: Date.now() })
       setShift({ data: freshShift, at: Date.now() })
+      if (freshShift) setLastShift(freshShift)
       setPickups({ data: freshPickups, at: Date.now() })
       setReachable(true)
     } catch (error) {
@@ -165,6 +192,19 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       setRefreshing(false)
     }
   }, [reloadCache])
+
+  /**
+   * Pull the shift again after the queue has landed something.
+   *
+   * Separate from `sync` rather than called at the end of it: `refresh` is
+   * defined below, and a courier who is offline again by now should get the
+   * usual quiet failure rather than an error nobody can act on.
+   */
+  React.useEffect(() => {
+    if (!needsRefresh.current || syncing) return
+    needsRefresh.current = false
+    void refresh()
+  }, [syncing, refresh])
 
   const record = React.useCallback<OfflineValue["record"]>(
     async (action) => {
@@ -190,6 +230,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     await clearCache()
     setOrders({ data: [], at: null })
     setShift({ data: null, at: null })
+    setLastShift(null)
     setPickups({ data: [], at: null })
     await reloadRows()
   }, [reloadRows])
@@ -249,6 +290,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     rows,
     orders,
     shift,
+    lastShift,
     pickups,
     reachable,
     syncing,
