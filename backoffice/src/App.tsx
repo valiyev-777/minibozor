@@ -9,6 +9,7 @@ import { CountsPage } from "@/pages/CountsPage"
 import { ModerationPage } from "@/pages/ModerationPage"
 import { MovementsPage } from "@/pages/MovementsPage"
 import { OrdersPage } from "@/pages/OrdersPage"
+import { ProductEditPage } from "@/pages/ProductEditPage"
 import { RemovalsPage } from "@/pages/RemovalsPage"
 import { ReturnsPage } from "@/pages/ReturnsPage"
 import { ReviewsPage } from "@/pages/ReviewsPage"
@@ -81,6 +82,12 @@ export function App() {
             <Route key={item.to} path={item.to} element={<Screen />} />
           ) : null
         })}
+        {/* The card editor hangs off the catalogue rather than the sidebar:
+            it is reached from a row, not chosen from a menu, and it is open
+            to whoever may see the catalogue. */}
+        {mine.some((item) => item.to === "/catalog") ? (
+          <Route path="/catalog/products/:id" element={<ProductEditPage />} />
+        ) : null}
         {/* Anything else — a path for another role included — goes home
             rather than to an empty frame. */}
         <Route path="*" element={<Navigate to={home} replace />} />

@@ -11,10 +11,9 @@ Three panels so far, in one application:
 - **Operator** — returns, review moderation, order status, delivery windows.
 - **Warehouse** — the shelf, incoming batches, stocktakes, removals, and the
   movement ledger.
-- **Admin** — moderation, the catalogue, sellers, roles, and the shop window.
-  Reading and deciding; the product edit form is the one screen still to come,
-  and the Katalog list's "Tahrirlash" button is deliberately disabled and
-  labelled rather than half-built.
+- **Admin** — moderation, the catalogue, sellers, roles, the shop window, and
+  the card editor: a product's words in three languages, its photographs, its
+  colour/size tree and its spec table.
 
 The sidebar is drawn from the signed-in role, so an operator sees the queues, a
 warehouse hand sees the shelves, and an admin sees all three — with headings,
@@ -163,18 +162,66 @@ again; reading it afterwards in a report is too late to be useful.
 | `npm run lint` | types only, no emit |
 | `npm run gen` | regenerate `src/api/schema.d.ts` from the API |
 
-## Endpoints the panel wants and the API does not have
+## The card editor
 
-Nothing here is a blocker; each is noted so the next backend stage can decide.
+`src/pages/ProductEditPage.tsx` and `src/pages/product/`. Five decisions in it
+are worth keeping.
 
-- **`GET /staff/catalog/categories` and `.../brands`.** The Katalog tab reads
-  the customer endpoints (`/categories`, `/brands`) because there is no admin
-  listing. Those answer in the request's language and hide nothing, which is
-  fine for a read-only list — but an admin editing a category wants the Uzbek
-  on the row, not the translation, and wants to see rows a shopper cannot.
-- **A brand's product count.** `GET /brands` always sends `product_count: 0`;
-  the figure is only computed in `/products/filters`, scoped to a listing. The
-  brands table therefore says how many brands there are and not how many
-  products each holds.
-- **A count for the moderation queue.** The sidebar cannot show "3 waiting"
-  without fetching the queue itself, so it does not try.
+- **Three languages, one form.** A language switcher, not three forms or three
+  columns: they are one card said three ways, and the thing an editor does
+  most is read the Uzbek while typing the Russian. The Uzbek lives on the row;
+  Russian and English live in the `translation` table and ride along in the
+  same PATCH. A blank translation is never marked as an error — it is what the
+  fallback is for, and the empty field shows the Uzbek as its placeholder so
+  what the app will actually display is visible without switching tabs.
+- **Creating and editing are different screens.** A photograph, a colour and a
+  spec row all hang off an id. The new-card form takes only what `POST
+  /staff/catalog/products` accepts and then redirects into the full editor;
+  holding a whole card in the browser to replay on save would mean a
+  half-failed replay leaves a card in a state nobody chose.
+- **The guards come from the API.** `GET .../variants` answers with
+  `can_delete`, `can_add_size` and the sentence for each, produced by the same
+  functions the write endpoints refuse with. So a greyed-out button and a 409
+  are one rule rather than two copies of it. Re-deriving "a variant with
+  movements cannot be deleted" in TypeScript would be the copy that goes stale.
+- **What is not on the form is named on the form.** Price, stock and status
+  each have an owner that is not this screen — an offer, the movement ledger,
+  a moderation decision. The `Elsewhere` panel says where each one lives and
+  shows the current value, because an editor who finds a blank space goes
+  hunting through five tabs for a field that was never going to be there.
+- **The seller's form is not this form.** A seller proposes cards through
+  `POST /staff/catalog/proposals`, is not staff, and never reaches this panel;
+  their editor will live in a seller's own account. Nothing here is abstracted
+  to serve both yet — what a seller needs is not known, and generalising now
+  would be guessing.
+
+## Endpoints added for it
+
+The catalogue list could be read-only against what already existed. Editing
+could not, and four of these were not in the plan:
+
+- `GET /staff/catalog/categories`, `.../brands` — the rows' own Uzbek, plus
+  the counts that explain a refused delete. The customer endpoints translate
+  as they go, which would have an editor working in Russian save the
+  translation back as the source.
+- `GET /staff/catalog/summary` — how many cards sit in each state, for the
+  sidebar badge, so the queue is not downloaded to render an integer.
+- `GET /staff/catalog/products/{id}` now answers with the description, the
+  flags and the translations — the list shape stays lean.
+- `GET .../images` — the gallery **with ids**. `DELETE .../images/{image_id}`
+  had always existed and nothing ever told the panel what `image_id` was.
+- `PUT .../images/order` — the whole list at once, like the showcase. The
+  first photograph is the cover.
+- `GET .../variants` — the tree with the two guards on it.
+- `GET .../specs` — with ids and translations. The table is only ever replaced
+  whole, so a form that could not read the Russian back would delete it by
+  saving an unrelated row.
+
+## Scripts
+
+| | |
+|---|---|
+| `npm run dev` | Vite dev server on :5173 |
+| `npm run build` | `tsc -b` in strict mode, then a production bundle |
+| `npm run lint` | types only, no emit |
+| `npm run gen` | regenerate `src/api/schema.d.ts` from the API |

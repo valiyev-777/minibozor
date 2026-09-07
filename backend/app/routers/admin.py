@@ -271,9 +271,48 @@ def list_products(
     )
 
 
-@router.get("/catalog/products/{product_id}", response_model=s.AdminProductOut)
-def get_product(product_id: int, user: AdminUser, session: SessionDep) -> s.AdminProductOut:
-    return _product_out(session, _product(session, product_id))
+@router.get(
+    "/catalog/summary",
+    response_model=s.CatalogSummaryOut,
+    summary="How many cards are in each state",
+)
+def catalog_summary(user: AdminUser, session: SessionDep) -> s.CatalogSummaryOut:
+    """For the badge on the moderation row.
+
+    A sidebar that wants to say "3 waiting" should not have to fetch the queue
+    to find out — that is a page of cards downloaded to render an integer, on
+    every screen, because the sidebar is on every screen.
+    """
+    rows = session.exec(
+        select(Product.status, func.count()).group_by(col(Product.status))
+    ).all()
+    counts = {status_: 0 for status_ in ProductStatus}
+    for status_, count in rows:
+        counts[status_] = int(count)
+    return s.CatalogSummaryOut(counts=counts)
+
+
+@router.get("/catalog/products/{product_id}", response_model=s.AdminProductDetailOut)
+def get_product(
+    product_id: int, user: AdminUser, session: SessionDep
+) -> s.AdminProductDetailOut:
+    """One card, with the fields only the edit form needs.
+
+    The list shape stays as it was — a description per row is prose fetched to
+    draw a table — so this is the richer of the two, on the endpoint an editor
+    calls one card at a time.
+    """
+    product = _product(session, product_id)
+    return s.AdminProductDetailOut(
+        **_product_out(session, product).model_dump(),
+        description=product.description,
+        badge=product.badge,
+        warranty=product.warranty,
+        is_original=product.is_original,
+        free_delivery=product.free_delivery,
+        next_day_delivery=product.next_day_delivery,
+        translations=i18n.stored(session, "product", product.id),
+    )
 
 
 @router.post(
@@ -457,6 +496,51 @@ def set_product_status(
 # --------------------------------------------------------------------------- categories
 
 
+@router.get(
+    "/catalog/categories",
+    response_model=list[s.AdminCategoryOut],
+    summary="Every category, flat, in the words the rows hold",
+)
+def list_categories(user: AdminUser, session: SessionDep) -> list[s.AdminCategoryOut]:
+    """The whole tree at once, and the Uzbek that is on the row.
+
+    Flat rather than nested: an editor picking a parent wants one list to
+    search, and the tree is recoverable from ``parent_slug``. The customer
+    endpoint answers a level at a time and translates as it goes, which is
+    right for the app and wrong for the field that writes the source text.
+    """
+    rows = session.exec(
+        select(Category).order_by(col(Category.sort), col(Category.name))
+    ).all()
+    parents = {row.id: row.slug for row in rows}
+    products = dict(
+        session.exec(
+            select(Product.category_id, func.count())
+            .group_by(col(Product.category_id))
+        ).all()
+    )
+    children: dict[int, int] = {}
+    for row in rows:
+        if row.parent_id is not None:
+            children[row.parent_id] = children.get(row.parent_id, 0) + 1
+    return [
+        s.AdminCategoryOut(
+            id=row.id,
+            slug=row.slug,
+            name=row.name,
+            subtitle=row.subtitle,
+            icon=row.icon,
+            image_url=sv.media_url(row.image_url),
+            parent_slug=parents.get(row.parent_id) if row.parent_id else None,
+            sort=row.sort,
+            is_quick_link=row.is_quick_link,
+            product_count=int(products.get(row.id, 0)),
+            child_count=children.get(row.id, 0),
+        )
+        for row in rows
+    ]
+
+
 @router.post(
     "/catalog/categories",
     response_model=s.CategoryOut,
@@ -532,6 +616,29 @@ def delete_category(slug: str, user: AdminUser, session: SessionDep) -> s.Messag
 # --------------------------------------------------------------------------- brands
 
 
+@router.get(
+    "/catalog/brands",
+    response_model=list[s.AdminBrandOut],
+    summary="Every brand, with how many cards carry it",
+)
+def list_brands(user: AdminUser, session: SessionDep) -> list[s.AdminBrandOut]:
+    counts = dict(
+        session.exec(
+            select(Product.brand_id, func.count()).group_by(col(Product.brand_id))
+        ).all()
+    )
+    rows = session.exec(select(Brand).order_by(col(Brand.name))).all()
+    return [
+        s.AdminBrandOut(
+            id=row.id,
+            slug=row.slug,
+            name=row.name,
+            product_count=int(counts.get(row.id, 0)),
+        )
+        for row in rows
+    ]
+
+
 @router.post(
     "/catalog/brands", response_model=s.BrandOut, status_code=status.HTTP_201_CREATED
 )
@@ -577,6 +684,51 @@ def delete_brand(slug: str, user: AdminUser, session: SessionDep) -> s.Message:
 # --------------------------------------------------------------------------- what a card is made of
 
 
+@router.get(
+    "/catalog/products/{product_id}/images",
+    response_model=list[s.AdminImageOut],
+    summary="The gallery, with the ids to edit it by",
+)
+def list_images(
+    product_id: int, user: AdminUser, session: SessionDep
+) -> list[s.AdminImageOut]:
+    """The write endpoints answer with bare URLs, which redraws a gallery and
+    does not edit one: ``DELETE .../images/{image_id}`` has always been here
+    and nothing ever told the panel what ``image_id`` was."""
+    product = _product(session, product_id)
+    return [
+        s.AdminImageOut(id=row.id, url=sv.media_url(row.url) or row.url, sort=row.sort)
+        for row in _image_rows(session, product.id)
+    ]
+
+
+@router.put(
+    "/catalog/products/{product_id}/images/order",
+    response_model=list[s.AdminImageOut],
+    summary="Set the order of the photographs, first one being the cover",
+)
+def reorder_images(
+    product_id: int, payload: s.ReorderIn, user: AdminUser, session: SessionDep
+) -> list[s.AdminImageOut]:
+    """The whole list, the way the showcase takes its orders.
+
+    Every row named once and none left out: a partial list would leave the
+    rest holding numbers that mean something else. The first photograph is the
+    one every tile in the shop shows, so this is not only arrangement.
+    """
+    product = _product(session, product_id)
+    rows = {row.id: row for row in _image_rows(session, product.id)}
+    if len(set(payload.ids)) != len(payload.ids):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("order_repeats"))
+    if set(payload.ids) != set(rows):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("order_incomplete"))
+    for position, image_id in enumerate(payload.ids):
+        rows[image_id].sort = position
+        session.add(rows[image_id])
+    session.commit()
+    return list_images(product_id, user, session)
+
+
 @router.post(
     "/catalog/products/{product_id}/images",
     response_model=list[str],
@@ -604,6 +756,51 @@ def remove_image(
     session.delete(row)
     session.commit()
     return _image_urls(session, product.id)
+
+
+@router.get(
+    "/catalog/products/{product_id}/variants",
+    response_model=s.AdminVariantsOut,
+    summary="The colour and size tree, and what may be done to it",
+)
+def list_variants(
+    product_id: int, user: AdminUser, session: SessionDep
+) -> s.AdminVariantsOut:
+    """Every variant with its own delete guard, and the tree's size guard.
+
+    Both answers come from the functions the write endpoints refuse with, so
+    a button greyed out here and a 409 from there are the same rule rather
+    than two copies of it. The editor can then say why in advance, which is
+    the whole difference between a form that explains itself and one that
+    waits to be wrong at.
+    """
+    product = _product(session, product_id)
+    rows = session.exec(
+        select(ProductVariant)
+        .where(ProductVariant.product_id == product.id)
+        .order_by(col(ProductVariant.sort), col(ProductVariant.id))
+    ).all()
+    blocked = _size_block(session, product.id)
+    return s.AdminVariantsOut(
+        variants=[
+            s.AdminVariantOut(
+                id=row.id,
+                kind=row.kind,
+                label=row.label,
+                value=row.value,
+                image_url=sv.media_url(row.image_url),
+                parent_id=row.parent_id,
+                sort=row.sort,
+                stock_left=row.stock_left,
+                in_stock=row.in_stock,
+                can_delete=not _variant_block(session, row),
+                blocked_reason=_variant_block(session, row),
+            )
+            for row in rows
+        ],
+        can_add_size=not blocked,
+        size_blocked_reason=blocked,
+    )
 
 
 @router.post(
@@ -641,10 +838,9 @@ def add_variant(
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST, i18n.label("size_needs_a_colour")
                 )
-            if _has_any_stock(session, product.id):
-                raise HTTPException(
-                    status.HTTP_409_CONFLICT, i18n.label("variant_would_move_the_count")
-                )
+            blocked = _size_block(session, product.id)
+            if blocked:
+                raise HTTPException(status.HTTP_409_CONFLICT, blocked)
 
     row = ProductVariant(
         product_id=product.id,
@@ -688,18 +884,11 @@ def remove_variant(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, i18n.label("variant_not_of_product")
         )
-    if session.exec(
-        select(StockMovement).where(StockMovement.variant_id == row.id)
-    ).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("variant_has_history"))
-    if session.exec(
-        select(OrderItem).where(
-            (OrderItem.variant_id == row.id) | (OrderItem.color_variant_id == row.id)
-        )
-    ).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("variant_has_history"))
-    if session.exec(select(ProductVariant).where(ProductVariant.parent_id == row.id)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("variant_has_children"))
+    # The same function the editor greys the button out with, so what it says
+    # and what this refuses cannot drift apart.
+    blocked = _variant_block(session, row)
+    if blocked:
+        raise HTTPException(status.HTTP_409_CONFLICT, blocked)
 
     for offer_row in session.exec(
         select(OfferVariant).where(OfferVariant.variant_id == row.id)
@@ -711,6 +900,40 @@ def remove_variant(
     of.refresh(session, product.id)
     session.commit()
     return _variants_out(session, product.id)
+
+
+@router.get(
+    "/catalog/products/{product_id}/specs",
+    response_model=list[s.AdminSpecOut],
+    summary="The spec table as it stands, translations included",
+)
+def list_specs(
+    product_id: int, user: AdminUser, session: SessionDep
+) -> list[s.AdminSpecOut]:
+    """A draft card cannot be read through ``/products/{id}``: that path is
+    narrowed to what is in the shop, which is the point of it. So the editor
+    needs its own way to see the rows it is about to replace.
+
+    With the translations, because replacing is all this table supports. The
+    editor has to send back every row it means to keep and every word in every
+    language on it; anything it could not read is a thing it would delete by
+    saving something else.
+    """
+    product = _product(session, product_id)
+    rows = session.exec(
+        select(ProductSpec)
+        .where(ProductSpec.product_id == product.id)
+        .order_by(col(ProductSpec.sort))
+    ).all()
+    return [
+        s.AdminSpecOut(
+            id=row.id,
+            key=row.key,
+            value=row.value,
+            translations=i18n.stored(session, "spec", row.id),
+        )
+        for row in rows
+    ]
 
 
 @router.put(
@@ -744,14 +967,7 @@ def replace_specs(
         session.refresh(row)
         i18n.write(session, "spec", row.id, texts)
     session.commit()
-    return [
-        s.SpecOut(key=row.key, value=row.value)
-        for row in session.exec(
-            select(ProductSpec)
-            .where(ProductSpec.product_id == product.id)
-            .order_by(col(ProductSpec.sort))
-        ).all()
-    ]
+    return _specs_out(session, product.id)
 
 
 # --------------------------------------------------------------------------- translations
@@ -855,6 +1071,57 @@ def _brand(session: SessionDep, slug: str) -> Brand:
     return row
 
 
+def _variant_block(session: SessionDep, variant: ProductVariant) -> str:
+    """Why this variant cannot be deleted, as a sentence — or "" if it can.
+
+    One function, two callers: the delete endpoint refuses with it, and the
+    editor greys its button out with it. Written that way round on purpose —
+    a rule the browser re-derives is a second copy of the rule, and it is the
+    copy that goes stale.
+
+    A variant named by a movement or an order line is part of a record. The
+    ledger would stop explaining its own totals and an old order would point
+    at a row that is not there, so what "we do not sell this any more" means
+    here is taking it out of stock, not deleting it.
+    """
+    if session.exec(
+        select(StockMovement).where(StockMovement.variant_id == variant.id)
+    ).first():
+        return i18n.label("variant_has_history")
+    if session.exec(
+        select(OrderItem).where(
+            (OrderItem.variant_id == variant.id)
+            | (OrderItem.color_variant_id == variant.id)
+        )
+    ).first():
+        return i18n.label("variant_has_history")
+    if session.exec(
+        select(ProductVariant).where(ProductVariant.parent_id == variant.id)
+    ).first():
+        return i18n.label("variant_has_children")
+    return ""
+
+
+def _size_block(session: SessionDep, product_id: int) -> str:
+    """Why a first size cannot be added under a colour — or "" if it can.
+
+    The shelf is counted on the leaves. While the leaves are colours, the
+    counts sit on the colours; adding the first size makes the sizes the
+    leaves and every existing count is suddenly a level above where the ledger
+    looks for it, with nothing to say how a colour's twelve should divide
+    between the sizes being added.
+
+    Empty once the product already has sizes: the leaves have moved, and a
+    second size changes nothing about where counting happens.
+    """
+    leaves = of.leaf_variants(session, product_id)
+    if not any(v.kind is VariantKind.COLOR for v in leaves):
+        return ""
+    if _has_any_stock(session, product_id):
+        return i18n.label("variant_would_move_the_count")
+    return ""
+
+
 def _has_any_stock(session: SessionDep, product_id: int) -> bool:
     return any(
         offer.stock_left
@@ -862,18 +1129,32 @@ def _has_any_stock(session: SessionDep, product_id: int) -> bool:
     )
 
 
+def _image_rows(session: SessionDep, product_id: int) -> list[ProductImage]:
+    return list(
+        session.exec(
+            select(ProductImage)
+            .where(ProductImage.product_id == product_id)
+            .order_by(col(ProductImage.sort), col(ProductImage.id))
+        ).all()
+    )
+
+
 def _image_urls(session: SessionDep, product_id: int) -> list[str]:
     return [
         url
-        for url in (
-            sv.media_url(row.url)
-            for row in session.exec(
-                select(ProductImage)
-                .where(ProductImage.product_id == product_id)
-                .order_by(col(ProductImage.sort), col(ProductImage.id))
-            ).all()
-        )
+        for url in (sv.media_url(row.url) for row in _image_rows(session, product_id))
         if url
+    ]
+
+
+def _specs_out(session: SessionDep, product_id: int) -> list[s.SpecOut]:
+    return [
+        s.SpecOut(key=row.key, value=row.value)
+        for row in session.exec(
+            select(ProductSpec)
+            .where(ProductSpec.product_id == product_id)
+            .order_by(col(ProductSpec.sort))
+        ).all()
     ]
 
 

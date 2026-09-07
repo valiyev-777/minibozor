@@ -1791,6 +1791,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/staff/catalog/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How many cards are in each state
+         * @description For the badge on the moderation row.
+         *
+         *     A sidebar that wants to say "3 waiting" should not have to fetch the queue
+         *     to find out — that is a page of cards downloaded to render an integer, on
+         *     every screen, because the sidebar is on every screen.
+         */
+        get: operations["catalog_summary_api_v1_staff_catalog_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/staff/catalog/products/{product_id}": {
         parameters: {
             query?: never;
@@ -1798,7 +1822,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Product */
+        /**
+         * Get Product
+         * @description One card, with the fields only the edit form needs.
+         *
+         *     The list shape stays as it was — a description per row is prose fetched to
+         *     draw a table — so this is the richer of the two, on the endpoint an editor
+         *     calls one card at a time.
+         */
         get: operations["get_product_api_v1_staff_catalog_products__product_id__get"];
         put?: never;
         post?: never;
@@ -1863,7 +1894,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Every category, flat, in the words the rows hold
+         * @description The whole tree at once, and the Uzbek that is on the row.
+         *
+         *     Flat rather than nested: an editor picking a parent wants one list to
+         *     search, and the tree is recoverable from ``parent_slug``. The customer
+         *     endpoint answers a level at a time and translates as it goes, which is
+         *     right for the app and wrong for the field that writes the source text.
+         */
+        get: operations["list_categories_api_v1_staff_catalog_categories_get"];
         put?: never;
         /** Create Category */
         post: operations["create_category_api_v1_staff_catalog_categories_post"];
@@ -1905,7 +1945,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Every brand, with how many cards carry it */
+        get: operations["list_brands_api_v1_staff_catalog_brands_get"];
         put?: never;
         /** Create Brand */
         post: operations["create_brand_api_v1_staff_catalog_brands_post"];
@@ -1940,10 +1981,40 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * The gallery, with the ids to edit it by
+         * @description The write endpoints answer with bare URLs, which redraws a gallery and
+         *     does not edit one: ``DELETE .../images/{image_id}`` has always been here
+         *     and nothing ever told the panel what ``image_id`` was.
+         */
+        get: operations["list_images_api_v1_staff_catalog_products__product_id__images_get"];
         put?: never;
         /** Add Image */
         post: operations["add_image_api_v1_staff_catalog_products__product_id__images_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/products/{product_id}/images/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the order of the photographs, first one being the cover
+         * @description The whole list, the way the showcase takes its orders.
+         *
+         *     Every row named once and none left out: a partial list would leave the
+         *     rest holding numbers that mean something else. The first photograph is the
+         *     one every tile in the shop shows, so this is not only arrangement.
+         */
+        put: operations["reorder_images_api_v1_staff_catalog_products__product_id__images_order_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1974,7 +2045,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * The colour and size tree, and what may be done to it
+         * @description Every variant with its own delete guard, and the tree's size guard.
+         *
+         *     Both answers come from the functions the write endpoints refuse with, so
+         *     a button greyed out here and a 409 from there are the same rule rather
+         *     than two copies of it. The editor can then say why in advance, which is
+         *     the whole difference between a form that explains itself and one that
+         *     waits to be wrong at.
+         */
+        get: operations["list_variants_api_v1_staff_catalog_products__product_id__variants_get"];
         put?: never;
         /**
          * Add Variant
@@ -2026,7 +2107,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * The spec table as it stands, translations included
+         * @description A draft card cannot be read through ``/products/{id}``: that path is
+         *     narrowed to what is in the shop, which is the point of it. So the editor
+         *     needs its own way to see the rows it is about to replace.
+         *
+         *     With the translations, because replacing is all this table supports. The
+         *     editor has to send back every row it means to keep and every word in every
+         *     language on it; anything it could not read is a thing it would delete by
+         *     saving something else.
+         */
+        get: operations["list_specs_api_v1_staff_catalog_products__product_id__specs_get"];
         /** Replace the spec table, in order */
         put: operations["replace_specs_api_v1_staff_catalog_products__product_id__specs_put"];
         post?: never;
@@ -2329,6 +2421,136 @@ export interface components {
             active: boolean;
         };
         /**
+         * AdminBrandOut
+         * @description A brand as it is stored, with the figure the customer list never fills.
+         *
+         *     ``/brands`` sends ``product_count: 0`` for every row — the count is only
+         *     computed in ``/products/filters``, and scoped to one listing. Here it is
+         *     the whole catalogue, and it is the answer to "can this be deleted".
+         */
+        AdminBrandOut: {
+            /** Id */
+            id: number;
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /** Product Count */
+            product_count: number;
+        };
+        /**
+         * AdminCategoryOut
+         * @description A category as it is stored, not as it is read.
+         *
+         *     ``name`` and ``subtitle`` are the row's own Uzbek. What makes this shape
+         *     necessary rather than convenient: ``/categories`` passes both through
+         *     ``i18n.t``, so an admin working with the panel in Russian would be shown
+         *     the translation in the field that writes the source.
+         */
+        AdminCategoryOut: {
+            /** Id */
+            id: number;
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /** Subtitle */
+            subtitle: string;
+            /** Icon */
+            icon: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Parent Slug */
+            parent_slug: string | null;
+            /** Sort */
+            sort: number;
+            /** Is Quick Link */
+            is_quick_link: boolean;
+            /** Product Count */
+            product_count: number;
+            /** Child Count */
+            child_count: number;
+        };
+        /**
+         * AdminImageOut
+         * @description A photograph with the id needed to remove or reorder it.
+         *
+         *     The write endpoints answer with bare URLs, which is enough to redraw a
+         *     gallery and not enough to edit one: ``DELETE .../images/{image_id}`` has
+         *     always existed and nothing told the panel what ``image_id`` was.
+         */
+        AdminImageOut: {
+            /** Id */
+            id: number;
+            /** Url */
+            url: string;
+            /** Sort */
+            sort: number;
+        };
+        /**
+         * AdminProductDetailOut
+         * @description One card, with everything the edit form binds to.
+         *
+         *     The list shape stays lean — a description per row is a page of prose
+         *     fetched to render a table — so the fields only an editor needs are added
+         *     here, on the endpoint only an editor calls.
+         */
+        AdminProductDetailOut: {
+            /** Id */
+            id: number;
+            /** Sku */
+            sku: string;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string;
+            status: components["schemas"]["ProductStatus"];
+            /** Next Statuses */
+            next_statuses: components["schemas"]["ProductStatus"][];
+            /** Category Slug */
+            category_slug: string;
+            /** Brand Slug */
+            brand_slug: string | null;
+            /** Price */
+            price: number;
+            /** Old Price */
+            old_price: number | null;
+            /** Stock Left */
+            stock_left: number;
+            /** Offer Count */
+            offer_count: number;
+            proposed_by: components["schemas"]["SellerOut"] | null;
+            /** Moderation Note */
+            moderation_note: string;
+            /** Image Count */
+            image_count: number;
+            /** Variant Count */
+            variant_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /** Badge */
+            badge: string | null;
+            /** Warranty */
+            warranty: string | null;
+            /** Is Original */
+            is_original: boolean;
+            /** Free Delivery */
+            free_delivery: boolean;
+            /** Next Day Delivery */
+            next_day_delivery: boolean;
+            /** Translations */
+            translations: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
          * AdminProductOut
          * @description A card as the person who owns the catalogue sees it.
          */
@@ -2426,6 +2648,79 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * AdminSpecOut
+         * @description A spec row as the editor has to hold it, translations included.
+         *
+         *     ``SpecOut`` is key and value, which is all a product page shows. An editor
+         *     needs more, and not for convenience: ``PUT .../specs`` replaces the whole
+         *     table, so every row it does not send is gone — translations with it. A
+         *     form that could not read the Russian back would quietly delete it on the
+         *     next save of an unrelated row.
+         */
+        AdminSpecOut: {
+            /** Id */
+            id: number;
+            /** Key */
+            key: string;
+            /** Value */
+            value: string;
+            /** Translations */
+            translations: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+        };
+        /**
+         * AdminVariantOut
+         * @description A colour or a size, and whether it may be deleted.
+         *
+         *     ``can_delete`` is the backend's own answer, from the same function the
+         *     delete endpoint refuses with — not a rule copied into the browser that
+         *     would drift from it. A panel that greys the button out and says why is
+         *     telling the truth; one that lets somebody click and then shows a 409 has
+         *     made them find out the hard way.
+         */
+        AdminVariantOut: {
+            /** Id */
+            id: number;
+            kind: components["schemas"]["VariantKind"];
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Parent Id */
+            parent_id: number | null;
+            /** Sort */
+            sort: number;
+            /** Stock Left */
+            stock_left: number | null;
+            /** In Stock */
+            in_stock: boolean;
+            /** Can Delete */
+            can_delete: boolean;
+            /** Blocked Reason */
+            blocked_reason: string;
+        };
+        /**
+         * AdminVariantsOut
+         * @description The tree, plus whether a size may be added to it at all.
+         *
+         *     The second guard the editor has to show in advance: a colour with stock
+         *     against it cannot take its first size, because the shelf is counted on the
+         *     colour and the size would move where the counting happens.
+         */
+        AdminVariantsOut: {
+            /** Variants */
+            variants: components["schemas"]["AdminVariantOut"][];
+            /** Can Add Size */
+            can_add_size: boolean;
+            /** Size Blocked Reason */
+            size_blocked_reason: string;
         };
         /** BannerOut */
         BannerOut: {
@@ -2704,6 +2999,20 @@ export interface components {
             quantity?: number | null;
             /** Selected */
             selected?: boolean | null;
+        };
+        /**
+         * CatalogSummaryOut
+         * @description How many cards sit in each state.
+         *
+         *     One query for a number the sidebar wants on every screen. The alternative
+         *     is fetching the moderation queue itself to count its rows, which is a page
+         *     of cards fetched to display an integer.
+         */
+        CatalogSummaryOut: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
         };
         /** CategoryOut */
         CategoryOut: {
@@ -8895,6 +9204,37 @@ export interface operations {
             };
         };
     };
+    catalog_summary_api_v1_staff_catalog_summary_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_product_api_v1_staff_catalog_products__product_id__get: {
         parameters: {
             query?: never;
@@ -8914,7 +9254,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdminProductOut"];
+                    "application/json": components["schemas"]["AdminProductDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -9037,6 +9377,37 @@ export interface operations {
             };
         };
     };
+    list_categories_api_v1_staff_catalog_categories_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCategoryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_category_api_v1_staff_catalog_categories_post: {
         parameters: {
             query?: never;
@@ -9129,6 +9500,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CategoryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_brands_api_v1_staff_catalog_brands_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBrandOut"][];
                 };
             };
             /** @description Validation Error */
@@ -9247,6 +9649,39 @@ export interface operations {
             };
         };
     };
+    list_images_api_v1_staff_catalog_products__product_id__images_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminImageOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     add_image_api_v1_staff_catalog_products__product_id__images_post: {
         parameters: {
             query?: never;
@@ -9284,6 +9719,43 @@ export interface operations {
             };
         };
     };
+    reorder_images_api_v1_staff_catalog_products__product_id__images_order_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminImageOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     remove_image_api_v1_staff_catalog_products__product_id__images__image_id__delete: {
         parameters: {
             query?: never;
@@ -9305,6 +9777,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_variants_api_v1_staff_catalog_products__product_id__variants_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminVariantsOut"];
                 };
             };
             /** @description Validation Error */
@@ -9376,6 +9881,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VariantOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_specs_api_v1_staff_catalog_products__product_id__specs_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSpecOut"][];
                 };
             };
             /** @description Validation Error */

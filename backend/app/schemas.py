@@ -1019,6 +1019,150 @@ class AdminProductOut(BaseModel):
     created_at: datetime
 
 
+# --------------------------------------------------------------------------- the editor
+
+# What a card is made of, as the person who owns the catalogue sees it.
+#
+# The customer shapes above are no use here twice over. They answer in the
+# language that was asked for, and an editor needs the Uzbek that is actually
+# on the row — otherwise saving a Russian screen writes the Russian back as
+# the Uzbek. And they carry only what a shopper needs; an editor also needs
+# the ids it will delete and reorder by, and needs to know which of those it
+# is allowed to do before it tries.
+
+
+class AdminCategoryOut(BaseModel):
+    """A category as it is stored, not as it is read.
+
+    ``name`` and ``subtitle`` are the row's own Uzbek. What makes this shape
+    necessary rather than convenient: ``/categories`` passes both through
+    ``i18n.t``, so an admin working with the panel in Russian would be shown
+    the translation in the field that writes the source.
+    """
+
+    id: int
+    slug: str
+    name: str
+    subtitle: str
+    icon: str
+    image_url: str | None
+    parent_slug: str | None
+    sort: int
+    is_quick_link: bool
+    # Why a delete would be refused, without having to try it.
+    product_count: int
+    child_count: int
+
+
+class AdminBrandOut(BaseModel):
+    """A brand as it is stored, with the figure the customer list never fills.
+
+    ``/brands`` sends ``product_count: 0`` for every row — the count is only
+    computed in ``/products/filters``, and scoped to one listing. Here it is
+    the whole catalogue, and it is the answer to "can this be deleted".
+    """
+
+    id: int
+    slug: str
+    name: str
+    product_count: int
+
+
+class CatalogSummaryOut(BaseModel):
+    """How many cards sit in each state.
+
+    One query for a number the sidebar wants on every screen. The alternative
+    is fetching the moderation queue itself to count its rows, which is a page
+    of cards fetched to display an integer.
+    """
+
+    counts: dict[ProductStatus, int]
+
+
+class AdminImageOut(BaseModel):
+    """A photograph with the id needed to remove or reorder it.
+
+    The write endpoints answer with bare URLs, which is enough to redraw a
+    gallery and not enough to edit one: ``DELETE .../images/{image_id}`` has
+    always existed and nothing told the panel what ``image_id`` was.
+    """
+
+    id: int
+    url: str
+    sort: int
+
+
+class AdminVariantOut(BaseModel):
+    """A colour or a size, and whether it may be deleted.
+
+    ``can_delete`` is the backend's own answer, from the same function the
+    delete endpoint refuses with — not a rule copied into the browser that
+    would drift from it. A panel that greys the button out and says why is
+    telling the truth; one that lets somebody click and then shows a 409 has
+    made them find out the hard way.
+    """
+
+    id: int
+    kind: VariantKind
+    label: str
+    value: str
+    image_url: str | None
+    parent_id: int | None
+    sort: int
+    stock_left: int | None
+    in_stock: bool
+    can_delete: bool
+    # An already-translated sentence, empty when it can be deleted.
+    blocked_reason: str
+
+
+class AdminVariantsOut(BaseModel):
+    """The tree, plus whether a size may be added to it at all.
+
+    The second guard the editor has to show in advance: a colour with stock
+    against it cannot take its first size, because the shelf is counted on the
+    colour and the size would move where the counting happens.
+    """
+
+    variants: list[AdminVariantOut]
+    can_add_size: bool
+    size_blocked_reason: str
+
+
+class AdminSpecOut(BaseModel):
+    """A spec row as the editor has to hold it, translations included.
+
+    ``SpecOut`` is key and value, which is all a product page shows. An editor
+    needs more, and not for convenience: ``PUT .../specs`` replaces the whole
+    table, so every row it does not send is gone — translations with it. A
+    form that could not read the Russian back would quietly delete it on the
+    next save of an unrelated row.
+    """
+
+    id: int
+    key: str
+    value: str
+    translations: dict[str, dict[str, str]]
+
+
+class AdminProductDetailOut(AdminProductOut):
+    """One card, with everything the edit form binds to.
+
+    The list shape stays lean — a description per row is a page of prose
+    fetched to render a table — so the fields only an editor needs are added
+    here, on the endpoint only an editor calls.
+    """
+
+    description: str
+    badge: str | None
+    warranty: str | None
+    is_original: bool
+    free_delivery: bool
+    next_day_delivery: bool
+    # {"ru": {"title": …}, "en": {…}} — absent languages simply not present.
+    translations: dict[str, dict[str, str]]
+
+
 class ProductCreateIn(BaseModel):
     """A new card.
 

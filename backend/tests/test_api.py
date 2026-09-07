@@ -4890,3 +4890,388 @@ def test_only_the_people_who_write_cards_may_upload_a_picture(
     assert send(operator) == 403
     assert send(seller) == 201
     assert send(admin) == 201
+
+
+# --------------------------------------------------------- what the editor reads
+
+
+def test_the_admin_lists_answer_in_the_words_the_rows_hold(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """The customer endpoints translate as they go, which is right for the app
+    and wrong for the field that writes the source: an editor working in
+    Russian would be shown the translation and save it back as the Uzbek."""
+    client.post(
+        f"{API}/staff/catalog/categories",
+        json={
+            "slug": "sinov-admin-turkum",
+            "name": "Sinov turkumi",
+            "subtitle": "izohi",
+            "translations": {"ru": {"name": "Тестовая категория"}},
+        },
+        headers=admin,
+    )
+    client.post(
+        f"{API}/staff/catalog/brands",
+        json={
+            "slug": "sinov-admin-brend",
+            "name": "Sinov Brend",
+            "translations": {"ru": {"name": "Тестовый бренд"}},
+        },
+        headers=admin,
+    )
+
+    # The shopper's list, asked for in Russian, answers in Russian.
+    shopper = client.get(f"{API}/brands", headers=_ru()).json()
+    assert "Тестовый бренд" in [row["name"] for row in shopper]
+
+    # The editor's list, asked for in Russian, answers with the row itself.
+    brands = client.get(f"{API}/staff/catalog/brands", headers=_ru(admin))
+    assert brands.status_code == 200, brands.text
+    mine = next(row for row in brands.json() if row["slug"] == "sinov-admin-brend")
+    assert mine["name"] == "Sinov Brend"
+
+    categories = client.get(f"{API}/staff/catalog/categories", headers=_ru(admin))
+    assert categories.status_code == 200, categories.text
+    row = next(r for r in categories.json() if r["slug"] == "sinov-admin-turkum")
+    assert (row["name"], row["subtitle"]) == ("Sinov turkumi", "izohi")
+
+    # Flat, and the tree recoverable from parent_slug — a child of the seeded
+    # root reports which root it hangs from.
+    slugs = {r["slug"] for r in categories.json()}
+    assert len(slugs) > len(client.get(f"{API}/categories").json()), "children too"
+    assert any(r["parent_slug"] for r in categories.json())
+
+    # Nobody else's list.
+    assert client.get(f"{API}/staff/catalog/brands").status_code == 401
+
+
+def test_the_admin_lists_carry_the_counts_that_explain_a_refusal(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """`GET /brands` sends `product_count: 0` for every row — the figure is
+    only computed in `/products/filters`, scoped to one listing. Here it is the
+    whole catalogue, and it is the answer to "why can't I delete this"."""
+    client.post(
+        f"{API}/staff/catalog/categories",
+        json={"slug": "sinov-sanoq", "name": "Sanoq turkumi"},
+        headers=admin,
+    )
+    client.post(
+        f"{API}/staff/catalog/brands",
+        json={"slug": "sinov-sanoq-brend", "name": "Sanoq Brend"},
+        headers=admin,
+    )
+
+    def counts() -> tuple[int, int]:
+        category = next(
+            r
+            for r in client.get(f"{API}/staff/catalog/categories", headers=admin).json()
+            if r["slug"] == "sinov-sanoq"
+        )
+        brand = next(
+            r
+            for r in client.get(f"{API}/staff/catalog/brands", headers=admin).json()
+            if r["slug"] == "sinov-sanoq-brend"
+        )
+        return category["product_count"], brand["product_count"]
+
+    assert counts() == (0, 0)
+    assert client.delete(
+        f"{API}/staff/catalog/brands/sinov-sanoq-brend", headers=admin
+    ).status_code == 200
+
+    # Written again, this time with a card against it.
+    client.post(
+        f"{API}/staff/catalog/brands",
+        json={"slug": "sinov-sanoq-brend", "name": "Sanoq Brend"},
+        headers=admin,
+    )
+    client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "SINOV-SANOQ-1",
+            "title": "Sanoq kartochkasi",
+            "category_slug": "sinov-sanoq",
+            "brand_slug": "sinov-sanoq-brend",
+            "price": 40_000,
+        },
+        headers=admin,
+    )
+    assert counts() == (1, 1)
+
+    # And the count is exactly why the delete is refused.
+    assert client.delete(
+        f"{API}/staff/catalog/categories/sinov-sanoq", headers=admin
+    ).status_code == 409
+    assert client.delete(
+        f"{API}/staff/catalog/brands/sinov-sanoq-brend", headers=admin
+    ).status_code == 409
+
+
+def test_the_queue_can_be_counted_without_fetching_it(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """The sidebar says "3 waiting" on every screen. Fetching the queue to
+    render an integer would be a page of cards downloaded each time."""
+    before = client.get(f"{API}/staff/catalog/summary", headers=admin)
+    assert before.status_code == 200, before.text
+    waiting = before.json()["counts"]["moderating"]
+
+    listing = client.get(f"{API}/categories").json()
+    made = client.post(
+        f"{API}/staff/catalog/proposals",
+        json={
+            "sku": "SINOV-QUEUE-1",
+            "title": "Navbat kartochkasi",
+            "category_slug": listing[0]["slug"],
+            "price": 30_000,
+        },
+        headers=admin,
+    )
+    assert made.status_code == 201, made.text
+
+    after = client.get(f"{API}/staff/catalog/summary", headers=admin).json()
+    assert after["counts"]["moderating"] == waiting + 1
+    # Every state is named, so a zero is a zero rather than a missing key.
+    assert set(after["counts"]) == {
+        "draft", "moderating", "published", "rejected", "archived",
+    }
+
+    client.post(
+        f"{API}/staff/catalog/products/{made.json()['id']}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+    assert (
+        client.get(f"{API}/staff/catalog/summary", headers=admin).json()["counts"][
+            "moderating"
+        ]
+        == waiting
+    )
+    assert client.get(f"{API}/staff/catalog/summary").status_code == 401
+
+
+def test_a_draft_card_can_be_read_back_in_full_to_be_edited(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """A draft is invisible through `/products/{id}` — that path is narrowed to
+    what is in the shop, which is the point of it. So until now nothing could
+    read back the description, the photographs, the colours or the specs of a
+    card that had not been published, and an edit form had nothing to open."""
+    listing = client.get(f"{API}/categories").json()
+    made = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "SINOV-EDIT-1",
+            "title": "Tahrir kartochkasi",
+            "subtitle": "qoralama",
+            "description": "Uzun tavsif matni.",
+            "badge": "Yangi",
+            "warranty": "Kafolat 1 yil",
+            "category_slug": listing[0]["slug"],
+            "price": 60_000,
+            "translations": {"ru": {"title": "Карточка", "description": "Описание."}},
+        },
+        headers=admin,
+    )
+    assert made.status_code == 201, made.text
+    product_id = made.json()["id"]
+
+    # The draft is not in the shop, and reading it there says so.
+    assert client.get(f"{API}/products/{product_id}").status_code == 404
+
+    card = client.get(f"{API}/staff/catalog/products/{product_id}", headers=admin)
+    assert card.status_code == 200, card.text
+    body = card.json()
+    assert body["description"] == "Uzun tavsif matni."
+    assert (body["badge"], body["warranty"]) == ("Yangi", "Kafolat 1 yil")
+    assert body["is_original"] is True
+    # Every language at once, so the editor can mark the empty cells.
+    assert body["translations"]["ru"]["title"] == "Карточка"
+    assert "en" not in body["translations"]
+
+    # The list shape stays lean — a description per row is prose fetched to
+    # draw a table.
+    page = client.get(
+        f"{API}/staff/catalog/products", params={"q": "SINOV-EDIT-1"}, headers=admin
+    ).json()
+    assert "description" not in page["items"][0]
+
+    specs = client.put(
+        f"{API}/staff/catalog/products/{product_id}/specs",
+        json={
+            "specs": [
+                {
+                    "key": "Material",
+                    "value": "Sopol",
+                    "translations": {"ru": {"key": "Материал"}},
+                }
+            ]
+        },
+        headers=admin,
+    )
+    assert specs.status_code == 200, specs.text
+    read_back = client.get(
+        f"{API}/staff/catalog/products/{product_id}/specs", headers=admin
+    )
+    assert read_back.status_code == 200, read_back.text
+    assert [(r["key"], r["value"]) for r in read_back.json()] == [("Material", "Sopol")]
+
+    # With the Russian on the row. The table is only ever replaced whole, so a
+    # form that could not read this back would delete it by saving an
+    # unrelated row.
+    assert read_back.json()[0]["translations"]["ru"]["key"] == "Материал"
+
+    # Saving the table again, carrying the translation with it, keeps it.
+    client.put(
+        f"{API}/staff/catalog/products/{product_id}/specs",
+        json={
+            "specs": [
+                {
+                    "key": "Material",
+                    "value": "Sopol",
+                    "translations": {"ru": {"key": "Материал"}},
+                },
+                {"key": "Vazn", "value": "300 g"},
+            ]
+        },
+        headers=admin,
+    )
+    again = client.get(
+        f"{API}/staff/catalog/products/{product_id}/specs", headers=admin
+    ).json()
+    assert [r["key"] for r in again] == ["Material", "Vazn"]
+    assert again[0]["translations"]["ru"]["key"] == "Материал"
+    # And the new row inherits nothing from whatever held its id before.
+    assert again[1]["translations"] == {}
+
+
+def test_photographs_can_be_reordered_because_the_ids_are_readable(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """`DELETE .../images/{image_id}` has always existed and nothing ever told
+    the panel what `image_id` was — the write endpoints answer with bare URLs,
+    which redraws a gallery and cannot edit one."""
+    listing = client.get(f"{API}/categories").json()
+    product_id = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "SINOV-RASM-1",
+            "title": "Rasmli kartochka",
+            "category_slug": listing[0]["slug"],
+            "price": 70_000,
+        },
+        headers=admin,
+    ).json()["id"]
+
+    for index, name in enumerate(("bir.png", "ikki.png", "uch.png")):
+        client.post(
+            f"{API}/staff/catalog/products/{product_id}/images",
+            json={"url": f"products/{name}", "sort": index},
+            headers=admin,
+        )
+
+    images = client.get(
+        f"{API}/staff/catalog/products/{product_id}/images", headers=admin
+    )
+    assert images.status_code == 200, images.text
+    rows = images.json()
+    assert [r["url"] for r in rows] == ["products/bir.png", "products/ikki.png", "products/uch.png"]
+    assert all(isinstance(r["id"], int) for r in rows)
+
+    door = f"{API}/staff/catalog/products/{product_id}/images/order"
+    flipped = [rows[2]["id"], rows[0]["id"], rows[1]["id"]]
+    moved = client.put(door, json={"ids": flipped}, headers=admin)
+    assert moved.status_code == 200, moved.text
+    assert [r["url"] for r in moved.json()] == [
+        "products/uch.png", "products/bir.png", "products/ikki.png"
+    ]
+
+    # The whole list or nothing: a partial order would leave the rest holding
+    # numbers that mean something else.
+    assert client.put(
+        door, json={"ids": [rows[0]["id"]]}, headers=admin
+    ).status_code == 400
+    assert client.put(
+        door, json={"ids": [rows[0]["id"], rows[0]["id"], rows[1]["id"]]}, headers=admin
+    ).status_code == 400
+
+    # The first photograph is the cover, so the order reaches the shop.
+    client.post(
+        f"{API}/staff/catalog/products/{product_id}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+    assert client.get(f"{API}/products/{product_id}").json()["images"][0] == "products/uch.png"
+
+    # And an id read here is the id the delete takes.
+    gone = client.delete(
+        f"{API}/staff/catalog/products/{product_id}/images/{rows[0]['id']}",
+        headers=admin,
+    )
+    assert gone.status_code == 200
+    assert len(client.get(
+        f"{API}/staff/catalog/products/{product_id}/images", headers=admin
+    ).json()) == 2
+
+
+def test_the_editor_is_told_what_it_may_not_do_before_it_tries(
+    client: TestClient,
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Both guards come from the functions the write endpoints refuse with, so
+    a greyed-out button and a 409 are the same rule rather than two copies of
+    it that drift."""
+    warehouse = staff(UserRole.WAREHOUSE, "+998900030051")
+    door = f"{API}/staff/catalog/products"
+
+    # A colour with nothing against it yet: deletable, and the tree can still
+    # change shape.
+    product_id, colour_id = _card_with_a_colour(
+        client, admin, "MB-GUARD-1", with_a_size=False
+    )
+    open_ = client.get(f"{door}/{product_id}/variants", headers=admin)
+    assert open_.status_code == 200, open_.text
+    assert open_.json()["can_add_size"] is True
+    assert open_.json()["size_blocked_reason"] == ""
+    colour = next(v for v in open_.json()["variants"] if v["id"] == colour_id)
+    assert colour["can_delete"] is True and colour["blocked_reason"] == ""
+
+    # Stock arrives on the colour. Now a first size would move where the shelf
+    # is counted, and the editor is told so rather than finding out.
+    _stock_a_leaf(client, admin, warehouse, product_id, colour_id, 4)
+    stocked = client.get(f"{door}/{product_id}/variants", headers=admin).json()
+    assert stocked["can_add_size"] is False
+    assert "sanoq" in stocked["size_blocked_reason"]
+
+    # And it is the same sentence the write endpoint refuses with.
+    refused = client.post(
+        f"{door}/{product_id}/variants",
+        json={"kind": "size", "label": "M", "value": "M", "parent_id": colour_id},
+        headers=admin,
+    )
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == stocked["size_blocked_reason"]
+
+    # The movement against the colour also makes it undeletable, and says why.
+    blocked = next(v for v in stocked["variants"] if v["id"] == colour_id)
+    assert blocked["can_delete"] is False
+    assert "harakat" in blocked["blocked_reason"]
+    gone = client.delete(f"{door}/{product_id}/variants/{colour_id}", headers=admin)
+    assert gone.status_code == 409
+    assert gone.json()["detail"] == blocked["blocked_reason"]
+
+    # A colour holding sizes is blocked for a different reason, and says that
+    # one instead.
+    parent_id, leaf_id = _card_with_a_colour(
+        client, admin, "MB-GUARD-2", with_a_size=True
+    )
+    tree = client.get(f"{door}/{parent_id}/variants", headers=admin).json()
+    colour_row = next(v for v in tree["variants"] if v["kind"] == "color")
+    assert colour_row["can_delete"] is False
+    assert "o'lcham" in colour_row["blocked_reason"]
+    # Its size is a leaf with nothing against it, so that one may go.
+    assert next(v for v in tree["variants"] if v["id"] == leaf_id)["can_delete"] is True
+    assert not _stock_is_consistent()

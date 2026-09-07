@@ -1,5 +1,6 @@
 import * as React from "react"
 import { NavLink, Outlet } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
 import {
   BadgeCheck,
   CalendarClock,
@@ -16,7 +17,8 @@ import {
   Undo2,
   Users,
 } from "lucide-react"
-import type { UserRole } from "@/api/types"
+import { api } from "@/api/client"
+import type { CatalogSummary, UserRole } from "@/api/types"
 import { useSession } from "@/auth/session"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -42,6 +44,8 @@ export type NavItem = {
   roles: UserRole[]
   /** Starts a group in the rail, so nine rows read as three jobs. */
   group?: string
+  /** Shows a count beside the label. Only the queues have one. */
+  badge?: "moderating"
 }
 
 export const NAV: NavItem[] = [
@@ -87,6 +91,7 @@ export const NAV: NavItem[] = [
     icon: BadgeCheck,
     roles: ["admin"],
     group: "Administrator",
+    badge: "moderating",
   },
   { to: "/catalog", label: "Katalog", icon: LibraryBig, roles: ["admin"] },
   { to: "/sellers", label: "Sotuvchilar", icon: Store, roles: ["admin"] },
@@ -109,6 +114,17 @@ export function Layout() {
   // they cannot leave; an admin sees three panels stacked and needs to know
   // where one ends.
   const grouped = new Set(items.map((item) => item.group).filter(Boolean)).size > 1
+
+  // One integer, from one GROUP BY. The queue itself is a page of cards, and
+  // the sidebar is on every screen — fetching it to render "3" would download
+  // the moderation queue on the way to the delivery windows.
+  const summary = useQuery({
+    queryKey: ["staff", "catalog", "summary"],
+    queryFn: () => api<CatalogSummary>("/staff/catalog/summary"),
+    enabled: items.some((item) => item.badge),
+    refetchInterval: 60_000,
+  })
+  const waiting = summary.data?.counts["moderating"] ?? 0
 
   return (
     <div className="flex min-h-full">
@@ -141,7 +157,12 @@ export function Layout() {
                 }
               >
                 <item.icon className="size-3.5 shrink-0" />
-                {item.label}
+                <span className="flex-1 truncate">{item.label}</span>
+                {item.badge && waiting ? (
+                  <span className="tabular rounded bg-white/15 px-1 text-[11px] font-semibold text-white">
+                    {waiting}
+                  </span>
+                ) : null}
               </NavLink>
             </React.Fragment>
           ))}

@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { ChevronDown, ChevronRight, Search, Store } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { ChevronDown, ChevronRight, Plus, Search, Store } from "lucide-react"
 import { api } from "@/api/client"
 import type {
   AdminProduct,
@@ -32,12 +33,21 @@ const STATUSES: ProductStatus[] = [
 ]
 
 export function CatalogPage() {
+  const navigate = useNavigate()
   const [tab, setTab] = React.useState<Tab>("products")
 
   return (
     <Page
       title="Katalog"
-      hint="Ko'rish uchun. Kartochka tahrirlash — alohida ekran, hozircha «Tahrirlash» tugmasi kutmoqda."
+      hint="Kartochkani tahrirlash — qatordagi tugma. Narx, qoldiq va holat u yerda emas, va nega emasligi yozilgan."
+      actions={
+        tab === "products" ? (
+          <Button variant="primary" onClick={() => navigate("/catalog/products/new")}>
+            <Plus />
+            Yangi kartochka
+          </Button>
+        ) : null
+      }
     >
       <div className="mb-3">
         <Tabs
@@ -61,6 +71,7 @@ export function CatalogPage() {
 // ----------------------------------------------------------------- products
 
 function ProductsTab() {
+  const navigate = useNavigate()
   const [term, setTerm] = React.useState("")
   const [q, setQ] = React.useState("")
   const [status, setStatus] = React.useState<"" | ProductStatus>("")
@@ -183,12 +194,8 @@ function ProductsTab() {
       header: "",
       headClassName: "text-right",
       className: "text-right",
-      cell: () => (
-        // The form behind this is the next stage's whole job — a card is a
-        // title in three languages, images, variants, specs and a status.
-        // A button that opened half of it would be worse than one that says
-        // so.
-        <Button size="sm" disabled title="Keyingi bosqichda">
+      cell: (row) => (
+        <Button size="sm" onClick={() => navigate(`/catalog/products/${row.id}`)}>
           Tahrirlash
         </Button>
       ),

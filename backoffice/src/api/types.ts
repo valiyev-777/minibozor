@@ -62,6 +62,21 @@ export type PromoWriteIn = S["PromoWriteIn"]
 export type PromoUpdateIn = S["PromoUpdateIn"]
 export type ReorderIn = S["ReorderIn"]
 
+// The editor's own shapes. The customer ones answer in the language asked for
+// and carry only what a shopper needs; an editor needs the Uzbek that is on
+// the row, the ids it deletes and reorders by, and what it is allowed to do.
+export type AdminCategory = S["AdminCategoryOut"]
+export type AdminBrand = S["AdminBrandOut"]
+export type CatalogSummary = S["CatalogSummaryOut"]
+export type AdminProductDetail = S["AdminProductDetailOut"]
+export type AdminImage = S["AdminImageOut"]
+export type AdminVariant = S["AdminVariantOut"]
+export type AdminVariants = S["AdminVariantsOut"]
+export type VariantKind = S["VariantKind"]
+export type SpecOut = S["SpecOut"]
+export type AdminSpec = S["AdminSpecOut"]
+export type MediaOut = S["MediaOut"]
+
 export type Supply = S["SupplyOut"]
 export type SupplyStatus = S["SupplyStatus"]
 export type SupplyLine = S["SupplyLineOut"]

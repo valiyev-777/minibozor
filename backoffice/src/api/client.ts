@@ -101,6 +101,12 @@ export type Query = Record<string, string | number | boolean | null | undefined>
 type Options = {
   method?: string
   json?: unknown
+  /**
+   * A file upload. Sent instead of `json`, and deliberately without a
+   * Content-Type of our own: multipart needs a boundary in that header, and
+   * the browser is the only thing that knows what boundary it wrote.
+   */
+  form?: FormData
   query?: Query
   /** Set on the auth calls themselves, which must not try to refresh. */
   noRefresh?: boolean
@@ -116,15 +122,22 @@ function url(path: string, query?: Query): string {
   return target.toString()
 }
 
+function body(options: Options): BodyInit | undefined {
+  if (options.form) return options.form
+  if (options.json !== undefined) return JSON.stringify(options.json)
+  return undefined
+}
+
 async function send(path: string, options: Options): Promise<Response> {
   const headers: Record<string, string> = { "Accept-Language": "uz" }
   if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`
   if (options.json !== undefined) headers["Content-Type"] = "application/json"
+  const payload = body(options)
   return fetch(url(path, options.query), {
     method: options.method ?? "GET",
     credentials: "include",
     headers,
-    ...(options.json !== undefined ? { body: JSON.stringify(options.json) } : {}),
+    ...(payload !== undefined ? { body: payload } : {}),
   })
 }
 
@@ -162,4 +175,17 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
 /** Recover a session on page load, from the cookie alone. */
 export async function resumeSession(): Promise<boolean> {
   return refreshAccessToken()
+}
+
+/**
+ * Upload one file and get back where it landed.
+ *
+ * Goes through `api` so it inherits the bearer token and the one-retry
+ * refresh: a photograph chosen after the access token expired should upload,
+ * not fail and lose the file the person picked.
+ */
+export async function upload<T>(path: string, file: File): Promise<T> {
+  const form = new FormData()
+  form.append("file", file)
+  return api<T>(path, { method: "POST", form })
 }
