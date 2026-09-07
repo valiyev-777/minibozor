@@ -187,6 +187,15 @@ data class VariantDto(
      * the shop does not count apart — then the product's own count answers.
      */
     @SerialName("stock_left") val stockLeft: Int? = null,
+    /**
+     * The colour a size belongs to.
+     *
+     * Sizes are counted per colour: one row per colour per size, each with its
+     * own count, so the page shows the sizes of the colour on screen. Null on a
+     * colour, and on a size of a product that has no colours — then the sizes
+     * are the product's own.
+     */
+    @SerialName("parent_id") val parentId: Int? = null,
 )
 
 @Immutable
@@ -202,6 +211,15 @@ data class ProductCardDto(
     @SerialName("old_price") val oldPrice: Long? = null,
     @SerialName("discount_percent") val discountPercent: Int? = null,
     @SerialName("image_url") val imageUrl: String? = null,
+    /**
+     * Every photograph the card may swipe through, the first being [imageUrl].
+     *
+     * The catalogue files four dials of one watch as four products with one
+     * picture each; the server hangs a shelf's photographs on every member of
+     * it, so the card can show what the choice actually looks like without the
+     * shopper opening four pages to find out.
+     */
+    val images: List<String> = emptyList(),
     val rating: Double = 0.0,
     @SerialName("reviews_count") val reviewsCount: Int = 0,
     val badge: String? = null,
@@ -371,6 +389,17 @@ data class CartItemDto(
     val title: String,
     @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("variant_label") val variantLabel: String = "",
+    /**
+     * The size and the colour this line was added for.
+     *
+     * The label above is one joined string for reading. These are what tell a
+     * product page whether the line in the basket is the one it is currently
+     * showing: without them it could only match on the product, so a shirt
+     * already in the basket in medium turned the buy button into a stepper for
+     * that line and there was no way left to add a large.
+     */
+    @SerialName("variant_id") val variantId: Int? = null,
+    @SerialName("color_variant_id") val colorVariantId: Int? = null,
     @SerialName("unit_price") val unitPrice: Long,
     @SerialName("old_unit_price") val oldUnitPrice: Long? = null,
     val quantity: Int,

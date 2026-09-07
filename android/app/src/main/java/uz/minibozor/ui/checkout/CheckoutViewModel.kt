@@ -118,6 +118,13 @@ class CheckoutViewModel @Inject constructor(
             _state.update {
                 it.copy(
                     addresses = addresses,
+                    // The code the basket was priced with, carried into the
+                    // order. It lives in the request rather than in the cart,
+                    // so a discount the customer had accepted in the basket
+                    // used to be dropped the moment they pressed "Buyurtma
+                    // berish" — the checkout asked for a preview with no code
+                    // on it and quietly charged the full amount.
+                    promoCode = it.promoCode ?: cart.promoCode.value,
                     cards = cards,
                     slotDays = slotDays,
                     pickupPoints = pickups,

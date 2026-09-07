@@ -418,4 +418,14 @@
         <item quantity="other">До заказа осталось %1$d шага</item>
     </plurals>
     <string name="yetkazish_narxi_punktdan_keyin">Стоимость доставки станет известна после выбора пункта</string>
+
+    <!-- корзина: что значат галочки, и промокод -->
+    <string name="hammasini_tanlash">Выбрать все</string>
+    <string name="faqat_belgilangan_tovarlar">Оформляются только отмеченные товары</string>
+    <string name="belgilanmagan_hisobga_olinmaydi">Не отмечено — в сумму не входит</string>
+    <string name="kamida_bitta_tovarni_belgilang">Отметьте хотя бы один товар, чтобы заказать</string>
+    <string name="n_ta_uchun">за %1$d шт.</string>
+    <string name="promokod">Промокод</string>
+    <string name="promokod_qollandi">%1$s применён</string>
+    <string name="punktda_tolash">Оплата в пункте выдачи</string>
 </resources>

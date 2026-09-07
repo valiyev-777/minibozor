@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import uz.minibozor.core.design.MbPressAlpha
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.mbPressable
@@ -50,9 +51,12 @@ fun MbChip(
             // provider falls back to Foundation's debugging indication —
             // flat black at nearly a third opacity, which is the dark
             // rectangle that turned up under the filter's controls.
+            // With the alpha on it: the highlight paints what it is handed at
+            // full strength, so a bare colour here filled the chip solid.
             .mbPressable(
                 MbTheme.shapes.chip,
-                if (selected) MbTheme.colors.onInverse else MbTheme.colors.ink,
+                (if (selected) MbTheme.colors.onInverse else MbTheme.colors.ink)
+                    .copy(alpha = MbPressAlpha),
                 enabled = enabled,
                 onClick = onClick,
             )
@@ -113,7 +117,7 @@ fun MbSizeChip(
             // sheet in its own window cannot fall back to the debugging one.
             .mbPressable(
                 MbTheme.shapes.field,
-                MbTheme.colors.ink,
+                MbTheme.colors.ink.copy(alpha = MbPressAlpha),
                 enabled = enabled,
                 onClick = onClick,
             )

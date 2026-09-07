@@ -104,7 +104,14 @@ fun PaymentMethodScreen(
                     if (state.cards.isNotEmpty()) MbDivider(inset = 68.dp)
                     MbRadioRow(
                         label = stringResource(R.string.naqd_pul),
-                        subtitle = stringResource(R.string.kuryerga_topshirishda),
+                        // Where the money changes hands depends on how the
+                        // order is coming: to the courier at the door, or over
+                        // the counter at the pickup point.
+                        subtitle = if (state.delivery == DeliveryMethod.Courier) {
+                            stringResource(R.string.kuryerga_topshirishda)
+                        } else {
+                            stringResource(R.string.punktda_tolash)
+                        },
                         selected = state.paymentMethod == "cash",
                         onSelect = viewModel::selectCash,
                         leading = {

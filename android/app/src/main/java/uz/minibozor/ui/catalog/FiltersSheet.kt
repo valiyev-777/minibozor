@@ -1,6 +1,7 @@
 package uz.minibozor.ui.catalog
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -31,9 +33,11 @@ import uz.minibozor.core.design.component.MbCheckRow
 import uz.minibozor.core.design.component.MbChip
 import uz.minibozor.core.design.component.MbDivider
 import uz.minibozor.core.design.component.MbPrimaryButton
+import uz.minibozor.core.design.component.MbSecondaryButton
 import uz.minibozor.core.design.component.MbSizeChip
 import uz.minibozor.core.design.component.MbTextField
 import uz.minibozor.core.design.component.SectionHeader
+import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.util.grouped
 import uz.minibozor.data.remote.dto.FiltersDto
 
@@ -66,29 +70,37 @@ fun FiltersSheet(
             .fillMaxWidth()
             .heightIn(max = (screenHeight * 0.66f).coerceIn(420.dp, 640.dp))
     ) {
+        // The sheet's own header, and the reason the panel no longer opens
+        // under a stray black bar.
+        //
+        // Material draws a drag handle over any sheet that does not say
+        // otherwise — a dark stub floating in the middle of the top edge, which
+        // is the one thing on this panel that belongs to nothing on it. The
+        // variant picker had already turned it off; this one had not, so the
+        // two sheets in the same app opened differently. It is off here too,
+        // and what stands at the top instead is a title and a way out.
+        //
+        // A way out it did not have at all: the only thing in the corner was
+        // "Tozalash", which is where a close button belongs and does very
+        // nearly the opposite of closing. It has moved down beside "Ko'rsatish"
+        // where the two decisions about a set of filters — throw them away, or
+        // use them — sit together.
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 6.dp),
+                .padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MbText(stringResource(R.string.filtrlar), MbTheme.type.title2)
             Spacer(Modifier.weight(1f))
-            MbText(
-                stringResource(R.string.tozalash),
-                MbTheme.type.label,
-                MbTheme.colors.accent,
-                modifier = Modifier
-                    .mbClickable(MbTheme.shapes.chip) {
-                        draft = draft.cleared()
-                        minPrice = ""
-                        maxPrice = ""
-                    }
-                    // Inside the click, not outside it: the padding is the
-                    // difference between a word-sized tap target and a
-                    // finger-sized one, and the ripple should cover both.
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-            )
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .mbClickable(MbTheme.shapes.chip, onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                MbIcon("close", size = 20.dp, tint = MbTheme.colors.inkSoft)
+            }
         }
         MbDivider()
 
@@ -215,7 +227,23 @@ fun FiltersSheet(
         }
 
         MbDivider()
-        Column(Modifier.padding(20.dp)) {
+        // Both decisions on one line: throw the filters away, or use them.
+        // "Tozalash" is the quieter of the two and is drawn as the quieter of
+        // the two, which it never was up in the corner where it looked like the
+        // way to close the panel.
+        Row(
+            Modifier.padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MbSecondaryButton(
+                text = stringResource(R.string.tozalash),
+                onClick = {
+                    draft = draft.cleared()
+                    minPrice = ""
+                    maxPrice = ""
+                },
+                modifier = Modifier.weight(1f),
+            )
             MbPrimaryButton(
                 text = if (resultCount > 0) {
                     stringResource(R.string.korsatish_n, resultCount.grouped())
@@ -228,6 +256,9 @@ fun FiltersSheet(
                         )
                     )
                 },
+                // Twice the room of the button beside it: applying is what the
+                // panel is for.
+                modifier = Modifier.weight(2f),
             )
         }
     }

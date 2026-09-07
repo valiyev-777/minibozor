@@ -52,7 +52,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
@@ -70,8 +69,6 @@ import uz.minibozor.core.design.component.SectionHeader
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.design.mbPressable
 import uz.minibozor.core.design.mbTap
-import uz.minibozor.core.util.grouped
-import uz.minibozor.core.util.sum
 import uz.minibozor.data.remote.dto.CartItemDto
 import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.ProductDto
@@ -100,16 +97,45 @@ fun barCover(crossing: Float): Float = (crossing * 8f).coerceAtMost(1f)
 /**
  * The bar: the status bar inset plus the row of buttons under it.
  *
- * 66 dp is the row itself — a 46 dp button with 10 dp of air above and below.
+ * 74 dp is the row itself — a 46 dp button with 18 dp of air above it and 10 dp
+ * below. The air above used to be 10 as well, which on a phone whose status bar
+ * carries a row of icons put the share button 15 dp under the battery: not
+ * touching it, but close enough that the two read as one cluttered strip, and
+ * the wash the buttons sit on runs between them so there is no edge to separate
+ * them either. The extra 8 dp is what makes the buttons the app's and the icons
+ * the phone's.
+ *
  * Shared with the screen, which decides when the page has crossed under the bar
  * off the same number; hard-coding 56 in both drifted the moment the buttons
  * grew.
  */
-val ChromeRowHeight: Dp = 66.dp
+val ChromeRowHeight: Dp = 74.dp
+
+/**
+ * The status bar's height, held at the tallest this window has ever reported.
+ *
+ * Reading the live inset was enough until the share sheet: MIUI opens it as its
+ * own window over the page, the page stops being the focused one, and while it
+ * is not, the status bar inset it is handed comes back as nothing. The bar's
+ * padding collapsed with it and the three buttons jumped up under the clock —
+ * behind the sheet, so what the customer saw was the row moving on its own and
+ * moving back a moment later.
+ *
+ * A held maximum rather than the live figure: whatever the system says while
+ * another window has the focus, this page still has a status bar above it and
+ * has to keep its distance from it. It only ever grows, which on a phone held
+ * in portrait is the whole of the story.
+ */
+@Composable
+fun statusBarTop(): Dp {
+    val live = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    var held by remember { mutableStateOf(live) }
+    if (live > held) held = live
+    return held
+}
 
 @Composable
-fun chromeHeight(): Dp =
-    WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + ChromeRowHeight
+fun chromeHeight(): Dp = statusBarTop() + ChromeRowHeight
 
 /** A stable key for the recommendations row. */
 const val RecommendationsKey = "recommendations"
@@ -311,8 +337,15 @@ fun ProductChrome(
                 // eighth of the crossing, which is a few pixels of the page.
                 drawRect(surface, alpha = barCover(cover()))
             }
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            // The held inset, not the live one: see [statusBarTop]. Uneven top
+            // and bottom on purpose, see [ChromeRowHeight] — the clock and the
+            // battery are directly above these buttons and need the room.
+            .padding(
+                start = 14.dp,
+                end = 14.dp,
+                top = statusBarTop() + 18.dp,
+                bottom = 10.dp,
+            )
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             GlassButton("arrow-left", cover = cover, onClick = onBack)
@@ -384,14 +417,23 @@ private fun GlassButton(
 }
 
 /**
- * The way to buy the thing, what it costs, and when it arrives.
+ * The way to buy the thing: one line of facts, and one button.
  *
- * The price sits beside the button rather than only at the top of the page: this
- * is the bar the thumb is already on, and a customer who has scrolled to the
- * reviews should not have to go back up to check the number they are about to
- * agree to. The top of the page keeps its own copy — the panel first, the bar
- * once the panel has scrolled away — so the number is on screen wherever the
- * page has got to.
+ * The price is not down here any more. It was on the left of the bar, in a
+ * column of its own, on the grounds that a customer down among the reviews
+ * should not have to scroll back up to see the number they are agreeing to —
+ * but they never had to, because the top bar carries the price the moment the
+ * panel holding it scrolls away ([MbHeroPrice] with `compact`). So the number
+ * was on the screen twice, and the second copy was taking the width the button
+ * wanted and pushing the delivery note into the button as a second line.
+ *
+ * That second line is what made the bar jump. A button with a subtitle is
+ * 58 dp and a button without one is 48 dp, so the bar was 58 dp tall while the
+ * product was not in the basket and 48 dp the instant it went in — the thing
+ * under the thumb changed size as it was pressed, and the stepper that replaced
+ * the price was 44 dp, which matched neither. Now the facts share one line
+ * above, and the button is [MbDimens.buttonHeight] in both shapes with the
+ * stepper standing at exactly that height beside it.
  *
  * Once the product is in the cart the button gives way to a quantity stepper, so
  * hammering the same spot adjusts a count instead of piling duplicate lines into
@@ -421,36 +463,35 @@ fun BuyBar(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
-        // Above the row, and above both of them. It had been a clause in the
-        // seller's row a third of the way down the page — "Sotuvchi · 25 dona
-        // qoldi" — which is the one place nobody reads twice. Here it is beside
-        // the button being aimed at.
-        //
-        // Above rather than tucked under the price, because the bar has two
-        // shapes: a price and a button before the product is in the basket, a
-        // stepper and a way onward once it is. Under the price it would vanish
-        // exactly when the customer is choosing how many to take, which is the
-        // moment the number matters most.
-        StockLine(stockLeft)
+        // One line of facts above the button: how many are left, and when it
+        // arrives. Both used to be somewhere worse — the count was a clause in
+        // the seller's row a third of the way down the page, and the delivery
+        // note was the second line inside the button, which is what made the
+        // button two heights. Here they are the same line whichever shape the
+        // bar is in, so the button below them never moves.
+        val note = product.deliveryNote.takeIf { it.isNotBlank() && inStock }
+        if (stockLeft > 0 || note != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StockLine(stockLeft)
+                if (note != null) {
+                    if (stockLeft > 0) {
+                        MbText(" · ", MbTheme.type.micro, MbTheme.colors.textQuaternary)
+                    }
+                    MbText(
+                        note,
+                        MbTheme.type.micro,
+                        MbTheme.colors.textQuaternary,
+                        maxLines = 1,
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (line == null) {
-                // Wraps rather than takes a share of the row: the button is the
-                // thing being aimed at, so it gets everything the number does
-                // not need.
-                Column(Modifier.padding(end = 14.dp)) {
-                    MbText(product.price.sum(), MbTheme.type.title3, maxLines = 1)
-                    val was = product.oldPrice
-                    if (was != null && was > product.price) {
-                        MbText(
-                            was.grouped(),
-                            MbTheme.type.caption.copy(
-                                textDecoration = TextDecoration.LineThrough,
-                            ),
-                            MbTheme.colors.textQuaternary,
-                            maxLines = 1,
-                        )
-                    }
-                }
+                // The whole bar, because there is nothing else on this line
+                // now. One button at one height, which is the same height it
+                // will be once the stepper appears beside it.
                 MbPrimaryButton(
                     text = stringResource(
                         if (inStock) R.string.savatga else R.string.mavjud_emas
@@ -458,7 +499,6 @@ fun BuyBar(
                     onClick = onAdd,
                     enabled = inStock,
                     loading = adding,
-                    subtitle = product.deliveryNote.takeIf { inStock },
                     modifier = Modifier.weight(1f),
                 )
             } else {
@@ -473,7 +513,10 @@ fun BuyBar(
                     // Where the shelf ends. The bar could otherwise walk the
                     // count up to ninety-nine of something there were three of.
                     max = stockLeft.coerceAtLeast(1),
-                    size = 44.dp,
+                    // The button's own height, not 44: the stepper stands
+                    // beside it and the two have to read as one bar. Four dp
+                    // apart is not a design, it is a mistake you can see.
+                    size = MbTheme.dimens.buttonHeight,
                 )
                 Spacer(Modifier.width(12.dp))
                 MbPrimaryButton(
@@ -505,18 +548,18 @@ fun Recommendations(
         if (tab == 0) products else products.sortedByDescending { it.reviewsCount }
     }
 
-    // On the page's own white panel, like every other section on it.
+    // On the page's grey ground rather than on a white panel.
     //
-    // It used to be a bare column on the grey canvas: a heading, two chips and a
-    // rail sitting straight on the page while everything above them was a white
-    // slab. At the bottom of a long page that read as a different screen having
-    // started, rather than as the last section of this one. The panel carries no
-    // padding of its own here, so the rail still runs off both edges the way a
-    // rail should.
+    // The panel was there to stop the section reading as a different screen
+    // having started at the bottom of a long white page — but the things it was
+    // drawn behind are white product cards, and a white card on a white panel
+    // is a card nobody can see. It is the same trade the home page had, and it
+    // goes the same way: the cards keep the grey to stand on, and the heading
+    // over them says the section is still this page.
     Column(
         modifier
             .fillMaxWidth()
-            .background(MbTheme.colors.surface)
+            .background(MbTheme.colors.canvas)
             .padding(top = 16.dp, bottom = 16.dp)
     ) {
         SectionHeader(
@@ -541,10 +584,10 @@ fun Recommendations(
         }
         Spacer(Modifier.height(14.dp))
         LazyRow(
-            // The same edge the home page's rails keep, which is what the tile
-            // width is sized against.
-            contentPadding = PaddingValues(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            // The same edge and the same gap the home page's rails keep, which
+            // is what the card width is sized against.
+            contentPadding = PaddingValues(horizontal = MbTheme.dimens.homeEdge),
+            horizontalArrangement = Arrangement.spacedBy(MbTheme.dimens.cardGap),
         ) {
             items(ordered, key = { it.id }) { item ->
                 MbRailTile(

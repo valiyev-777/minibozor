@@ -13,33 +13,34 @@ import androidx.compose.ui.unit.dp
  * The design is drawn at 375 dp wide, which is close enough to a real phone that
  * these values are used as-is rather than scaled.
  */
+/** The page edge every home block keeps, cards included. */
+private val HomeEdge = 16.dp
+
+/** The gap between two cards standing side by side. */
+private val CardGap = 12.dp
+
 /**
- * How wide a rail tile is, so a rail always shows two and a half of them.
+ * How wide a product card is — the same number for a grid tile and a rail tile.
  *
- * A hard 112 dp was drawn against a 375 dp canvas and never did fit three
- * tiles anywhere: three of them and their gaps come to 356 dp, and the widest
- * phone in the design is 319 dp of room. What that produced on a 393 dp handset
- * was two and three-quarter cards — near enough to three to read as three cards
- * that would not fit, rather than as a rail that scrolls.
+ * The home page used to draw three different cards. The grid gave each tile
+ * half the page, the deals pair gave each of two tiles half a panel inside the
+ * page, and a rail tile was a hard 112 dp derived to show two and a half of
+ * them — a card two thirds the width of the one above it, carrying a name at
+ * caption size next to a price at small size. Three widths and three type
+ * scales down one scroll, which reads as three different kinds of thing rather
+ * than as one shop's shelves.
  *
- * Two and a half is the point of the number: half a card is unmistakably half a
- * card, so the rail says it continues without a chevron or a hint of a shadow
- * to say it. Deriving the width holds that half card deliberate at any size,
- * and hands a bigger phone a roomier card rather than a wider gap — which is
- * also where the product's name stops losing its last word.
- *
- * Sized against the home rail: 20 dp of content padding before the first tile
- * and after the last, and 10 dp between them.
+ * So there is one width, and the grid's is what it is: half the page less its
+ * edges and the gap down the middle. A rail then shows two cards and the start
+ * of a third, which is a rail saying it continues — the same thing the half
+ * card said, at a size the card's own contents can actually be read at.
  */
 @Composable
-fun rememberRailTileWidth(): Dp {
+fun rememberProductCardWidth(): Dp {
     val screen = LocalConfiguration.current.screenWidthDp.dp
-    val inset = 20.dp * 2
-    val gaps = 10.dp * 2
-    // Clamped at both ends: a 320 dp phone would shrink the photograph past
-    // what a photograph is for, and a tablet would blow one tile up to a third
-    // of the screen instead of showing more of them.
-    return ((screen - inset - gaps) / 2.5f).coerceIn(108.dp, 150.dp)
+    // A floor rather than a ceiling: a narrow phone still gets a card wide
+    // enough for the price and the cart disc to share the last line.
+    return ((screen - HomeEdge * 2 - CardGap) / 2).coerceAtLeast(120.dp)
 }
 
 @Immutable
@@ -90,13 +91,17 @@ data class MbDimens(
     val tabBarLift: Dp = 8.dp,
 
     /**
-     * How wide one tile of a horizontal rail is.
+     * How wide one product card is.
      *
      * The only metric here that cannot be drawn once at 375 dp and used as-is.
-     * See [rememberRailTileWidth], which is what the theme actually puts here;
-     * this default is for previews and tests.
+     * See [rememberProductCardWidth], which is what the theme actually puts
+     * here; this default is for previews and tests.
      */
-    val railTileWidth: Dp = 112.dp,
+    val productCardWidth: Dp = 164.dp,
+    /** The page edge every block of the home feed keeps. */
+    val homeEdge: Dp = HomeEdge,
+    /** The gap between two cards standing side by side. */
+    val cardGap: Dp = CardGap,
     val categoryTile: Dp = 44.dp,
 
     /**

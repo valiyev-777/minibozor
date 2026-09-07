@@ -42,7 +42,7 @@ fun HomeSkeleton(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(6.dp))
         MbSkeleton(
             Modifier
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = MbTheme.dimens.homeEdge)
                 .fillMaxWidth()
                 .height(MbTheme.dimens.bannerHeight),
             MbTheme.shapes.card,
@@ -51,7 +51,7 @@ fun HomeSkeleton(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(18.dp))
         // the 5x2 quick-link grid
         Column(
-            Modifier.padding(horizontal = 12.dp),
+            Modifier.padding(horizontal = MbTheme.dimens.homeEdge),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             repeat(2) {
@@ -91,8 +91,8 @@ fun HomeSkeleton(modifier: Modifier = Modifier) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = MbTheme.dimens.homeEdge),
+            horizontalArrangement = Arrangement.spacedBy(MbTheme.dimens.cardGap),
         ) {
             repeat(2) {
                 Column(Modifier.weight(1f)) {

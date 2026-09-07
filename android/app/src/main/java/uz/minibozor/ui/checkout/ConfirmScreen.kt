@@ -98,7 +98,11 @@ fun ConfirmScreen(
                         else stringResource(R.string.karta_niqob, preview.card?.last4.orEmpty()),
                         glyph = "card",
                         subtitle = if (state.paymentMethod == "cash") {
-                            stringResource(R.string.kuryerga_topshirishda)
+                            if (state.delivery == DeliveryMethod.Courier) {
+                                stringResource(R.string.kuryerga_topshirishda)
+                            } else {
+                                stringResource(R.string.punktda_tolash)
+                            }
                         } else preview.card?.brand,
                         showChevron = false,
                         contentPadding = 10.dp,

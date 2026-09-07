@@ -27,11 +27,27 @@ class CartViewModel @Inject constructor(
 
     val cart: StateFlow<CartDto?> = repo.cart
 
+    /** The code the basket is currently priced with, or null. */
+    val promoCode: StateFlow<String?> = repo.promoCode
+
     private val _loading = MutableStateFlow(true)
     val loading = _loading.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
+
+    /**
+     * Why the last promo code was refused, in the server's own words.
+     *
+     * Separate from [error], which is about the basket itself. A code being
+     * wrong is not the cart failing to load, and showing "Promokod yaroqsiz"
+     * where the retry button lives would say the wrong thing about both.
+     */
+    private val _promoError = MutableStateFlow<String?>(null)
+    val promoError = _promoError.asStateFlow()
+
+    private val _promoBusy = MutableStateFlow(false)
+    val promoBusy = _promoBusy.asStateFlow()
 
     init {
         refresh()
@@ -50,6 +66,27 @@ class CartViewModel @Inject constructor(
     }
 
     fun setQuantity(itemId: Int, quantity: Int) = mutate { repo.setQuantity(itemId, quantity) }
+
+    fun setAllSelected(selected: Boolean) = mutate { repo.setAllSelected(selected) }
+
+    fun applyPromo(code: String) {
+        val trimmed = code.trim()
+        if (trimmed.isEmpty() || _promoBusy.value) return
+        _promoBusy.value = true
+        _promoError.value = null
+        viewModelScope.launch {
+            when (val result = repo.applyPromo(trimmed)) {
+                is Outcome.Success -> Unit
+                is Outcome.Failure -> _promoError.value = result.message
+            }
+            _promoBusy.value = false
+        }
+    }
+
+    fun clearPromo() {
+        _promoError.value = null
+        mutate { repo.clearPromo() }
+    }
 
     fun setSelected(itemId: Int, selected: Boolean) = mutate { repo.setSelected(itemId, selected) }
 

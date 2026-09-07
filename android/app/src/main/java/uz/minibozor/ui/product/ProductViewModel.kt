@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.minibozor.core.util.Outcome
@@ -59,15 +60,21 @@ class ProductViewModel @Inject constructor(
             when (val result = catalog.product(id)) {
                 is Outcome.Success -> {
                     val product = result.data
+                    // The colour first, then a size *of that colour*: sizes
+                    // are counted per colour, so preselecting the product's
+                    // first in-stock size could land on a size belonging to a
+                    // colour the page is not showing.
+                    val color = product.variants.firstOrNull { v -> v.kind == "color" }
                     _state.update {
                         it.copy(
                             loading = false,
                             product = product,
-                            // Preselect the first in-stock size, as the design shows.
+                            selectedColorId = color?.id,
                             selectedSizeId = product.variants
-                                .firstOrNull { v -> v.kind == "size" && v.inStock }?.id,
-                            selectedColorId = product.variants
-                                .firstOrNull { v -> v.kind == "color" }?.id,
+                                .firstOrNull { v ->
+                                    v.kind == "size" && v.inStock &&
+                                        (v.parentId == null || v.parentId == color?.id)
+                                }?.id,
                         )
                     }
                 }
@@ -92,7 +99,25 @@ class ProductViewModel @Inject constructor(
 
     fun selectSize(id: Int) = _state.update { it.copy(selectedSizeId = id) }
 
-    fun selectColor(id: Int) = _state.update { it.copy(selectedColorId = id) }
+    /**
+     * A colour, and the size that goes with it.
+     *
+     * Sizes belong to colours, so the size chosen a moment ago was a size of
+     * the colour being left behind — held on to, it would buy a cell of the
+     * grid the page is no longer showing. The same label is kept where the new
+     * colour has it in stock, which is what a customer switching between two
+     * colours of the same shirt means to happen; otherwise the first size the
+     * new colour actually has.
+     */
+    fun selectColor(id: Int) = _state.update { s ->
+        val ofColor = s.product?.variants.orEmpty()
+            .filter { it.kind == "size" && it.parentId == id }
+        if (ofColor.isEmpty()) return@update s.copy(selectedColorId = id)
+        val kept = s.product?.variants?.firstOrNull { it.id == s.selectedSizeId }?.label
+        val next = ofColor.firstOrNull { it.label == kept && it.inStock }
+            ?: ofColor.firstOrNull { it.inStock }
+        s.copy(selectedColorId = id, selectedSizeId = next?.id)
+    }
 
     fun toggleFavorite() {
         val product = _state.value.product ?: return
@@ -103,13 +128,26 @@ class ProductViewModel @Inject constructor(
     }
 
     /**
-     * The cart line for this product, if it is already in the cart. The buy bar
-     * swaps its button for a quantity stepper off this, which is also what
-     * stops a burst of taps from piling copies into the cart.
+     * The cart line for what the page is showing right now, if it is in the
+     * cart. The buy bar swaps its button for a quantity stepper off this, which
+     * is also what stops a burst of taps from piling copies into the cart.
+     *
+     * The size and the colour are part of the question, and they were not.
+     * Matching on the product alone meant a watch already in the basket in
+     * 41 mm turned the bar into a stepper for that line — and it stayed a
+     * stepper when the customer then picked 36 mm, so there was no button left
+     * to buy the second size with. One line per size is what the basket holds
+     * and what the server folds adds into; the bar has to ask the same
+     * question the server answers.
      */
-    val cartLine: StateFlow<CartItemDto?> = cart.cart
-        .map { c -> c?.items?.lastOrNull { it.productId == productId } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val cartLine: StateFlow<CartItemDto?> =
+        combine(cart.cart, _state) { c, s ->
+            c?.items?.lastOrNull {
+                it.productId == productId &&
+                    it.variantId == s.selectedSizeId &&
+                    it.colorVariantId == s.selectedColorId
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun addToCart(onDone: (String) -> Unit) {
         val current = _state.value

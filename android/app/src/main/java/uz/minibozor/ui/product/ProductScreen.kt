@@ -155,7 +155,10 @@ fun ProductScreen(
     BackHandler(enabled = viewerPage == null) { leave() }
 
     val density = LocalDensity.current
-    val statusBarPx = WindowInsets.statusBars.getTop(density).toFloat()
+    // The held inset, the same one the bar pads itself with: read live, the
+    // whole page's scroll maths would shift the moment another window took the
+    // focus. See [statusBarTop].
+    val statusBarPx = with(density) { statusBarTop().toPx() }
     val heroHeight = heroHeight()
     val heroHeightPx = with(density) { heroHeight.toPx() }
     val closePx = heroHeightPx * 0.55f
@@ -281,15 +284,14 @@ fun ProductScreen(
     // And what can actually be bought, which is a narrower question than what
     // is on the shelf. The line under the rating answers about the colour in
     // the photograph above it; the bar at the bottom is buying one colour in
-    // one size, so its ceiling is whichever of the two is scarcer. Seventeen in
-    // blue and one in a 45 is one pair to sell, and a stepper offering
-    // seventeen of them is an offer the server refuses.
+    // one size, and that pair is a cell of the shelf with a count of its own —
+    // so where a size is chosen, the size is the whole answer. The two used to
+    // be separate splits of one total and the ceiling was whichever was
+    // scarcer, which offered the last black 41 for as long as a blue one was
+    // left. The server counts it the same way, in `shelf_left`.
     val selectedSize = product?.variants.orEmpty()
         .firstOrNull { it.kind == "size" && it.id == state.selectedSizeId }
-    val buyableLeft = listOfNotNull(
-        selectedColor?.stockLeft,
-        selectedSize?.stockLeft,
-    ).minOrNull() ?: shelfLeft
+    val buyableLeft = selectedSize?.stockLeft ?: shelfLeft
     val buyable = shelfInStock && (selectedSize?.inStock ?: true)
 
     Box(
@@ -305,7 +307,16 @@ fun ProductScreen(
                     Modifier.windowInsetsPadding(WindowInsets.statusBars),
                 )
                 else -> product?.let { product ->
-                    val sizes = product.variants.filter { it.kind == "size" }
+                    // The sizes of the colour on screen, not of the product.
+                    //
+                    // A size belongs to a colour and holds that pair's own
+                    // count, so a shirt with two colours has two sets of size
+                    // rows. Showing them all put "L" on the page twice and let
+                    // the last black L be sold as long as a white one was left.
+                    val sizes = product.variants.filter {
+                        it.kind == "size" &&
+                            (it.parentId == null || it.parentId == state.selectedColorId)
+                    }
                     val colors = product.variants.filter { it.kind == "color" }
                     val hasOptions = sizes.isNotEmpty() || colors.isNotEmpty()
 

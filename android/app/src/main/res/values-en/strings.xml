@@ -404,4 +404,14 @@
         <item quantity="other">%1$d steps left before ordering</item>
     </plurals>
     <string name="yetkazish_narxi_punktdan_keyin">Delivery is priced once there is a pickup point</string>
+
+    <!-- cart: what the ticks mean, and the promo code -->
+    <string name="hammasini_tanlash">Select all</string>
+    <string name="faqat_belgilangan_tovarlar">Only ticked items are ordered</string>
+    <string name="belgilanmagan_hisobga_olinmaydi">Not ticked — left out of the total</string>
+    <string name="kamida_bitta_tovarni_belgilang">Tick at least one item to place an order</string>
+    <string name="n_ta_uchun">for %1$d</string>
+    <string name="promokod">Promo code</string>
+    <string name="promokod_qollandi">%1$s applied</string>
+    <string name="punktda_tolash">Pay at the pickup point</string>
 </resources>

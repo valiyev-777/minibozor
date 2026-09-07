@@ -149,9 +149,11 @@ fun ListingScreen(
                     else -> LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         state = gridState,
-                        contentPadding = PaddingValues(14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                        // The home page's edge and the home page's gap, so a card
+                        // here is the same card at the same width as a card there.
+                        contentPadding = PaddingValues(MbTheme.dimens.homeEdge),
+                        horizontalArrangement = Arrangement.spacedBy(MbTheme.dimens.cardGap),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         items(state.items, key = { it.id }) { product ->
                             MbProductTile(
@@ -160,6 +162,7 @@ fun ListingScreen(
                                 oldPrice = product.oldPrice,
                                 discountPercent = product.discountPercent,
                                 imageUrl = product.imageUrl,
+                                images = product.images,
                                 isFavorite = product.isFavorite,
                                 inStock = product.inStock,
                                 stockLeft = product.stockLeft,
@@ -212,6 +215,12 @@ fun ListingScreen(
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = MbTheme.colors.surface,
             shape = MbTheme.shapes.sheet,
+            // The panel draws its own header, with the title and the way out on
+            // it. Material's handle is a dark stub in the middle of the top
+            // edge belonging to nothing else on the sheet — and the variant
+            // picker had already turned it off, so leaving it here made the
+            // app's two sheets open differently.
+            dragHandle = null,
         ) {
             FiltersSheet(
                 filters = state.filters,

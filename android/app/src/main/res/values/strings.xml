@@ -426,4 +426,14 @@
         <item quantity="other">Buyurtma uchun %1$d qadam qoldi</item>
     </plurals>
     <string name="yetkazish_narxi_punktdan_keyin">Yetkazish narxi punkt tanlangandan keyin aniqlanadi</string>
+
+    <!-- savat: what the ticks mean, and the promo code -->
+    <string name="hammasini_tanlash">Hammasini tanlash</string>
+    <string name="faqat_belgilangan_tovarlar">Faqat belgilangan tovarlar rasmiylashtiriladi</string>
+    <string name="belgilanmagan_hisobga_olinmaydi">Belgilanmagan — jamiga qo\'shilmaydi</string>
+    <string name="kamida_bitta_tovarni_belgilang">Buyurtma berish uchun kamida bitta tovarni belgilang</string>
+    <string name="n_ta_uchun">%1$d dona uchun</string>
+    <string name="promokod">Promokod</string>
+    <string name="promokod_qollandi">%1$s qo\'llandi</string>
+    <string name="punktda_tolash">Punktda to\'lash</string>
 </resources>

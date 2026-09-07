@@ -357,9 +357,11 @@ fun FavoritesScreen(
 
                 else -> LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    // The home page's edge and the home page's gap, so a card
+                    // here is the same card at the same width as a card there.
+                    contentPadding = PaddingValues(MbTheme.dimens.homeEdge),
+                    horizontalArrangement = Arrangement.spacedBy(MbTheme.dimens.cardGap),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     items(items, key = { it.id }) { product ->
                         MbProductTile(
@@ -368,6 +370,7 @@ fun FavoritesScreen(
                             oldPrice = product.oldPrice,
                             discountPercent = product.discountPercent,
                             imageUrl = product.imageUrl,
+                            images = product.images,
                             isFavorite = true,
                             inStock = product.inStock,
                             stockLeft = product.stockLeft,

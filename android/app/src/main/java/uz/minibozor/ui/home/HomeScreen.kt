@@ -71,8 +71,6 @@ import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbPressAlpha
 import uz.minibozor.core.design.mbPressable
 import uz.minibozor.core.design.MbTheme
-import uz.minibozor.core.design.component.MbCard
-import uz.minibozor.core.design.component.MbDealTile
 import uz.minibozor.core.design.component.MbProductImage
 import uz.minibozor.core.design.component.MbProductTile
 import uz.minibozor.core.design.component.MbRailTile
@@ -91,24 +89,36 @@ import uz.minibozor.ui.common.MbToastHost
 import uz.minibozor.ui.common.UiStateContent
 import uz.minibozor.ui.common.rememberToast
 
-/**
- * The 20 dp card corners, split across a card's lazy fragments. A section card
- * is emitted as several small lazy items (header, rows, rail) rather than one
- * card-sized item — composing a whole card in a single frame is what made the
- * scroll hitch — so the top and bottom fragments each carry their half of the
- * card's rounding and the middle fragments draw a plain surface.
- */
 /** How many times the banners are repeated so the carousel can run on. */
 private const val BannerLoops = 1000
 
-/** What a rail spends before its first tile, and after its last. */
-private val RailEdge = 20.dp
-
+/**
+ * The 20 dp panel corners, split across the category grid's lazy rows.
+ *
+ * The grid is emitted as one lazy item per row of five rather than as a single
+ * panel-sized item — composing a whole panel in one frame is what made the
+ * scroll hitch — so the first and last rows each carry their half of the
+ * panel's rounding and anything between them draws a plain surface.
+ *
+ * The product sections used to be drawn this way too. They are not any more:
+ * what those panels were behind is white cards, and a white card on a white
+ * panel cannot be seen. The categories keep theirs, because what sits on it is
+ * a grey tile and a name.
+ */
 private val CardTopShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
 private val CardBottomShape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
 
-/** The gap between blocks; explicit because spacedBy would split card fragments. */
-private val SectionGap = 12.dp
+/**
+ * The air above a section's heading; explicit because spacedBy would split the
+ * fragments a section is emitted as.
+ *
+ * Wider than it was. The blocks used to be told apart by the white panels drawn
+ * behind them, which is also what made the cards inside those panels invisible:
+ * white cards on a white ground, held apart by 3 dp of shadow. The panels are
+ * gone and the space does their work — a heading with room over it is a new
+ * shelf, and the cards keep the grey page to stand on.
+ */
+private val SectionGap = 22.dp
 
 /**
  * Screen 07. One request fills the whole page: banners, the 5x2 category grid,
@@ -210,7 +220,7 @@ fun HomeScreen(
 
                     if (home.banners.isNotEmpty()) {
                         item(key = "banners", contentType = "banners") {
-                            Box(Modifier.padding(top = SectionGap)) {
+                            Box(Modifier.padding(top = 12.dp)) {
                                 BannerCarousel(home.banners, bannerPager, onOpenBanner)
                             }
                         }
@@ -281,8 +291,13 @@ private fun RegionPicker(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MbTheme.colors.surface,
         shape = MbTheme.shapes.sheet,
+        // As the other two sheets: the panel's own heading stands at the top,
+        // not Material's dark handle stub.
+        dragHandle = null,
     ) {
-        Column(Modifier.padding(horizontal = 20.dp)) {
+        // The handle used to stand in for this padding; without it the title
+        // would begin against the sheet's own top edge.
+        Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp)) {
             MbText(stringResource(R.string.hududni_tanlang), MbTheme.type.title2)
             Spacer(Modifier.height(4.dp))
             MbText(
@@ -408,7 +423,7 @@ private fun BannerCarousel(
         HorizontalPager(
             state = pager,
             pageSpacing = 10.dp,
-            contentPadding = PaddingValues(horizontal = 12.dp),
+            contentPadding = PaddingValues(horizontal = MbTheme.dimens.homeEdge),
         ) { page ->
             BannerCard(
                 banner = banners[page % banners.size],
@@ -519,7 +534,11 @@ private fun LazyListScope.categoryGrid(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, top = if (first) SectionGap else 0.dp)
+                    .padding(
+                        start = MbTheme.dimens.homeEdge,
+                        end = MbTheme.dimens.homeEdge,
+                        top = if (first) 16.dp else 0.dp,
+                    )
                     .background(MbTheme.colors.surface, shape)
                     .padding(
                         start = 14.dp,
@@ -595,8 +614,18 @@ private fun CategoryCell(
 }
 
 /**
- * One home section, emitted as several small lazy items so a scroll frame
- * composes a header or a single product row, never a whole card.
+ * One home section: a heading, then its products.
+ *
+ * Two shapes and one card. A section either stands its products two to a row
+ * down the page or runs them along a rail, and the deals pair is the first of
+ * those with a single row in it rather than a third kind of block. Everything
+ * else — how wide a card is, what is on it, the edge it keeps and the gap to
+ * the card beside it — is the same wherever the section is drawn, which is the
+ * point: one scroll of this page used to show the same shoe as three different
+ * cards, two of which could not be bought or saved from where they stood.
+ *
+ * Emitted as several small lazy items so a scroll frame composes a heading or a
+ * single row of two, never a whole section.
  */
 private fun LazyListScope.homeSection(
     section: SectionDto,
@@ -605,133 +634,95 @@ private fun LazyListScope.homeSection(
     onToggleFavorite: (ProductCardDto) -> Unit,
     onAddToCart: (ProductCardDto) -> Unit,
 ) {
-    when (section.layout) {
-        // Two tiles and a header — light enough to stay a single item.
-        "deals" -> item(key = section.key, contentType = "deals") {
-            MbCard(
-                Modifier.padding(start = 12.dp, end = 12.dp, top = SectionGap),
-                padding = 16.dp,
-            ) {
-                SectionHeader(section.title, section.subtitle)
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    section.products.forEach { product ->
-                        MbDealTile(
+    if (section.products.isEmpty()) return
+    // A rail unless the section says otherwise. "deals" and "grid" both stand
+    // their products down the page; anything else runs along.
+    val stacked = section.layout == "deals" || section.layout == "grid"
+
+    item(key = "${section.key}:head", contentType = "section-head") {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = MbTheme.dimens.homeEdge,
+                    end = MbTheme.dimens.homeEdge,
+                    top = SectionGap,
+                    bottom = 12.dp,
+                ),
+        ) {
+            SectionHeader(
+                title = section.title,
+                subtitle = section.subtitle,
+                // Only where there is somewhere to go. A "Barchasi" on a
+                // section with no category behind it opens the whole shop,
+                // which is not what the customer asked to see more of.
+                actionLabel = section.categorySlug?.let { stringResource(R.string.barchasi) },
+                onAction = if (section.categorySlug != null) onOpenAll else null,
+            )
+        }
+    }
+
+    if (stacked) {
+        val rows = section.products.chunked(2)
+        rows.forEachIndexed { index, row ->
+            item(key = "${section.key}:row$index", contentType = "section-row") {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = MbTheme.dimens.homeEdge,
+                            end = MbTheme.dimens.homeEdge,
+                            // Between the rows of a grid, and nothing under the
+                            // last one — the next heading brings its own room.
+                            bottom = if (index == rows.lastIndex) 0.dp else 14.dp,
+                        ),
+                    horizontalArrangement = Arrangement.spacedBy(MbTheme.dimens.cardGap),
+                ) {
+                    row.forEach { product ->
+                        MbProductTile(
                             title = product.title,
                             price = product.price,
                             oldPrice = product.oldPrice,
                             discountPercent = product.discountPercent,
                             imageUrl = product.imageUrl,
+                            images = product.images,
+                            isFavorite = product.isFavorite,
                             inStock = product.inStock,
                             stockLeft = product.stockLeft,
                             onClick = { onOpenProduct(product.id) },
+                            onToggleFavorite = { onToggleFavorite(product) },
+                            onAddToCart = { onAddToCart(product) },
                             modifier = Modifier.weight(1f),
                         )
                     }
+                    // A row of one keeps its neighbour's half of the page
+                    // rather than stretching a card to twice the width of
+                    // every other card on the screen.
+                    repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
-
-        "grid" -> {
-            item(key = "${section.key}:head", contentType = "grid-head") {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, top = SectionGap)
-                        .background(MbTheme.colors.surface, CardTopShape)
-                        .padding(14.dp),
-                ) {
-                    SectionHeader(section.title, section.subtitle)
-                }
-            }
-            val rows = section.products.chunked(2)
-            rows.forEachIndexed { index, row ->
-                item(key = "${section.key}:row$index", contentType = "grid-row") {
-                    val last = index == rows.lastIndex
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .background(
-                                MbTheme.colors.surface,
-                                if (last) CardBottomShape else RectangleShape,
-                            )
-                            .padding(
-                                start = 14.dp,
-                                end = 14.dp,
-                                // The last row also carries the card's own
-                                // 14 dp bottom padding.
-                                bottom = if (last) 30.dp else 16.dp,
-                            ),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        row.forEach { product ->
-                            MbProductTile(
-                                title = product.title,
-                                price = product.price,
-                                oldPrice = product.oldPrice,
-                                discountPercent = product.discountPercent,
-                                imageUrl = product.imageUrl,
-                                isFavorite = product.isFavorite,
-                                inStock = product.inStock,
-                                stockLeft = product.stockLeft,
-                                onClick = { onOpenProduct(product.id) },
-                                onToggleFavorite = { onToggleFavorite(product) },
-                                onAddToCart = { onAddToCart(product) },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        repeat(2 - row.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
-            }
-        }
-
-        else -> {
-            // No panel under a rail, unlike the grid and the deals pair.
-            //
-            // Those two are bounded: everything they hold is on the screen at
-            // once, and a surface drawn around them says where they stop. A rail
-            // does not stop — it runs off the side of the screen, and a box
-            // around something that leaves the box was the reason the third card
-            // read as a card that would not fit rather than as one more card
-            // along. So the heading sits on the page and the tiles run to the
-            // edges, which is also where the width they had been losing to two
-            // sets of padding went.
-            item(key = "${section.key}:head", contentType = "rail-head") {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(start = RailEdge, end = RailEdge, top = SectionGap, bottom = 12.dp),
-                ) {
-                    SectionHeader(
-                        title = section.title,
-                        subtitle = section.subtitle,
-                        actionLabel = stringResource(R.string.barchasi),
-                        onAction = onOpenAll,
+    } else {
+        item(key = "${section.key}:rail", contentType = "section-rail") {
+            LazyRow(
+                Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = MbTheme.dimens.homeEdge),
+                horizontalArrangement = Arrangement.spacedBy(MbTheme.dimens.cardGap),
+            ) {
+                items(section.products, key = { it.id }, contentType = { "rail-tile" }) { product ->
+                    MbRailTile(
+                        title = product.title,
+                        price = product.price,
+                        oldPrice = product.oldPrice,
+                        discountPercent = product.discountPercent,
+                        imageUrl = product.imageUrl,
+                        isFavorite = product.isFavorite,
+                        inStock = product.inStock,
+                        stockLeft = product.stockLeft,
+                        onClick = { onOpenProduct(product.id) },
+                        onToggleFavorite = { onToggleFavorite(product) },
+                        onAddToCart = { onAddToCart(product) },
                     )
-                }
-            }
-            item(key = "${section.key}:rail", contentType = "rail-list") {
-                LazyRow(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 4.dp),
-                    contentPadding = PaddingValues(horizontal = RailEdge),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(section.products, key = { it.id }, contentType = { "rail-tile" }) { product ->
-                        MbRailTile(
-                            title = product.title,
-                            price = product.price,
-                            oldPrice = product.oldPrice,
-                            discountPercent = product.discountPercent,
-                            imageUrl = product.imageUrl,
-                            inStock = product.inStock,
-                            stockLeft = product.stockLeft,
-                            onClick = { onOpenProduct(product.id) },
-                        )
-                    }
                 }
             }
         }

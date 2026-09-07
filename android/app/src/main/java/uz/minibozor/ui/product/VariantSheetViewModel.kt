@@ -26,7 +26,19 @@ data class VariantSheetState(
     val error: String? = null,
 ) {
     val colors: List<VariantDto> get() = product?.variants.orEmpty().filter { it.kind == "color" }
-    val sizes: List<VariantDto> get() = product?.variants.orEmpty().filter { it.kind == "size" }
+
+    /**
+     * The sizes of the colour chosen, not of the product.
+     *
+     * A size belongs to a colour and carries that pair's own count, so a shirt
+     * in two colours has two sets of size rows. Listed together they put "L" in
+     * the sheet twice and let the last black L be added while a white one was
+     * still on the shelf.
+     */
+    val sizes: List<VariantDto>
+        get() = product?.variants.orEmpty().filter {
+            it.kind == "size" && (it.parentId == null || it.parentId == colorId)
+        }
 
     val selectedColor: VariantDto? get() = colors.firstOrNull { it.id == colorId }
     val selectedSize: VariantDto? get() = sizes.firstOrNull { it.id == sizeId }
@@ -36,7 +48,11 @@ data class VariantSheetState(
      * shelf, or the whole shelf when the colours are not counted apart. The
      * sheet is adding one colour, so that is the shelf its stepper stops at.
      */
-    val shelfLeft: Int get() = selectedColor?.stockLeft ?: product?.stockLeft ?: 1
+    val shelfLeft: Int
+        get() = selectedSize?.stockLeft
+            ?: selectedColor?.stockLeft
+            ?: product?.stockLeft
+            ?: 1
 
     /** A size has to be chosen when the product has any in stock. */
     val ready: Boolean
@@ -82,7 +98,25 @@ class VariantSheetViewModel @Inject constructor(
 
     fun selectSize(id: Int) = _state.update { it.copy(sizeId = id, error = null) }
 
-    fun selectColor(id: Int) = _state.update { it.copy(colorId = id) }
+    /**
+     * A colour, and whatever the size chosen before it now means.
+     *
+     * Sizes belong to colours, so a size picked under the old colour is a cell
+     * of the grid this sheet is no longer showing. The same label is kept where
+     * the new colour has it in stock; otherwise the sheet goes back to asking,
+     * which is the honest state — the customer has not chosen a size of *this*
+     * colour yet.
+     */
+    fun selectColor(id: Int) = _state.update { s ->
+        val ofColor = s.product?.variants.orEmpty()
+            .filter { it.kind == "size" && it.parentId == id }
+        if (ofColor.isEmpty()) return@update s.copy(colorId = id)
+        val kept = s.product?.variants?.firstOrNull { it.id == s.sizeId }?.label
+        s.copy(
+            colorId = id,
+            sizeId = ofColor.firstOrNull { it.label == kept && it.inStock }?.id,
+        )
+    }
 
     fun addToCart() {
         val current = _state.value
@@ -96,18 +130,21 @@ class VariantSheetViewModel @Inject constructor(
                 colorVariantId = current.colorId,
                 quantity = current.quantity,
             )
+            // The line we just added, matched on what we sent rather than on
+            // the product: a shirt already in the basket in medium is a line
+            // with the same product id, and the stepper would have driven that
+            // one instead of the large that was just chosen.
+            val added = (result as? Outcome.Success)?.data?.items?.lastOrNull { item ->
+                item.productId == product.id &&
+                    item.variantId == current.sizeId &&
+                    item.colorVariantId == current.colorId
+            }
             _state.update {
                 when (result) {
                     is Outcome.Success -> it.copy(
                         busy = false,
-                        // Match on the line we just added so the stepper drives
-                        // the right row rather than the product's first one.
-                        cartItemId = result.data.items
-                            .lastOrNull { item -> item.productId == product.id }
-                            ?.id,
-                        quantity = result.data.items
-                            .lastOrNull { item -> item.productId == product.id }
-                            ?.quantity ?: it.quantity,
+                        cartItemId = added?.id,
+                        quantity = added?.quantity ?: it.quantity,
                     )
                     is Outcome.Failure -> it.copy(busy = false, error = result.message)
                 }
