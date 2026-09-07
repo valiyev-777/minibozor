@@ -1,4 +1,10 @@
-import type { OrderStatus, ReturnStatus, ReviewStatus, UserRole } from "@/api/types"
+import type {
+  OrderStatus,
+  ProductStatus,
+  ReturnStatus,
+  ReviewStatus,
+  UserRole,
+} from "@/api/types"
 
 /**
  * Uzbek words for the enum values the API sends.
@@ -135,4 +141,36 @@ export const ORDER_ACTION: Record<OrderStatus, string> = {
   delivered: "Yetkazildi deb belgilash",
   cancelled: "Bekor qilish",
   returned: "Qaytarildi deb belgilash",
+}
+
+/**
+ * A card's place in the catalogue.
+ *
+ * `moderating` is the queue an admin works; the rest are states a card rests
+ * in. Which move is legal from where is never decided here — it comes from
+ * `next_statuses` on the response, built from `app/transitions.py`.
+ */
+export const PRODUCT_STATUS: Record<ProductStatus, string> = {
+  draft: "Qoralama",
+  moderating: "Moderatsiyada",
+  published: "E'lon qilingan",
+  rejected: "Rad etilgan",
+  archived: "Arxivlangan",
+}
+
+export const PRODUCT_TONE: Record<ProductStatus, Tone> = {
+  draft: "neutral",
+  moderating: "accent",
+  published: "good",
+  rejected: "danger",
+  archived: "neutral",
+}
+
+/** The verb for a moderation decision, so a button reads as an action. */
+export const PRODUCT_ACTION: Record<ProductStatus, string> = {
+  draft: "Qoralamaga qaytarish",
+  moderating: "Moderatsiyaga yuborish",
+  published: "E'lon qilish",
+  rejected: "Rad etish",
+  archived: "Arxivlash",
 }

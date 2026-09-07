@@ -1071,6 +1071,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/staff/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find an account by phone, or list who holds a role
+         * @description Two screens, one query.
+         *
+         *     Appointing somebody starts from their phone number, because that is the
+         *     only thing the admin knows about them — it is what they sign in with and
+         *     what they were given over the phone. Reviewing who works here starts from
+         *     the role instead. Searching by digits alone is enough for the first: an
+         *     admin typing ``9001`` has the number in front of them and wants the row,
+         *     not a directory.
+         */
+        get: operations["list_users_api_v1_staff_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/users/{user_id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Appoint somebody, or stand them down
+         * @description The only door a role goes through from inside the running system.
+         *
+         *     Refused when it would demote the last admin — including the admin making
+         *     the request, who is the likeliest person to try it. A role is granted by
+         *     an admin, so an admin is the only one who can put it back; take the last
+         *     one away and there is nobody left who can, and the way in is a shell on
+         *     the server. See ``app.roles`` for the rule itself, which the seller link
+         *     honours too.
+         *
+         *     Making somebody a seller is a role like any other here, but it does not
+         *     attach them to a seller account — that is what linking does, over in
+         *     ``/staff/sellers/{id}``, and it sets this role as a side effect.
+         */
+        patch: operations["set_role_api_v1_staff_users__user_id__role_patch"];
+        trace?: never;
+    };
+    "/api/v1/staff/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a picture and get its media path
+         * @description Admins and sellers. A seller photographs the goods they propose, and a
+         *     card with no picture is a card nobody taps.
+         *
+         *     Declared ``def`` rather than ``async def`` on purpose: decoding and
+         *     re-encoding a four-megapixel photograph is a second of CPU, and on the
+         *     event loop that second is a second nobody else is served in. Sync
+         *     endpoints run in the threadpool, which is where this belongs.
+         */
+        post: operations["upload_api_v1_staff_media_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/staff/returns": {
         parameters: {
             query?: never;
@@ -1650,6 +1734,482 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/staff/sellers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every seller */
+        get: operations["list_sellers_api_v1_staff_sellers_get"];
+        put?: never;
+        /** Take on a seller */
+        post: operations["create_seller_api_v1_staff_sellers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/sellers/{seller_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Seller */
+        get: operations["get_seller_api_v1_staff_sellers__seller_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit a seller, or stop them selling */
+        patch: operations["update_seller_api_v1_staff_sellers__seller_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every card, whatever its state — and the moderation queue */
+        get: operations["list_products_api_v1_staff_catalog_products_get"];
+        put?: never;
+        /**
+         * Write a new card
+         * @description Created as a draft. Publishing it is a separate act with its own door.
+         */
+        post: operations["create_product_api_v1_staff_catalog_products_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/products/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Product */
+        get: operations["get_product_api_v1_staff_catalog_products__product_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Product */
+        patch: operations["update_product_api_v1_staff_catalog_products__product_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest a card for the catalogue (seller)
+         * @description A suggestion, not a card in the shop.
+         *
+         *     It lands in moderation whoever sends it — an admin included, because an
+         *     admin who wanted it published outright would use the door marked that way.
+         */
+        post: operations["propose_product_api_v1_staff_catalog_proposals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/products/{product_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish, refuse, or withdraw a card
+         * @description The moderation decision, and the only way a card's state moves.
+         *
+         *     A refusal needs a reason because the seller who proposed it reads it and
+         *     has to know what to fix. Which moves are legal is in
+         *     ``app.transitions.PRODUCT_TRANSITIONS`` and nowhere else.
+         */
+        post: operations["set_product_status_api_v1_staff_catalog_products__product_id__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Category */
+        post: operations["create_category_api_v1_staff_catalog_categories_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/categories/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Category
+         * @description Refused while anything still points at it.
+         *
+         *     A category with cards in it, or with children, is load-bearing: deleting
+         *     it would leave products pointing at a row that is not there and a listing
+         *     that answers with nothing.
+         */
+        delete: operations["delete_category_api_v1_staff_catalog_categories__slug__delete"];
+        options?: never;
+        head?: never;
+        /** Update Category */
+        patch: operations["update_category_api_v1_staff_catalog_categories__slug__patch"];
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Brand */
+        post: operations["create_brand_api_v1_staff_catalog_brands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/brands/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Brand */
+        delete: operations["delete_brand_api_v1_staff_catalog_brands__slug__delete"];
+        options?: never;
+        head?: never;
+        /** Update Brand */
+        patch: operations["update_brand_api_v1_staff_catalog_brands__slug__patch"];
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/products/{product_id}/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Image */
+        post: operations["add_image_api_v1_staff_catalog_products__product_id__images_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/products/{product_id}/images/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Image */
+        delete: operations["remove_image_api_v1_staff_catalog_products__product_id__images__image_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/products/{product_id}/variants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Variant
+         * @description Add a colour, or a size of a colour.
+         *
+         *     Refused if it would move where the shelf is counted. A product whose
+         *     leaves are colours has its stock recorded on those colours; adding the
+         *     first size makes the sizes the leaves, and every existing count would then
+         *     be sitting a level above where the ledger expects to find it — with no way
+         *     to say how the colour's stock should divide between the new sizes. Add the
+         *     sizes before the stock, or count the shelf out and back in.
+         */
+        post: operations["add_variant_api_v1_staff_catalog_products__product_id__variants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/products/{product_id}/variants/{variant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Variant
+         * @description Refused once anything has happened to it.
+         *
+         *     A variant named by a movement or by an order line is part of a record: the
+         *     ledger would stop explaining its own totals and an old order would point
+         *     at a row that is not there. Take it out of stock instead — that is what
+         *     "we do not sell this any more" means when it has been sold before.
+         */
+        delete: operations["remove_variant_api_v1_staff_catalog_products__product_id__variants__variant_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/products/{product_id}/specs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the spec table, in order */
+        put: operations["replace_specs_api_v1_staff_catalog_products__product_id__specs_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/translations/{entity}/{entity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What Russian and English a row already has
+         * @description The one read the panel cannot get from the catalogue endpoints.
+         *
+         *     Those answer in a single language and fall back to Uzbek without saying
+         *     so, which is exactly right for a shopper and no use to somebody trying to
+         *     see what is still missing. This returns the Uzbek on the row beside every
+         *     translation held for it, so an editor can show three columns and mark the
+         *     empty cells.
+         */
+        get: operations["get_translations_api_v1_staff_catalog_translations__entity___entity_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/showcase/banners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Banners */
+        get: operations["list_banners_api_v1_staff_showcase_banners_get"];
+        put?: never;
+        /** Create Banner */
+        post: operations["create_banner_api_v1_staff_showcase_banners_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/showcase/banners/{banner_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Banner */
+        delete: operations["delete_banner_api_v1_staff_showcase_banners__banner_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Banner */
+        patch: operations["update_banner_api_v1_staff_showcase_banners__banner_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/staff/showcase/banners/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set the order of the banners, top to bottom */
+        post: operations["reorder_banners_api_v1_staff_showcase_banners_order_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/showcase/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sections */
+        get: operations["list_sections_api_v1_staff_showcase_sections_get"];
+        put?: never;
+        /** Create Section */
+        post: operations["create_section_api_v1_staff_showcase_sections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/showcase/sections/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Section */
+        delete: operations["delete_section_api_v1_staff_showcase_sections__key__delete"];
+        options?: never;
+        head?: never;
+        /** Update Section */
+        patch: operations["update_section_api_v1_staff_showcase_sections__key__patch"];
+        trace?: never;
+    };
+    "/api/v1/staff/showcase/sections/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set the order of the home screen's rails */
+        post: operations["reorder_sections_api_v1_staff_showcase_sections_order_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/showcase/promos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Promos */
+        get: operations["list_promos_api_v1_staff_showcase_promos_get"];
+        put?: never;
+        /** Create Promo */
+        post: operations["create_promo_api_v1_staff_showcase_promos_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/showcase/promos/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Promo
+         * @description Refused for a code that has been used. Switch it off instead.
+         *
+         *     An order that was discounted names the code it was discounted by, and
+         *     deleting the row would leave that figure unexplainable.
+         */
+        delete: operations["delete_promo_api_v1_staff_showcase_promos__code__delete"];
+        options?: never;
+        head?: never;
+        /** Update Promo */
+        patch: operations["update_promo_api_v1_staff_showcase_promos__code__patch"];
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1741,6 +2301,132 @@ export interface components {
             /** Is Default */
             is_default: boolean;
         };
+        /** AdminBannerOut */
+        AdminBannerOut: {
+            /** Id */
+            id: number;
+            /** Kicker */
+            kicker: string;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string;
+            /** Cta */
+            cta: string;
+            /** Image Url */
+            image_url: string;
+            /** Gradient From */
+            gradient_from: string;
+            /** Gradient To */
+            gradient_to: string;
+            /** Target Type */
+            target_type: string;
+            /** Target Value */
+            target_value: string;
+            /** Sort */
+            sort: number;
+            /** Active */
+            active: boolean;
+        };
+        /**
+         * AdminProductOut
+         * @description A card as the person who owns the catalogue sees it.
+         */
+        AdminProductOut: {
+            /** Id */
+            id: number;
+            /** Sku */
+            sku: string;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string;
+            status: components["schemas"]["ProductStatus"];
+            /** Next Statuses */
+            next_statuses: components["schemas"]["ProductStatus"][];
+            /** Category Slug */
+            category_slug: string;
+            /** Brand Slug */
+            brand_slug: string | null;
+            /** Price */
+            price: number;
+            /** Old Price */
+            old_price: number | null;
+            /** Stock Left */
+            stock_left: number;
+            /** Offer Count */
+            offer_count: number;
+            proposed_by: components["schemas"]["SellerOut"] | null;
+            /** Moderation Note */
+            moderation_note: string;
+            /** Image Count */
+            image_count: number;
+            /** Variant Count */
+            variant_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** AdminPromoOut */
+        AdminPromoOut: {
+            /** Id */
+            id: number;
+            /** Code */
+            code: string;
+            /** Percent Off */
+            percent_off: number;
+            /** Amount Off */
+            amount_off: number;
+            /** Min Total */
+            min_total: number;
+            /** Active */
+            active: boolean;
+        };
+        /** AdminSectionOut */
+        AdminSectionOut: {
+            /** Id */
+            id: number;
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string;
+            /** Category Slug */
+            category_slug: string | null;
+            /** Layout */
+            layout: string;
+            /** Sort */
+            sort: number;
+            /** Active */
+            active: boolean;
+        };
+        /** AdminSellerOut */
+        AdminSellerOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Phone */
+            phone: string;
+            /** Commission Percent */
+            commission_percent: number;
+            /** Active */
+            active: boolean;
+            /** User Phone */
+            user_phone: string | null;
+            /** User Name */
+            user_name: string | null;
+            /** Offer Count */
+            offer_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** BannerOut */
         BannerOut: {
             /** Id */
@@ -1764,6 +2450,85 @@ export interface components {
             /** Target Value */
             target_value: string;
         };
+        /** BannerUpdateIn */
+        BannerUpdateIn: {
+            /** Kicker */
+            kicker?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Subtitle */
+            subtitle?: string | null;
+            /** Cta */
+            cta?: string | null;
+            /** Image Url */
+            image_url?: string | null;
+            /** Gradient From */
+            gradient_from?: string | null;
+            /** Gradient To */
+            gradient_to?: string | null;
+            /** Target Type */
+            target_type?: ("category" | "product" | "url") | null;
+            /** Target Value */
+            target_value?: string | null;
+            /** Active */
+            active?: boolean | null;
+        };
+        /** BannerWriteIn */
+        BannerWriteIn: {
+            /**
+             * Kicker
+             * @default
+             */
+            kicker: string;
+            /** Title */
+            title: string;
+            /**
+             * Subtitle
+             * @default
+             */
+            subtitle: string;
+            /**
+             * Cta
+             * @default Ko'rish
+             */
+            cta: string;
+            /** Image Url */
+            image_url: string;
+            /**
+             * Gradient From
+             * @default #14162A
+             */
+            gradient_from: string;
+            /**
+             * Gradient To
+             * @default #0E7BF5
+             */
+            gradient_to: string;
+            /**
+             * Target Type
+             * @default category
+             * @enum {string}
+             */
+            target_type: "category" | "product" | "url";
+            /**
+             * Target Value
+             * @default
+             */
+            target_value: string;
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+        };
+        /** Body_upload_api_v1_staff_media_post */
+        Body_upload_api_v1_staff_media_post: {
+            /**
+             * File
+             * @description A photograph. Any format Pillow reads.
+             */
+            file: string;
+        };
         /** BrandOut */
         BrandOut: {
             /** Id */
@@ -1777,6 +2542,22 @@ export interface components {
              * @default 0
              */
             product_count: number;
+        };
+        /** BrandTextIn */
+        BrandTextIn: {
+            /** Name */
+            name?: string | null;
+        };
+        /** BrandWriteIn */
+        BrandWriteIn: {
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /** Translations */
+            translations?: {
+                [key: string]: components["schemas"]["BrandTextIn"];
+            };
         };
         /** CancelIn */
         CancelIn: {
@@ -1946,6 +2727,69 @@ export interface components {
              */
             has_children: boolean;
         };
+        /** CategoryTextIn */
+        CategoryTextIn: {
+            /** Name */
+            name?: string | null;
+            /** Subtitle */
+            subtitle?: string | null;
+        };
+        /** CategoryUpdateIn */
+        CategoryUpdateIn: {
+            /** Name */
+            name?: string | null;
+            /** Subtitle */
+            subtitle?: string | null;
+            /** Icon */
+            icon?: string | null;
+            /** Image Url */
+            image_url?: string | null;
+            /** Parent Slug */
+            parent_slug?: string | null;
+            /** Sort */
+            sort?: number | null;
+            /** Is Quick Link */
+            is_quick_link?: boolean | null;
+            /** Translations */
+            translations?: {
+                [key: string]: components["schemas"]["CategoryTextIn"];
+            };
+        };
+        /** CategoryWriteIn */
+        CategoryWriteIn: {
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+            /**
+             * Subtitle
+             * @default
+             */
+            subtitle: string;
+            /**
+             * Icon
+             * @default box
+             */
+            icon: string;
+            /** Image Url */
+            image_url?: string | null;
+            /** Parent Slug */
+            parent_slug?: string | null;
+            /**
+             * Sort
+             * @default 0
+             */
+            sort: number;
+            /**
+             * Is Quick Link
+             * @default false
+             */
+            is_quick_link: boolean;
+            /** Translations */
+            translations?: {
+                [key: string]: components["schemas"]["CategoryTextIn"];
+            };
+        };
         /** CheckoutIn */
         CheckoutIn: {
             /** Address Id */
@@ -2066,6 +2910,16 @@ export interface components {
             /** Sections */
             sections: components["schemas"]["SectionOut"][];
         };
+        /** ImageWriteIn */
+        ImageWriteIn: {
+            /** Url */
+            url: string;
+            /**
+             * Sort
+             * @default 0
+             */
+            sort: number;
+        };
         /**
          * Language
          * @enum {string}
@@ -2094,6 +2948,29 @@ export interface components {
             title: string;
             /** Meta */
             meta: string;
+        };
+        /**
+         * MediaOut
+         * @description Where an uploaded picture ended up.
+         *
+         *     ``media_url`` is the same shape every other image in the API carries — a
+         *     path relative to the media root — so it can be handed straight back as the
+         *     ``url`` of a product image, a category, or a colour swatch, and every app
+         *     resolves it the way it already resolves the seeded ones.
+         *
+         *     The size is returned because it is not the size that was sent: the picture
+         *     has been re-encoded and shrunk, and a panel that shows a preview wants to
+         *     know what it is previewing.
+         */
+        MediaOut: {
+            /** Media Url */
+            media_url: string;
+            /** Width */
+            width: number;
+            /** Height */
+            height: number;
+            /** Bytes */
+            bytes: number;
         };
         /** Message */
         Message: {
@@ -2452,6 +3329,19 @@ export interface components {
             /** Code */
             code: string;
         };
+        /** Page[AdminProductOut] */
+        Page_AdminProductOut_: {
+            /** Items */
+            items: components["schemas"]["AdminProductOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+            /** Has More */
+            has_more: boolean;
+        };
         /** Page[MovementOut] */
         Page_MovementOut_: {
             /** Items */
@@ -2508,6 +3398,19 @@ export interface components {
         Page_StaffOrderOut_: {
             /** Items */
             items: components["schemas"]["StaffOrderOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+            /** Has More */
+            has_more: boolean;
+        };
+        /** Page[StaffUserOut] */
+        Page_StaffUserOut_: {
+            /** Items */
+            items: components["schemas"]["StaffUserOut"][];
             /** Page */
             page: number;
             /** Page Size */
@@ -2601,6 +3504,63 @@ export interface components {
              */
             has_variants: boolean;
         };
+        /**
+         * ProductCreateIn
+         * @description A new card.
+         *
+         *     ``price`` seeds the cached figure and nothing more. The price a shopper
+         *     pays comes from an offer, and ``app.offers.refresh`` overwrites this the
+         *     moment one exists — it is here so a card with no offers yet has a number
+         *     to show rather than a nought. Stock is absent on purpose: it comes from
+         *     the movement ledger and is the warehouse's to move.
+         */
+        ProductCreateIn: {
+            /** Sku */
+            sku: string;
+            /** Title */
+            title: string;
+            /**
+             * Subtitle
+             * @default
+             */
+            subtitle: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Category Slug */
+            category_slug: string;
+            /** Brand Slug */
+            brand_slug?: string | null;
+            /** Price */
+            price: number;
+            /** Old Price */
+            old_price?: number | null;
+            /** Badge */
+            badge?: string | null;
+            /** Warranty */
+            warranty?: string | null;
+            /**
+             * Is Original
+             * @default true
+             */
+            is_original: boolean;
+            /**
+             * Free Delivery
+             * @default true
+             */
+            free_delivery: boolean;
+            /**
+             * Next Day Delivery
+             * @default true
+             */
+            next_day_delivery: boolean;
+            /** Translations */
+            translations?: {
+                [key: string]: components["schemas"]["ProductTextIn"];
+            };
+        };
         /** ProductOut */
         ProductOut: {
             /** Id */
@@ -2673,6 +3633,134 @@ export interface components {
              */
             sold_count: number;
         };
+        /**
+         * ProductProposeIn
+         * @description A seller suggesting a card for the platform's catalogue.
+         *
+         *     The catalogue belongs to the platform: a seller attaches an offer to a card
+         *     that already exists rather than opening their own copy, because a copy per
+         *     seller duplicates the catalogue and leaves the warehouse holding the same
+         *     goods in two places. What a seller *can* do is suggest one, and this is
+         *     that — it lands in moderation, never in the shop.
+         */
+        ProductProposeIn: {
+            /** Sku */
+            sku: string;
+            /** Title */
+            title: string;
+            /**
+             * Subtitle
+             * @default
+             */
+            subtitle: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Category Slug */
+            category_slug: string;
+            /** Brand Slug */
+            brand_slug?: string | null;
+            /** Price */
+            price: number;
+            /** Old Price */
+            old_price?: number | null;
+            /** Badge */
+            badge?: string | null;
+            /** Warranty */
+            warranty?: string | null;
+            /**
+             * Is Original
+             * @default true
+             */
+            is_original: boolean;
+            /**
+             * Free Delivery
+             * @default true
+             */
+            free_delivery: boolean;
+            /**
+             * Next Day Delivery
+             * @default true
+             */
+            next_day_delivery: boolean;
+            /** Translations */
+            translations?: {
+                [key: string]: components["schemas"]["ProductTextIn"];
+            };
+        };
+        /**
+         * ProductStatus
+         * @description Whether a card is in the shop.
+         *
+         *     The catalogue belongs to the platform: a seller attaches an offer to a card
+         *     that already exists rather than opening their own copy of it. That is the
+         *     whole point of one card with several offers — a copy per seller would
+         *     duplicate the catalogue and leave the warehouse holding the same goods in
+         *     two places under two names.
+         *
+         *     So a seller may *propose* a card and an admin decides. Until somebody
+         *     decides, it is not in the shop, and the customer endpoints show nothing but
+         *     ``published``.
+         * @enum {string}
+         */
+        ProductStatus: "draft" | "moderating" | "published" | "rejected" | "archived";
+        /** ProductStatusIn */
+        ProductStatusIn: {
+            status: components["schemas"]["ProductStatus"];
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
+        /** ProductTextIn */
+        ProductTextIn: {
+            /** Title */
+            title?: string | null;
+            /** Subtitle */
+            subtitle?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Badge */
+            badge?: string | null;
+            /** Warranty */
+            warranty?: string | null;
+        };
+        /**
+         * ProductUpdateIn
+         * @description Everything about a card except its price, its stock and its status.
+         *
+         *     Those three have owners: the price belongs to an offer, the stock to the
+         *     ledger, and the status to a moderation decision with a reason attached.
+         */
+        ProductUpdateIn: {
+            /** Title */
+            title?: string | null;
+            /** Subtitle */
+            subtitle?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Category Slug */
+            category_slug?: string | null;
+            /** Brand Slug */
+            brand_slug?: string | null;
+            /** Badge */
+            badge?: string | null;
+            /** Warranty */
+            warranty?: string | null;
+            /** Is Original */
+            is_original?: boolean | null;
+            /** Free Delivery */
+            free_delivery?: boolean | null;
+            /** Next Day Delivery */
+            next_day_delivery?: boolean | null;
+            /** Translations */
+            translations?: {
+                [key: string]: components["schemas"]["ProductTextIn"];
+            };
+        };
         /** ProfileOverviewOut */
         ProfileOverviewOut: {
             user: components["schemas"]["UserOut"];
@@ -2693,6 +3781,42 @@ export interface components {
         PromoIn: {
             /** Code */
             code: string;
+        };
+        /** PromoUpdateIn */
+        PromoUpdateIn: {
+            /** Percent Off */
+            percent_off?: number | null;
+            /** Amount Off */
+            amount_off?: number | null;
+            /** Min Total */
+            min_total?: number | null;
+            /** Active */
+            active?: boolean | null;
+        };
+        /** PromoWriteIn */
+        PromoWriteIn: {
+            /** Code */
+            code: string;
+            /**
+             * Percent Off
+             * @default 0
+             */
+            percent_off: number;
+            /**
+             * Amount Off
+             * @default 0
+             */
+            amount_off: number;
+            /**
+             * Min Total
+             * @default 0
+             */
+            min_total: number;
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
         };
         /** RatingBucket */
         RatingBucket: {
@@ -2831,6 +3955,18 @@ export interface components {
          * @enum {string}
          */
         RemovalStatus: "requested" | "ready" | "collected" | "cancelled";
+        /**
+         * ReorderIn
+         * @description The whole order, in one call.
+         *
+         *     A screen where rows are dragged into place knows the final order and
+         *     nothing else. Sending it as one list means the order cannot be left half
+         *     applied, and it costs one request instead of one per row.
+         */
+        ReorderIn: {
+            /** Ids */
+            ids: number[];
+        };
         /** ReturnIn */
         ReturnIn: {
             /** Order Item Id */
@@ -2964,6 +4100,22 @@ export interface components {
              */
             photos_total: number;
         };
+        /**
+         * RoleWriteIn
+         * @description Making somebody staff, or standing them down.
+         *
+         *     ``note`` is why. It is not required — the audit row records who and when
+         *     regardless — but it is the field that makes the log worth reading a year
+         *     later, so the panel offers it.
+         */
+        RoleWriteIn: {
+            role: components["schemas"]["UserRole"];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
         /** SearchLandingOut */
         SearchLandingOut: {
             /** Recent */
@@ -2986,12 +4138,87 @@ export interface components {
             /** Products */
             products: components["schemas"]["ProductCardOut"][];
         };
+        /** SectionUpdateIn */
+        SectionUpdateIn: {
+            /** Title */
+            title?: string | null;
+            /** Subtitle */
+            subtitle?: string | null;
+            /** Category Slug */
+            category_slug?: string | null;
+            /** Layout */
+            layout?: ("rail" | "grid" | "deals") | null;
+            /** Active */
+            active?: boolean | null;
+        };
+        /** SectionWriteIn */
+        SectionWriteIn: {
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /**
+             * Subtitle
+             * @default
+             */
+            subtitle: string;
+            /** Category Slug */
+            category_slug?: string | null;
+            /**
+             * Layout
+             * @default rail
+             * @enum {string}
+             */
+            layout: "rail" | "grid" | "deals";
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+        };
+        /**
+         * SellerCreateIn
+         * @description A seller, and optionally the account that signs in as them.
+         *
+         *     Linking an account is what *makes* somebody a seller — it is not a
+         *     separate administrative step — so giving a phone here grants that user the
+         *     seller role, and the change is written to the audit log.
+         */
+        SellerCreateIn: {
+            /** Name */
+            name: string;
+            /**
+             * Phone
+             * @default
+             */
+            phone: string;
+            /**
+             * Commission Percent
+             * @default 5
+             */
+            commission_percent: number;
+            /** User Phone */
+            user_phone?: string | null;
+        };
         /** SellerOut */
         SellerOut: {
             /** Id */
             id: number;
             /** Name */
             name: string;
+        };
+        /** SellerUpdateIn */
+        SellerUpdateIn: {
+            /** Name */
+            name?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Commission Percent */
+            commission_percent?: number | null;
+            /** Active */
+            active?: boolean | null;
+            /** User Phone */
+            user_phone?: string | null;
         };
         /** SettingsIn */
         SettingsIn: {
@@ -3135,6 +4362,33 @@ export interface components {
             key: string;
             /** Value */
             value: string;
+        };
+        /** SpecTextIn */
+        SpecTextIn: {
+            /** Key */
+            key?: string | null;
+            /** Value */
+            value?: string | null;
+        };
+        /** SpecWriteIn */
+        SpecWriteIn: {
+            /** Key */
+            key: string;
+            /** Value */
+            value: string;
+            /** Translations */
+            translations?: {
+                [key: string]: components["schemas"]["SpecTextIn"];
+            };
+        };
+        /**
+         * SpecsReplaceIn
+         * @description The whole list, in order. Specs are read as a table, not edited row by
+         *     row, and replacing them is how the order gets fixed.
+         */
+        SpecsReplaceIn: {
+            /** Specs */
+            specs?: components["schemas"]["SpecWriteIn"][];
         };
         /**
          * StaffMeOut
@@ -3313,6 +4567,31 @@ export interface components {
             express: boolean;
             /** Capacity Left */
             capacity_left: number;
+        };
+        /**
+         * StaffUserOut
+         * @description An account as the person handing out roles sees it.
+         *
+         *     Separate from ``UserOut``, which is somebody's own profile and is read by
+         *     two shipped apps. This one answers a different question — who is this, and
+         *     what are they allowed to do — and carries nothing an admin has no business
+         *     reading off a customer's row.
+         */
+        StaffUserOut: {
+            /** Id */
+            id: number;
+            /** Phone */
+            phone: string;
+            /** Full Name */
+            full_name: string;
+            role: components["schemas"]["UserRole"];
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** StockCountCloseIn */
         StockCountCloseIn: {
@@ -3518,6 +4797,30 @@ export interface components {
              */
             is_new_user: boolean;
         };
+        /**
+         * TranslationsOut
+         * @description What is held for one row, in every language at once.
+         *
+         *     The read path answers in one language and falls back to Uzbek without
+         *     saying so, which is right for a shopper and useless to somebody trying to
+         *     see what is still missing.
+         */
+        TranslationsOut: {
+            /** Entity */
+            entity: string;
+            /** Entity Id */
+            entity_id: number;
+            /** Uz */
+            uz: {
+                [key: string]: string;
+            };
+            /** Translations */
+            translations: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+        };
         /** UserOut */
         UserOut: {
             /** Id */
@@ -3596,6 +4899,32 @@ export interface components {
             stock_left?: number | null;
             /** Parent Id */
             parent_id?: number | null;
+        };
+        /** VariantTextIn */
+        VariantTextIn: {
+            /** Label */
+            label?: string | null;
+        };
+        /** VariantWriteIn */
+        VariantWriteIn: {
+            kind: components["schemas"]["VariantKind"];
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+            /** Image Url */
+            image_url?: string | null;
+            /** Parent Id */
+            parent_id?: number | null;
+            /**
+             * Sort
+             * @default 0
+             */
+            sort: number;
+            /** Translations */
+            translations?: {
+                [key: string]: components["schemas"]["VariantTextIn"];
+            };
         };
         /**
          * WriteOffIn
@@ -6018,6 +7347,116 @@ export interface operations {
             };
         };
     };
+    list_users_api_v1_staff_users_get: {
+        parameters: {
+            query?: {
+                /** @description Part of a phone number, or of a name */
+                q?: string | null;
+                /** @description Only accounts holding this role */
+                role?: components["schemas"]["UserRole"] | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_StaffUserOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_role_api_v1_staff_users__user_id__role_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffUserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_api_v1_staff_media_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_api_v1_staff_media_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_returns_api_v1_staff_returns_get: {
         parameters: {
             query?: {
@@ -7235,6 +8674,1257 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_MovementOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sellers_api_v1_staff_sellers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSellerOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_seller_api_v1_staff_sellers_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSellerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_seller_api_v1_staff_sellers__seller_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                seller_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSellerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_seller_api_v1_staff_sellers__seller_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                seller_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSellerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_products_api_v1_staff_catalog_products_get: {
+        parameters: {
+            query?: {
+                /** @description `moderating` is the queue */
+                status?: components["schemas"]["ProductStatus"] | null;
+                q?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AdminProductOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_product_api_v1_staff_catalog_products_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_product_api_v1_staff_catalog_products__product_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_product_api_v1_staff_catalog_products__product_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_product_api_v1_staff_catalog_proposals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductProposeIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_product_status_api_v1_staff_catalog_products__product_id__status_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductStatusIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProductOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_category_api_v1_staff_catalog_categories_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_category_api_v1_staff_catalog_categories__slug__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_category_api_v1_staff_catalog_categories__slug__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_brand_api_v1_staff_catalog_brands_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BrandWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrandOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_brand_api_v1_staff_catalog_brands__slug__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_brand_api_v1_staff_catalog_brands__slug__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BrandWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrandOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_image_api_v1_staff_catalog_products__product_id__images_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_image_api_v1_staff_catalog_products__product_id__images__image_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+                image_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_variant_api_v1_staff_catalog_products__product_id__variants_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VariantWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_variant_api_v1_staff_catalog_products__product_id__variants__variant_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+                variant_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_specs_api_v1_staff_catalog_products__product_id__specs_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecsReplaceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_translations_api_v1_staff_catalog_translations__entity___entity_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                entity: string;
+                entity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_banners_api_v1_staff_showcase_banners_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBannerOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_banner_api_v1_staff_showcase_banners_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BannerWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBannerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_banner_api_v1_staff_showcase_banners__banner_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                banner_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_banner_api_v1_staff_showcase_banners__banner_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                banner_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BannerUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBannerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_banners_api_v1_staff_showcase_banners_order_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBannerOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sections_api_v1_staff_showcase_sections_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSectionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_section_api_v1_staff_showcase_sections_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SectionWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_section_api_v1_staff_showcase_sections__key__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_section_api_v1_staff_showcase_sections__key__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SectionUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSectionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_sections_api_v1_staff_showcase_sections_order_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSectionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_promos_api_v1_staff_showcase_promos_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPromoOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_promo_api_v1_staff_showcase_promos_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromoWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPromoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_promo_api_v1_staff_showcase_promos__code__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_promo_api_v1_staff_showcase_promos__code__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromoUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPromoOut"];
                 };
             };
             /** @description Validation Error */

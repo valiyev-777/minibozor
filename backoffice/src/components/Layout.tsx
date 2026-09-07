@@ -1,14 +1,20 @@
+import * as React from "react"
 import { NavLink, Outlet } from "react-router-dom"
 import {
+  BadgeCheck,
   CalendarClock,
   ClipboardList,
   Layers,
+  LayoutTemplate,
+  LibraryBig,
   LogOut,
   PackageCheck,
   ScrollText,
   Star,
+  Store,
   Truck,
   Undo2,
+  Users,
 } from "lucide-react"
 import type { UserRole } from "@/api/types"
 import { useSession } from "@/auth/session"
@@ -20,19 +26,32 @@ import { cn } from "@/lib/utils"
 /**
  * The menu is data, and the role decides which of it exists.
  *
- * Four more panels hang off this: warehouse, admin, seller, and a courier app.
- * They will add rows here rather than fork the layout, which is why a row
- * carries the roles it belongs to instead of the sidebar carrying an `if`.
+ * Two more panels hang off this: seller, and a courier app. They will add rows
+ * here rather than fork the layout, which is why a row carries the roles it
+ * belongs to instead of the sidebar carrying an `if`.
+ *
+ * The router reads the same rows — see `allowed` below and `App.tsx`. A menu
+ * that hides a screen while the URL still opens it has not withheld anything:
+ * a bookmark, the back button or a pasted link gets an operator on to the
+ * roles screen. One list decides both.
  */
-type NavItem = {
+export type NavItem = {
   to: string
   label: string
   icon: typeof Undo2
   roles: UserRole[]
+  /** Starts a group in the rail, so nine rows read as three jobs. */
+  group?: string
 }
 
-const NAV: NavItem[] = [
-  { to: "/returns", label: "Qaytarishlar", icon: Undo2, roles: ["operator", "admin"] },
+export const NAV: NavItem[] = [
+  {
+    to: "/returns",
+    label: "Qaytarishlar",
+    icon: Undo2,
+    roles: ["operator", "admin"],
+    group: "Operator",
+  },
   { to: "/reviews", label: "Sharhlar", icon: Star, roles: ["operator", "admin"] },
   { to: "/orders", label: "Buyurtmalar", icon: PackageCheck, roles: ["operator", "admin"] },
   {
@@ -41,7 +60,13 @@ const NAV: NavItem[] = [
     icon: CalendarClock,
     roles: ["operator", "admin"],
   },
-  { to: "/shelf", label: "Javon", icon: Layers, roles: ["warehouse", "admin"] },
+  {
+    to: "/shelf",
+    label: "Javon",
+    icon: Layers,
+    roles: ["warehouse", "admin"],
+    group: "Ombor",
+  },
   { to: "/supplies", label: "Partiyalar", icon: Truck, roles: ["warehouse", "admin"] },
   {
     to: "/counts",
@@ -56,12 +81,34 @@ const NAV: NavItem[] = [
     icon: ScrollText,
     roles: ["warehouse", "admin"],
   },
+  {
+    to: "/moderation",
+    label: "Moderatsiya",
+    icon: BadgeCheck,
+    roles: ["admin"],
+    group: "Administrator",
+  },
+  { to: "/catalog", label: "Katalog", icon: LibraryBig, roles: ["admin"] },
+  { to: "/sellers", label: "Sotuvchilar", icon: Store, roles: ["admin"] },
+  { to: "/users", label: "Foydalanuvchilar", icon: Users, roles: ["admin"] },
+  { to: "/showcase", label: "Vitrina", icon: LayoutTemplate, roles: ["admin"] },
 ]
+
+/** The rows this role may reach, for the sidebar and for the router alike. */
+export function allowed(role: UserRole): NavItem[] {
+  return NAV.filter((item) => item.roles.includes(role))
+}
 
 export function Layout() {
   const session = useSession()
   const user = session.status === "signed-in" ? session.user : null
-  const items = NAV.filter((item) => user && item.roles.includes(user.role))
+  const items = user ? allowed(user.role) : []
+
+  // Headings only when there is more than one job on screen. An operator sees
+  // four rows that are all theirs, and a heading over them names something
+  // they cannot leave; an admin sees three panels stacked and needs to know
+  // where one ends.
+  const grouped = new Set(items.map((item) => item.group).filter(Boolean)).size > 1
 
   return (
     <div className="flex min-h-full">
@@ -71,23 +118,32 @@ export function Layout() {
           <p className="text-[11px] text-rail-ink/70">Backoffice</p>
         </div>
 
-        <nav className="flex-1 space-y-0.5 px-2">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
           {items.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-2 rounded px-2 py-1.5 text-[13px] transition-colors",
-                  isActive
-                    ? "bg-white/12 font-medium text-white"
-                    : "hover:bg-white/8 hover:text-white",
-                )
-              }
-            >
-              <item.icon className="size-3.5 shrink-0" />
-              {item.label}
-            </NavLink>
+            <React.Fragment key={item.to}>
+              {/* A heading only where a group actually begins: an operator who
+                  cannot see the warehouse rows should not see its heading
+                  either, and the admin — who sees all three — needs them. */}
+              {grouped && item.group ? (
+                <p className="px-2 pt-3 pb-1 text-[10px] font-semibold tracking-wide text-rail-ink/50 uppercase">
+                  {item.group}
+                </p>
+              ) : null}
+              <NavLink
+                to={item.to}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-2 rounded px-2 py-1.5 text-[13px] transition-colors",
+                    isActive
+                      ? "bg-white/12 font-medium text-white"
+                      : "hover:bg-white/8 hover:text-white",
+                  )
+                }
+              >
+                <item.icon className="size-3.5 shrink-0" />
+                {item.label}
+              </NavLink>
+            </React.Fragment>
           ))}
         </nav>
 

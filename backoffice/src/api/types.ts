@@ -34,6 +34,34 @@ export type SlotWindowIn = S["SlotWindowIn"]
 
 export type StaffOffer = S["StaffOfferOut"]
 
+// ---------------------------------------------------------------- admin
+
+export type AdminSeller = S["AdminSellerOut"]
+export type SellerCreateIn = S["SellerCreateIn"]
+export type SellerUpdateIn = S["SellerUpdateIn"]
+
+export type StaffUser = S["StaffUserOut"]
+export type StaffUserPage = S["Page_StaffUserOut_"]
+export type RoleWriteIn = S["RoleWriteIn"]
+
+export type AdminProduct = S["AdminProductOut"]
+export type AdminProductPage = S["Page_AdminProductOut_"]
+export type ProductStatus = S["ProductStatus"]
+export type ProductStatusIn = S["ProductStatusIn"]
+export type Category = S["CategoryOut"]
+export type Brand = S["BrandOut"]
+
+export type AdminBanner = S["AdminBannerOut"]
+export type BannerWriteIn = S["BannerWriteIn"]
+export type BannerUpdateIn = S["BannerUpdateIn"]
+export type AdminSection = S["AdminSectionOut"]
+export type SectionWriteIn = S["SectionWriteIn"]
+export type SectionUpdateIn = S["SectionUpdateIn"]
+export type AdminPromo = S["AdminPromoOut"]
+export type PromoWriteIn = S["PromoWriteIn"]
+export type PromoUpdateIn = S["PromoUpdateIn"]
+export type ReorderIn = S["ReorderIn"]
+
 export type Supply = S["SupplyOut"]
 export type SupplyStatus = S["SupplyStatus"]
 export type SupplyLine = S["SupplyLineOut"]

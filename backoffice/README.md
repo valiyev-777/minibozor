@@ -6,16 +6,21 @@ because the business logic (`transitions.py`, `inventory.py`, `offers.py`,
 `audit.py`) lives in FastAPI and a second model layer over the same database
 would mean writing every schema change twice.
 
-Two panels so far, in one application:
+Three panels so far, in one application:
 
 - **Operator** — returns, review moderation, order status, delivery windows.
 - **Warehouse** — the shelf, incoming batches, stocktakes, removals, and the
   movement ledger.
+- **Admin** — moderation, the catalogue, sellers, roles, and the shop window.
+  Reading and deciding; the product edit form is the one screen still to come,
+  and the Katalog list's "Tahrirlash" button is deliberately disabled and
+  labelled rather than half-built.
 
 The sidebar is drawn from the signed-in role, so an operator sees the queues, a
-warehouse hand sees the shelves, and an admin sees both. Three more are planned
-(admin, seller, and a courier app), so most of what is in `src/components`
-exists to be shared rather than to serve one panel.
+warehouse hand sees the shelves, and an admin sees all three — with headings,
+which appear only when more than one job is on screen. Two more are planned
+(seller, and a courier app), so most of what is in `src/components` exists to
+be shared rather than to serve one panel.
 
 ## Running it
 
@@ -38,8 +43,8 @@ Sign in with the phone number and the SMS code. In dev the code is always
 `123456` and the login screen shows it, because `/auth/otp/request` echoes it
 back when `MB_ENV=dev`.
 
-The panel refuses anybody whose role is not `operator` or `admin`, and says
-which role it found rather than showing an empty screen.
+The panel refuses anybody whose role is not `operator`, `warehouse` or
+`admin`, and says which role it found rather than showing an empty screen.
 
 ### Why the port matters
 
@@ -74,7 +79,7 @@ MB_API_URL=https://api.minibozor.uz npm run gen
 regeneration breaks it, the backend changed something and the panel needs to
 follow — that is the point.
 
-## Conventions the next four panels should keep
+## Conventions the next two panels should keep
 
 - **`src/components/DataTable.tsx`** — the one table. Sorting, paging, the
   empty state and the loading skeleton are settled there; a page contributes
@@ -84,6 +89,10 @@ follow — that is the point.
 - **`src/components/ConfirmDialog.tsx`** — the one confirmation. Anything
   irreversible goes through it, and a decision's own fields go in as
   `children`, so there is one dialog rather than one per verb.
+- **`src/lib/utils.ts` → `mediaSrc`** — the one place a relative media path
+  becomes a URL. The API answers with `products/x.png` or `uploads/<uuid>.webp`
+  and never a whole URL, because it does not know how a client reaches it;
+  every client prefixes its own base.
 - **`src/lib/mutate.ts`** — the one way a change is sent, and the one way a
   failure is shown. The backend answers 403, 409 and 422 with a specific,
   already-translated sentence; it goes straight into the toast. There is no
@@ -99,6 +108,21 @@ follow — that is the point.
 - **The access token stays in memory.** Not `localStorage`: it is short-lived
   and recovered on load from the HttpOnly refresh cookie, which this code
   cannot read and never tries to.
+- **`src/components/SortableList.tsx`** — rows arranged by dragging. Pointer
+  events, not HTML5 drag-and-drop: `draggable`/`dragstart` does nothing under a
+  finger and cannot be driven by synthesised mouse events, so the one
+  interaction on the showcase screen would be the one thing untestable. Every
+  row also carries up/down buttons, because a list that can only be dragged
+  cannot be rearranged with a keyboard at all.
+- **`src/components/ui/tabs.tsx`** — sections inside one screen, with no
+  routing. The showcase is three tables and the catalogue is three more; a
+  sidebar row each would turn a menu of nine into a menu of fifteen. The
+  sidebar is for finding the *area* you work in.
+- **An order goes as a whole.** `POST .../order` takes every id and answers 400
+  to a list that repeats or omits one. So an arrangement is held locally while
+  somebody is making it and sent in one request when they save — never a
+  request per row, which could be left half applied. Until Save the shop keeps
+  the old order, and the panel says so.
 - **Dense and plain.** An operator sees hundreds of rows a day. The mobile
   app's design system is not reused — that product is looked at, this one is
   worked in.
@@ -138,3 +162,19 @@ again; reading it afterwards in a report is too late to be useful.
 | `npm run build` | `tsc -b` in strict mode, then a production bundle |
 | `npm run lint` | types only, no emit |
 | `npm run gen` | regenerate `src/api/schema.d.ts` from the API |
+
+## Endpoints the panel wants and the API does not have
+
+Nothing here is a blocker; each is noted so the next backend stage can decide.
+
+- **`GET /staff/catalog/categories` and `.../brands`.** The Katalog tab reads
+  the customer endpoints (`/categories`, `/brands`) because there is no admin
+  listing. Those answer in the request's language and hide nothing, which is
+  fine for a read-only list — but an admin editing a category wants the Uzbek
+  on the row, not the translation, and wants to see rows a shopper cannot.
+- **A brand's product count.** `GET /brands` always sends `product_count: 0`;
+  the figure is only computed in `/products/filters`, scoped to a listing. The
+  brands table therefore says how many brands there are and not how many
+  products each holds.
+- **A count for the moderation queue.** The sidebar cannot show "3 waiting"
+  without fetching the queue itself, so it does not try.

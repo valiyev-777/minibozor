@@ -12,7 +12,7 @@
  *   the mobile apps' sake; we deliberately ignore it.
  */
 
-const API_URL = import.meta.env["VITE_API_URL"] ?? "http://localhost:8000"
+export const API_URL = import.meta.env["VITE_API_URL"] ?? "http://localhost:8000"
 export const BASE = `${API_URL}/api/v1`
 
 let accessToken: string | null = null
