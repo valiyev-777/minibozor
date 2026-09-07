@@ -121,7 +121,7 @@ export function DeliverPage() {
       <button
         type="button"
         onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-lg font-semibold text-muted"
+        className="flex items-center gap-2 text-lg font-semibold text-ink-soft"
       >
         <ArrowLeft className="size-6" />
         {order.code}
@@ -131,7 +131,7 @@ export function DeliverPage() {
 
       {needsCash ? (
         <Panel tone="cash">
-          <p className="text-lg font-semibold text-muted">Olinadigan naqd pul</p>
+          <p className="text-lg font-semibold text-ink-soft">Olinadigan naqd pul</p>
           <p className="text-5xl font-bold tabular-nums">{sum(cashDue)}</p>
           <label className="mt-3 flex items-center gap-3 text-lg font-semibold">
             <input
@@ -142,7 +142,7 @@ export function DeliverPage() {
             />
             Naqd pul to'liq olindi
           </label>
-          <p className="mt-1 text-base text-muted">
+          <p className="mt-1 text-base text-ink-soft">
             Summa aynan shu bo'lishi kerak — server boshqasini qabul qilmaydi.
           </p>
         </Panel>
@@ -165,7 +165,7 @@ export function DeliverPage() {
       />
 
       <div>
-        <p className="mb-1.5 text-base font-semibold text-muted">Surat — ixtiyoriy</p>
+        <p className="mb-1.5 text-base font-semibold text-ink-soft">Surat — ixtiyoriy</p>
         {photo ? (
           <Panel tone="good">
             <div className="flex items-center justify-between gap-3">
@@ -173,7 +173,7 @@ export function DeliverPage() {
               <button
                 type="button"
                 onClick={() => setPhoto(null)}
-                className="flex items-center gap-1 text-lg font-semibold text-bad"
+                className="flex items-center gap-1 text-lg font-semibold text-danger"
               >
                 <X className="size-5" />
                 Olib tashlash
@@ -219,14 +219,14 @@ export function DeliverPage() {
       />
 
       {error && name.trim() ? (
-        <p className="text-lg font-semibold text-bad">{error}</p>
+        <p className="text-lg font-semibold text-danger">{error}</p>
       ) : null}
 
       <Button type="submit" tone="good" busy={busy}>
         Yetkazildi deb yozish
       </Button>
       {!reachable ? (
-        <p className="text-center text-base text-pending">
+        <p className="text-center text-base text-warn">
           Tarmoq yo'q — telefoningizda saqlanadi va o'zi yuboriladi.
         </p>
       ) : null}

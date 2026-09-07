@@ -81,7 +81,7 @@ export function FailPage() {
       <button
         type="button"
         onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-lg font-semibold text-muted"
+        className="flex items-center gap-2 text-lg font-semibold text-ink-soft"
       >
         <ArrowLeft className="size-6" />
         {order.code}
@@ -90,7 +90,7 @@ export function FailPage() {
       <h1 className="text-3xl font-bold">Urinish muvaffaqiyatsiz</h1>
 
       <Panel tone="pending">
-        <p className="text-xl font-bold text-pending">Buyurtma sizda qoladi</p>
+        <p className="text-xl font-bold text-warn">Buyurtma sizda qoladi</p>
         <p className="mt-1 text-base">
           Bu — bekor qilish emas. Buyurtma bekor bo'lmaydi va boshqa kuryerga o'tmaydi: u sizda,
           reysingizda qoladi va yana urinib ko'rish mumkin. Bekor qilish yoki qaytarish haqidagi
@@ -99,7 +99,7 @@ export function FailPage() {
       </Panel>
 
       <div>
-        <p className="mb-2 text-base font-semibold text-muted">Sabab</p>
+        <p className="mb-2 text-base font-semibold text-ink-soft">Sabab</p>
         <div className="grid grid-cols-2 gap-2">
           {REASONS.map((option) => (
             <button
@@ -111,7 +111,7 @@ export function FailPage() {
                 setError(null)
               }}
               className={clsx(
-                "min-h-16 rounded-[var(--radius-work)] border-2 px-3 py-2 text-lg font-semibold",
+                "min-h-16 rounded-[var(--radius-panel)] border-2 px-3 py-2 text-lg font-semibold",
                 reason === option ? "border-brand bg-brand text-brand-ink" : "border-line",
               )}
             >
@@ -137,7 +137,7 @@ export function FailPage() {
         Urinishni yozish
       </Button>
       {!reachable ? (
-        <p className="text-center text-base text-pending">
+        <p className="text-center text-base text-warn">
           Tarmoq yo'q — telefoningizda saqlanadi va o'zi yuboriladi.
         </p>
       ) : null}

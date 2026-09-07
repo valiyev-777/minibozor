@@ -144,14 +144,14 @@ function Elsewhere({ product }: { product: AdminProductDetail | null }) {
     {
       icon: Coins,
       title: "Narx",
-      where: "Taklifda — sotuvchi belgilaydi",
+      where: "Sotuvchi belgilaydi",
       why:
         "Bir kartochkani bir nechta sotuvchi sotadi va har biri o'z narxini " +
-        "qo'yadi. Kartochkadagi raqam — eng arzon taklifning nusxasi.",
+        "qo'yadi. Kartochkadagi raqam — eng arzon narxning nusxasi.",
       now: product
         ? product.offer_count
-          ? `${money(product.price)} · ${product.offer_count} taklif`
-          : "Taklif yo'q — ko'rsatilayotgani boshlang'ich raqam"
+          ? `${money(product.price)} · ${product.offer_count} sotuvchi`
+          : "Narx qo'yilmagan — ko'rsatilayotgani boshlang'ich raqam"
         : null,
     },
     {
@@ -185,7 +185,7 @@ function Elsewhere({ product }: { product: AdminProductDetail | null }) {
               <item.icon className="size-3.5 shrink-0 text-ink-faint" />
               {item.title}
             </dt>
-            <dd className="mt-0.5 text-[12px] text-accent">{item.where}</dd>
+            <dd className="mt-0.5 text-[12px] text-brand">{item.where}</dd>
             <dd className="mt-1 text-[12px] text-ink-soft">{item.why}</dd>
             {item.now ? (
               <dd className="tabular mt-1 text-[12px] text-ink-faint">Hozir: {item.now}</dd>
@@ -294,8 +294,8 @@ function NewProduct() {
                   offers shows something rather than a nought, and the first
                   offer overwrites it. */}
               <Hint>
-                Narx emas — taklif kelguncha ko'rsatiladigan raqam. Birinchi
-                taklif uni almashtiradi.
+                Narx emas — sotuvchi narx qo'yguncha ko'rsatiladigan raqam.
+                Birinchi narx uni almashtiradi.
               </Hint>
             </div>
           </div>

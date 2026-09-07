@@ -43,12 +43,12 @@ export function OffersPage() {
   return (
     <>
       <PageHead
-        title="Takliflarim"
-        hint="Narx sizning, qoldiq omborning. Bir kartochkani bir nechta sotuvchi sotadi — eng arzon va qoldig'i bor taklif do'konda ko'rinadi."
+        title="Narxlarim"
+        hint="Narx sizning, qoldiq omborning. Bir kartochkani bir nechta sotuvchi sotadi — eng arzon va qoldig'i bor narx do'konda ko'rinadi."
       />
 
       <Panel
-        title={`${rows.length} ta taklif`}
+        title={`${rows.length} ta narx`}
         hint={
           rows.length
             ? `${winning} tasi do'konda yetakchi${paused ? ` · ${paused} tasi to'xtatilgan` : ""}`
@@ -61,8 +61,8 @@ export function OffersPage() {
         ) : null}
         {!query.isPending && !query.error && rows.length === 0 ? (
           <Empty
-            title="Hali taklifingiz yo'q"
-            hint="Taklif — mavjud kartochkaga o'z narxingizni qo'yish. Katalogda kerakli mahsulot bo'lmasa, uni taklif qilish mumkin — administrator ko'rib chiqadi."
+            title="Hali narx qo'ymagansiz"
+            hint="Bu — boshqalar ochgan kartochkaga o'z narxingizni qo'yish. O'z mahsulotingizni «Mahsulotlarim»da qo'shasiz."
           />
         ) : null}
 
@@ -249,7 +249,7 @@ function EditPrice({ offer, onClose }: { offer: Offer; onClose: () => void }) {
                 Sotuvda
               </span>
               <span className="block text-[13px] text-ink-soft">
-                O'chirilsa taklif narx yarishida qatnashmaydi va do'konda
+                O'chirilsa narxingiz yarishda qatnashmaydi va do'konda
                 ko'rinmaydi. Tovar javonda qoladi — saqlash haqi hisoblanishda
                 davom etadi.
               </span>

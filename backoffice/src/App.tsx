@@ -6,6 +6,7 @@ import { useSession } from "@/auth/session"
 import { allowed, Layout } from "@/components/Layout"
 import { CatalogPage } from "@/pages/CatalogPage"
 import { CountsPage } from "@/pages/CountsPage"
+import { HomePage } from "@/pages/HomePage"
 import { ModerationPage } from "@/pages/ModerationPage"
 import { MovementsPage } from "@/pages/MovementsPage"
 import { OrdersPage } from "@/pages/OrdersPage"
@@ -24,8 +25,15 @@ import { UsersPage } from "@/pages/UsersPage"
 
 /** The first screen of each role's day. */
 const HOME: Partial<Record<UserRole, string>> = {
+  // The warehouse starts at the shelf and the operator at their queue: those
+  // are jobs, and the person opening the panel is there to do one.
+  //
+  // An admin is not. Signing in used to drop them on the moderation queue
+  // because it happened to be the first nav row, so "how is the shop doing"
+  // needed them to guess which of fifteen screens to open. `/` is an
+  // overview now, and it is the only screen that is one.
   warehouse: "/shelf",
-  admin: "/moderation",
+  admin: "/",
 }
 
 /**
@@ -85,6 +93,12 @@ export function App() {
             <Route key={item.to} path={item.to} element={<Screen />} />
           ) : null
         })}
+        {/* The overview. Admins only: it is built from orders, returns and the
+            catalogue summary, and an operator or the warehouse would be shown
+            three tiles they cannot act on. */}
+        {session.user.role === "admin" ? (
+          <Route index element={<HomePage />} />
+        ) : null}
         {/* The card editor hangs off the catalogue rather than the sidebar:
             it is reached from a row, not chosen from a menu, and it is open
             to whoever may see the catalogue. */}

@@ -159,7 +159,7 @@ function ProductsTab() {
           {/* The figure on the card is a cache of the winning offer. With no
               offers behind it, it is the number the card was written with. */}
           <span className="block text-[12px] text-ink-faint">
-            {row.offer_count ? `${row.offer_count} taklif` : "taklifsiz"}
+            {row.offer_count ? `${row.offer_count} sotuvchi` : "sotuvchisiz"}
           </span>
         </>
       ),
@@ -327,7 +327,7 @@ function CategoryRow({ category, depth }: { category: Category; depth: number })
       <div
         className={cn(
           "flex items-center gap-2 px-3 py-2",
-          expandable && "cursor-pointer hover:bg-accent-soft/50",
+          expandable && "cursor-pointer hover:bg-brand-soft/50",
         )}
         style={{ paddingLeft: `${0.75 + depth * 1.25}rem` }}
         onClick={expandable ? () => setOpen((was) => !was) : undefined}

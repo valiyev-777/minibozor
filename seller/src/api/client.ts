@@ -109,6 +109,16 @@ export type Query = Record<string, string | number | boolean | null | undefined>
 type Options = {
   method?: string
   json?: unknown
+  /**
+   * A multipart body — a photograph on its way to `POST /staff/media`.
+   *
+   * Separate from `json` because the two cannot share a header: `fetch`
+   * derives `multipart/form-data` *and its boundary* from the FormData
+   * itself, and setting Content-Type by hand omits the boundary, which the
+   * server then cannot parse. So the rule is that this path sets no
+   * Content-Type at all — see `send`.
+   */
+  form?: FormData
   query?: Query
   /** Set on the auth calls themselves, which must not try to refresh. */
   noRefresh?: boolean
@@ -128,11 +138,19 @@ async function send(path: string, options: Options): Promise<Response> {
   const headers: Record<string, string> = { "Accept-Language": "uz" }
   if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`
   if (options.json !== undefined) headers["Content-Type"] = "application/json"
+  // Deliberately no Content-Type for `form`: the boundary comes from the
+  // FormData and only `fetch` knows it.
+  const body =
+    options.form !== undefined
+      ? options.form
+      : options.json !== undefined
+        ? JSON.stringify(options.json)
+        : undefined
   return fetch(url(path, options.query), {
     method: options.method ?? "GET",
     credentials: "include",
     headers,
-    ...(options.json !== undefined ? { body: JSON.stringify(options.json) } : {}),
+    ...(body !== undefined ? { body } : {}),
   })
 }
 
@@ -165,6 +183,30 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   const body: unknown = text ? JSON.parse(text) : null
   if (!res.ok) throw new ApiError(res.status, messageFrom(res.status, body))
   return body as T
+}
+
+/**
+ * Upload one photograph and get back the path the catalogue stores.
+ *
+ * Goes through `api` rather than its own `fetch` so an expired access token
+ * is refreshed and the upload retried — a seller picking six pictures after
+ * half an hour on the form would otherwise lose the lot to a 401.
+ *
+ * The bytes are not what gets stored: the server decodes, shrinks and
+ * re-encodes them, so `media_url` is a picture it produced, and the size it
+ * reports is not the size that was sent.
+ */
+export async function uploadImage(file: File): Promise<MediaUploaded> {
+  const form = new FormData()
+  form.append("file", file, file.name)
+  return api<MediaUploaded>("/staff/media", { method: "POST", form })
+}
+
+export type MediaUploaded = {
+  media_url: string
+  width: number
+  height: number
+  bytes: number
 }
 
 /** Recover a session on page load, from the cookie alone. */

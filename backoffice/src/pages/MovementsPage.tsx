@@ -4,6 +4,7 @@ import { api } from "@/api/client"
 import type { Movement, MovementKind, MovementPage, StaffOffer } from "@/api/types"
 import { DataTable, type Column } from "@/components/DataTable"
 import { Page } from "@/components/Layout"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Hint, Input, Label, Select } from "@/components/ui/field"
 import { MOVEMENT_KIND } from "@/lib/labels"
@@ -23,10 +24,10 @@ const KINDS: MovementKind[] = [
   "seller_return",
 ]
 
-const TONE: Record<MovementKind, "neutral" | "accent" | "good" | "warn" | "danger"> = {
+const TONE: Record<MovementKind, "neutral" | "brand" | "good" | "warn" | "danger"> = {
   opening: "neutral",
   intake: "good",
-  sale: "accent",
+  sale: "brand",
   cancel_return: "warn",
   customer_return: "warn",
   write_off: "danger",
@@ -48,6 +49,17 @@ export function MovementsPage() {
   const [who, setWho] = React.useState("")
   const [since, setSince] = React.useState("")
   const [page, setPage] = React.useState(1)
+
+  /** Back to every movement. The empty state offers this rather than only
+   *  naming it — "try clearing the filter" with no way to clear it is a
+   *  sentence, not a way out. */
+  function reset() {
+    setKind("")
+    setOfferId("")
+    setWho("")
+    setSince("")
+    setPage(1)
+  }
 
   const offers = useQuery({
     queryKey: ["staff", "shelf", "offers"],
@@ -171,7 +183,12 @@ export function MovementsPage() {
         error={query.error}
         onRetry={() => void query.refetch()}
         emptyTitle="Harakat yo'q"
-        emptyHint="Filtrni bo'shatib ko'ring."
+        emptyHint="Bu filtrga mos harakat yo'q."
+        emptyAction={
+          <Button size="sm" variant="primary" onClick={reset}>
+            Filtrni bo'shatish
+          </Button>
+        }
         server={{
           page,
           pageSize: PAGE_SIZE,
@@ -203,7 +220,7 @@ export function MovementsPage() {
             </div>
             <Select
               className="w-56"
-              aria-label="Taklif"
+              aria-label="Narx"
               value={offerId}
               onChange={(event) => {
                 setOfferId(event.target.value)

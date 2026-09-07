@@ -31,7 +31,7 @@ export function OrderPage() {
     <div className="mx-auto max-w-xl space-y-4 p-4 pb-safe">
       <button
         onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-lg font-semibold text-muted"
+        className="flex items-center gap-2 text-lg font-semibold text-ink-soft"
       >
         <ArrowLeft className="size-6" />
         Reys
@@ -46,10 +46,10 @@ export function OrderPage() {
 
       {queued ? (
         <Panel tone="pending">
-          <p className="text-lg font-bold text-pending">
+          <p className="text-lg font-bold text-warn">
             {queued === "deliver" ? "Yetkazildi · yuborilmagan" : "Urinish yozildi · yuborilmagan"}
           </p>
-          <p className="mt-1 text-base text-muted">
+          <p className="mt-1 text-base text-ink-soft">
             Telefoningizda saqlandi. Tarmoq qaytganda o'zi yuboriladi.
           </p>
         </Panel>
@@ -60,13 +60,13 @@ export function OrderPage() {
           <span className="selectable">{order.address_line}</span>
         </Labelled>
         {order.address_meta ? (
-          <p className="selectable mt-1 text-lg text-muted">{order.address_meta}</p>
+          <p className="selectable mt-1 text-lg text-ink-soft">{order.address_meta}</p>
         ) : null}
       </Panel>
 
       <Panel>
         <Labelled label="Mijoz">{order.recipient_name}</Labelled>
-        <p className="selectable mt-1 text-lg text-muted">{prettyPhone(order.recipient_phone)}</p>
+        <p className="selectable mt-1 text-lg text-ink-soft">{prettyPhone(order.recipient_phone)}</p>
       </Panel>
 
       {/* One tap, and the phone's own dialler. Not `tel:` inside a menu and not
@@ -84,7 +84,7 @@ export function OrderPage() {
       */}
       {order.cash_due > 0 ? (
         <Panel tone="cash">
-          <p className="text-lg font-semibold text-muted">Olinadigan naqd pul</p>
+          <p className="text-lg font-semibold text-ink-soft">Olinadigan naqd pul</p>
           <p className="text-5xl font-bold tabular-nums">{sum(order.cash_due)}</p>
         </Panel>
       ) : (
@@ -95,11 +95,11 @@ export function OrderPage() {
 
       <Panel>
         <div className="flex items-baseline justify-between">
-          <span className="text-lg text-muted">Tovarlar</span>
+          <span className="text-lg text-ink-soft">Tovarlar</span>
           <span className="text-2xl font-bold">{order.items_count} dona</span>
         </div>
         <div className="mt-2 flex items-baseline justify-between">
-          <span className="text-lg text-muted">Buyurtma summasi</span>
+          <span className="text-lg text-ink-soft">Buyurtma summasi</span>
           <span className="text-xl font-semibold tabular-nums">{sum(order.total)}</span>
         </div>
         {/*
@@ -115,7 +115,7 @@ export function OrderPage() {
 
       {order.attempts > 0 ? (
         <Panel tone="bad">
-          <p className="text-lg font-bold text-bad">{order.attempts} marta urinilgan</p>
+          <p className="text-lg font-bold text-danger">{order.attempts} marta urinilgan</p>
           {order.last_failure ? (
             <p className="mt-1 text-lg">Oxirgi sabab: {order.last_failure}</p>
           ) : null}
@@ -126,7 +126,7 @@ export function OrderPage() {
         <div className="space-y-3 pt-2">
           {!shiftReady ? (
             <Panel tone="pending">
-              <p className="text-lg font-bold text-pending">Smena ochilmagan</p>
+              <p className="text-lg font-bold text-warn">Smena ochilmagan</p>
               <p className="mt-1 text-base">
                 Yetkazishni belgilash uchun smena ochiq bo'lishi shart — naqd pul shu smenaga
                 yoziladi.

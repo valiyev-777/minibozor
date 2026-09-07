@@ -1,7 +1,4 @@
 import * as React from "react"
-import { AlertCircle, Inbox } from "lucide-react"
-import { ApiError } from "@/api/client"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 /**
@@ -112,38 +109,11 @@ export function Figure({
 }
 
 /** Loading, failed and empty, said the same way on every screen. */
-export function Loading({ lines = 3 }: { lines?: number }) {
-  return (
-    <div className="space-y-3 px-5 py-5">
-      {Array.from({ length: lines }, (_, i) => (
-        <span key={i} className="block h-4 w-full max-w-sm animate-pulse rounded bg-line" />
-      ))}
-    </div>
-  )
-}
-
-export function Failed({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-danger-soft px-5 py-4">
-      <p className="flex items-start gap-2 text-[14px] text-danger">
-        <AlertCircle className="mt-0.5 size-4 shrink-0" />
-        {error instanceof ApiError ? error.message : "So'rov bajarilmadi."}
-      </p>
-      {onRetry ? (
-        <Button size="sm" onClick={onRetry}>
-          Qaytadan
-        </Button>
-      ) : null}
-    </div>
-  )
-}
-
-export function Empty({ title, hint }: { title: string; hint?: React.ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-1.5 border-t border-line-soft px-5 py-12 text-center">
-      <Inbox className="size-6 text-ink-faint" />
-      <p className="text-[15px] font-medium text-ink">{title}</p>
-      {hint ? <p className="max-w-sm text-[13px] text-ink-soft">{hint}</p> : null}
-    </div>
-  )
-}
+/* Loading, nothing and broken come from the one design system now — the same
+ * three the back office and the courier's app draw, so a failed request looks
+ * the same whichever panel somebody is in. `Empty` gained an `action` slot
+ * there, which is what stops an empty screen being a dead end.
+ *
+ * Re-exported rather than swept, because every screen in this app already
+ * imports them from here. */
+export { Async, Empty, Failed, Loading } from "@/ui/states"

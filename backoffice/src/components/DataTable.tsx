@@ -1,7 +1,7 @@
 import * as React from "react"
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Inbox } from "lucide-react"
-import { ApiError } from "@/api/client"
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Empty, Failed } from "@/ui/states"
 import { cn } from "@/lib/utils"
 
 /**
@@ -43,6 +43,9 @@ type Props<T> = {
   onRowClick?: (row: T) => void
   emptyTitle?: string
   emptyHint?: string
+  /** What to do about the emptiness. A screen with nothing and no next step
+   *  leaves the reader to guess whether it is broken or simply empty. */
+  emptyAction?: React.ReactNode
   server?: ServerPaging
   clientPageSize?: number
   /** Rendered under the header row — a filter bar, usually. */
@@ -61,6 +64,7 @@ export function DataTable<T>({
   onRowClick,
   emptyTitle = "Hech narsa yo'q",
   emptyHint,
+  emptyAction,
   server,
   clientPageSize = CLIENT_PAGE_SIZE,
   toolbar,
@@ -161,9 +165,31 @@ export function DataTable<T>({
                   <tr
                     key={rowKey(row)}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    // A clickable row has to be reachable without a mouse.
+                    // It was a bare `<tr onClick>`: no tab stop, no keyboard
+                    // handler and no announced role, so every dialog behind a
+                    // row — the shelf reading, a statement, an order — was
+                    // unreachable from the keyboard. `Enter` and `Space` both,
+                    // because a row is being used as a button and that is what
+                    // a button answers to.
+                    {...(onRowClick
+                      ? {
+                          tabIndex: 0,
+                          role: "button" as const,
+                          onKeyDown: (event: React.KeyboardEvent) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault()
+                              onRowClick(row)
+                            }
+                          },
+                        }
+                      : {})}
                     className={cn(
                       "border-b border-line-soft last:border-0",
-                      onRowClick && "cursor-pointer hover:bg-accent-soft/50",
+                      onRowClick &&
+                        "cursor-pointer hover:bg-brand-soft/50 " +
+                          "focus-visible:outline-2 focus-visible:-outline-offset-2 " +
+                          "focus-visible:outline-brand",
                     )}
                   >
                     {columns.map((column) => (
@@ -180,25 +206,19 @@ export function DataTable<T>({
         </table>
       </div>
 
-      {error ? (
-        <div className="flex items-center justify-between gap-3 border-t border-line bg-danger-soft px-3 py-2.5">
-          <p className="text-[12px] font-medium text-danger">
-            {error instanceof ApiError ? error.message : "So'rov bajarilmadi."}
-          </p>
-          {onRetry ? (
-            <Button size="sm" onClick={onRetry}>
-              Qayta urinish
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
+      {/* One failure and one emptiness, shared with the seller cabinet and the
+          courier app — this table used to draw its own, slightly differently.
+          `emptyAction` is the slot that stops an empty screen being a dead
+          end: whoever is looking at it either wants the filter off or wants
+          the button that makes the first row. */}
+      {error ? <Failed error={error} {...(onRetry ? { onRetry } : {})} /> : null}
 
       {!loading && !error && rows && rows.length === 0 ? (
-        <div className="flex flex-col items-center gap-1 px-3 py-10 text-center">
-          <Inbox className="size-5 text-ink-faint" />
-          <p className="text-[13px] font-medium text-ink">{emptyTitle}</p>
-          {emptyHint ? <p className="text-[12px] text-ink-faint">{emptyHint}</p> : null}
-        </div>
+        <Empty
+          title={emptyTitle}
+          {...(emptyHint ? { hint: emptyHint } : {})}
+          {...(emptyAction ? { action: emptyAction } : {})}
+        />
       ) : null}
 
       {total > pageSize ? (

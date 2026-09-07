@@ -248,7 +248,7 @@ function Declare({ onClose }: { onClose: () => void }) {
           {offers.isPending ? <Loading lines={2} /> : null}
           {!offers.isPending && rows.length === 0 ? (
             <p className="rounded-lg bg-warn-soft px-3 py-2.5 text-[14px] text-ink">
-              Avval taklif kerak: partiya taklifga bog'lanadi, chunki qoldiq
+              Avval narx kerak: partiya narxga bog'lanadi, chunki qoldiq
               qaysi narxda sotilishini bilishi shart.
             </p>
           ) : null}

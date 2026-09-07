@@ -27,6 +27,18 @@ export type OfferUpdateIn = S["OfferUpdateIn"]
 // What is on the shelf: on hand, held for baskets, sellable.
 export type Shelf = S["ShelfOut"]
 
+// My own products. A seller owns the product they sell: they open it,
+// photograph it, price it and say what colours and sizes they have. What the
+// warehouse confirms is that the goods arrived — not that the listing was
+// allowed.
+export type Listing = S["SellerListingOut"]
+export type ListingCreateIn = S["ListingCreateIn"]
+export type ListingColorIn = S["ListingColorIn"]
+export type ListingSizeIn = S["ListingSizeIn"]
+export type ListingStock = S["ListingStockOut"]
+/** Where a product has got to: awaiting_warehouse … on_sale … rejected. */
+export type ListingStage = Listing["stage"]
+
 // Batches I send in.
 export type Supply = S["SupplyOut"]
 export type SupplyLine = S["SupplyLineOut"]

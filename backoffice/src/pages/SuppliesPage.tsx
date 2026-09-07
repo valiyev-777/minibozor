@@ -1,5 +1,6 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
+import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { api } from "@/api/client"
 import type { Supply, SupplyStatus } from "@/api/types"
@@ -156,6 +157,7 @@ function ReceiveSupply({ supply, onClose }: { supply: Supply; onClose: () => voi
   const [note, setNote] = React.useState("")
   const [confirming, setConfirming] = React.useState(false)
   const [lastScan, setLastScan] = React.useState<number | null>(null)
+  const navigate = useNavigate()
 
   const editable = supply.status === "declared"
 
@@ -172,8 +174,19 @@ function ReceiveSupply({ supply, onClose }: { supply: Supply; onClose: () => voi
         },
       }),
     invalidate: [KEY, ["staff", "shelf"], ["staff", "movements"]],
-    success: (result) => `${result.code} qabul qilindi`,
-    onDone: onClose,
+    // The toast says what happened and offers the next thing. Counting a
+    // batch in is the moment the shelf changes, and the warehouse's next
+    // question is always the shelf — so the answer is one tap away instead of
+    // a trip back through the sidebar.
+    success: (result) => `${result.code} qabul qilindi — javon yangilandi`,
+    onDone: (result) => {
+      onClose()
+      toast.success(`${result.code}: tovar javonga tushdi`, {
+        description: "Javonda nima borligini ko'rish uchun bosing.",
+        action: { label: "Javonga o'tish", onClick: () => navigate("/shelf") },
+        duration: 8000,
+      })
+    },
   })
 
   const cancel = useAction<void, Supply>({
@@ -264,7 +277,7 @@ function ReceiveSupply({ supply, onClose }: { supply: Supply; onClose: () => voi
                       key={line.id}
                       className={
                         lastScan === line.id
-                          ? "border-b border-line-soft bg-accent-soft"
+                          ? "border-b border-line-soft bg-brand-soft"
                           : "border-b border-line-soft"
                       }
                     >

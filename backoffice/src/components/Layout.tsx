@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Layers,
   Landmark,
+  LayoutDashboard,
   LayoutTemplate,
   LibraryBig,
   LogOut,
@@ -50,6 +51,12 @@ export type NavItem = {
 }
 
 export const NAV: NavItem[] = [
+  {
+    to: "/",
+    label: "Boshqaruv",
+    icon: LayoutDashboard,
+    roles: ["admin"],
+  },
   {
     to: "/returns",
     label: "Qaytarishlar",
@@ -177,7 +184,7 @@ export function Layout() {
             </p>
             <p className="tabular truncate text-[11px] text-rail-ink/70">{user.phone}</p>
             <div className="mt-1.5 flex items-center justify-between gap-2">
-              <Badge tone="accent">{ROLE[user.role]}</Badge>
+              <Badge tone="brand">{ROLE[user.role]}</Badge>
               <Button
                 size="sm"
                 variant="ghost"

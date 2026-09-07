@@ -26,7 +26,7 @@ export function Shell() {
       <header
         className={clsx(
           "flex items-center justify-between gap-3 border-b-2 px-4 py-2",
-          bad ? "border-pending bg-pending-fill text-pending" : "border-line text-muted",
+          bad ? "border-warn bg-warn-soft text-warn" : "border-line text-ink-soft",
         )}
       >
         <span className="flex items-center gap-2 text-base font-semibold">
@@ -36,7 +36,7 @@ export function Shell() {
         {waiting > 0 || blocked > 0 ? (
           <NavLink
             to="/outbox"
-            className="rounded-lg bg-pending px-2.5 py-1 text-sm font-bold text-page"
+            className="rounded-lg bg-warn px-2.5 py-1 text-sm font-bold text-canvas"
           >
             {blocked > 0
               ? `Yuborilmagan ${waiting} · ${blocked} xato`
@@ -82,14 +82,14 @@ function Tab({
       className={({ isActive }) =>
         clsx(
           "relative flex h-16 flex-col items-center justify-center gap-0.5 text-sm font-semibold",
-          isActive ? "text-brand" : "text-muted",
+          isActive ? "text-brand" : "text-ink-soft",
         )
       }
     >
       {icon}
       {label}
       {badge ? (
-        <span className="absolute top-1.5 right-[22%] min-w-5 rounded-full bg-pending px-1 text-xs font-bold text-page">
+        <span className="absolute top-1.5 right-[22%] min-w-5 rounded-full bg-warn px-1 text-xs font-bold text-canvas">
           {badge}
         </span>
       ) : null}

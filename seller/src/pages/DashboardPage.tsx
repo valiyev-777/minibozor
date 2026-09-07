@@ -66,7 +66,7 @@ export function DashboardPage() {
           {offers.isPending ? (
             <Loading lines={1} />
           ) : (
-            <Figure label="Takliflarim" value={rows.length} />
+            <Figure label="Narxlarim" value={rows.length} />
           )}
         </Panel>
         <Panel className="px-5 py-4">
@@ -106,7 +106,7 @@ export function DashboardPage() {
         <Panel
           className="mb-5"
           title="Kam qoldi"
-          hint={`Sotuvdagi ${low.length} ta taklifda ${LOW_STOCK} donadan kam qolgan.`}
+          hint={`Sotuvdagi ${low.length} ta narxda ${LOW_STOCK} donadan kam qolgan.`}
           actions={
             <Button size="sm" asChild>
               <Link to="/supplies">
@@ -185,12 +185,20 @@ export function DashboardPage() {
 
       {!offers.isPending && rows.length === 0 ? (
         <Panel className="px-5 py-8 text-center">
-          <p className="text-[16px] font-medium text-ink">Hali taklifingiz yo'q</p>
+          <p className="text-[16px] font-medium text-ink">Hali sotuvda hech narsa yo'q</p>
           <p className="mx-auto mt-1 max-w-md text-[14px] text-ink-soft">
-            Sotish uchun mavjud kartochkaga narx qo'yish kerak. Katalogda kerakli
-            mahsulot bo'lmasa — uni taklif qilasiz, administrator ko'rib
-            chiqadi. Taklif berish sahifasi keyingi bosqichda qo'shiladi.
+            «Mahsulotlarim» — o'z mahsulotingizni qo'shasiz: rasmlari, narxi,
+            ranglari va razmerlari. Saqlaganingizda omborga sizning partiyangiz
+            bo'lib tushadi; ombor sanab qabul qilgach ilovada paydo bo'ladi.
           </p>
+          <div className="mt-4 flex justify-center">
+            <Button variant="primary" asChild>
+              <Link to="/products">
+                Mahsulot qo'shish
+                <ArrowRight />
+              </Link>
+            </Button>
+          </div>
         </Panel>
       ) : null}
 

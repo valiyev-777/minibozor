@@ -65,7 +65,16 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+    // `src/ui` is a symlink to ../../shared/ui — the one design system, shared
+    // with the other two panels. Preserved rather than resolved so that a
+    // module inside it looks for `clsx` in *this* app's node_modules, which is
+    // what makes a symlink cheaper than a workspace package: no workspace, no
+    // build step, no version to keep in step. The three builds stay exactly as
+    // separate as they were.
+    preserveSymlinks: true,
   },
   server: {
     // Its own port: 5173 is the backoffice, 5174 the seller's cabinet.

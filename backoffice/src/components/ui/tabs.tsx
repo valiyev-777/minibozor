@@ -41,7 +41,7 @@ export function Tabs<T extends string>({
             className={cn(
               "inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-[13px] transition-colors",
               active
-                ? "bg-accent-soft font-medium text-accent"
+                ? "bg-brand-soft font-medium text-brand"
                 : "text-ink-soft hover:bg-line-soft hover:text-ink",
             )}
           >
@@ -50,7 +50,7 @@ export function Tabs<T extends string>({
               <span
                 className={cn(
                   "tabular rounded px-1 text-[11px] font-semibold",
-                  active ? "bg-accent/12 text-accent" : "bg-line-soft text-ink-faint",
+                  active ? "bg-brand/12 text-brand" : "bg-line-soft text-ink-faint",
                 )}
               >
                 {item.count}

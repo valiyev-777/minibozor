@@ -24,11 +24,11 @@ const FILTERS: { value: "" | UserRole; label: string }[] = [
   ...ROLES.map((role) => ({ value: role, label: ROLE[role] })),
 ]
 
-const TONE: Record<UserRole, "neutral" | "accent" | "good" | "warn" | "danger"> = {
+const TONE: Record<UserRole, "neutral" | "brand" | "good" | "warn" | "danger"> = {
   customer: "neutral",
-  operator: "accent",
-  warehouse: "accent",
-  courier: "accent",
+  operator: "brand",
+  warehouse: "brand",
+  courier: "brand",
   seller: "warn",
   admin: "danger",
 }

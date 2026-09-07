@@ -82,7 +82,7 @@ export function NewOffer({
         },
       }),
     invalidate: [CATALOG, ["offers"], ["shop"]],
-    success: "Taklif qo'yildi",
+    success: "Narx qo'yildi",
     onDone: (offer) => setSaved(offer),
   })
 
@@ -106,7 +106,7 @@ export function NewOffer({
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogPanel
         className="w-[min(94vw,38rem)]"
-        title="Taklif qo'yish"
+        title="Narx qo'yish"
         description={card.title}
         footer={
           <>
@@ -118,7 +118,7 @@ export function NewOffer({
               disabled={!ready || create.isPending}
               onClick={() => void submit()}
             >
-              {create.isPending ? "Saqlanmoqda…" : "Taklifni qo'yish"}
+              {create.isPending ? "Saqlanmoqda…" : "Narxni qo'yish"}
             </Button>
           </>
         }
@@ -133,8 +133,8 @@ export function NewOffer({
                   <AlertCircle className="mt-0.5 size-4 shrink-0 text-warn" />
                   <span>
                     <span className="font-semibold">{clash}</span> Narxni
-                    o'zgartirmoqchi bo'lsangiz, mavjud taklifni tahrirlang —
-                    ikkinchi taklif qo'yish kerak emas.
+                    o'zgartirmoqchi bo'lsangiz, mavjud narxni tahrirlang —
+                    ikkinchi marta qo'yish kerak emas.
                   </span>
                 </p>
                 <Button
@@ -145,7 +145,7 @@ export function NewOffer({
                     navigate("/offers")
                   }}
                 >
-                  Takliflarimga o'tish
+                  Narxlarimga o'tish
                 </Button>
               </div>
             ) : null}
@@ -192,7 +192,7 @@ export function NewOffer({
                 {value > 0 && full.offers.length ? (
                   value < Math.min(...full.offers.map((o) => o.price)) ? (
                     <Hint className="text-good">
-                      Eng arzon taklif bo'ladi — qoldiq kelganda kartochkani
+                      Eng arzon narx bo'ladi — qoldiq kelganda kartochkani
                       oladi.
                     </Hint>
                   ) : (
@@ -256,7 +256,7 @@ export function NewOffer({
               <Info className="mt-0.5 size-4 shrink-0 text-ink-faint" />
               <span>
                 Saqlagandan keyin qoldig'ingiz <span className="font-medium text-ink">nol</span>{" "}
-                bo'ladi va taklif hali do'konda ko'rinmaydi. Ombor tovarni
+                bo'ladi va narxingiz hali do'konda ko'rinmaydi. Ombor tovarni
                 qabul qilganda ko'rinadi — narx qo'yish bilan tovar
                 yetkazish alohida qadamlar.
               </span>
@@ -376,8 +376,8 @@ function Leaves({
               {missing.length} variant belgilanmagan:
             </span>{" "}
             {missing.slice(0, 10).join(", ")}
-            {missing.length > 10 ? "…" : ""}. Taklif kartochkaning hammasini
-            qamrashi kerak — yarmini qamragan taklif qolgan qismini
+            {missing.length > 10 ? "…" : ""}. Narx kartochkaning hammasini
+            qamrashi kerak — yarmini qamragan narx qolgan qismini
             sanoqsiz qoldiradi.
           </span>
         </p>
@@ -406,7 +406,7 @@ function Placed({
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogPanel
-        title="Taklif qo'yildi"
+        title="Narx qo'yildi"
         description={card.title}
         footer={
           <>
@@ -443,17 +443,17 @@ function Placed({
 
           <p className="text-[15px] text-ink">
             Qoldiq <span className="font-semibold">nol</span>, shuning uchun bu
-            taklif hozircha do'kon kartochkasini{" "}
+            narxingiz hozircha do'kon kartochkasini{" "}
             <span className="font-semibold">olmaydi</span>.
           </p>
           <p className="text-[14px] text-ink-soft">
             Bu xato emas — model shunday ishlaydi. Javondagi son ombor
             jurnalining yig'indisi: siz yozadigan raqam emas, kirim va chiqim
             natijasi. Tovar yuborish uchun partiya e'lon qiling; ombor
-            sanaganda son o'sadi va taklif narx yarishida qatnashadi.
+            sanaganda son o'sadi va narxingiz yarishda qatnashadi.
           </p>
           <p className="text-[14px] text-ink-soft">
-            Narxni keyin ham o'zgartirasiz — «Takliflarim» sahifasida.
+            Narxni keyin ham o'zgartirasiz — «Narxlarim» sahifasida.
           </p>
         </div>
       </DialogPanel>

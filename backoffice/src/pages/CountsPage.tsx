@@ -200,7 +200,7 @@ function OpenCount({ onClose }: { onClose: () => void }) {
                 onClick={() => setOfferId(offer.id)}
                 className={
                   offerId === offer.id
-                    ? "w-full rounded border-2 border-accent bg-accent-soft px-2.5 py-2 text-left"
+                    ? "w-full rounded border-2 border-brand bg-brand-soft px-2.5 py-2 text-left"
                     : "w-full rounded border border-line px-2.5 py-2 text-left hover:bg-line-soft"
                 }
               >
@@ -349,7 +349,7 @@ function CountSheet({ count, onClose }: { count: StockCount; onClose: () => void
                       key={key(line)}
                       className={
                         lastScan === key(line)
-                          ? "border-b border-line-soft bg-accent-soft"
+                          ? "border-b border-line-soft bg-brand-soft"
                           : "border-b border-line-soft"
                       }
                     >

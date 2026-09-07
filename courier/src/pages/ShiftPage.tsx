@@ -88,7 +88,7 @@ export function ShiftPage() {
     <div className="mx-auto max-w-xl space-y-4 p-4 pb-safe">
       <div className="flex items-baseline justify-between gap-3">
         <h1 className="text-3xl font-bold">Smena</h1>
-        <span className="text-base text-muted">{courier.full_name || courier.phone}</span>
+        <span className="text-base text-ink-soft">{courier.full_name || courier.phone}</span>
       </div>
 
       {state === "none" || state === "closed" ? (
@@ -97,7 +97,7 @@ export function ShiftPage() {
             <p className="text-xl font-bold">
               {lastShift?.status === "closed" ? "Smena yopildi" : "Smena ochilmagan"}
             </p>
-            <p className="mt-1 text-base text-muted">
+            <p className="mt-1 text-base text-ink-soft">
               Yetkazishni belgilash uchun smena ochiq bo'lishi shart — naqd pul shu smenaga
               yoziladi.
             </p>
@@ -115,7 +115,7 @@ export function ShiftPage() {
 
       {state === "opening" ? (
         <Panel tone="pending">
-          <p className="text-xl font-bold text-pending">Smena ochilmoqda · yuborilmagan</p>
+          <p className="text-xl font-bold text-warn">Smena ochilmoqda · yuborilmagan</p>
           <p className="mt-1 text-base">
             Telefoningizda saqlandi. Yetkazishlarni hozircha belgilayverishingiz mumkin — ular ham
             navbatda turadi va smenadan keyin yuboriladi.
@@ -125,7 +125,7 @@ export function ShiftPage() {
 
       {state === "closing" ? (
         <Panel tone="pending">
-          <p className="text-xl font-bold text-pending">Smena yopilmoqda · yuborilmagan</p>
+          <p className="text-xl font-bold text-warn">Smena yopilmoqda · yuborilmagan</p>
           <p className="mt-1 text-base">
             Topshirilayotgan summa telefoningizda saqlandi va tarmoq qaytganda yuboriladi.
           </p>
@@ -135,11 +135,11 @@ export function ShiftPage() {
       {state === "open" || state === "opening" || state === "closing" ? (
         <>
           <Panel tone="cash">
-            <p className="text-lg font-semibold text-muted">Kutilgan summa</p>
+            <p className="text-lg font-semibold text-ink-soft">Kutilgan summa</p>
             <p className="text-5xl font-bold tabular-nums">{sum(money.total)}</p>
-            <p className="mt-1 text-base text-muted">Yetkazilgan naqd buyurtmalar yig'indisi.</p>
+            <p className="mt-1 text-base text-ink-soft">Yetkazilgan naqd buyurtmalar yig'indisi.</p>
             {money.unsent > 0 ? (
-              <p className="mt-2 text-base font-semibold text-pending">
+              <p className="mt-2 text-base font-semibold text-warn">
                 Shundan {grouped(money.unsent)} so'm hali yuborilmagan amallardan.
               </p>
             ) : null}
@@ -148,18 +148,18 @@ export function ShiftPage() {
           {shift.data ? (
             <div className="grid grid-cols-2 gap-3">
               <Panel>
-                <p className="text-base text-muted">Yetkazilgan</p>
+                <p className="text-base text-ink-soft">Yetkazilgan</p>
                 <p className="text-3xl font-bold">{shift.data.orders_delivered}</p>
               </Panel>
               <Panel>
-                <p className="text-base text-muted">Muvaffaqiyatsiz</p>
+                <p className="text-base text-ink-soft">Muvaffaqiyatsiz</p>
                 <p className="text-3xl font-bold">{shift.data.orders_failed}</p>
               </Panel>
             </div>
           ) : null}
 
           {shift.data?.opened_at ? (
-            <p className="text-base text-muted">Ochilgan: {stamp(shift.data.opened_at)}</p>
+            <p className="text-base text-ink-soft">Ochilgan: {stamp(shift.data.opened_at)}</p>
           ) : null}
 
           {state !== "closing" ? (
@@ -193,7 +193,7 @@ export function ShiftPage() {
                     <p className="text-lg font-bold text-good">Summalar to'g'ri keldi.</p>
                   ) : (
                     <>
-                      <p className="text-lg font-bold text-pending">
+                      <p className="text-lg font-bold text-warn">
                         Farq: {signedSum(difference)}
                       </p>
                       <p className="mt-1 text-base">
@@ -226,7 +226,7 @@ export function ShiftPage() {
 
       {shift.data && shift.data.attempts.length > 0 ? (
         <>
-          <h2 className="pt-2 text-xl font-bold text-muted">Shu smenadagi urinishlar</h2>
+          <h2 className="pt-2 text-xl font-bold text-ink-soft">Shu smenadagi urinishlar</h2>
           <ul className="space-y-2">
             {shift.data.attempts
               .slice()
@@ -240,7 +240,7 @@ export function ShiftPage() {
                         {attempt.result === "delivered" ? "Yetkazildi" : "Urinish"}
                       </Pill>
                     </div>
-                    <p className="mt-1 text-base text-muted">
+                    <p className="mt-1 text-base text-ink-soft">
                       {stamp(attempt.happened_at)}
                       {attempt.recipient_name ? ` · ${attempt.recipient_name}` : ""}
                       {attempt.reason ? ` · ${attempt.reason}` : ""}
@@ -256,7 +256,7 @@ export function ShiftPage() {
       ) : null}
 
       {!reachable ? (
-        <p className="text-center text-base text-muted">
+        <p className="text-center text-base text-ink-soft">
           Oflayn ko'rinish. <button onClick={() => void refresh()} className="underline">Yangilash</button>
         </p>
       ) : null}
@@ -267,7 +267,7 @@ export function ShiftPage() {
 function ClosedSummary({ shift }: { shift: Shift }) {
   return (
     <Panel tone="good">
-      <p className="text-base text-muted">
+      <p className="text-base text-ink-soft">
         Oxirgi smena{shift.closed_at ? ` · yopilgan ${stamp(shift.closed_at)}` : ""}
       </p>
       <div className="mt-1 space-y-1 text-lg">
@@ -285,7 +285,7 @@ function ClosedSummary({ shift }: { shift: Shift }) {
               : ""}
           </p>
         ) : (
-          <p className="text-muted">Kassa hali sanamagan.</p>
+          <p className="text-ink-soft">Kassa hali sanamagan.</p>
         )}
       </div>
     </Panel>

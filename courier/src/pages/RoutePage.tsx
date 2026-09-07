@@ -22,13 +22,13 @@ export function RoutePage() {
     <div className="mx-auto max-w-xl space-y-4 p-4">
       <div className="flex items-baseline justify-between gap-3">
         <h1 className="text-3xl font-bold">Bugungi reys</h1>
-        <span className="text-base text-muted">{open.length} manzil</span>
+        <span className="text-base text-ink-soft">{open.length} manzil</span>
       </div>
 
       {/* When the round was last actually fetched. A round that is quietly six
           hours stale would send a courier to a door cancelled at ten. */}
       {!reachable && orders.at ? (
-        <p className="text-base text-pending">
+        <p className="text-base text-warn">
           Oflayn ko'rinish — oxirgi yangilangani {stamp(new Date(orders.at).toISOString())}
         </p>
       ) : null}
@@ -50,7 +50,7 @@ export function RoutePage() {
 
       {done.length > 0 ? (
         <>
-          <h2 className="pt-4 text-xl font-bold text-muted">Yakunlangan</h2>
+          <h2 className="pt-4 text-xl font-bold text-ink-soft">Yakunlangan</h2>
           <ul className="space-y-3">
             {done.map((stop) => (
               <StopCard key={stop.order.id} stop={stop} />
@@ -89,23 +89,23 @@ function StopCard({ stop }: { stop: Stop }) {
               <p className="selectable mt-1 text-xl leading-snug font-semibold">
                 {order.address_line}
               </p>
-              <p className="text-lg text-muted">{order.recipient_name}</p>
+              <p className="text-lg text-ink-soft">{order.recipient_name}</p>
 
               {order.cash_due > 0 ? (
                 <p className="mt-2 text-xl font-bold">Naqd: {sum(order.cash_due)}</p>
               ) : (
-                <p className="mt-2 text-lg text-muted">Karta bilan to'langan</p>
+                <p className="mt-2 text-lg text-ink-soft">Karta bilan to'langan</p>
               )}
 
               {queued === "deliver" ? (
-                <p className="mt-2 font-bold text-pending">Yetkazildi · yuborilmagan</p>
+                <p className="mt-2 font-bold text-warn">Yetkazildi · yuborilmagan</p>
               ) : queued === "failed" ? (
-                <p className="mt-2 font-bold text-pending">Urinish yozildi · yuborilmagan</p>
+                <p className="mt-2 font-bold text-warn">Urinish yozildi · yuborilmagan</p>
               ) : done ? (
                 <p className="mt-2 font-bold text-good">Yetkazildi</p>
               ) : null}
             </div>
-            <ChevronRight className="mt-1 size-6 shrink-0 text-muted" />
+            <ChevronRight className="mt-1 size-6 shrink-0 text-ink-soft" />
           </div>
         </Panel>
       </Link>

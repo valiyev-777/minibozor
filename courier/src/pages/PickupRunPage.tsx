@@ -97,7 +97,7 @@ export function PickupRunPage() {
     <div className="mx-auto max-w-xl space-y-4 p-4 pb-safe">
       <button
         onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-lg font-semibold text-muted"
+        className="flex items-center gap-2 text-lg font-semibold text-ink-soft"
       >
         <ArrowLeft className="size-6" />
         Yig'uv
@@ -110,8 +110,8 @@ export function PickupRunPage() {
 
       {queued ? (
         <Panel tone="pending">
-          <p className="text-lg font-bold text-pending">Topshirildi · yuborilmagan</p>
-          <p className="mt-1 text-base text-muted">
+          <p className="text-lg font-bold text-warn">Topshirildi · yuborilmagan</p>
+          <p className="mt-1 text-base text-ink-soft">
             Telefoningizda saqlandi. Tarmoq qaytganda o'zi yuboriladi.
           </p>
         </Panel>
@@ -126,11 +126,11 @@ export function PickupRunPage() {
                 tone={mark.collected === true ? "good" : mark.collected === false ? "bad" : "plain"}
               >
                 <p className="text-xl font-semibold">{line.product_title || line.order_code}</p>
-                <p className="text-base text-muted">{line.order_code}</p>
+                <p className="text-base text-ink-soft">{line.order_code}</p>
                 <p className="selectable mt-2 text-lg">{line.address_line}</p>
-                <p className="text-lg text-muted">{line.customer_name}</p>
+                <p className="text-lg text-ink-soft">{line.customer_name}</p>
                 {line.reason ? (
-                  <p className="mt-1 text-base text-muted">
+                  <p className="mt-1 text-base text-ink-soft">
                     Qaytarish sababi: <span className="text-ink">{line.reason}</span>
                   </p>
                 ) : null}
@@ -197,7 +197,7 @@ export function PickupRunPage() {
             Yig'uvni topshirish
           </Button>
           {!reachable ? (
-            <p className="text-center text-base text-pending">
+            <p className="text-center text-base text-warn">
               Tarmoq yo'q — telefoningizda saqlanadi va o'zi yuboriladi.
             </p>
           ) : null}
@@ -223,9 +223,9 @@ function Choice({
       type="button"
       onClick={onClick}
       className={clsx(
-        "h-16 rounded-[var(--radius-work)] border-2 text-xl font-bold",
+        "h-16 rounded-[var(--radius-panel)] border-2 text-xl font-bold",
         active && tone === "good" && "border-good bg-good text-good-ink",
-        active && tone === "bad" && "border-bad bg-bad text-bad-ink",
+        active && tone === "bad" && "border-danger bg-danger text-danger-ink",
         !active && "border-line",
       )}
     >

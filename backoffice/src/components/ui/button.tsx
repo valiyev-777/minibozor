@@ -1,38 +1,15 @@
-import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "@/lib/utils"
-
-const button = cva(
-  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded font-medium " +
-    "transition-colors outline-none focus-visible:ring-2 focus-visible:ring-accent/40 " +
-    "disabled:pointer-events-none disabled:opacity-45 [&_svg]:size-3.5 [&_svg]:shrink-0",
-  {
-    variants: {
-      variant: {
-        primary: "bg-accent text-white hover:bg-accent/90",
-        outline: "border border-line bg-surface text-ink hover:bg-line-soft",
-        ghost: "text-ink-soft hover:bg-line-soft hover:text-ink",
-        danger: "bg-danger text-white hover:bg-danger/90",
-        quiet: "border border-line bg-surface text-danger hover:bg-danger-soft",
-      },
-      size: {
-        sm: "h-7 px-2.5 text-[12px]",
-        md: "h-8 px-3 text-[13px]",
-        // For the warehouse floor: a target a gloved thumb can hit without
-        // aiming. Same colours, same shapes — only bigger.
-        lg: "h-11 gap-2 px-4 text-[15px] [&_svg]:size-4",
-        icon: "size-7",
-      },
-    },
-    defaultVariants: { variant: "outline", size: "md" },
-  },
-)
-
-export type ButtonProps = React.ComponentProps<"button"> &
-  VariantProps<typeof button> & { asChild?: boolean }
-
-export function Button({ className, variant, size, asChild, ...props }: ButtonProps) {
-  const Component = asChild ? Slot : "button"
-  return <Component className={cn(button({ variant, size }), className)} {...props} />
-}
+/* Re-exported from the one design system in ../../ui (a symlink to
+ * ../../../shared/ui), shared with the other two panels.
+ *
+ * This file used to hold a button of its own — 32px, its own focus ring, its
+ * own five variants — while the seller's cabinet held a 40px one with the same
+ * variant names and different numbers, and the courier's app a fork with a
+ * `tone` prop and no sizes at all. There is one now, and its height is a
+ * density token, so `size="lg"` is 44px here and 64px in the courier's app
+ * without either of them being a different component.
+ *
+ * Kept as a file rather than rewriting eighty import statements: the path
+ * `@/components/ui/button` is not wrong, and a re-export is a smaller change
+ * than a sweep.
+ */
+export { Button, buttonClasses, type ButtonProps } from "@/ui/button"

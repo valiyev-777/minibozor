@@ -81,7 +81,7 @@ export function StockPage() {
       </div>
 
       <Panel
-        title="Taklif bo'yicha"
+        title="Narx bo'yicha"
         hint="Rang va o'lcham darajasida ko'rish uchun qatorni bosing."
       >
         {offers.isPending ? <Loading /> : null}
@@ -90,8 +90,8 @@ export function StockPage() {
         ) : null}
         {!offers.isPending && !offers.error && rows.length === 0 ? (
           <Empty
-            title="Taklif yo'q, demak javonda ham hech narsa yo'q"
-            hint="Qoldiq taklifga bog'lanadi: avval kartochkaga narx qo'yiladi, keyin partiya keltiriladi."
+            title="Narx yo'q, demak javonda ham hech narsa yo'q"
+            hint="Qoldiq narxga bog'lanadi: avval kartochkaga narx qo'yiladi, keyin partiya keltiriladi."
           />
         ) : null}
 

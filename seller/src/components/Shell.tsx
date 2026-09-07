@@ -4,6 +4,7 @@ import {
   Boxes,
   LayoutDashboard,
   LogOut,
+  PackagePlus,
   Receipt,
   Search,
   Tag,
@@ -24,8 +25,13 @@ import { cn } from "@/lib/utils"
  */
 const NAV = [
   { to: "/", label: "Boshqaruv", icon: LayoutDashboard },
+  // First after the dashboard, because it is the seller's own shop: their
+  // products, their pictures, their prices. `Katalog` below is the shared
+  // catalogue — somebody else's card they can also put a price on — and it is
+  // the second thing they do, not the first.
+  { to: "/products", label: "Mahsulotlarim", icon: PackagePlus },
   { to: "/catalog", label: "Katalog", icon: Search },
-  { to: "/offers", label: "Takliflarim", icon: Tag },
+  { to: "/offers", label: "Narxlarim", icon: Tag },
   { to: "/stock", label: "Qoldiq", icon: Boxes },
   { to: "/supplies", label: "Partiyalar", icon: Truck },
   { to: "/statements", label: "Hisobotlar", icon: Receipt },

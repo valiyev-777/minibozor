@@ -17,7 +17,7 @@ export default function App() {
 
   if (session.status === "loading") {
     return (
-      <div className="grid h-full place-items-center p-8 text-center text-lg text-muted">
+      <div className="grid h-full place-items-center p-8 text-center text-lg text-ink-soft">
         Yuklanmoqda…
       </div>
     )

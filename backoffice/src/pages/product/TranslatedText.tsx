@@ -80,7 +80,7 @@ export function LanguageTabs({
             className={cn(
               "inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-[13px] transition-colors",
               active
-                ? "bg-accent-soft font-medium text-accent"
+                ? "bg-brand-soft font-medium text-brand"
                 : "text-ink-soft hover:bg-line-soft hover:text-ink",
             )}
           >

@@ -63,11 +63,11 @@ export function LoginPage() {
     <div className="mx-auto flex h-full max-w-md flex-col justify-between p-5 pb-safe">
       <div>
         <h1 className="mt-8 text-4xl font-bold">MiniBozor</h1>
-        <p className="mt-1 text-xl font-semibold text-muted">Kuryer</p>
+        <p className="mt-1 text-xl font-semibold text-ink-soft">Kuryer</p>
 
         {reason ? (
           <Panel tone="bad" className="mt-6">
-            <p className="text-lg font-semibold text-bad">{reason}</p>
+            <p className="text-lg font-semibold text-danger">{reason}</p>
           </Panel>
         ) : null}
 
@@ -88,14 +88,14 @@ export function LoginPage() {
           </form>
         ) : (
           <form onSubmit={signIn} className="mt-8 space-y-5">
-            <p className="text-lg text-muted">
+            <p className="text-lg text-ink-soft">
               Kod yuborildi: <span className="font-semibold text-ink">{prettyPhone(toApiPhone(phone))}</span>
             </p>
             {/* The dev server echoes the code back rather than sending an SMS,
                 so a tester need not own the SIM. It is null in production. */}
             {sent.dev_code ? (
               <Panel tone="cash">
-                <p className="text-base text-muted">Test kodi</p>
+                <p className="text-base text-ink-soft">Test kodi</p>
                 <p className="text-3xl font-bold tracking-widest">{sent.dev_code}</p>
               </Panel>
             ) : null}
@@ -126,7 +126,7 @@ export function LoginPage() {
         )}
       </div>
 
-      <p className="pt-8 text-center text-base text-muted">
+      <p className="pt-8 text-center text-base text-ink-soft">
         Kirish uchun internet kerak. Kirgandan keyin ilova tarmoqsiz ham ishlaydi.
       </p>
     </div>

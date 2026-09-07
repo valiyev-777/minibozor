@@ -47,16 +47,16 @@ export function PickupsPage() {
                             {statusWord(run.status)}
                           </Pill>
                         </div>
-                        <p className="mt-1 text-lg text-muted">
+                        <p className="mt-1 text-lg text-ink-soft">
                           {run.lines.length} ta tovar · {stamp(run.created_at)}
                         </p>
                         {queued ? (
-                          <p className="mt-1 font-bold text-pending">
+                          <p className="mt-1 font-bold text-warn">
                             Topshirildi · yuborilmagan
                           </p>
                         ) : null}
                       </div>
-                      <ChevronRight className="mt-1 size-6 shrink-0 text-muted" />
+                      <ChevronRight className="mt-1 size-6 shrink-0 text-ink-soft" />
                     </div>
                   </Panel>
                 </Link>
@@ -68,7 +68,7 @@ export function PickupsPage() {
 
       {finished.length > 0 ? (
         <>
-          <h2 className="pt-4 text-xl font-bold text-muted">Topshirilgan</h2>
+          <h2 className="pt-4 text-xl font-bold text-ink-soft">Topshirilgan</h2>
           <ul className="space-y-3">
             {finished.map((run) => (
               <li key={run.id}>
@@ -78,7 +78,7 @@ export function PickupsPage() {
                       <span className="text-xl font-bold">{run.code}</span>
                       <Pill tone="plain">{statusWord(run.status)}</Pill>
                     </div>
-                    <p className="mt-1 text-lg text-muted">
+                    <p className="mt-1 text-lg text-ink-soft">
                       {run.lines.filter((line) => line.collected).length}/{run.lines.length} olindi
                       {run.collected_at ? ` · ${stamp(run.collected_at)}` : ""}
                     </p>

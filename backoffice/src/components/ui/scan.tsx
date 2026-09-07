@@ -42,7 +42,7 @@ export function ScanInput({
 
   return (
     <div
-      className="rounded-lg border-2 border-accent/40 bg-accent-soft/60 p-3"
+      className="rounded-lg border-2 border-brand/40 bg-brand-soft/60 p-3"
       // Clicking the panel — or fumbling near it with a glove on — puts the
       // caret back rather than taking it away.
       onMouseDown={(event) => {
@@ -52,7 +52,7 @@ export function ScanInput({
         }
       }}
     >
-      <label className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-accent">
+      <label className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-brand">
         <ScanLine className="size-4" />
         {label}
       </label>
@@ -75,7 +75,7 @@ export function ScanInput({
         className={cn(
           "w-full rounded border-2 border-line bg-surface px-3 py-2.5 font-mono",
           "text-[17px] tracking-wide text-ink outline-none",
-          "focus:border-accent focus:ring-4 focus:ring-accent/20",
+          "focus:border-brand focus:ring-4 focus:ring-brand/20",
           "disabled:bg-line-soft disabled:text-ink-faint",
         )}
         placeholder="SKU yoki kod"
@@ -126,7 +126,7 @@ export function CountStepper({
         className={cn(
           "tabular w-16 rounded border border-line bg-surface text-center",
           "text-[17px] font-semibold text-ink outline-none",
-          "focus:border-accent focus:ring-2 focus:ring-accent/25",
+          "focus:border-brand focus:ring-2 focus:ring-brand/25",
         )}
       />
       <Button

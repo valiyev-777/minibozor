@@ -155,7 +155,7 @@ export function Images({ productId }: { productId: number }) {
               />
               <div className="min-w-0 flex-1">
                 <p className="tabular truncate text-[12px] text-ink-soft">{row.url}</p>
-                {index === 0 ? <Badge tone="accent">Muqova</Badge> : null}
+                {index === 0 ? <Badge tone="brand">Muqova</Badge> : null}
               </div>
               <Button
                 size="icon"

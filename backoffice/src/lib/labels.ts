@@ -47,10 +47,10 @@ export const ROLE: Record<UserRole, string> = {
   seller: "Sotuvchi",
 }
 
-type Tone = "neutral" | "accent" | "good" | "warn" | "danger"
+type Tone = "neutral" | "brand" | "good" | "warn" | "danger"
 
 export const ORDER_TONE: Record<OrderStatus, Tone> = {
-  placed: "accent",
+  placed: "brand",
   packing: "warn",
   shipped: "warn",
   delivered: "good",
@@ -59,14 +59,14 @@ export const ORDER_TONE: Record<OrderStatus, Tone> = {
 }
 
 export const RETURN_TONE: Record<ReturnStatus, Tone> = {
-  submitted: "accent",
+  submitted: "brand",
   approved: "warn",
   rejected: "danger",
   refunded: "good",
 }
 
 export const REVIEW_TONE: Record<ReviewStatus, Tone> = {
-  moderating: "accent",
+  moderating: "brand",
   published: "good",
   rejected: "danger",
 }
@@ -93,7 +93,7 @@ export const SUPPLY_STATUS: Record<"declared" | "received" | "cancelled", string
 }
 
 export const SUPPLY_TONE: Record<"declared" | "received" | "cancelled", Tone> = {
-  declared: "accent",
+  declared: "brand",
   received: "good",
   cancelled: "neutral",
 }
@@ -124,7 +124,7 @@ export const REMOVAL_TONE: Record<
   "requested" | "ready" | "collected" | "cancelled",
   Tone
 > = {
-  requested: "accent",
+  requested: "brand",
   ready: "warn",
   collected: "good",
   cancelled: "neutral",
@@ -162,19 +162,10 @@ export const PRODUCT_STATUS: Record<ProductStatus, string> = {
 
 export const PRODUCT_TONE: Record<ProductStatus, Tone> = {
   draft: "neutral",
-  moderating: "accent",
+  moderating: "brand",
   published: "good",
   rejected: "danger",
   archived: "neutral",
-}
-
-/** The verb for a moderation decision, so a button reads as an action. */
-export const PRODUCT_ACTION: Record<ProductStatus, string> = {
-  draft: "Qoralamaga qaytarish",
-  moderating: "Moderatsiyaga yuborish",
-  published: "E'lon qilish",
-  rejected: "Rad etish",
-  archived: "Arxivlash",
 }
 
 // ------------------------------------------------------------------ payouts
@@ -186,7 +177,7 @@ export const SETTLEMENT_STATUS: Record<SettlementStatus, string> = {
 }
 
 export const SETTLEMENT_TONE: Record<SettlementStatus, Tone> = {
-  open: "accent",
+  open: "brand",
   closed: "warn",
   paid: "good",
 }
@@ -207,13 +198,3 @@ export const LINE_KIND: Record<StatementLineKind, string> = {
   adjustment: "Tuzatish",
 }
 
-/** What the row was computed from, for the column that names the source. */
-export const LINE_SOURCE: Record<StatementLineKind, string> = {
-  sale: "Buyurtma satri",
-  commission: "Buyurtma satri",
-  fulfilment: "Buyurtma satri",
-  refund: "Qaytarish",
-  refund_commission: "Qaytarish",
-  storage: "Taklif",
-  adjustment: "Qo'lda",
-}

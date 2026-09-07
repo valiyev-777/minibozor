@@ -239,7 +239,7 @@ function Source({ line }: { line: StatementLine }) {
     : line.return_request_id
       ? { label: "Qaytarish", id: line.return_request_id }
       : line.offer_id
-        ? { label: "Taklif", id: line.offer_id }
+        ? { label: "Narx", id: line.offer_id }
         : null
 
   if (!source) {

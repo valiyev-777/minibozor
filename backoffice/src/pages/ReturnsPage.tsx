@@ -299,12 +299,12 @@ function ReturnDetail({
                 ].map((choice) => (
                   <label
                     key={String(choice.value)}
-                    className="flex cursor-pointer items-center gap-2 rounded border border-line px-2.5 py-2 text-[13px] hover:bg-line-soft has-checked:border-accent has-checked:bg-accent-soft"
+                    className="flex cursor-pointer items-center gap-2 rounded border border-line px-2.5 py-2 text-[13px] hover:bg-line-soft has-checked:border-brand has-checked:bg-brand-soft"
                   >
                     <input
                       type="radio"
                       name="restock"
-                      className="accent-accent"
+                      className="brand-brand"
                       checked={restock === choice.value}
                       onChange={() => setRestock(choice.value)}
                     />

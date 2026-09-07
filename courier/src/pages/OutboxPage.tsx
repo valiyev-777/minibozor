@@ -36,7 +36,7 @@ export function OutboxPage() {
           : `Yuborilmagan ${unsent.pending} amal`}
       </h1>
 
-      <p className="text-base text-muted">
+      <p className="text-base text-ink-soft">
         Bu amallar telefoningizda saqlangan. Tarmoq qaytganda o'zi yuboriladi — ilovani yopsangiz
         ham, telefon o'chsa ham yo'qolmaydi.
       </p>
@@ -60,8 +60,8 @@ export function OutboxPage() {
 
       {blocked.length > 0 ? (
         <>
-          <h2 className="pt-4 text-xl font-bold text-bad">Server rad etdi</h2>
-          <p className="text-base text-muted">
+          <h2 className="pt-4 text-xl font-bold text-danger">Server rad etdi</h2>
+          <p className="text-base text-ink-soft">
             Bu amallarni qayta yuborish foyda bermaydi. Operator bilan gaplashing, keyin o'chiring.
           </p>
           <ul className="space-y-3">
@@ -77,7 +77,7 @@ export function OutboxPage() {
           Chiqish
         </Button>
         {rows.length > 0 ? (
-          <p className="mt-2 text-center text-base text-pending">
+          <p className="mt-2 text-center text-base text-warn">
             Diqqat: navbatda {rows.length} ta amal bor. Chiqishdan oldin ularni yuboring.
           </p>
         ) : null}
@@ -100,7 +100,7 @@ function RowCard({ row }: { row: OutboxRow }) {
           </Pill>
         </div>
 
-        <p className="mt-1 text-base text-muted">
+        <p className="mt-1 text-base text-ink-soft">
           {waited(row.createdAt)}
           {row.attempts > 0 ? ` · ${row.attempts} urinish` : ""}
         </p>
@@ -110,7 +110,7 @@ function RowCard({ row }: { row: OutboxRow }) {
         ) : null}
 
         {row.lastError ? (
-          <p className={row.blocked ? "mt-2 text-lg font-semibold text-bad" : "mt-2 text-base text-muted"}>
+          <p className={row.blocked ? "mt-2 text-lg font-semibold text-danger" : "mt-2 text-base text-ink-soft"}>
             {row.lastError}
           </p>
         ) : null}

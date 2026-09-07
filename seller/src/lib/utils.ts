@@ -1,10 +1,8 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
 import { API_URL } from "@/api/client"
 
-export function cn(...inputs: ClassValue[]): string {
-  return twMerge(clsx(inputs))
-}
+// One definition, in the shared design system. Re-exported because every
+// screen in this app already imports `cn` from here.
+export { cn } from "@/ui/cn"
 
 /**
  * A figure in so'm, grouped and never rounded.

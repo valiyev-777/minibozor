@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Check, ImageOff, Lightbulb, Plus, Search, Users } from "lucide-react"
+import { Check, ImageOff, PackagePlus, Plus, Search, Users } from "lucide-react"
+import { Link } from "react-router-dom"
 import { api } from "@/api/client"
 import type { CatalogCard, CatalogCardPage, Category } from "@/api/types"
 import { Empty, Failed, Loading, Panel } from "@/components/Card"
@@ -9,7 +10,6 @@ import { Button } from "@/components/ui/button"
 import { Hint, Input, Label, Select } from "@/components/ui/field"
 import { mediaSrc, money } from "@/lib/utils"
 import { NewOffer } from "@/pages/catalog/NewOffer"
-import { Propose } from "@/pages/catalog/Propose"
 
 export const CATALOG = ["catalog"]
 
@@ -18,12 +18,13 @@ const PAGE_SIZE = 24
 type Owned = "" | "no" | "yes"
 
 /**
- * Finding something to sell.
+ * Putting my price on somebody else's card.
  *
- * The screen the marketplace was missing. Offering a product needs a
- * `product_id`, and until now the only catalogue listing was the admin's — so
- * a seller could edit the offers somebody had opened for them and could not
- * open one. This is where they arrive, search, and price something.
+ * Not where a seller's own product comes from — that is `ProductsPage`, and a
+ * seller owns what they sell. This is the other half of a marketplace: one
+ * card that several sellers stock, where the cheapest one with something on
+ * the shelf wins the shop. A seller arrives here to price a product that
+ * already exists rather than to open one.
  *
  * A grid of photographs rather than a table of rows. What a seller does here
  * is *recognise* a product — is this the shoe I have in the van — and a
@@ -42,7 +43,6 @@ export function CatalogPage() {
   const [owned, setOwned] = React.useState<Owned>("no")
   const [page, setPage] = React.useState(1)
   const [offering, setOffering] = React.useState<CatalogCard | null>(null)
-  const [proposing, setProposing] = React.useState(false)
 
   const categories = useQuery({
     queryKey: ["categories"],
@@ -78,11 +78,13 @@ export function CatalogPage() {
     <>
       <PageHead
         title="Katalog"
-        hint="Sotmoqchi bo'lgan tovarni toping va o'z narxingizni qo'ying. Katalog platformaniki — kartochka bitta, unga bir nechta sotuvchi taklif qo'yadi."
+        hint="Boshqa sotuvchilar ham sotadigan tovarga o'z narxingizni qo'yish. O'z mahsulotingizni qo'shish uchun «Mahsulotlarim» sahifasiga o'ting."
         actions={
-          <Button onClick={() => setProposing(true)}>
-            <Lightbulb />
-            Yo'q tovarni taklif qilish
+          <Button asChild>
+            <Link to="/products">
+              <PackagePlus />
+              O'z mahsulotimni qo'shish
+            </Link>
           </Button>
         }
       />
@@ -117,7 +119,7 @@ export function CatalogPage() {
             </Select>
           </div>
           <div className="w-52 space-y-1.5">
-            <Label htmlFor="owned">Mening takliflarim</Label>
+            <Label htmlFor="owned">Mening narxlarim</Label>
             <Select
               id="owned"
               value={owned}
@@ -158,8 +160,8 @@ export function CatalogPage() {
             title={q || category ? "Bunday tovar topilmadi" : "Kartochka yo'q"}
             hint={
               owned === "no"
-                ? "Hammasiga taklif qo'yib bo'lgan bo'lsangiz, «Allaqachon meniki» ni tanlang. Katalogda yo'q tovarni esa taklif qilish mumkin."
-                : "Katalogda yo'q tovarni taklif qilsangiz, administrator ko'rib chiqadi."
+                ? "Hammasiga narx qo'yib bo'lgan bo'lsangiz, «Allaqachon meniki» ni tanlang."
+                : "Bu ro'yxat — boshqalar ochgan kartochkalar. O'z mahsulotingiz «Mahsulotlarim»da."
             }
           />
         </Panel>
@@ -193,7 +195,6 @@ export function CatalogPage() {
       {offering ? (
         <NewOffer card={offering} onClose={() => setOffering(null)} />
       ) : null}
-      {proposing ? <Propose onClose={() => setProposing(false)} /> : null}
     </>
   )
 }
@@ -236,7 +237,7 @@ function Card({ card, onOffer }: { card: CatalogCard; onOffer: () => void }) {
                 somebody deciding whether to be the fourth seller on it. */}
             <p className="flex items-center justify-end gap-1 text-[13px] text-ink-soft">
               <Users className="size-3.5" />
-              {card.offer_count} taklif
+              {card.offer_count} sotuvchi
             </p>
             {card.variant_count ? (
               <p className="text-[13px] text-ink-faint">
@@ -262,7 +263,7 @@ function Card({ card, onOffer }: { card: CatalogCard; onOffer: () => void }) {
           ) : (
             <Button variant="primary" className="w-full" onClick={onOffer}>
               <Plus />
-              Taklif qo'yish
+              Narx qo'yish
             </Button>
           )}
         </div>

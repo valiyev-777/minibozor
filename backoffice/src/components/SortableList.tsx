@@ -121,7 +121,7 @@ export function SortableList<T>({
           key={rowKey(row)}
           className={cn(
             "flex items-center gap-2 px-3 py-2 transition-colors",
-            dragging === index && "bg-accent-soft",
+            dragging === index && "bg-brand-soft",
           )}
         >
           <button
@@ -131,7 +131,7 @@ export function SortableList<T>({
             onPointerDown={(event) => startDrag(event, index)}
             className={cn(
               "shrink-0 rounded p-0.5 text-ink-faint outline-none",
-              "focus-visible:ring-2 focus-visible:ring-accent/40",
+              "focus-visible:ring-2 focus-visible:ring-brand/40",
               // `touch-none` is load-bearing under a finger: without it the
               // browser claims the gesture as a scroll and the row never moves.
               disabled ? "cursor-not-allowed" : "cursor-grab touch-none active:cursor-grabbing",

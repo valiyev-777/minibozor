@@ -60,7 +60,7 @@ export function ModerationPage() {
     },
     {
       key: "proposer",
-      header: "Kim taklif qilgan",
+      header: "Kimning mahsuloti",
       sortValue: (row) => row.proposed_by?.name ?? "",
       cell: (row) =>
         row.proposed_by ? (
@@ -141,7 +141,7 @@ export function ModerationPage() {
   return (
     <Page
       title="Moderatsiya navbati"
-      hint="Katalog platformaniki: sotuvchi kartochka taklif qiladi, e'lon qilishni admin hal qiladi."
+      hint="Sotuvchi o'z mahsulotini o'zi qo'shadi. Bu navbat — tovar omborga kelishini kutayotganlar: ombor sanab qabul qilsa, mahsulot o'zi sotuvga chiqadi. Bu yerdan e'lon qilish — qo'lda tasdiqlash."
     >
       <DataTable
         rows={query.data?.items}
@@ -151,7 +151,7 @@ export function ModerationPage() {
         error={query.error}
         onRetry={() => void query.refetch()}
         emptyTitle="Navbat bo'sh"
-        emptyHint="Sotuvchilar taklif qilgan kartochkalar shu yerda, eng eskisi birinchi bo'lib turadi."
+        emptyHint="Ombor kutayotgan mahsulotlar shu yerda turadi, eng eskisi birinchi. Partiya qabul qilinsa, mahsulot bu navbatdan o'zi chiqadi."
         server={{
           page: query.data?.page ?? page,
           pageSize: query.data?.page_size ?? PAGE_SIZE,

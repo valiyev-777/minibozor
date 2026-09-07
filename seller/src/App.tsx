@@ -5,6 +5,7 @@ import { Shell } from "@/components/Shell"
 import { CatalogPage } from "@/pages/CatalogPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import { OffersPage } from "@/pages/OffersPage"
+import { ProductsPage } from "@/pages/ProductsPage"
 import { StatementPage } from "@/pages/StatementPage"
 import { StatementsPage } from "@/pages/StatementsPage"
 import { StockPage } from "@/pages/StockPage"
@@ -29,6 +30,7 @@ export function App() {
     <Routes>
       <Route element={<Shell />}>
         <Route index element={<DashboardPage />} />
+        <Route path="/products" element={<ProductsPage />} />
         <Route path="/offers" element={<OffersPage />} />
         <Route path="/stock" element={<StockPage />} />
         <Route path="/supplies" element={<SuppliesPage />} />

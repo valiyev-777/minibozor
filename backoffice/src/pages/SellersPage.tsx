@@ -61,7 +61,7 @@ export function SellersPage() {
     },
     {
       key: "offers",
-      header: "Takliflar",
+      header: "Narxlari",
       headClassName: "text-right",
       className: "text-right tabular",
       sortValue: (row) => row.offer_count,
@@ -115,7 +115,7 @@ export function SellersPage() {
   return (
     <Page
       title="Sotuvchilar"
-      hint="Katalog platformaniki: sotuvchi mavjud kartochkaga taklif qo'shadi, o'z nusxasini ochmaydi."
+      hint="Sotuvchi o'z mahsulotini o'zi ochadi, rasmini yuklaydi va narxini o'zi qo'yadi. Bitta kartochkani bir nechta sotuvchi ham sotishi mumkin."
       actions={
         <Button variant="primary" onClick={() => setCreating(true)}>
           <Plus />
@@ -379,13 +379,13 @@ function StandDown({ seller, onClose }: { seller: AdminSeller; onClose: () => vo
         {/* Not a side effect to be discovered afterwards: it is the decision. */}
         <p className="text-[13px] text-ink">
           Bu sotuvchining{" "}
-          <span className="font-semibold">{seller.offer_count} ta taklifi</span> ham
+          <span className="font-semibold">{seller.offer_count} ta narxi</span> ham
           o'chiriladi — ular narx yarishida qatnashmaydi va kartochkalardagi narx qayta
           hisoblanadi.
         </p>
         <p className="text-[12px] text-ink-soft">
           Aks holda do'kondagi eng arzon kartochka biz ish to'xtatgan odamniki bo'lib
-          qolardi. Qaytadan ishga tushirilganda takliflar avtomatik tiklanmaydi —
+          qolardi. Qaytadan ishga tushirilganda narxlar avtomatik tiklanmaydi —
           har birini sotuvchi yoki admin qayta yoqadi.
         </p>
         <p className="text-[12px] text-ink-soft">
