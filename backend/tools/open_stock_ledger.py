@@ -10,6 +10,19 @@ the invariant the whole ledger rests on, and a database migrated without these
 rows would violate it before anybody had done anything.
 
 Safe to run twice: an offer that already has movements is left alone.
+
+Superseded by the migration history, for the schema half of what it does.
+Every column and table below is in ``alembic/versions/0001_baseline.py``, so a
+database at ``head`` already has them and the ALTER step here finds nothing to
+do. It is kept because the *data* half is not in any migration and could not
+be: the opening balances are read off whatever the counts happened
+to be when the ledger was opened, and that moment has passed.
+
+Creating tables is no longer its job — it used to call
+``SQLModel.metadata.create_all`` first — so on a database older than the
+baseline, run the migration before this:
+
+    .venv/bin/alembic upgrade head
 """
 
 from __future__ import annotations
@@ -20,7 +33,7 @@ from sqlmodel import Session, col, select
 
 from app import offers as of
 from app import stock as st
-from app.db import engine, init_db
+from app.db import engine
 from app.models import CartItem, Offer, StockMovement
 
 NEW_COLUMNS = [
@@ -60,8 +73,6 @@ def add_columns(session: Session, *, apply: bool) -> list[str]:
 
 def main() -> None:
     apply = "--apply" in sys.argv
-    if apply:
-        init_db()   # creates the seven new tables, leaves the rest alone
 
     with Session(engine) as session:
         columns = add_columns(session, apply=apply)

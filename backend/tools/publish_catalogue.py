@@ -13,6 +13,19 @@ existing rows are then updated. A column left defaulting to ``PUBLISHED``
 would be a trap for the next person inserting a row by hand.
 
 Idempotent.
+
+Superseded by the migration history, for the schema half of what it does.
+Every column and table below is in ``alembic/versions/0001_baseline.py``, so a
+database at ``head`` already has them and the ALTER step here finds nothing to
+do. It is kept because the *data* half is not in any migration and could not
+be: deciding that every card predating the ``status``
+column was in the shop is a judgement about this catalogue, not a rule.
+
+Creating tables is no longer its job — it used to call
+``SQLModel.metadata.create_all`` first — so on a database older than the
+baseline, run the migration before this:
+
+    .venv/bin/alembic upgrade head
 """
 
 from __future__ import annotations
@@ -21,7 +34,7 @@ import sys
 
 from sqlmodel import Session, col, select
 
-from app.db import engine, init_db
+from app.db import engine
 from app.models import Product, ProductStatus
 
 NEW_COLUMNS = [
@@ -51,8 +64,6 @@ def add_columns(session: Session, *, apply: bool) -> list[str]:
 
 def main() -> None:
     apply = "--apply" in sys.argv
-    if apply:
-        init_db()
 
     with Session(engine) as session:
         columns = add_columns(session, apply=apply)

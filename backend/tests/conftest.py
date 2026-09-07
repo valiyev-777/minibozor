@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from app.db import engine, init_db
+from app.db import engine, init_db, stamp_head
 from app.main import app
 from app.models import User, UserRole
 from app.seed import ADMIN_PHONE, reset, seed
@@ -21,7 +21,23 @@ API = "/api/v1"
 
 @pytest.fixture(scope="session", autouse=True)
 def database() -> None:
+    """Built by ``create_all``, then stamped at head.
+
+    ``create_all`` rather than ``alembic upgrade head`` because this runs once
+    per suite and issues one CREATE TABLE per table instead of replaying the
+    migration history — the suite is slow enough already. That is only
+    defensible because ``test_schema.py`` holds the two builders to producing
+    the identical schema, so what the tests run against is what a migrated
+    database is. Without that test this shortcut would be the exact hole the
+    migration system was installed to close.
+
+    Stamped because the application refuses to start against a database with
+    no version row, and ``TestClient(app)`` runs the real lifespan. The stamp
+    is not a way round the check: this database genuinely holds what the
+    baseline builds, and the test next door is what says so.
+    """
     init_db()
+    stamp_head()
     with Session(engine) as session:
         reset(session)
         seed(session)

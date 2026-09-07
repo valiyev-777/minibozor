@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import i18n
 from app.core.config import settings
-from app.db import init_db
+from app.db import require_current_schema
 from app.images import MEDIA_DIR
 from app.routers import (
     admin,
@@ -45,7 +45,25 @@ request. Screen numbers from the design file are quoted in the summaries.
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    init_db()
+    """Check the schema; do not change it.
+
+    This used to call ``init_db`` — ``SQLModel.metadata.create_all`` — which
+    creates a table that is missing and never alters one that exists. So it
+    was reassuring and almost useless: it silently agreed with any database
+    whose tables happened to have the right names, whatever columns they had.
+
+    It now refuses to start unless the database is at the newest revision, and
+    it still does not migrate. Why the check and the migration are two
+    different commands is written out in ``app.db.require_current_schema``;
+    the short version is that several processes booting at once would run the
+    same DDL against each other, and nobody chose three in the morning as the
+    moment to change the schema.
+
+    Migrations are run on purpose:
+
+        .venv/bin/alembic upgrade head
+    """
+    require_current_schema()
     yield
 
 

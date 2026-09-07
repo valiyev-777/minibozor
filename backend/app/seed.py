@@ -13,11 +13,14 @@ import sys
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
+# Aliased: `text` is a local variable in two of the seed's own loops (a
+# review's text, a notification's), and those names are the right ones there.
+from sqlalchemy import text as sql_text
 from sqlmodel import Session, SQLModel, col, delete, select
 
 from app import offers as of
 from app.core.security import hash_secret
-from app.db import engine, init_db
+from app.db import engine, require_current_schema
 from app.models import (
     Address,
     Banner,
@@ -608,8 +611,32 @@ DAY_CLOSES = time.fromisoformat("22:00")
 
 
 def reset(session: Session) -> None:
-    for table in reversed(SQLModel.metadata.sorted_tables):
-        session.exec(delete(table))
+    """Empty every table, and put the id counters back where they started.
+
+    On SQLite, ``DELETE`` is the whole job: the next rowid is ``max(rowid) + 1``
+    and an empty table has no max, so ids begin at 1 again by themselves.
+
+    On Postgres a sequence is an object in its own right and ``DELETE`` does
+    not touch it. A second seed therefore numbered the same catalogue from 63
+    instead of 1 — same rows, same order, different ids — which is not a reset
+    at all. It broke sixteen tests that name a row by id, but those tests were
+    the messenger: two freshly seeded databases that disagree about every
+    primary key cannot be compared, and a fixture that says "reset" and leaves
+    the counters running will mislead somebody else later.
+
+    ``TRUNCATE ... RESTART IDENTITY`` does both in one statement, and
+    ``CASCADE`` saves ordering fifty-three tables by dependency. It is
+    deliberately limited to the tables the models declare: ``alembic_version``
+    is not one of them and must survive, or the next thing to open this
+    database would refuse to start.
+    """
+    tables = list(SQLModel.metadata.sorted_tables)
+    if session.bind is not None and session.bind.dialect.name == "postgresql":
+        names = ", ".join(f'"{table.name}"' for table in tables)
+        session.exec(sql_text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))
+    else:
+        for table in reversed(tables):
+            session.exec(delete(table))
     session.commit()
 
 
@@ -1338,7 +1365,15 @@ def _seed_notifications(session: Session, user: User) -> None:
 
 
 def main() -> None:
-    init_db()
+    # The schema is Alembic's, the content is ours. This used to call
+    # `init_db` and so would happily seed a database whose tables had the
+    # right names and the wrong columns — the seed is a long series of
+    # inserts, and the first one to hit a missing column fails halfway
+    # through, leaving a half-populated database that looks seeded.
+    #
+    #     .venv/bin/alembic upgrade head
+    #     .venv/bin/python -m app.seed
+    require_current_schema()
     with Session(engine) as session:
         if "--reset" in sys.argv:
             reset(session)

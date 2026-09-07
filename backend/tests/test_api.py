@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, select
 
 from app import audit
 from app import offers as of
@@ -18,7 +18,9 @@ from app.db import engine
 from app.deps import AdminUser
 from app.models import (
     AuditLog,
+    Brand,
     CartItem,
+    Category,
     DeliverySlot,
     Notification,
     Offer,
@@ -7429,3 +7431,248 @@ def test_the_running_total_names_the_run_it_belongs_to_when_there_is_one(
     assert body["ends_on"] == period["ends_on"], "the run's days, not ours"
     # Still not the figure they will be paid: closing is what makes it one.
     assert body["is_final"] is False
+
+
+# ================================================== the same answer on both databases
+
+# SQLite for development, Postgres for production. Anything that answers
+# differently on the two is a bug that reaches the user through whichever one
+# the tests are not running on, so these run on both and assert the same thing.
+
+
+def test_search_ignores_case_in_russian_as_well_as_english(
+    client: TestClient,
+    admin: dict[str, str],
+    auth: dict[str, str],
+    sign_in: Callable[[str], dict[str, str]],
+) -> None:
+    """`lower()` is not the same function on the two databases.
+
+    Every search here is already written the portable way —
+    `func.lower(column).like(needle)` with the needle lowered in Python — so
+    that `LIKE`'s own case rules never come into it. SQLite's `LIKE` ignores
+    ASCII case and Postgres' does not, and with both sides lowercase that
+    difference cannot bite.
+
+    What it misses is that **SQLite's `lower()` is ASCII-only**:
+
+        lower('Чайники')   -> 'Чайники'   unchanged, on SQLite
+        'ЧАЙНИКИ'.lower()  -> 'чайники'   Python, which is not ASCII-only
+        'Чайники' LIKE '%чайники%'  ->  no match
+
+    Postgres lowercases Cyrillic properly and matches. So this was live on
+    SQLite — every developer's machine — and would have been *fixed* by the
+    move to Postgres, which is the worst way for a bug to go: nothing raises,
+    no test that searches in Latin notices, and the symptom is a customer
+    typing a Russian name into a trilingual shop and being told there is
+    nothing there.
+
+    `app.db` now replaces SQLite's `lower` with Python's, so this test is the
+    same on both. It searches in upper case on purpose: matching only works if
+    both sides really were folded.
+    """
+    category = client.get(f"{API}/categories").json()[0]["slug"]
+    made = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "MB-CYR-1",
+            "title": "Чайник электрический",
+            "subtitle": "Стеклянный",
+            "description": "Чайник с подсветкой",
+            "category_slug": category,
+            "price": 250_000,
+        },
+        headers=admin,
+    )
+    assert made.status_code == 201, made.text
+    product_id = made.json()["id"]
+
+    # The editor's search, before it is even published.
+    def admin_hits(q: str) -> list[int]:
+        got = client.get(
+            f"{API}/staff/catalog/products", params={"q": q}, headers=admin
+        )
+        assert got.status_code == 200, got.text
+        return [row["id"] for row in got.json()["items"]]
+
+    assert product_id in admin_hits("Чайник"), "as typed"
+    assert product_id in admin_hits("ЧАЙНИК"), "upper case Cyrillic"
+    assert product_id in admin_hits("чайник"), "lower case Cyrillic"
+    assert product_id in admin_hits("ЭЛЕКТРИЧЕСКИЙ"), "a later word, upper case"
+    # And Latin still behaves, which is what would have broken if the fix had
+    # been to stop lowering at all.
+    assert admin_hits("MB-CYR-1") == admin_hits("mb-cyr-1") == [product_id]
+
+    assert client.post(
+        f"{API}/staff/catalog/products/{product_id}/status",
+        json={"status": "published"},
+        headers=admin,
+    ).status_code == 200
+
+    # The shopper's listing, and the typeahead behind the search box.
+    def shop_hits(q: str) -> list[int]:
+        got = client.get(f"{API}/products", params={"q": q, "show_sold_out": True})
+        assert got.status_code == 200, got.text
+        return [row["id"] for row in got.json()["items"]]
+
+    assert product_id in shop_hits("ЧАЙНИК")
+    assert product_id in shop_hits("чайник")
+    # The description is searched too, and it only has the word in one case.
+    assert product_id in shop_hits("ПОДСВЕТКОЙ")
+
+    # A staff account found by name — the search an admin uses to appoint
+    # somebody, and the one most likely to be given a Cyrillic name.
+    theirs = sign_in("+998900110001")
+    named = client.patch(
+        f"{API}/me", json={"full_name": "Дилноза Расулова"}, headers=theirs
+    )
+    assert named.status_code == 200, named.text
+
+    def users_found(q: str) -> list[str]:
+        got = client.get(f"{API}/staff/users", params={"q": q}, headers=admin)
+        assert got.status_code == 200, got.text
+        return [row["phone"] for row in got.json()["items"]]
+
+    assert "+998900110001" in users_found("Дилноза")
+    assert "+998900110001" in users_found("ДИЛНОЗА"), "upper case Cyrillic"
+    assert "+998900110001" in users_found("расулова"), "surname, lower case"
+    # The phone half of the same search, which is what it is mostly used for.
+    assert "+998900110001" in users_found("900110001")
+
+    # Nothing matches a word that is not there — a search that found
+    # everything would satisfy every assertion above.
+    assert product_id not in shop_hits("самовар")
+    assert "+998900110001" not in users_found("Гулнора")
+
+
+def test_the_same_row_gets_the_same_id_on_a_freshly_seeded_database() -> None:
+    """`reset()` has to put the id counters back, not just empty the tables.
+
+    On SQLite the next rowid is `max(rowid) + 1`, so an empty table starts at 1
+    again by itself. On Postgres a sequence is its own object and `DELETE` does
+    not touch it — a second seed numbered the same catalogue from 63 instead of
+    1, which broke every test that names a row by id and, worse, meant two
+    freshly seeded databases could not be compared at all.
+
+    The suite's own database is seeded once per session, so this asserts the
+    property that made that safe: the seeded rows occupy the bottom of the
+    range, from 1.
+    """
+    with Session(engine) as session:
+        first = session.exec(
+            select(Product).order_by(col(Product.id)).limit(1)
+        ).one()
+        assert first.id == 1, "the seed's first product is id 1, on either database"
+
+        # Every seeded table that the suite names by id starts from 1 too.
+        for model in (Category, Brand, User):
+            lowest = session.exec(
+                select(func.min(model.id)).select_from(model)
+            ).one()
+            assert lowest == 1, f"{model.__name__} ids start at 1"
+
+
+def test_every_column_type_survives_the_round_trip_on_this_database() -> None:
+    """The types SQLite is relaxed about and Postgres is not.
+
+    SQLite stores what you hand it and barely inspects the declared type;
+    Postgres enforces one. So a value that goes in and comes back unchanged on
+    a developer's machine is not evidence that it will in production, and the
+    classes that differ are well known: a JSON column, a naive datetime, a
+    boolean, an enum, a float.
+
+    This writes one of each through the models and reads it back through a
+    fresh session — fresh so the answer comes from the database rather than
+    from the identity map, which would happily hand back the Python object
+    that was just put in and prove nothing.
+
+    Nothing here is a fix; it is the assertion that no fix is needed, made on
+    whichever database the suite was pointed at.
+    """
+    from app.models import ReturnRequest, ReturnStatus, Review, ReviewStatus
+
+    with Session(engine) as session:
+        # An existing order to hang a return on, so the foreign keys are real.
+        item = session.exec(select(OrderItem).order_by(col(OrderItem.id))).first()
+        assert item is not None, "the seed writes orders"
+        # Plain integers, read out while the session is still open: the ORM
+        # object goes stale the moment the block closes.
+        product_id, order_id, item_id = item.product_id, item.order_id, item.id
+        user_id = session.exec(select(User.id).order_by(col(User.id))).first()
+
+        stamp = utcnow().replace(microsecond=123456)
+        review = Review(
+            product_id=product_id,
+            user_id=user_id,
+            rating=4,
+            text="Turlar tekshiruvi",
+            # JSON: a list of strings, non-ASCII among them, and an empty list
+            # in the column beside it — `[]` and NULL are different values and
+            # a driver that confused them would be found here.
+            tags=["сифатли", "tez", "o'lchamiga mos"],
+            photos=[],
+            status=ReviewStatus.PUBLISHED,
+            created_at=stamp,
+        )
+        request = ReturnRequest(
+            user_id=user_id,
+            order_id=order_id,
+            order_item_id=item_id,
+            reason="Turlar tekshiruvi",
+            photos=["returns/a.png", "returns/b.png"],
+            status=ReturnStatus.SUBMITTED,
+        )
+        session.add(review)
+        session.add(request)
+        session.commit()
+        review_id, request_id = review.id, request.id
+
+    with Session(engine) as fresh:
+        got = fresh.get(Review, review_id)
+
+        # JSON, both directions and both shapes.
+        assert got.tags == ["сифатли", "tez", "o'lchamiga mos"]
+        assert got.photos == [], "an empty list is a list, not a null"
+        assert fresh.get(ReturnRequest, request_id).photos == [
+            "returns/a.png",
+            "returns/b.png",
+        ]
+
+        # A naive UTC datetime, to the microsecond. Every timestamp in this
+        # codebase comes from `models.utcnow`, which strips the tzinfo, and the
+        # columns are `DateTime` with no timezone — so both databases hold
+        # `timestamp without time zone` and neither is doing a conversion.
+        assert got.created_at.tzinfo is None, "naive on the way out as well as in"
+        assert got.created_at == stamp, "microseconds included"
+
+        # An enum, which is a VARCHAR with a check on SQLite and a real type on
+        # Postgres. Read back as the Python member, not as its name.
+        assert got.status is ReviewStatus.PUBLISHED
+        assert got.rating == 4 and isinstance(got.rating, int)
+
+        # And the enum is usable in a WHERE, which is where a native type
+        # would bite if the value were being sent as the wrong thing.
+        found = fresh.exec(
+            select(Review).where(
+                Review.id == review_id,
+                col(Review.status).in_([ReviewStatus.PUBLISHED]),
+                Review.created_at <= utcnow(),
+            )
+        ).first()
+        assert found is not None, "enum in an IN, datetime in a comparison"
+
+        # A float column, on a row the seed wrote.
+        product = fresh.get(Product, product_id)
+        assert isinstance(product.rating, float)
+
+        # Boolean, and the `.is_(True)` form every listing uses.
+        assert isinstance(product.in_stock, bool)
+        assert fresh.exec(
+            select(func.count()).select_from(Product).where(Product.in_stock.is_(True))
+        ).one() >= 0
+
+    # Tidy up: these rows would otherwise show up in another test's counts.
+    with Session(engine) as session:
+        session.delete(session.get(Review, review_id))
+        session.delete(session.get(ReturnRequest, request_id))
+        session.commit()

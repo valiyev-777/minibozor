@@ -15,7 +15,7 @@ import sys
 
 from sqlmodel import Session, select
 
-from app.db import engine, init_db
+from app.db import engine, require_current_schema
 from app.models import Seller, User, UserRole
 
 
@@ -31,7 +31,11 @@ def show(session: Session) -> None:
 
 
 def main() -> None:
-    init_db()
+    # Refuses on a database the models have moved past, rather than creating
+    # tables to make itself work. Granting somebody the admin role against a
+    # stale `users` table is how you end up with an account nobody can sign
+    # in as.
+    require_current_schema()
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     seller_name: str | None = None
     for flag in sys.argv[1:]:

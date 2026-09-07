@@ -11,6 +11,19 @@ order lines that were written before any of it existed.
 
 Safe to run twice: every step checks first, and ``app.offers.mirror_catalogue``
 leaves a product that already has an offer alone.
+
+Superseded by the migration history, for the schema half of what it does.
+Every column and table below is in ``alembic/versions/0001_baseline.py``, so a
+database at ``head`` already has them and the ALTER step here finds nothing to
+do. It is kept because the *data* half is not in any migration and could not
+be: which seller each existing product belonged to was inferred
+from a column that no longer exists.
+
+Creating tables is no longer its job — it used to call
+``SQLModel.metadata.create_all`` first — so on a database older than the
+baseline, run the migration before this:
+
+    .venv/bin/alembic upgrade head
 """
 
 from __future__ import annotations
@@ -20,7 +33,7 @@ import sys
 from sqlmodel import Session, col, select
 
 from app import offers as of
-from app.db import engine, init_db
+from app.db import engine
 from app.models import CartItem, Offer, OfferVariant, Order, OrderItem, Seller
 
 NEW_COLUMNS = [
@@ -93,9 +106,6 @@ def backfill_cart_lines(session: Session, *, apply: bool) -> int:
 
 def main() -> None:
     apply = "--apply" in sys.argv
-    if apply:
-        # Creates the three new tables; leaves every existing one alone.
-        init_db()
 
     with Session(engine) as session:
         columns = add_columns(session, apply=apply)
