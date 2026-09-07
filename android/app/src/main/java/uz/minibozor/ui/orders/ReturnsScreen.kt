@@ -22,12 +22,15 @@ import uz.minibozor.R
 import uz.minibozor.core.design.MbText
 import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbCard
+import uz.minibozor.core.design.component.MbDivider
 import uz.minibozor.core.design.component.MbEmptyState
 import uz.minibozor.core.design.component.MbErrorState
 import uz.minibozor.core.design.component.MbLoading
 import uz.minibozor.core.design.component.MbScreen
 import uz.minibozor.core.design.component.MbStatusPill
 import uz.minibozor.core.design.component.MbTopBar
+import uz.minibozor.core.design.component.MbTotalRow
+import uz.minibozor.core.util.sum
 import uz.minibozor.core.util.toLocalDateTimeOrNull
 import uz.minibozor.core.util.uzDateTime
 
@@ -99,6 +102,26 @@ fun ReturnsScreen(
                                 request.comment,
                                 MbTheme.type.caption,
                                 MbTheme.colors.textSecondary,
+                            )
+                        }
+                        // What actually came back, once something did.
+                        //
+                        // A status pill saying "Qaytarildi" is the shop telling
+                        // the customer it is done without telling them what was
+                        // done: a return of one item out of four is not the
+                        // whole order's money, and the sum is the fact they are
+                        // waiting to hear. Nought until a refund is made, and
+                        // nought forever on a request that was refused — so the
+                        // line appears only when there is a number to print.
+                        if (request.refundAmount > 0) {
+                            Spacer(Modifier.height(10.dp))
+                            MbDivider()
+                            Spacer(Modifier.height(6.dp))
+                            MbTotalRow(
+                                stringResource(R.string.qaytarilgan_summa),
+                                request.refundAmount.sum(),
+                                strong = true,
+                                valueColor = MbTheme.colors.success,
                             )
                         }
                         Spacer(Modifier.height(8.dp))

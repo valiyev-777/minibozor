@@ -344,3 +344,7 @@
 "rating_words.3" = "Good";
 "rating_words.4" = "Very good";
 "rating_words.5" = "Excellent";
+/* Sellers on a product page, and the sum a return paid back. */
+"boshqa_sotuvchilar" = "Other sellers";
+"kartadagi_narx" = "Shown price";
+"qaytarilgan_summa" = "Refunded";

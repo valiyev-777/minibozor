@@ -166,6 +166,34 @@ struct SpecDTO: Decodable, Hashable {
     let value: String
 }
 
+// MARK: - Offers
+
+struct SellerDTO: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+}
+
+/// One seller's price for a product.
+///
+/// The card carries one price because one offer wins it; this is the list
+/// behind that number. Several sellers put the same thing on the same card, so
+/// "who am I buying from" is a question the page has to be able to answer, and
+/// until this was fetched it could not.
+struct OfferDTO: Decodable, Identifiable, Hashable {
+    let id: Int
+    let seller: SellerDTO
+    let price: Int
+    let oldPrice: Int?
+    let discountPercent: Int?
+    let stockLeft: Int
+    let inStock: Bool
+    /// Whose price the card is showing. Exactly one offer has it, or none.
+    let isWinner: Bool
+
+    /// Nothing to sell, whichever way the server says so.
+    var gone: Bool { !inStock || stockLeft <= 0 }
+}
+
 struct ProductCardDTO: Decodable, Identifiable, Hashable {
     let id: Int
     let title: String
@@ -580,7 +608,17 @@ struct ReturnDTO: Decodable, Identifiable {
     let reason: String
     let comment: String
     let status: String
+    /// What was actually paid back, once somebody paid it back.
+    ///
+    /// Nought until then, and nought on a request that was refused — so the
+    /// screen prints it only when there is a sum to print. Optional rather than
+    /// defaulted: a synthesised `Decodable` only falls back for optionals, so
+    /// this is what keeps a server that predates the field from failing the
+    /// whole list.
+    let refundAmount: Int?
     let createdAt: String
+
+    var refunded: Int { refundAmount ?? 0 }
 }
 
 // MARK: - Misc

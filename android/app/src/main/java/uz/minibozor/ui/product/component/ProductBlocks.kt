@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
@@ -35,9 +36,12 @@ import uz.minibozor.core.design.component.MbStars
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.design.mbClickable
 import uz.minibozor.core.design.mbTap
+import uz.minibozor.core.design.strikePrice
 import uz.minibozor.core.util.grouped
 import uz.minibozor.core.util.ratingText
+import uz.minibozor.core.util.sum
 import uz.minibozor.core.util.toColor
+import uz.minibozor.data.remote.dto.OfferDto
 import uz.minibozor.data.remote.dto.VariantDto
 
 /**
@@ -333,6 +337,123 @@ fun SizePicker(
                 stringResource(R.string.n_dona_qoldi, left),
                 MbTheme.type.caption,
                 if (left <= LowStock) MbTheme.colors.danger else MbTheme.colors.textTertiary,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/**
+ * Every seller offering this product, cheapest first.
+ *
+ * The one price at the top of the page belongs to one seller, and on a
+ * marketplace that is a fact the page has been keeping to itself: the same
+ * thing sits on the same card at four prices and the customer saw one of them
+ * with no way to know there were others, or who any of them were. This is the
+ * list behind that number — a name, a price and what is left of it per row,
+ * with the row the card is quoting marked so the two numbers are seen to be the
+ * same number rather than a contradiction.
+ *
+ * A sold-out seller stays in the list, greyed and struck: a cheaper price that
+ * has run out is the reason the price above is the one it is, and hiding it
+ * turns an explanation into a mystery. A seller who has withdrawn is not here
+ * at all — the server does not send them.
+ *
+ * Read-only. Choosing a seller is a thing the API has no way to say yet, so the
+ * rows do not pretend to be buttons.
+ */
+@Composable
+fun OfferRow(offer: OfferDto, modifier: Modifier = Modifier) {
+    val gone = !offer.inStock || offer.stockLeft <= 0
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                MbText(
+                    offer.seller.name,
+                    MbTheme.type.body.copy(fontWeight = FontWeight.Bold),
+                    if (gone) MbTheme.colors.textTertiary else MbTheme.colors.ink,
+                    maxLines = 1,
+                )
+                // Which of these rows the page above is quoting. Only ever one,
+                // and only while it still has something to sell.
+                if (offer.isWinner && !gone) {
+                    MbStatusPill(
+                        stringResource(R.string.kartadagi_narx),
+                        MbTheme.colors.successBg,
+                        MbTheme.colors.success,
+                    )
+                }
+            }
+            Spacer(Modifier.height(3.dp))
+            MbText(
+                if (gone) {
+                    stringResource(R.string.tugagan)
+                } else {
+                    stringResource(R.string.n_dona_qoldi, offer.stockLeft)
+                },
+                MbTheme.type.caption,
+                when {
+                    gone -> MbTheme.colors.textTertiary
+                    offer.stockLeft <= LowStock -> MbTheme.colors.danger
+                    else -> MbTheme.colors.textSecondary
+                },
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            MbText(
+                offer.price.sum(),
+                MbTheme.type.priceSmall,
+                if (gone) MbTheme.colors.textTertiary else MbTheme.colors.ink,
+                maxLines = 1,
+            )
+            val was = offer.oldPrice
+            if (was != null && was > offer.price) {
+                Spacer(Modifier.height(3.dp))
+                MbText(
+                    was.grouped(),
+                    MbTheme.type.strikePrice.copy(textDecoration = TextDecoration.LineThrough),
+                    MbTheme.colors.textQuaternary,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Who is selling the thing at the price above, on the panel itself.
+ *
+ * On a marketplace the seller is part of what is being bought, and until now
+ * the page carried the name in a delivery row folded behind "Batafsil" three
+ * sections down. The count beside it is the point of the section further down:
+ * "and three others are selling it" is a reason to keep scrolling, and one
+ * seller says nothing at all.
+ */
+@Composable
+fun SellerLine(name: String, offersCount: Int, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        MbIcon("basket", size = 14.dp, tint = MbTheme.colors.icon)
+        MbText(name, MbTheme.type.label, MbTheme.colors.inkMuted, maxLines = 1)
+        if (offersCount > 1) {
+            MbText("·", MbTheme.type.caption, MbTheme.colors.hairlineStrong)
+            MbText(
+                pluralStringResource(R.plurals.n_sotuvchi, offersCount, offersCount),
+                MbTheme.type.caption,
+                MbTheme.colors.textSecondary,
                 maxLines = 1,
             )
         }

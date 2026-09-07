@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.minibozor.core.util.Outcome
 import uz.minibozor.data.remote.dto.CartItemDto
+import uz.minibozor.data.remote.dto.OfferDto
 import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.ProductDto
 import uz.minibozor.data.remote.dto.ReviewDto
@@ -31,6 +32,14 @@ data class ProductState(
     val summary: ReviewSummaryDto? = null,
     val topReviews: List<ReviewDto> = emptyList(),
     val similar: List<ProductCardDto> = emptyList(),
+    /**
+     * Every seller offering this product, cheapest first.
+     *
+     * Empty while it is being fetched and on a product only the house sells, so
+     * the page shows the section when there is more than one of them and says
+     * nothing otherwise.
+     */
+    val offers: List<OfferDto> = emptyList(),
     val selectedSizeId: Int? = null,
     val selectedColorId: Int? = null,
     val adding: Boolean = false,
@@ -91,6 +100,12 @@ class ProductViewModel @Inject constructor(
             }
             (catalog.similar(id) as? Outcome.Success)?.let { r ->
                 _state.update { it.copy(similar = r.data) }
+            }
+            // Alongside the rest of the page rather than gating it: a product
+            // page whose price and photographs have arrived should draw, and
+            // the list of sellers is an addition to it, not a precondition.
+            (catalog.offers(id) as? Outcome.Success)?.let { r ->
+                _state.update { it.copy(offers = r.data) }
             }
         }
     }
