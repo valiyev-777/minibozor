@@ -161,7 +161,7 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
         if p.brand_id:
             brand_counts[p.brand_id] = brand_counts.get(p.brand_id, 0) + 1
     brands = [
-        s.BrandOut(id=b.id, slug=b.slug, name=b.name, product_count=brand_counts[b.id])
+        sv.brand_out(session, b, product_count=brand_counts[b.id])
         for b in session.exec(select(Brand).where(col(Brand.id).in_(brand_counts or {-1}))).all()
     ]
     brands.sort(key=lambda b: -b.product_count)
@@ -305,7 +305,7 @@ def product_reviews(
 @router.get("/brands", response_model=list[s.BrandOut])
 def list_brands(session: SessionDep) -> list[s.BrandOut]:
     rows = session.exec(select(Brand).order_by(col(Brand.name))).all()
-    return [s.BrandOut(id=b.id, slug=b.slug, name=b.name) for b in rows]
+    return [sv.brand_out(session, b) for b in rows]
 
 
 # --------------------------------------------------------------------------- helpers

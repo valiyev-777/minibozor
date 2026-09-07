@@ -4288,3 +4288,605 @@ def test_a_promo_code_can_be_written_and_switched_off(
     assert _audit_rows("promo.create", promo_id)
     off = _audit_rows("promo.active", promo_id)
     assert (off[0].old_value, off[0].new_value) == ("true", "false")
+
+
+# --------------------------------------------------------- who works here
+
+
+def _find_user(client: TestClient, admin: dict[str, str], phone: str) -> dict:
+    """The account behind a phone number, the way a panel finds it."""
+    found = client.get(f"{API}/staff/users", params={"q": phone}, headers=admin)
+    assert found.status_code == 200, found.text
+    rows = [row for row in found.json()["items"] if row["phone"] == phone]
+    assert rows, f"{phone} not found by search"
+    return rows[0]
+
+
+def test_an_admin_appoints_an_operator_and_nobody_else_can(
+    client: TestClient,
+    admin: dict[str, str],
+    operator: dict[str, str],
+    auth: dict[str, str],
+    sign_in: Callable[[str], dict[str, str]],
+) -> None:
+    """Until now a role came from a shell script, so a panel could list the
+    operators and had no way to appoint one."""
+    phone = "+998900040001"
+    theirs = sign_in(phone)                      # an ordinary customer, for now
+    account = _find_user(client, admin, phone)
+    assert account["role"] == "customer"
+
+    # Searching by the digits alone is enough — an admin has the number in
+    # front of them, not a directory.
+    assert _find_user(client, admin, phone)["id"] == account["id"]
+    by_tail = client.get(f"{API}/staff/users", params={"q": "900040001"}, headers=admin)
+    assert account["id"] in [row["id"] for row in by_tail.json()["items"]]
+
+    body = {"role": "operator", "note": "yangi smena"}
+    door = f"{API}/staff/users/{account['id']}/role"
+    assert client.patch(door, json=body).status_code == 401
+    assert client.patch(door, json=body, headers=auth).status_code == 403
+    assert client.patch(door, json=body, headers=theirs).status_code == 403
+    # Not even the role that runs the shop day to day: this is how somebody
+    # would promote themselves.
+    assert client.patch(door, json=body, headers=operator).status_code == 403
+
+    done = client.patch(door, json=body, headers=admin)
+    assert done.status_code == 200, done.text
+    assert done.json()["role"] == "operator"
+
+    # And the role is the whole of the difference — the same token now opens
+    # the operator's door.
+    assert client.get(f"{API}/staff/returns", headers=theirs).status_code == 200
+
+    # A privilege change is the kind of thing asked about months later.
+    rows = _audit_rows("user.role", account["id"])
+    assert rows[-1].action == "user.role"
+    assert (rows[-1].old_value, rows[-1].new_value) == ("customer", "operator")
+    assert rows[-1].actor_role is UserRole.ADMIN
+    assert rows[-1].note == "yangi smena"
+
+    # Saving a form that changed nothing is not an error, and does not add a
+    # row to a log that is meant to be a list of changes.
+    again = client.patch(door, json={"role": "operator"}, headers=admin)
+    assert again.status_code == 200
+    assert len(_audit_rows("user.role", account["id"])) == len(rows)
+
+    # Standing them down again is the same door.
+    back = client.patch(door, json={"role": "customer"}, headers=admin)
+    assert back.status_code == 200
+    assert back.json()["role"] == "customer"
+    assert client.get(f"{API}/staff/returns", headers=theirs).status_code == 403
+
+
+def test_the_last_admin_cannot_be_stood_down(
+    client: TestClient,
+    admin: dict[str, str],
+    sign_in: Callable[[str], dict[str, str]],
+) -> None:
+    """The one privilege change that cannot be undone through the door it was
+    made in: demote the last admin and there is nobody left who can hand the
+    role back."""
+    me = client.get(f"{API}/staff/me", headers=admin).json()
+    door = f"{API}/staff/users/{me['id']}/role"
+
+    refused = client.patch(door, json={"role": "operator"}, headers=admin)
+    assert refused.status_code == 409, refused.text
+    assert "admin" in refused.json()["detail"].lower()
+    assert client.get(f"{API}/staff/me", headers=admin).json()["role"] == "admin"
+
+    # With a second admin in place the same request is ordinary.
+    phone = "+998900040002"
+    theirs = sign_in(phone)
+    second = _find_user(client, admin, phone)
+    assert client.patch(
+        f"{API}/staff/users/{second['id']}/role", json={"role": "admin"}, headers=admin
+    ).status_code == 200
+
+    stood_down = client.patch(door, json={"role": "operator"}, headers=theirs)
+    assert stood_down.status_code == 200, stood_down.text
+    assert stood_down.json()["role"] == "operator"
+
+    # Put back by the admin who is left, which is the point of the rule.
+    assert client.patch(
+        door, json={"role": "admin"}, headers=theirs
+    ).status_code == 200
+
+    # And now the second one is the one who cannot go — whichever of them is
+    # last is the one the rule protects.
+    client.patch(
+        f"{API}/staff/users/{second['id']}/role", json={"role": "customer"},
+        headers=admin,
+    )
+    assert client.patch(
+        door, json={"role": "operator"}, headers=admin
+    ).status_code == 409
+
+
+def test_a_role_a_seller_link_hands_out_obeys_the_same_rule(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """Linking an account to a seller sets its role, so it is a second door on
+    to the same rule and has to be guarded at the same place."""
+    me = client.get(f"{API}/staff/me", headers=admin).json()
+    seller = client.post(
+        f"{API}/staff/sellers",
+        json={"name": "Yakka Admin Savdo", "phone": "+998781119988"},
+        headers=admin,
+    ).json()
+
+    # The last admin filling in a form about somebody else's shop would
+    # otherwise demote themselves out of the panel.
+    refused = client.patch(
+        f"{API}/staff/sellers/{seller['id']}",
+        json={"user_phone": me["phone"]},
+        headers=admin,
+    )
+    assert refused.status_code == 409, refused.text
+    assert client.get(f"{API}/staff/me", headers=admin).json()["role"] == "admin"
+
+
+# --------------------------------------------------------- a card in three languages
+
+
+def _ru(headers: dict[str, str] | None = None) -> dict[str, str]:
+    return {**(headers or {}), "Accept-Language": "ru"}
+
+
+def _en(headers: dict[str, str] | None = None) -> dict[str, str]:
+    return {**(headers or {}), "Accept-Language": "en"}
+
+
+def _trilingual_card(client: TestClient, admin: dict[str, str]) -> dict:
+    """A card written the way the panel writes one: all three languages, in the
+    same request that creates the row."""
+    category = client.post(
+        f"{API}/staff/catalog/categories",
+        json={
+            "slug": "sinov-choynak",
+            "name": "Choynaklar",
+            "subtitle": "Choy uchun",
+            "translations": {
+                "ru": {"name": "Чайники", "subtitle": "Для чая"},
+                "en": {"name": "Teapots", "subtitle": "For tea"},
+            },
+        },
+        headers=admin,
+    )
+    assert category.status_code == 201, category.text
+
+    brand = client.post(
+        f"{API}/staff/catalog/brands",
+        json={
+            "slug": "sinov-hunarmand",
+            "name": "Hunarmand",
+            "translations": {"ru": {"name": "Ремесленник"}, "en": {"name": "Artisan"}},
+        },
+        headers=admin,
+    )
+    assert brand.status_code == 201, brand.text
+
+    created = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "SINOV-I18N-1",
+            "title": "Choynak",
+            "subtitle": "Sopol choynak",
+            "description": "Qo'lda yasalgan sopol choynak.",
+            "badge": "Yangi",
+            "warranty": "Kafolat 1 yil",
+            "category_slug": "sinov-choynak",
+            "brand_slug": "sinov-hunarmand",
+            "price": 120_000,
+            "translations": {
+                "ru": {
+                    "title": "Чайник",
+                    "subtitle": "Керамический чайник",
+                    "description": "Керамический чайник ручной работы.",
+                    "badge": "Новинка",
+                    "warranty": "Гарантия 1 год",
+                },
+                "en": {
+                    "title": "Teapot",
+                    "subtitle": "Ceramic teapot",
+                    "description": "A hand-thrown ceramic teapot.",
+                    "badge": "New",
+                    "warranty": "1-year warranty",
+                },
+            },
+        },
+        headers=admin,
+    )
+    assert created.status_code == 201, created.text
+    product = created.json()
+
+    variant = client.post(
+        f"{API}/staff/catalog/products/{product['id']}/variants",
+        json={
+            "kind": "color",
+            "label": "Ko'k",
+            "value": "#2E5AAC",
+            "translations": {"ru": {"label": "Синий"}, "en": {"label": "Blue"}},
+        },
+        headers=admin,
+    )
+    assert variant.status_code == 201, variant.text
+
+    specs = client.put(
+        f"{API}/staff/catalog/products/{product['id']}/specs",
+        json={
+            "specs": [
+                {
+                    "key": "Material",
+                    "value": "Sopol",
+                    "translations": {
+                        "ru": {"key": "Материал", "value": "Керамика"},
+                        "en": {"key": "Material", "value": "Ceramic"},
+                    },
+                }
+            ]
+        },
+        headers=admin,
+    )
+    assert specs.status_code == 200, specs.text
+
+    published = client.post(
+        f"{API}/staff/catalog/products/{product['id']}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+    assert published.status_code == 200, published.text
+    return product
+
+
+def test_a_card_written_in_three_languages_answers_in_all_three(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """The table has always been read. Until now nothing could write to it, so
+    every card added after the seed made the catalogue a little more Uzbek than
+    the app claims it is."""
+    product = _trilingual_card(client, admin)
+    url = f"{API}/products/{product['id']}"
+
+    uz = client.get(url).json()
+    assert (uz["title"], uz["subtitle"]) == ("Choynak", "Sopol choynak")
+    assert uz["description"].startswith("Qo'lda")
+    assert (uz["badge"], uz["warranty"]) == ("Yangi", "Kafolat 1 yil")
+    assert uz["category"]["name"] == "Choynaklar"
+    assert uz["brand"]["name"] == "Hunarmand"
+    assert uz["variants"][0]["label"] == "Ko'k"
+    assert (uz["specs"][0]["key"], uz["specs"][0]["value"]) == ("Material", "Sopol")
+
+    ru = client.get(url, headers=_ru()).json()
+    assert (ru["title"], ru["subtitle"]) == ("Чайник", "Керамический чайник")
+    assert ru["description"] == "Керамический чайник ручной работы."
+    assert (ru["badge"], ru["warranty"]) == ("Новинка", "Гарантия 1 год")
+    assert ru["category"]["name"] == "Чайники"
+    assert ru["brand"]["name"] == "Ремесленник"
+    assert ru["variants"][0]["label"] == "Синий"
+    assert (ru["specs"][0]["key"], ru["specs"][0]["value"]) == ("Материал", "Керамика")
+
+    en = client.get(url, headers=_en()).json()
+    assert (en["title"], en["brand"]["name"]) == ("Teapot", "Artisan")
+    assert en["specs"][0]["value"] == "Ceramic"
+
+    # The value the row itself holds is untouched: the panel edits Uzbek, and
+    # sees Uzbek.
+    card = client.get(
+        f"{API}/staff/catalog/products/{product['id']}", headers=_ru(admin)
+    ).json()
+    assert card["title"] == "Choynak"
+
+    # A listing carries the translation too, not only the product page.
+    # Nothing has been booked in against this card, so the grid is asked for
+    # what it normally hides.
+    listing = client.get(
+        f"{API}/products",
+        params={"category": "sinov-choynak", "show_sold_out": True},
+        headers=_ru(),
+    ).json()
+    assert [row["title"] for row in listing["items"]] == ["Чайник"]
+
+
+def test_a_card_with_no_translation_is_uzbek_in_every_language(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """The fallback is what makes a partly translated catalogue usable: a card
+    written by somebody in a hurry degrades to Uzbek, not to blanks."""
+    listing = client.get(f"{API}/categories").json()
+    created = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "SINOV-I18N-2",
+            "title": "Tarjimasiz kartochka",
+            "subtitle": "Faqat o'zbekcha",
+            "category_slug": listing[0]["slug"],
+            "price": 90_000,
+        },
+        headers=admin,
+    )
+    assert created.status_code == 201, created.text
+    product = created.json()
+    client.post(
+        f"{API}/staff/catalog/products/{product['id']}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+
+    for headers in ({}, _ru(), _en()):
+        body = client.get(f"{API}/products/{product['id']}", headers=headers).json()
+        assert body["title"] == "Tarjimasiz kartochka"
+        assert body["subtitle"] == "Faqat o'zbekcha"
+
+
+def test_a_translation_can_be_read_back_and_taken_away(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """The catalogue endpoints answer in one language and fall back silently,
+    which is right for a shopper and no use to an editor trying to see what is
+    still missing."""
+    listing = client.get(f"{API}/categories").json()
+    product = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "SINOV-I18N-3",
+            "title": "Piyola",
+            "category_slug": listing[0]["slug"],
+            "price": 30_000,
+            "translations": {"ru": {"title": "Пиала"}},
+        },
+        headers=admin,
+    ).json()
+    client.post(
+        f"{API}/staff/catalog/products/{product['id']}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+    door = f"{API}/staff/catalog/translations/product/{product['id']}"
+
+    held = client.get(door, headers=admin)
+    assert held.status_code == 200, held.text
+    assert held.json()["uz"]["title"] == "Piyola"
+    assert held.json()["translations"]["ru"]["title"] == "Пиала"
+    assert "en" not in held.json()["translations"]
+
+    # A field left out of the payload is left alone; the English arriving
+    # later does not wipe the Russian that was already there.
+    client.patch(
+        f"{API}/staff/catalog/products/{product['id']}",
+        json={"translations": {"en": {"title": "Tea bowl"}}},
+        headers=admin,
+    )
+    assert client.get(door, headers=admin).json()["translations"] == {
+        "ru": {"title": "Пиала"},
+        "en": {"title": "Tea bowl"},
+    }
+
+    # Blank is not the same as absent: it takes the row away, and the card
+    # falls back to its Uzbek again.
+    client.patch(
+        f"{API}/staff/catalog/products/{product['id']}",
+        json={"translations": {"ru": {"title": ""}}},
+        headers=admin,
+    )
+    assert "ru" not in client.get(door, headers=admin).json()["translations"]
+    assert client.get(
+        f"{API}/products/{product['id']}", headers=_ru()
+    ).json()["title"] == "Piyola"
+
+    # A field the shape does not have is a bug in the caller, not a silent
+    # no-op that shows up months later as a card nobody translated.
+    assert client.patch(
+        f"{API}/staff/catalog/products/{product['id']}",
+        json={"translations": {"ru": {"nomi": "Пиала"}}},
+        headers=admin,
+    ).status_code == 422
+    assert client.patch(
+        f"{API}/staff/catalog/products/{product['id']}",
+        json={"translations": {"de": {"title": "Teeschale"}}},
+        headers=admin,
+    ).status_code == 422
+    # Uzbek is the row itself, and is not written here.
+    assert client.get(door).status_code == 401
+
+
+def test_a_replaced_spec_table_does_not_inherit_the_old_rows_words(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """SQLite hands a deleted row's id straight back out, so a spec table
+    replaced in place would arrive in Russian describing something else."""
+    listing = client.get(f"{API}/categories").json()
+    product = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "SINOV-I18N-4",
+            "title": "Likobcha",
+            "category_slug": listing[0]["slug"],
+            "price": 20_000,
+        },
+        headers=admin,
+    ).json()
+    client.post(
+        f"{API}/staff/catalog/products/{product['id']}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+    specs_url = f"{API}/staff/catalog/products/{product['id']}/specs"
+
+    client.put(
+        specs_url,
+        json={
+            "specs": [
+                {
+                    "key": "Rang",
+                    "value": "Oq",
+                    "translations": {"ru": {"key": "Цвет", "value": "Белый"}},
+                }
+            ]
+        },
+        headers=admin,
+    )
+    client.put(
+        specs_url,
+        json={"specs": [{"key": "Og'irlik", "value": "300 g"}]},
+        headers=admin,
+    )
+
+    ru = client.get(f"{API}/products/{product['id']}", headers=_ru()).json()
+    assert [(s["key"], s["value"]) for s in ru["specs"]] == [("Og'irlik", "300 g")]
+
+
+# --------------------------------------------------------- photographs
+
+
+def _photograph(width: int, height: int, fmt: str = "JPEG") -> bytes:
+    """A picture of the size a phone actually takes one."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    image = Image.new("RGB", (width, height))
+    for x in range(0, width, 7):
+        for y in range(0, height, 11):
+            image.putpixel((x, y), ((x * 3) % 256, (y * 5) % 256, (x + y) % 256))
+    buffer = BytesIO()
+    image.save(buffer, fmt, quality=95)
+    return buffer.getvalue()
+
+
+def test_a_photograph_is_re_encoded_shrunk_and_renamed(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """The catalogue's pictures are 169–641 px. What arrives from a phone is
+    four megabytes and four thousand pixels across, under a name of its
+    own."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.images import MEDIA_DIR
+
+    original = _photograph(4000, 3000)
+    sent = client.post(
+        f"{API}/staff/media",
+        files={"file": ("IMG_20260907_113045.jpg", original, "image/jpeg")},
+        headers=admin,
+    )
+    assert sent.status_code == 201, sent.text
+    body = sent.json()
+
+    # Shrunk on its long side, and the shape kept.
+    assert (body["width"], body["height"]) == (1600, 1200)
+    assert body["bytes"] < len(original)
+
+    # Named by us. Nothing of what the uploader called it survives.
+    assert body["media_url"].startswith("uploads/")
+    assert body["media_url"].endswith(".webp")
+    assert "IMG_20260907" not in body["media_url"]
+
+    # Written where the existing StaticFiles mount already serves, and in the
+    # format we chose rather than the one that was sent.
+    on_disk = MEDIA_DIR / body["media_url"]
+    assert on_disk.is_file()
+    with Image.open(BytesIO(on_disk.read_bytes())) as written:
+        assert written.format == "WEBP"
+        assert written.size == (1600, 1200)
+    assert client.get(f"/media/{body['media_url']}").status_code == 200
+
+    # And the path is the shape the rest of the catalogue already stores, so
+    # it goes straight back as a product image.
+    listing = client.get(f"{API}/categories").json()
+    product = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "SINOV-MEDIA-1",
+            "title": "Suratli kartochka",
+            "category_slug": listing[0]["slug"],
+            "price": 55_000,
+        },
+        headers=admin,
+    ).json()
+    attached = client.post(
+        f"{API}/staff/catalog/products/{product['id']}/images",
+        json={"url": body["media_url"]},
+        headers=admin,
+    )
+    assert attached.status_code == 201, attached.text
+    assert attached.json() == [body["media_url"]]
+
+    # A picture already inside the box is re-encoded but never enlarged.
+    small = client.post(
+        f"{API}/staff/media",
+        files={"file": ("swatch.png", _photograph(640, 640, "PNG"), "image/png")},
+        headers=admin,
+    ).json()
+    assert (small["width"], small["height"]) == (640, 640)
+
+
+def test_a_file_that_is_not_an_image_is_refused_however_it_is_named(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """The name, the extension and the declared type are all the uploader's to
+    write. The bytes are the only honest part of the request."""
+    refused = client.post(
+        f"{API}/staff/media",
+        files={"file": ("photo.jpg", b"#!/bin/sh\necho not a picture\n", "image/jpeg")},
+        headers=admin,
+    )
+    assert refused.status_code == 415, refused.text
+    assert refused.json()["detail"]
+
+    # Nor does a real image header make the rest of the file an image.
+    truncated = _photograph(320, 240)[:40]
+    assert client.post(
+        f"{API}/staff/media",
+        files={"file": ("half.jpg", truncated, "image/jpeg")},
+        headers=admin,
+    ).status_code == 415
+
+    assert client.post(
+        f"{API}/staff/media",
+        files={"file": ("empty.jpg", b"", "image/jpeg")},
+        headers=admin,
+    ).status_code == 400
+
+
+def test_a_file_over_the_limit_is_refused_before_it_is_read(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    from app.images import MAX_BYTES
+
+    too_big = b"\xff\xd8\xff\xe0" + b"\x00" * (MAX_BYTES + 1024)
+    refused = client.post(
+        f"{API}/staff/media",
+        files={"file": ("huge.jpg", too_big, "image/jpeg")},
+        headers=admin,
+    )
+    assert refused.status_code == 413, refused.text
+    assert "8" in refused.json()["detail"], "the limit is named, not just refused"
+
+
+def test_only_the_people_who_write_cards_may_upload_a_picture(
+    client: TestClient,
+    admin: dict[str, str],
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A seller photographs the goods they propose, so uploading is theirs as
+    well as the admin's — and nobody else's."""
+    seller = staff(UserRole.SELLER, "+998900040011")
+    picture = _photograph(200, 200)
+
+    def send(headers: dict[str, str] | None) -> int:
+        return client.post(
+            f"{API}/staff/media",
+            files={"file": ("a.jpg", picture, "image/jpeg")},
+            headers=headers or {},
+        ).status_code
+
+    assert send(None) == 401
+    assert send(auth) == 403
+    assert send(operator) == 403
+    assert send(seller) == 201
+    assert send(admin) == 201

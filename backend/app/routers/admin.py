@@ -18,6 +18,13 @@ two names. What a seller can do is *propose* a card, which lands in moderation.
 to an offer, its stock to the movement ledger, and its status to a decision
 somebody made with a reason attached. So none of them is in the edit shape,
 and each has its own door.
+
+**A card is written in three languages or it is written badly.** The apps ask
+for Uzbek, Russian or English; a row carries its Uzbek and the ``translation``
+table carries the other two. Every write here takes them together, because a
+translation asked for as a second step is a translation nobody does — and
+every delete takes them with it, because SQLite hands a deleted row's id back
+out again. See ``app.i18n`` for both halves.
 """
 
 from __future__ import annotations
@@ -25,7 +32,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import audit, i18n
+from app import audit, i18n, roles
 from app import offers as of
 from app import schemas as s
 from app import services as sv
@@ -190,20 +197,18 @@ def _link_account(
     if taken is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("account_taken"))
 
-    if account.role is not UserRole.SELLER:
-        audit.record(
-            session,
-            actor=actor,
-            action="user.role",
-            entity="user",
-            entity_id=account.id,
-            field="role",
-            old=account.role,
-            new=UserRole.SELLER,
-            note=f"{seller.name} bilan bog'landi",
-        )
-        account.role = UserRole.SELLER
-        session.add(account)
+    # Through ``app.roles`` rather than straight onto the row: this is the
+    # second door a role goes through, and the rule that the last admin cannot
+    # be stood down has to hold at both. An admin who linked their own account
+    # to a seller would otherwise demote themselves out of the panel by
+    # filling in a form about somebody else's shop.
+    roles.assign(
+        session,
+        actor=actor,
+        user=account,
+        role=UserRole.SELLER,
+        note=f"{seller.name} bilan bog'landi",
+    )
 
     seller.user_id = account.id
     session.add(seller)
@@ -352,6 +357,8 @@ def _create_card(
     session.commit()
     session.refresh(product)
 
+    i18n.write(session, "product", product.id, _texts(payload.translations))
+
     audit.record(
         session,
         actor=actor,
@@ -392,6 +399,7 @@ def update_product(
         if value is not None:
             setattr(product, field, value)
 
+    i18n.write(session, "product", product.id, _texts(payload.translations))
     session.add(product)
     session.commit()
     session.refresh(product)
@@ -473,6 +481,9 @@ def create_category(
     session.add(row)
     session.commit()
     session.refresh(row)
+    i18n.write(session, "category", row.id, _texts(payload.translations))
+    session.commit()
+    session.refresh(row)
     return sv.category_out(session, row)
 
 
@@ -492,6 +503,7 @@ def update_category(
         value = getattr(payload, field)
         if value is not None:
             setattr(row, field, value)
+    i18n.write(session, "category", row.id, _texts(payload.translations))
     session.add(row)
     session.commit()
     session.refresh(row)
@@ -511,6 +523,7 @@ def delete_category(slug: str, user: AdminUser, session: SessionDep) -> s.Messag
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("category_in_use"))
     if session.exec(select(Category).where(Category.parent_id == row.id)).first():
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("category_in_use"))
+    i18n.forget(session, "category", row.id)
     session.delete(row)
     session.commit()
     return s.Message(message=i18n.label("deleted"))
@@ -531,6 +544,9 @@ def create_brand(
     session.add(row)
     session.commit()
     session.refresh(row)
+    i18n.write(session, "brand", row.id, _texts(payload.translations))
+    session.commit()
+    session.refresh(row)
     return s.BrandOut(id=row.id, slug=row.slug, name=row.name)
 
 
@@ -540,6 +556,7 @@ def update_brand(
 ) -> s.BrandOut:
     row = _brand(session, slug)
     row.name = payload.name
+    i18n.write(session, "brand", row.id, _texts(payload.translations))
     session.add(row)
     session.commit()
     session.refresh(row)
@@ -551,6 +568,7 @@ def delete_brand(slug: str, user: AdminUser, session: SessionDep) -> s.Message:
     row = _brand(session, slug)
     if session.exec(select(Product).where(Product.brand_id == row.id)).first():
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("brand_in_use"))
+    i18n.forget(session, "brand", row.id)
     session.delete(row)
     session.commit()
     return s.Message(message=i18n.label("deleted"))
@@ -628,20 +646,22 @@ def add_variant(
                     status.HTTP_409_CONFLICT, i18n.label("variant_would_move_the_count")
                 )
 
-    session.add(
-        ProductVariant(
-            product_id=product.id,
-            kind=payload.kind,
-            label=payload.label,
-            value=payload.value,
-            image_url=payload.image_url,
-            parent_id=payload.parent_id,
-            sort=payload.sort,
-            # Counted by the offers that carry it, not here.
-            stock_left=None,
-            in_stock=True,
-        )
+    row = ProductVariant(
+        product_id=product.id,
+        kind=payload.kind,
+        label=payload.label,
+        value=payload.value,
+        image_url=payload.image_url,
+        parent_id=payload.parent_id,
+        sort=payload.sort,
+        # Counted by the offers that carry it, not here.
+        stock_left=None,
+        in_stock=True,
     )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    i18n.write(session, "variant", row.id, _texts(payload.translations))
     session.commit()
     of.refresh(session, product.id)
     session.commit()
@@ -685,6 +705,7 @@ def remove_variant(
         select(OfferVariant).where(OfferVariant.variant_id == row.id)
     ).all():
         session.delete(offer_row)
+    i18n.forget(session, "variant", row.id)
     session.delete(row)
     session.commit()
     of.refresh(session, product.id)
@@ -701,16 +722,27 @@ def replace_specs(
     product_id: int, payload: s.SpecsReplaceIn, user: AdminUser, session: SessionDep
 ) -> list[s.SpecOut]:
     product = _product(session, product_id)
+    # The old rows' translations go with them. Their ids come back around —
+    # SQLite reuses them — and a spec table replaced in place would otherwise
+    # inherit the Russian of whatever used to sit in that slot.
     for row in session.exec(
         select(ProductSpec).where(ProductSpec.product_id == product.id)
     ).all():
+        i18n.forget(session, "spec", row.id)
         session.delete(row)
+    session.commit()
+
+    written: list[tuple[ProductSpec, dict]] = []
     for index, spec in enumerate(payload.specs):
-        session.add(
-            ProductSpec(
-                product_id=product.id, key=spec.key, value=spec.value, sort=index
-            )
+        row = ProductSpec(
+            product_id=product.id, key=spec.key, value=spec.value, sort=index
         )
+        session.add(row)
+        written.append((row, _texts(spec.translations)))
+    session.commit()
+    for row, texts in written:
+        session.refresh(row)
+        i18n.write(session, "spec", row.id, texts)
     session.commit()
     return [
         s.SpecOut(key=row.key, value=row.value)
@@ -720,6 +752,76 @@ def replace_specs(
             .order_by(col(ProductSpec.sort))
         ).all()
     ]
+
+
+# --------------------------------------------------------------------------- translations
+
+
+@router.get(
+    "/catalog/translations/{entity}/{entity_id}",
+    response_model=s.TranslationsOut,
+    summary="What Russian and English a row already has",
+)
+def get_translations(
+    entity: str, entity_id: int, user: AdminUser, session: SessionDep
+) -> s.TranslationsOut:
+    """The one read the panel cannot get from the catalogue endpoints.
+
+    Those answer in a single language and fall back to Uzbek without saying
+    so, which is exactly right for a shopper and no use to somebody trying to
+    see what is still missing. This returns the Uzbek on the row beside every
+    translation held for it, so an editor can show three columns and mark the
+    empty cells.
+    """
+    if entity not in i18n.WRITABLE:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("doc_not_found"))
+    source = _source_text(session, entity, entity_id)
+    if source is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("doc_not_found"))
+    return s.TranslationsOut(
+        entity=entity,
+        entity_id=entity_id,
+        uz=source,
+        translations=i18n.stored(session, entity, entity_id),
+    )
+
+
+# What the Uzbek side of each translatable row is called on the row itself.
+# The keys are the fields ``i18n.WRITABLE`` allows, which are in turn the
+# fields the read path passes through ``i18n.t`` — one list, stated three
+# times only because each layer needs it in a different shape.
+_SOURCES: dict[str, type] = {
+    "product": Product,
+    "category": Category,
+    "brand": Brand,
+    "variant": ProductVariant,
+    "spec": ProductSpec,
+}
+
+
+def _source_text(session: SessionDep, entity: str, entity_id: int) -> dict[str, str] | None:
+    row = session.get(_SOURCES[entity], entity_id)
+    if row is None:
+        return None
+    return {
+        field: getattr(row, field) or ""
+        for field in sorted(i18n.WRITABLE[entity])
+    }
+
+
+def _texts(translations: dict) -> dict[str, dict[str, str | None]]:
+    """A ``{lang: TextIn}`` payload as ``i18n.write`` wants it.
+
+    ``exclude_unset`` is what makes the two meanings distinct: a field the
+    caller did not mention is left alone, and a field they sent as ``null`` or
+    blank has its translation removed. A model dumped whole would turn the
+    first into the second and quietly wipe the half of the form that was not
+    on screen.
+    """
+    return {
+        lang: text.model_dump(exclude_unset=True)
+        for lang, text in translations.items()
+    }
 
 
 # --------------------------------------------------------------------------- helpers

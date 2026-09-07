@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import (
     CardStatus,
@@ -45,6 +45,73 @@ class Page(BaseModel, Generic[T]):
 class Message(BaseModel):
     ok: bool = True
     message: str = ""
+
+
+# --------------------------------------------------------------------------- translations
+
+# The apps are trilingual and a new card is written in Uzbek, so every card
+# added without the other two makes the catalogue a little more Uzbek than it
+# says it is. These ride along on the write that creates the row, because a
+# translation asked for as a second step is a translation nobody does.
+#
+# The Uzbek is the row itself — ``Product.title`` — and is not repeated here.
+# What goes in the ``translation`` table is only what differs from it.
+
+Lang = Literal["ru", "en"]
+
+
+class TextIn(BaseModel):
+    """One language's version of a row's words.
+
+    Unknown fields are refused rather than dropped: a payload naming
+    ``name`` where the shape wants ``title`` has a bug in it, and silently
+    saving nothing would hide it until somebody switched the app to Russian.
+
+    A field left out is left alone; a field given as ``null`` or blank has its
+    translation removed, so the row falls back to its Uzbek again.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProductTextIn(TextIn):
+    title: str | None = Field(None, max_length=200)
+    subtitle: str | None = None
+    description: str | None = None
+    badge: str | None = None
+    warranty: str | None = None
+
+
+class CategoryTextIn(TextIn):
+    name: str | None = Field(None, max_length=120)
+    subtitle: str | None = None
+
+
+class BrandTextIn(TextIn):
+    name: str | None = Field(None, max_length=120)
+
+
+class VariantTextIn(TextIn):
+    label: str | None = Field(None, max_length=60)
+
+
+class SpecTextIn(TextIn):
+    key: str | None = Field(None, max_length=80)
+    value: str | None = Field(None, max_length=200)
+
+
+class TranslationsOut(BaseModel):
+    """What is held for one row, in every language at once.
+
+    The read path answers in one language and falls back to Uzbek without
+    saying so, which is right for a shopper and useless to somebody trying to
+    see what is still missing.
+    """
+
+    entity: str
+    entity_id: int
+    uz: dict[str, str]
+    translations: dict[str, dict[str, str]]
 
 
 # --------------------------------------------------------------------------- auth
@@ -975,6 +1042,8 @@ class ProductCreateIn(BaseModel):
     is_original: bool = True
     free_delivery: bool = True
     next_day_delivery: bool = True
+    # The Russian and English for this card, written with it. See TextIn.
+    translations: dict[Lang, ProductTextIn] = Field(default_factory=dict)
 
 
 class ProductUpdateIn(BaseModel):
@@ -994,6 +1063,7 @@ class ProductUpdateIn(BaseModel):
     is_original: bool | None = None
     free_delivery: bool | None = None
     next_day_delivery: bool | None = None
+    translations: dict[Lang, ProductTextIn] = Field(default_factory=dict)
 
 
 class ProductProposeIn(ProductCreateIn):
@@ -1021,6 +1091,7 @@ class CategoryWriteIn(BaseModel):
     parent_slug: str | None = None
     sort: int = 0
     is_quick_link: bool = False
+    translations: dict[Lang, CategoryTextIn] = Field(default_factory=dict)
 
 
 class CategoryUpdateIn(BaseModel):
@@ -1031,11 +1102,13 @@ class CategoryUpdateIn(BaseModel):
     parent_slug: str | None = None
     sort: int | None = None
     is_quick_link: bool | None = None
+    translations: dict[Lang, CategoryTextIn] = Field(default_factory=dict)
 
 
 class BrandWriteIn(BaseModel):
     slug: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9-]+$")
     name: str = Field(min_length=1, max_length=120)
+    translations: dict[Lang, BrandTextIn] = Field(default_factory=dict)
 
 
 class ImageWriteIn(BaseModel):
@@ -1052,11 +1125,13 @@ class VariantWriteIn(BaseModel):
     # has colours — a size that belongs to nothing is a cell of no grid.
     parent_id: int | None = None
     sort: int = 0
+    translations: dict[Lang, VariantTextIn] = Field(default_factory=dict)
 
 
 class SpecWriteIn(BaseModel):
     key: str = Field(min_length=1, max_length=80)
     value: str = Field(min_length=1, max_length=200)
+    translations: dict[Lang, SpecTextIn] = Field(default_factory=dict)
 
 
 class SpecsReplaceIn(BaseModel):
@@ -1241,6 +1316,54 @@ class StaffMeOut(BaseModel):
     phone: str
     full_name: str
     role: UserRole
+
+
+class StaffUserOut(BaseModel):
+    """An account as the person handing out roles sees it.
+
+    Separate from ``UserOut``, which is somebody's own profile and is read by
+    two shipped apps. This one answers a different question — who is this, and
+    what are they allowed to do — and carries nothing an admin has no business
+    reading off a customer's row.
+    """
+
+    id: int
+    phone: str
+    full_name: str
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+
+
+class RoleWriteIn(BaseModel):
+    """Making somebody staff, or standing them down.
+
+    ``note`` is why. It is not required — the audit row records who and when
+    regardless — but it is the field that makes the log worth reading a year
+    later, so the panel offers it.
+    """
+
+    role: UserRole
+    note: str = Field("", max_length=200)
+
+
+class MediaOut(BaseModel):
+    """Where an uploaded picture ended up.
+
+    ``media_url`` is the same shape every other image in the API carries — a
+    path relative to the media root — so it can be handed straight back as the
+    ``url`` of a product image, a category, or a colour swatch, and every app
+    resolves it the way it already resolves the seeded ones.
+
+    The size is returned because it is not the size that was sent: the picture
+    has been re-encoded and shrunk, and a panel that shows a preview wants to
+    know what it is previewing.
+    """
+
+    media_url: str
+    width: int
+    height: int
+    bytes: int
 
 
 # ------------------------------------------------------------------ backoffice

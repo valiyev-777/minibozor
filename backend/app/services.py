@@ -233,6 +233,23 @@ def category_out(session: Session, c: Category) -> s.CategoryOut:
     )
 
 
+def brand_out(session: Session, b: Brand, product_count: int = 0) -> s.BrandOut:
+    """A brand in the language asked for.
+
+    Most brand names are the same in all three — a Latin-alphabet marque is
+    read as itself — which is why the row's own name is the fallback and why
+    nothing seeded carries a translation. The ones that are not are the local
+    names, written in Uzbek on the row and spelt in Cyrillic by a Russian
+    speaker; those are the rows an admin fills in.
+    """
+    return s.BrandOut(
+        id=b.id,
+        slug=b.slug,
+        name=i18n.t(session, "brand", b.id, "name", b.name),
+        product_count=product_count,
+    )
+
+
 def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
     card = product_card(session, p, favs)
     images = session.exec(
@@ -263,7 +280,7 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
         description=i18n.t(session, "product", p.id, "description", p.description),
         images=[media_url(i.url) for i in images],
         category=category_out(session, category),
-        brand=s.BrandOut(id=brand.id, slug=brand.slug, name=brand.name) if brand else None,
+        brand=brand_out(session, brand) if brand else None,
         variants=[
             s.VariantOut(
                 id=v.id,

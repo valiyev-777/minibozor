@@ -416,6 +416,29 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Это не ваше предложение",
         "en": "That offer is not yours",
     },
+    "last_admin": {
+        "uz": "Bu oxirgi admin — rolini tushirib bo'lmaydi, aks holda tizimga "
+              "hech kim kira olmaydi. Avval boshqa admin tayinlang.",
+        "ru": "Это последний администратор — понизить его нельзя, иначе в систему "
+              "никто не войдёт. Сначала назначьте другого администратора.",
+        "en": "That is the last admin — demoting them would leave nobody who can "
+              "sign in. Appoint another admin first.",
+    },
+    "file_empty": {
+        "uz": "Fayl bo'sh",
+        "ru": "Файл пустой",
+        "en": "That file is empty",
+    },
+    "file_too_large": {
+        "uz": "Fayl juda katta — {limit} MB gacha ruxsat etiladi",
+        "ru": "Файл слишком большой — не более {limit} МБ",
+        "en": "That file is too large — the limit is {limit} MB",
+    },
+    "not_an_image": {
+        "uz": "Bu fayl rasm emas — nomi rasmga o'xshasa ham",
+        "ru": "Это не изображение — даже если имя файла говорит обратное",
+        "en": "That file isn't an image — whatever its name says",
+    },
     "seller_account_missing": {
         "uz": "Hisobingiz sotuvchiga bog'lanmagan",
         "ru": "Ваш аккаунт не привязан к продавцу",
@@ -734,3 +757,129 @@ def t(session: Session, entity: str, entity_id: int | None, field: str, default:
     if entity_id is None or current() == DEFAULT:
         return default
     return _load(session).get((entity, entity_id, field)) or default
+
+
+def invalidate() -> None:
+    """Drop the per-request cache after writing to the table.
+
+    ``_load`` reads the whole table once and holds it for the rest of the
+    request. An endpoint that writes a translation and then renders the row it
+    wrote would otherwise answer out of a snapshot taken before the write —
+    the admin would save Russian and be shown Uzbek back.
+    """
+    _cache.set(None)
+
+
+# Which fields of which row may be translated, and therefore what a write is
+# allowed to name. The lists are the read path in reverse: every field here is
+# one that ``services.py`` or a router passes through ``t()`` above, and
+# nothing else, because a translation nobody reads is a row that quietly does
+# nothing.
+WRITABLE: dict[str, frozenset[str]] = {
+    "product": frozenset({"title", "subtitle", "description", "badge", "warranty"}),
+    "category": frozenset({"name", "subtitle"}),
+    "brand": frozenset({"name"}),
+    "variant": frozenset({"label"}),
+    "spec": frozenset({"key", "value"}),
+}
+
+
+def stored(session: Session, entity: str, entity_id: int) -> dict[str, dict[str, str]]:
+    """Every translation held for one row, as ``{lang: {field: text}}``.
+
+    For the panel that edits them: the read path answers in one language and
+    falls back silently, which is the right behaviour for a shopper and no use
+    at all to somebody trying to see what is still missing.
+    """
+    from app.models import Translation
+
+    rows = session.exec(
+        select(Translation).where(
+            Translation.entity == entity, Translation.entity_id == entity_id
+        )
+    ).all()
+    out: dict[str, dict[str, str]] = {}
+    for row in rows:
+        out.setdefault(row.lang, {})[row.field] = row.value
+    return out
+
+
+def write(
+    session: Session,
+    entity: str,
+    entity_id: int,
+    table: dict[str, dict[str, str | None]],
+) -> None:
+    """Store the Russian and English for a row, without committing.
+
+    ``table`` is ``{lang: {field: text}}`` and names only what the caller
+    meant to change: a field that is absent is left alone, and a field given
+    as ``None`` or blank has its row deleted so the field falls back to the
+    Uzbek on the record again. That is the difference between "I am not
+    editing the description" and "there is no Russian description".
+
+    The caller commits, along with the row being described.
+    """
+    from app.models import Translation
+
+    allowed = WRITABLE.get(entity, frozenset())
+    touched = False
+    for lang, fields in table.items():
+        if lang == DEFAULT or lang not in SUPPORTED:
+            # Uzbek is on the record itself, not in this table.
+            continue
+        for field, value in fields.items():
+            if field not in allowed:
+                continue
+            row = session.exec(
+                select(Translation).where(
+                    Translation.entity == entity,
+                    Translation.entity_id == entity_id,
+                    Translation.field == field,
+                    Translation.lang == lang,
+                )
+            ).first()
+            text = (value or "").strip()
+            if not text:
+                if row is not None:
+                    session.delete(row)
+                    touched = True
+                continue
+            if row is None:
+                session.add(
+                    Translation(
+                        entity=entity,
+                        entity_id=entity_id,
+                        field=field,
+                        lang=lang,
+                        value=text,
+                    )
+                )
+            else:
+                row.value = text
+                session.add(row)
+            touched = True
+    if touched:
+        invalidate()
+
+
+def forget(session: Session, entity: str, entity_id: int) -> None:
+    """Drop every translation for a row that is going away.
+
+    Not tidiness. SQLite hands out the id of a deleted row again, so a brand
+    deleted at id 5 and a brand created afterwards at id 5 would be the same
+    key — and the new one would arrive in Russian already, under the old one's
+    name. Specs make this certain rather than likely: replacing a spec table
+    deletes every row and writes fresh ones straight back.
+    """
+    from app.models import Translation
+
+    rows = session.exec(
+        select(Translation).where(
+            Translation.entity == entity, Translation.entity_id == entity_id
+        )
+    ).all()
+    for row in rows:
+        session.delete(row)
+    if rows:
+        invalidate()
