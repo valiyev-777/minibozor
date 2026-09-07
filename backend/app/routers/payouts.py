@@ -16,6 +16,39 @@ The doors here are deliberately few and each one is a decision:
 Only ``generate`` is repeatable. The other three change something a seller has
 seen or been paid, so each writes an audit row before it commits — the same
 rule the rest of the backoffice follows for money and stock.
+
+Two more doors, and both are about the same thing — a figure a seller reads
+before it is final.
+
+* **The running total.** ``GET /current`` runs the arithmetic over the window
+  covering today and stores none of it. Marked provisional in the shape
+  itself, because the alternative was answering "how is this month going" with
+  silence until an admin happened to generate a run.
+* **The weight bands.** ``POST``/``PATCH``/``DELETE /tariffs``. A band is a
+  term of a contract, so every change is logged per field, with a name and a
+  time against it.
+
+**The bands are global, not per seller, and that is a decision rather than an
+omission.** The negotiated lever already exists and is per seller:
+``Seller.commission_percent``, a percentage of what the goods are worth. A
+band says what a two-kilogram parcel costs *us* to pick, carry and shelve, and
+that does not become cheaper because of whose parcel it is. Two further
+reasons it should not be copied per seller yet:
+
+* A handling fee is snapshotted onto the order line the day it sells, so a
+  per-seller band would need its own snapshot before it could be trusted —
+  whereas the storage rate is read live and would need one at close time,
+  which does not exist. Two rates with two different freezing rules on one
+  table is how a settlement model starts disagreeing with itself.
+* A per-seller override is only meaningful once somebody has negotiated one.
+  Building the column first means every band lookup grows a fallback chain
+  that nothing exercises, and the day a real override arrives it will want a
+  start date as well — which is a contract, not a column.
+
+When a seller does negotiate handling separately, it belongs on a contract row
+with dates, read through ``settlement.fulfilment_fee`` and
+``settlement.storage_rate`` — the two functions that already exist so nothing
+else has to know where a rate comes from.
 """
 
 from __future__ import annotations
@@ -373,7 +406,99 @@ def pay(
     return _statement_out(session, statement)
 
 
+# --------------------------------------------------------------------------- so far
+
+
+@router.get(
+    "/current",
+    response_model=s.RunningTotalOut,
+    summary="How the period is going so far — not the figure that will be paid",
+)
+def current(
+    user: SellerUser,
+    session: SessionDep,
+    seller_id: int | None = Query(
+        None, description="Admins only: whose running total to read"
+    ),
+) -> s.RunningTotalOut:
+    """The question a seller asks between payouts, and could not ask here.
+
+    ``/statements`` answers with the runs an admin has generated. Until one is
+    generated there is nothing to read, and a seller mid-month was told
+    nothing at all — while the sales, the returns and the days of storage were
+    all sitting in the database being counted for them.
+
+    So this runs the same arithmetic ``generate`` runs, over the window that
+    covers today, and stores none of it. Two things make that safe to show:
+
+    **It is marked provisional in the shape itself.** ``is_final`` is the
+    constant ``false``. A seller who reads a figure and is paid a different
+    one has been told the first number was a guess, which makes every number a
+    guess — so this one says it is a guess before they ask.
+
+    **It cannot be mistaken for a statement.** No id, no lines with ids, no
+    status that could become ``paid``. The only door that produces a figure
+    somebody is paid is ``close``, and it is an admin's.
+
+    Why it will differ: goods delivered after the request, a return that
+    arrives next week, another day of storage on every unit — and an
+    adjustment, which is not derived from anything and so is not here at all.
+    """
+    mine = _own_seller(session, user)
+    if mine is not None:
+        seller = mine
+    else:
+        if seller_id is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, i18n.label("seller_required")
+            )
+        seller = session.get(Seller, seller_id)
+        if seller is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, i18n.label("seller_not_found")
+            )
+
+    period = st.current_window(session)
+    tally, lines = st.running(session, period, seller.id)
+    return s.RunningTotalOut(
+        period_id=period.id,
+        # A window nobody opened has no name of its own, so it is given the
+        # one thing that is true about it: it is not a run yet.
+        period_label=period.label or i18n.label("period_not_opened"),
+        period_status=period.status if period.id else None,
+        starts_on=period.starts_on,
+        ends_on=period.ends_on,
+        as_of=utcnow(),
+        seller_id=seller.id,
+        seller_name=seller.name,
+        gross_sales=tally.gross_sales,
+        commission=tally.commission,
+        fulfilment=tally.fulfilment,
+        refunds=tally.refunds,
+        storage=tally.storage,
+        payable=tally.payable,
+        line_count=len(lines),
+        lines=[
+            s.RunningLineOut(
+                kind=line.kind,
+                amount=line.amount,
+                quantity=line.quantity,
+                title=line.title,
+                note=line.note,
+                occurred_at=line.occurred_at,
+                order_item_id=line.order_item_id,
+                return_request_id=line.return_request_id,
+                offer_id=line.offer_id,
+            )
+            for line in lines
+        ],
+    )
+
+
 # --------------------------------------------------------------------------- tariffs
+
+# Global bands, read by everybody who is charged them and written by admins
+# only. Why they are not per seller is in the module docstring.
 
 
 @router.get(
@@ -389,19 +514,192 @@ def list_tariffs(
     rows = session.exec(
         select(FulfilmentTariff).order_by(col(FulfilmentTariff.max_grams))
     ).all()
-    return [
-        s.FulfilmentTariffOut(
-            id=row.id,
-            max_grams=row.max_grams,
-            fee=row.fee,
-            storage_per_day=row.storage_per_day,
-            label=row.label,
+    return [_tariff_out(row) for row in rows]
+
+
+@router.post(
+    "/tariffs",
+    response_model=s.FulfilmentTariffOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a weight band",
+)
+def create_tariff(
+    payload: s.FulfilmentTariffWriteIn, user: AdminUser, session: SessionDep
+) -> s.FulfilmentTariffOut:
+    """A band is a term of a contract, so writing one is logged with a name
+    against it.
+
+    Refused if a band already tops out at the same weight. ``band_for`` takes
+    the lightest band that still covers a parcel, so two bands sharing a
+    ceiling make "what does this cost to handle" a question with two answers
+    and the one that wins depends on row order — which is not a rule anybody
+    could quote back to a seller.
+    """
+    _band_ceiling_is_free(session, payload.max_grams, None)
+    row = FulfilmentTariff(
+        max_grams=payload.max_grams,
+        fee=payload.fee,
+        storage_per_day=payload.storage_per_day,
+        label=payload.label.strip(),
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    audit.record(
+        session,
+        actor=user,
+        action="tariff.create",
+        entity="fulfilment_tariff",
+        entity_id=row.id,
+        field="max_grams",
+        old=None,
+        new=row.max_grams,
+        note=_band_note(row),
+    )
+    session.commit()
+    session.refresh(row)
+    return _tariff_out(row)
+
+
+@router.patch(
+    "/tariffs/{tariff_id}",
+    response_model=s.FulfilmentTariffOut,
+    summary="Change what a weight band charges",
+)
+def update_tariff(
+    tariff_id: int,
+    payload: s.FulfilmentTariffUpdateIn,
+    user: AdminUser,
+    session: SessionDep,
+) -> s.FulfilmentTariffOut:
+    """One audit row per field that actually moved.
+
+    Per field because "the 2 kg band was edited" is not a fact anybody can
+    act on: a seller disputing a handling charge wants to know that the fee
+    went from 14 000 to 19 000 on a particular day, by a particular person.
+    And only when it moved — a panel that saves a form it did not change
+    should not fill the log with a change nobody made.
+
+    **What this does not do is rewrite history.** A closed statement's lines
+    are frozen rows and a sold order line carries the fee it was sold at, so
+    a band edited today changes what the *next* parcel is charged and nothing
+    that has already been settled. There is a test that says so, because it is
+    the property a seller has to be able to rely on and the one that would
+    break silently.
+    """
+    row = _tariff(session, tariff_id)
+    if payload.max_grams is not None:
+        _band_ceiling_is_free(session, payload.max_grams, row.id)
+
+    for field in ("max_grams", "fee", "storage_per_day", "label"):
+        value = getattr(payload, field)
+        if value is None:
+            continue
+        if field == "label":
+            value = value.strip()
+        if value == getattr(row, field):
+            continue
+        audit.record(
+            session,
+            actor=user,
+            action=f"tariff.{field}",
+            entity="fulfilment_tariff",
+            entity_id=row.id,
+            field=field,
+            old=getattr(row, field),
+            new=value,
+            note=_band_note(row),
         )
-        for row in rows
-    ]
+        setattr(row, field, value)
+
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return _tariff_out(row)
+
+
+@router.delete(
+    "/tariffs/{tariff_id}",
+    response_model=s.Message,
+    summary="Withdraw a weight band",
+)
+def delete_tariff(
+    tariff_id: int, user: AdminUser, session: SessionDep
+) -> s.Message:
+    """Refused for the heaviest band while any lighter one remains.
+
+    The heaviest band is the roof: it is what covers everything above the band
+    below it, which is why the seed gives it an absurdly large ceiling rather
+    than a null. Delete it and every parcel heavier than the next band down
+    falls through to no band at all — handled free, and stored at the flat
+    fallback rate — which is a free ride nobody decided to give and nothing
+    would report. Raise the ceiling of the band below it instead, or add the
+    replacement first.
+
+    The last band standing can go: an installation with no tariffs at all
+    charges no handling, which is honest about not having decided yet.
+    """
+    row = _tariff(session, tariff_id)
+    lighter = session.exec(
+        select(FulfilmentTariff).where(FulfilmentTariff.max_grams < row.max_grams)
+    ).first()
+    heavier = session.exec(
+        select(FulfilmentTariff).where(FulfilmentTariff.max_grams > row.max_grams)
+    ).first()
+    if heavier is None and lighter is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("tariff_top_band"))
+
+    audit.record(
+        session,
+        actor=user,
+        action="tariff.delete",
+        entity="fulfilment_tariff",
+        entity_id=row.id,
+        field="max_grams",
+        old=row.max_grams,
+        new=None,
+        note=_band_note(row),
+    )
+    session.delete(row)
+    session.commit()
+    return s.Message(message=i18n.label("deleted"))
 
 
 # --------------------------------------------------------------------------- helpers
+
+
+def _tariff(session: SessionDep, tariff_id: int) -> FulfilmentTariff:
+    row = session.get(FulfilmentTariff, tariff_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("tariff_not_found"))
+    return row
+
+
+def _band_ceiling_is_free(
+    session: SessionDep, max_grams: int, except_id: int | None
+) -> None:
+    """Two bands may not share a ceiling. See ``create_tariff``."""
+    clash = session.exec(
+        select(FulfilmentTariff).where(FulfilmentTariff.max_grams == max_grams)
+    ).first()
+    if clash is not None and clash.id != except_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("tariff_band_exists"))
+
+
+def _band_note(row: FulfilmentTariff) -> str:
+    """The band in words, for the log — a row id is not a band anybody
+    recognises a year later."""
+    return f"{row.label or row.max_grams} · {row.fee} so'm · {row.storage_per_day}/kun"
+
+
+def _tariff_out(row: FulfilmentTariff) -> s.FulfilmentTariffOut:
+    return s.FulfilmentTariffOut(
+        id=row.id,
+        max_grams=row.max_grams,
+        fee=row.fee,
+        storage_per_day=row.storage_per_day,
+        label=row.label,
+    )
 
 
 def _period(session: SessionDep, period_id: int) -> SettlementPeriod:

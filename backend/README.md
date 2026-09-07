@@ -120,6 +120,26 @@ as unavailable rather than disappearing.
 Which moves are legal is `transitions.PRODUCT_TRANSITIONS`; a refusal needs a
 reason and every move is written to `audit_log`.
 
+### Two lists of the same rows, and why
+
+`GET /categories` and `GET /brands` pass every name through `i18n.t`, which is
+right for an app and wrong for the field that writes the source text: an admin
+working with the panel in Russian would be shown the translation and save it
+back as the Uzbek. So the editor has its own pair —
+`GET /staff/catalog/categories` and `GET /staff/catalog/brands` — answering
+with the row's own Uzbek whatever `Accept-Language` says, flat rather than a
+level at a time, and carrying the counts that explain why a delete was refused.
+
+The shopper's `/brands` now carries a count too. The field was always in the
+shape and always nought — the figure was only ever computed in
+`/products/filters`, scoped to one listing so the tick-boxes add up to the grid
+beside them — and an A-to-Z of marques reading "(0)" against every one of them
+tells a shopper nothing. It counts published cards only, through the same
+`in_the_shop` narrowing every customer path uses, so tapping a brand opens a
+listing of exactly that many. Brands with nothing in the shop are still listed:
+the index is a directory, and dropping rows would change what an installed app
+is shown.
+
 ### Doors
 
 ```
@@ -127,8 +147,10 @@ admin   POST   /staff/sellers                              take on a seller
 admin   PATCH  /staff/sellers/{id}                         edit, stand down, link an account
 admin   POST   /staff/catalog/products                     write a card (draft)
 seller  POST   /staff/catalog/proposals                    suggest a card (moderating)
+seller  GET    /staff/catalog/proposals                    …and what became of it
 admin   GET    /staff/catalog/products?status=moderating   the queue
 admin   POST   /staff/catalog/products/{id}/status         publish / refuse / withdraw
+admin   GET    /staff/catalog/categories | /brands         the editor's lists
 admin   POST   /staff/catalog/categories | /brands         …and PATCH, DELETE
 admin   POST   /staff/catalog/products/{id}/images         …variants, specs
 admin   POST   /staff/showcase/banners | /sections | /promos
@@ -140,6 +162,15 @@ owner: the price belongs to an offer, the stock to the movement ledger, and the
 status to a decision somebody made with a reason attached. `price` on *create*
 seeds the cached figure so a card with no offers has a number to show;
 `offers.refresh` overwrites it the moment an offer exists.
+
+A refused card is the half a seller could not read. Approved, it appears in
+the shop and they can find it there; refused, it went nowhere they could look
+— and the refusal carries the reason they are supposed to act on. So
+``GET /staff/catalog/proposals`` answers with the cards *this* seller proposed,
+whatever state they are in, ``moderation_note`` filled in on the refusals. The
+scoping is not a filter they choose: for a seller those are the only proposals
+that exist. An admin has no shop, so they read every seller's, narrowable with
+``seller_id``.
 
 Linking an account to a seller grants that user the seller role — there is no
 state where an account is attached to a seller and cannot act as one — and the
@@ -286,6 +317,75 @@ same one on the same day.
 Creates the seven warehouse tables, adds `cart_items.reserved_until`, and
 writes the opening balances without which the running totals would disagree
 with their own ledger before anybody had done anything. Idempotent.
+
+## Paying sellers
+
+```
+admin   POST   /staff/payouts/periods                      open a run
+admin   POST   /staff/payouts/periods/{id}/generate        work out every account
+admin   POST   /staff/payouts/periods/{id}/close           freeze it
+admin   POST   /staff/payouts/statements/{id}/pay          the money has left
+seller  GET    /staff/payouts/statements                   my accounts, closed ones included
+seller  GET    /staff/payouts/current                      how this period is going so far
+seller  GET    /staff/payouts/tariffs                      what handling costs, by weight
+admin   POST   /staff/payouts/tariffs                      …and PATCH, DELETE
+```
+
+### A number a seller reads before it is final says so
+
+`GET /staff/payouts/current` runs the same arithmetic `generate` runs, over the
+window covering today, and stores none of it. Its shape carries
+`is_final: false` as a constant rather than a flag: a seller shown a figure and
+paid a different one has been told the first number was provisional, which
+makes every number provisional. It has no id, no lines with ids, and no status
+that could become `paid` — the only door that produces a figure somebody is
+paid is `close`, and that is an admin's.
+
+Without it, "how is this month going" had no answer at all: `/statements` lists
+the runs an admin has generated, so a seller mid-period was told nothing while
+their sales, returns and days of storage were all in the database being counted
+for them. What it deliberately omits is an adjustment — every other line is
+derived from something that happened and can be recomputed at any moment; an
+adjustment is a decision somebody wrote onto a statement, and until a statement
+exists there is nothing to write it on.
+
+When no run covers today — the last one closed and the next not yet opened,
+while the selling carries on — the window is worked out instead: the day after
+the last day any period already accounts for, through today. It comes back with
+`period_id: null`, because it is not a period and calling it one would invite
+somebody to close it.
+
+### The weight bands are global, and that is a decision
+
+A band is a term of a contract, so every change is `PATCH`ed one field at a
+time and each field that actually moves writes its own `audit_log` row. "The
+2 kg band was edited" is not a fact a seller disputing a charge can act on;
+"the fee went from 14 000 to 19 000 on this day, by this person" is.
+
+Two guards, both about ambiguity rather than tidiness. Two bands may not share
+a ceiling: `band_for` takes the lightest band that still covers a parcel, so
+with two the answer would depend on row order. And the heaviest band cannot be
+deleted while a lighter one remains — it is the roof, and deleting it drops
+every parcel above the band below into no band at all, handled free, with
+nothing to report it.
+
+**Not per seller.** The negotiated lever already exists and is per seller:
+`Seller.commission_percent`, a percentage of what the goods are worth. A band
+says what a two-kilogram parcel costs *us* to pick, carry and shelve, and that
+does not become cheaper because of whose parcel it is. Beyond that, the two
+rates on a band freeze differently — the handling fee is snapshotted onto the
+order line the day it sells, while the storage rate is read live per period —
+so a per-seller copy would need two different freezing rules on one table,
+which is how a settlement model starts disagreeing with itself. When a seller
+does negotiate handling separately it belongs on a contract row with dates,
+read through `settlement.fulfilment_fee` and `settlement.storage_rate`.
+
+**A change to a band never rewrites history.** A closed statement's lines are
+frozen rows and a sold order line carries the fee it was sold at, so editing a
+band changes what the next parcel is charged and nothing that has been settled.
+There is a test that doubles a band a hundredfold between closing one run and
+generating the next, and holds the closed one byte-identical while the open one
+moves.
 
 ## Money and cards
 

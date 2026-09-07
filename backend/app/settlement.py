@@ -31,6 +31,19 @@ door. The day it was delivered is on the order's own timeline.
 **A closed statement is finished.** Its lines are frozen rows and its sources
 are spent. Anything arriving afterwards is unspent and lands in the next open
 period, so a figure a seller has read never becomes a different figure.
+
+That last rule is also what makes the rates safe to edit. A band's handling
+fee is snapshotted onto the order line the day it sells and a closed
+statement's lines are rows in a table, so raising a tariff changes what the
+next parcel is charged and nothing that has been settled. The storage rate is
+the one figure read live — which is correct, because an open period is a
+running answer — and closing is what stops it being read again.
+
+``compose`` is the arithmetic; ``build`` persists what it returns and
+``running`` throws it away. One function rather than two because a seller
+reading "so far" has to be reading a preview of the figure they will be paid
+rather than a second opinion about it, and two copies of this would disagree
+the first time a line kind was added to one of them.
 """
 
 from __future__ import annotations
@@ -453,6 +466,89 @@ def _refunded_items(session: Session, request: ReturnRequest) -> list[OrderItem]
     )
 
 
+def compose(
+    session: Session, period: SettlementPeriod, seller_id: int
+) -> list[StatementLine]:
+    """Every line one seller's account over these days is made of.
+
+    Unattached rows: nothing here is added to the session. ``build`` persists
+    what it gets back, ``running`` throws it away, and the arithmetic is the
+    same both times — which is the only way a seller reading "so far" is
+    reading a preview of the figure rather than a second opinion about it.
+
+    Not adjustments. Those are not derived from anything; see
+    ``schemas.RunningTotalOut``.
+    """
+    spent_items, spent_returns = _settled_sources(session, seller_id)
+    return [
+        *_sale_lines(session, seller_id, period, spent_items),
+        *_refund_lines(session, seller_id, period, spent_returns),
+        *_storage_lines(session, seller_id, period),
+    ]
+
+
+def current_window(session: Session) -> SettlementPeriod:
+    """Which days "so far" means, and whether anybody has named them.
+
+    The open period covering today, when there is one. That is the run the
+    seller's next statement will be cut from, and its dates were somebody's
+    decision rather than ours.
+
+    When there is none — the last run has been closed and the next has not
+    been opened, while the selling carries on regardless — a window is worked
+    out instead: the day after the last day any period already accounts for,
+    through today. The row it returns is **not in the database** and its ``id``
+    is ``None``, because it is not a period. It is the gap between the last one
+    and now, and calling it a period would invite somebody to close it.
+
+    Clamped to today at the near end, so a period closed early — one whose
+    days run past today — cannot make the window start in the future.
+    """
+    today = utcnow().date()
+    covering = session.exec(
+        select(SettlementPeriod)
+        .where(
+            SettlementPeriod.status == SettlementStatus.OPEN,
+            SettlementPeriod.starts_on <= today,
+            SettlementPeriod.ends_on >= today,
+        )
+        .order_by(col(SettlementPeriod.starts_on).desc())
+    ).first()
+    if covering is not None:
+        return covering
+
+    # The last day already spoken for. Periods that have not started yet are
+    # ignored: a run opened for next month says nothing about where this
+    # month's accounting begins.
+    previous = session.exec(
+        select(SettlementPeriod)
+        .where(SettlementPeriod.starts_on <= today)
+        .order_by(col(SettlementPeriod.ends_on).desc())
+    ).first()
+    starts = (
+        min(previous.ends_on + timedelta(days=1), today)
+        if previous is not None
+        else today.replace(day=1)
+    )
+    return SettlementPeriod(label="", starts_on=starts, ends_on=today)
+
+
+def running(
+    session: Session, period: SettlementPeriod, seller_id: int
+) -> tuple[SellerStatement, list[StatementLine]]:
+    """The same arithmetic over a window nobody has frozen, stored nowhere.
+
+    The totals are hung on an unsaved ``SellerStatement`` so that ``_total``
+    is the one place the headings are worked out — a second copy of that
+    function is a second answer to "what does commission mean", and the two
+    would drift the first time a line kind was added.
+    """
+    lines = compose(session, period, seller_id)
+    tally = SellerStatement(period_id=period.id or 0, seller_id=seller_id)
+    _total(tally, lines)
+    return tally, lines
+
+
 def build(
     session: Session, period: SettlementPeriod, seller_id: int
 ) -> SellerStatement:
@@ -486,12 +582,7 @@ def build(
         session.delete(row)
     session.commit()
 
-    spent_items, spent_returns = _settled_sources(session, seller_id)
-    lines = [
-        *_sale_lines(session, seller_id, period, spent_items),
-        *_refund_lines(session, seller_id, period, spent_returns),
-        *_storage_lines(session, seller_id, period),
-    ]
+    lines = compose(session, period, seller_id)
     for line in lines:
         line.statement_id = statement.id
         session.add(line)

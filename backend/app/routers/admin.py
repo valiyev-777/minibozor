@@ -333,6 +333,77 @@ def create_product(
     return _create_card(session, user, payload, ProductStatus.DRAFT, proposed_by=None)
 
 
+@router.get(
+    "/catalog/proposals",
+    response_model=s.Page[s.AdminProductOut],
+    summary="What I proposed and what became of it (seller)",
+)
+def list_proposals(
+    user: SellerUser,
+    session: SessionDep,
+    status_filter: ProductStatus | None = Query(
+        None, alias="status", description="`rejected` is the one that needs reading"
+    ),
+    q: str | None = Query(None, description="Part of a title or a SKU"),
+    seller_id: int | None = Query(
+        None, description="Admins only: whose proposals to read"
+    ),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=100),
+) -> s.Page[s.AdminProductOut]:
+    """The other half of proposing a card, which did not exist.
+
+    A seller could post a proposal and then never see it again. Approved, it
+    turns up in the catalogue by itself and they can find it there. **Refused,
+    it went nowhere they could look** — and the refusal carries the one thing
+    they need, which is the reason it was refused. So a seller was being asked
+    to fix something without being told what was wrong with it, and the only
+    way to find out was to ask an admin directly.
+
+    Every state, not just the refused ones: a proposal in moderation is the
+    answer to "has anybody looked at it yet", and one that was published is
+    how they confirm the card in the shop is theirs. ``moderation_note`` is on
+    every row and is filled in on exactly the refusals.
+
+    Scoped to the caller's own shop, and that is not a filter they choose: for
+    a seller these are the only proposals that exist. An admin has no shop, so
+    they read every seller's proposals — the whole queue with its provenance —
+    and may narrow it to one with ``seller_id``.
+    """
+    stmt = select(Product)
+    mine = _own_seller_or_none(session, user)
+    if mine is not None:
+        stmt = stmt.where(Product.proposed_by_id == mine.id)
+    elif seller_id is not None:
+        stmt = stmt.where(Product.proposed_by_id == _seller(session, seller_id).id)
+    else:
+        # Everything anybody proposed, and nothing the platform wrote itself:
+        # a draft an admin started is not a proposal and has no reason to be
+        # in a list about somebody else's suggestions.
+        stmt = stmt.where(col(Product.proposed_by_id).is_not(None))
+    if status_filter is not None:
+        stmt = stmt.where(Product.status == status_filter)
+    if q:
+        needle = f"%{q.lower()}%"
+        stmt = stmt.where(
+            func.lower(Product.title).like(needle) | func.lower(Product.sku).like(needle)
+        )
+
+    total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
+    rows = session.exec(
+        stmt.order_by(col(Product.created_at).desc(), col(Product.id).desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return s.Page[s.AdminProductOut](
+        items=[_product_out(session, row) for row in rows],
+        page=page,
+        page_size=page_size,
+        total=total,
+        has_more=page * page_size < total,
+    )
+
+
 @router.post(
     "/catalog/proposals",
     response_model=s.AdminProductOut,
@@ -347,13 +418,7 @@ def propose_product(
     It lands in moderation whoever sends it — an admin included, because an
     admin who wanted it published outright would use the door marked that way.
     """
-    seller = None
-    if user.role is UserRole.SELLER:
-        seller = session.exec(select(Seller).where(Seller.user_id == user.id)).first()
-        if seller is None:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN, i18n.label("seller_account_missing")
-            )
+    seller = _own_seller_or_none(session, user)
     return _create_card(
         session, user, payload, ProductStatus.MODERATING, proposed_by=seller
     )
@@ -1046,6 +1111,23 @@ def _texts(translations: dict) -> dict[str, dict[str, str | None]]:
 
 
 # --------------------------------------------------------------------------- helpers
+
+
+def _own_seller_or_none(session: SessionDep, user: User) -> Seller | None:
+    """The shop this account belongs to, or None when it has no shop of its own.
+
+    None means an admin, and an admin reads across every seller. A *seller*
+    with no ``sellers`` row is not scoped to nothing — that would hand them
+    everybody's proposals — so it is refused.
+    """
+    if user.role is not UserRole.SELLER:
+        return None
+    row = session.exec(select(Seller).where(Seller.user_id == user.id)).first()
+    if row is None:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, i18n.label("seller_account_missing")
+        )
+    return row
 
 
 def _seller(session: SessionDep, seller_id: int) -> Seller:

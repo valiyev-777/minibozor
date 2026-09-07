@@ -31,6 +31,7 @@ from app.models import (
     Review,
     ReviewStatus,
     Seller,
+    SellerStatement,
     StockMovement,
     StockMovementKind,
     User,
@@ -6846,3 +6847,585 @@ def test_a_collection_run_brings_returns_back_to_the_warehouse(
 
 def _stock_snapshot(session: Session) -> dict[int, int]:
     return {row.id: row.stock_left for row in session.exec(select(Offer)).all()}
+
+
+# ================================================================== the gaps closed
+
+# Five things the system could not answer. Each one is somebody looking at a
+# screen with a reasonable question and being told nothing.
+
+
+# ------------------------------------------------ what became of what I proposed
+
+
+def test_a_seller_reads_what_became_of_the_card_they_proposed(
+    client: TestClient,
+    admin: dict[str, str],
+    auth: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A refusal carries a reason, and the seller could not read it.
+
+    Proposing worked. Approved, the card turns up in the shop and they can
+    find it there. Refused, it went nowhere they could look — so a seller was
+    being asked to fix something without being told what was wrong with it,
+    and the only way to find out was to telephone an admin.
+    """
+    seller_id, mine = _linked_seller(staff, "Taklif Bir", "+998900100001")
+    _, theirs = _linked_seller(staff, "Taklif Ikki", "+998900100002")
+    category = client.get(f"{API}/categories").json()[0]["slug"]
+
+    def propose(sku: str, headers: dict[str, str]) -> dict:
+        made = client.post(
+            f"{API}/staff/catalog/proposals",
+            json={
+                "sku": sku,
+                "title": f"Taklif {sku}",
+                "category_slug": category,
+                "price": 90_000,
+            },
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        return made.json()
+
+    refused = propose("MB-GAP-PROP-1", mine)
+    accepted = propose("MB-GAP-PROP-2", mine)
+    somebody_elses = propose("MB-GAP-PROP-3", theirs)
+
+    # Before anybody has looked: in the queue, and the seller can see that it
+    # is — "has anybody read it yet" is the other half of the question.
+    waiting = client.get(f"{API}/staff/catalog/proposals", headers=mine)
+    assert waiting.status_code == 200, waiting.text
+    rows = {row["id"]: row for row in waiting.json()["items"]}
+    assert rows[refused["id"]]["status"] == "moderating"
+    assert rows[refused["id"]]["moderation_note"] == ""
+
+    # Nobody else's proposals, and that is not a filter they chose: for a
+    # seller these are the only rows that exist.
+    assert somebody_elses["id"] not in rows
+    assert {row["proposed_by"]["id"] for row in waiting.json()["items"]} == {seller_id}
+
+    decided = client.post(
+        f"{API}/staff/catalog/products/{refused['id']}/status",
+        json={"status": "rejected", "reason": "Surat yo'q — kamida bitta kerak"},
+        headers=admin,
+    )
+    assert decided.status_code == 200, decided.text
+    assert client.post(
+        f"{API}/staff/catalog/products/{accepted['id']}/status",
+        json={"status": "published"},
+        headers=admin,
+    ).status_code == 200
+
+    # The refusal, and the reason for it, which is the whole point.
+    after = client.get(f"{API}/staff/catalog/proposals", headers=mine).json()["items"]
+    rows = {row["id"]: row for row in after}
+    assert rows[refused["id"]]["status"] == "rejected"
+    assert rows[refused["id"]]["moderation_note"] == "Surat yo'q — kamida bitta kerak"
+    # And the approved one is here too, so a seller can confirm the card in the
+    # shop is theirs rather than hunting the catalogue for it.
+    assert rows[accepted["id"]]["status"] == "published"
+    assert rows[accepted["id"]]["moderation_note"] == ""
+
+    # The list a seller actually opens after being told "one was refused".
+    only_refused = client.get(
+        f"{API}/staff/catalog/proposals", params={"status": "rejected"}, headers=mine
+    )
+    assert only_refused.status_code == 200, only_refused.text
+    assert [row["id"] for row in only_refused.json()["items"]] == [refused["id"]]
+    assert only_refused.json()["total"] == 1
+
+    # Findable by SKU, which is what a seller's own system calls it.
+    found = client.get(
+        f"{API}/staff/catalog/proposals",
+        params={"q": "MB-GAP-PROP-2"},
+        headers=mine,
+    ).json()["items"]
+    assert [row["id"] for row in found] == [accepted["id"]]
+
+    # An admin has no shop, so they read every seller's proposals — with the
+    # provenance on each row — and may narrow it to one.
+    everybody = client.get(f"{API}/staff/catalog/proposals", headers=admin)
+    assert everybody.status_code == 200, everybody.text
+    seen = {row["id"] for row in everybody.json()["items"]}
+    assert {refused["id"], accepted["id"], somebody_elses["id"]} <= seen
+    # A draft the platform wrote itself is not a proposal and has no business
+    # in a list about somebody else's suggestions.
+    assert all(row["proposed_by"] for row in everybody.json()["items"])
+    narrowed = client.get(
+        f"{API}/staff/catalog/proposals",
+        params={"seller_id": seller_id},
+        headers=admin,
+    ).json()["items"]
+    assert somebody_elses["id"] not in {row["id"] for row in narrowed}
+
+    # Not a customer's list, and not an anonymous one.
+    assert client.get(f"{API}/staff/catalog/proposals", headers=auth).status_code == 403
+    assert client.get(f"{API}/staff/catalog/proposals").status_code == 401
+
+
+# ----------------------------------------------- a weight band is a contract term
+
+
+def test_a_weight_band_can_be_edited_and_every_change_is_logged(
+    client: TestClient,
+    admin: dict[str, str],
+    auth: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The bands were readable and unwritable: a rate somebody is charged
+    arrived through the seed and could only be changed in the database, which
+    is a change with nobody's name on it.
+
+    A band this light covers nothing in the catalogue — the lightest seeded
+    band tops out at 500 g — so the suite's other arithmetic is untouched by
+    it. That is deliberate: these rates are global, and a test that edited a
+    real band would be editing what every other test is charged.
+    """
+    _, theirs = _linked_seller(staff, "Tarif Bir", "+998900100011")
+    seeded = client.get(f"{API}/staff/payouts/tariffs", headers=admin).json()
+
+    made = client.post(
+        f"{API}/staff/payouts/tariffs",
+        json={
+            "max_grams": 12,
+            "fee": 1_000,
+            "storage_per_day": 5,
+            "label": "Sinov guruhi",
+        },
+        headers=admin,
+    )
+    assert made.status_code == 201, made.text
+    band = made.json()
+    assert (band["max_grams"], band["fee"], band["storage_per_day"]) == (12, 1_000, 5)
+
+    # Writing a band is logged with a name against it, and the log says which
+    # band in words — a row id is not a band anybody recognises a year later.
+    created = _audit_rows("tariff.create", band["id"])
+    assert created and created[-1].actor_role is UserRole.ADMIN
+    assert "Sinov guruhi" in created[-1].note
+
+    # One row per field that actually moved. "The band was edited" is not a
+    # fact a seller disputing a charge can act on; "the fee went from 1 000 to
+    # 4 000 on this day, by this person" is.
+    changed = client.patch(
+        f"{API}/staff/payouts/tariffs/{band['id']}",
+        json={"fee": 4_000, "storage_per_day": 5, "label": "Sinov guruhi"},
+        headers=admin,
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["fee"] == 4_000
+    fees = _audit_rows("tariff.fee", band["id"])
+    assert [(row.old_value, row.new_value) for row in fees] == [("1000", "4000")]
+    # Only when it moved: a panel saving a form it did not change should not
+    # fill the log with a change nobody made.
+    assert not _audit_rows("tariff.storage_per_day", band["id"])
+    assert not _audit_rows("tariff.label", band["id"])
+
+    # Two bands may not share a ceiling. `band_for` takes the lightest band
+    # that still covers a parcel, so with two of them the answer to "what does
+    # this cost to handle" would depend on row order.
+    clash = client.post(
+        f"{API}/staff/payouts/tariffs",
+        json={"max_grams": 12, "fee": 2_000},
+        headers=admin,
+    )
+    assert clash.status_code == 409
+    assert client.patch(
+        f"{API}/staff/payouts/tariffs/{band['id']}",
+        json={"max_grams": 500},
+        headers=admin,
+    ).status_code == 409, "500 g is the seeded lightest band"
+
+    # The heaviest band is the roof. Delete it and every parcel above the band
+    # below falls into no band at all and is handled free — a discount nobody
+    # decided to give and nothing would report.
+    bands = client.get(f"{API}/staff/payouts/tariffs", headers=admin).json()
+    roof = max(bands, key=lambda row: row["max_grams"])
+    refused = client.delete(f"{API}/staff/payouts/tariffs/{roof['id']}", headers=admin)
+    assert refused.status_code == 409
+    assert "guruh" in refused.json()["detail"].lower()
+    assert client.get(f"{API}/staff/payouts/tariffs", headers=admin).json() == bands, (
+        "a refusal changes nothing"
+    )
+
+    # A rate is a term of a contract, so a seller reads it and does not write
+    # it — and a customer does neither.
+    assert client.post(
+        f"{API}/staff/payouts/tariffs",
+        json={"max_grams": 14, "fee": 1},
+        headers=theirs,
+    ).status_code == 403
+    assert client.patch(
+        f"{API}/staff/payouts/tariffs/{band['id']}", json={"fee": 1}, headers=theirs
+    ).status_code == 403
+    assert client.delete(
+        f"{API}/staff/payouts/tariffs/{band['id']}", headers=theirs
+    ).status_code == 403
+    assert client.get(f"{API}/staff/payouts/tariffs", headers=auth).status_code == 403
+    assert client.patch(
+        f"{API}/staff/payouts/tariffs/{band['id']}", json={"fee": 1}
+    ).status_code == 401
+
+    assert client.patch(
+        f"{API}/staff/payouts/tariffs/999999", json={"fee": 1}, headers=admin
+    ).status_code == 404
+
+    # Withdrawn, and the withdrawal logged too.
+    gone = client.delete(f"{API}/staff/payouts/tariffs/{band['id']}", headers=admin)
+    assert gone.status_code == 200, gone.text
+    assert _audit_rows("tariff.delete", band["id"])
+    # The table as the seed left it: this test edited nothing anybody else is
+    # charged, which is what makes it safe to run beside the rest of them.
+    assert client.get(f"{API}/staff/payouts/tariffs", headers=admin).json() == seeded
+    assert client.delete(
+        f"{API}/staff/payouts/tariffs/{band['id']}", headers=admin
+    ).status_code == 404
+
+
+def test_editing_a_tariff_does_not_rewrite_a_closed_statement(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The property that makes the bands safe to edit at all.
+
+    A closed statement is a figure a seller has read. Recomputing it against
+    today's rates would mean that reading it twice gives two answers, which
+    makes every answer provisional — the same reason the commission on a line
+    is the rate it sold at rather than the rate on the seller row today.
+
+    So this walks both halves: the closed run does not move when the band
+    under it is doubled a hundredfold, and the next open run does.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, "+998900100021")
+    seller_id, _ = _linked_seller(staff, "Tarif Ikki", "+998900100022", commission=10)
+
+    # A band nothing else in the catalogue falls into, so this test is not
+    # editing what every other test is charged. Written before the sale,
+    # because the fee is captured onto the order line at checkout.
+    band = client.post(
+        f"{API}/staff/payouts/tariffs",
+        json={
+            "max_grams": 9,
+            "fee": 5_000,
+            "storage_per_day": 100,
+            "label": "Qulf guruhi",
+        },
+        headers=admin,
+    )
+    assert band.status_code == 201, band.text
+    band_id = band.json()["id"]
+
+    first_id, _ = _card_with_a_colour(client, admin, "MB-GAP-LOCK-1", with_a_size=False)
+    second_id, _ = _card_with_a_colour(client, admin, "MB-GAP-LOCK-2", with_a_size=False)
+    with Session(engine) as session:
+        for product_id in (first_id, second_id):
+            row = session.get(Product, product_id)
+            row.weight_grams = 7
+            session.add(row)
+        session.commit()
+
+    _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=first_id, price=200_000,
+    )
+
+    period = _period(
+        client, admin, starts="2047-01-01", ends="2047-12-31", label="Qulflangan"
+    )
+    before = _statement(client, admin, period["id"], seller_id)
+    assert before["fulfilment"] == 5_000, "one unit, at the band's fee"
+    assert before["storage"] > 0
+    # Nothing has moved for months by the closing day, so the shelf rate is
+    # tripled — and the line says so, which is what makes it checkable.
+    assert "× 300 so'm" in _lines(before, "storage")[0]["note"]
+
+    closed = client.post(
+        f"{API}/staff/payouts/periods/{period['id']}/close", headers=admin
+    )
+    assert closed.status_code == 200, closed.text
+    frozen = client.get(
+        f"{API}/staff/payouts/statements/{before['id']}", headers=admin
+    ).json()
+    assert frozen["status"] == "closed"
+
+    # The contract is renegotiated, steeply.
+    bumped = client.patch(
+        f"{API}/staff/payouts/tariffs/{band_id}",
+        json={"fee": 999_000, "storage_per_day": 9_900},
+        headers=admin,
+    )
+    assert bumped.status_code == 200, bumped.text
+
+    # Every row of the closed account, unchanged — not the totals only, the
+    # lines and their workings-out, because the note is what a seller checks
+    # the figure against.
+    after = client.get(
+        f"{API}/staff/payouts/statements/{before['id']}", headers=admin
+    )
+    assert after.status_code == 200, after.text
+    assert after.json() == frozen, "a closed statement is finished"
+    assert (after.json()["fulfilment"], after.json()["storage"]) == (
+        before["fulfilment"],
+        before["storage"],
+    )
+
+    # And the lock is a lock rather than an accident of nothing being asked:
+    # the next run, still open, is worked out at the new rate.
+    _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=second_id, price=200_000,
+    )
+    later = _period(
+        client, admin, starts="2048-01-01", ends="2048-12-31", label="Yangi stavka"
+    )
+    now = _statement(client, admin, later["id"], seller_id)
+    assert now["fulfilment"] == 999_000, "the parcel sold after the change"
+    assert "× 29700 so'm" in _lines(now, "storage")[0]["note"]
+    # The settled sale is spent and is not restated into the new run.
+    assert [line["order_item_id"] for line in _lines(now, "sale")] != [
+        line["order_item_id"] for line in _lines(before, "sale")
+    ]
+
+    client.delete(f"{API}/staff/payouts/tariffs/{band_id}", headers=admin)
+    assert not _stock_is_consistent()
+
+
+# ------------------------------------------------------- how the month is going
+
+
+def test_a_seller_reads_the_period_still_running_and_it_says_it_is_not_final(
+    client: TestClient,
+    auth: dict[str, str],
+    admin: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """"How is this month going" had no answer.
+
+    `/statements` lists the runs an admin has generated, so until somebody
+    generated one a seller mid-period was told nothing — while the sales, the
+    returns and the days of storage were all in the database being counted
+    for them.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, "+998900100031")
+    seller_id, mine = _linked_seller(staff, "Joriy Bir", "+998900100032", commission=10)
+    _, theirs = _linked_seller(staff, "Joriy Ikki", "+998900100033")
+
+    product_id, _ = _card_with_a_colour(client, admin, "MB-GAP-NOW-1", with_a_size=False)
+    _sell_and_deliver(
+        client, auth, admin, operator, warehouse,
+        seller_id=seller_id, product_id=product_id, price=700_000, quantity=2,
+    )
+
+    running = client.get(f"{API}/staff/payouts/current", headers=mine)
+    assert running.status_code == 200, running.text
+    body = running.json()
+
+    # The point of the shape: it says it is a guess before anybody asks. A
+    # seller shown a figure and paid a different one has been told the first
+    # number was provisional, which makes every number provisional.
+    assert body["is_final"] is False
+    assert body["as_of"]
+    assert body["starts_on"] <= body["ends_on"]
+
+    # The arithmetic is the arithmetic — 2 × 700 000 at the rate on the line.
+    assert (body["seller_id"], body["seller_name"]) == (seller_id, "Joriy Bir")
+    assert body["gross_sales"] == 1_400_000
+    assert body["commission"] == 140_000
+    assert body["payable"] == sum(line["amount"] for line in body["lines"])
+    assert body["line_count"] == len(body["lines"])
+    assert body["lines"], "an account to read, not a number to argue with"
+
+    # Not a statement, and nothing about it could be mistaken for one: no id
+    # to fetch, no status that could become `paid`.
+    assert "id" not in body and "status" not in body
+    assert all("id" not in line for line in body["lines"])
+
+    # And it wrote nothing. A read that persisted a statement would let a
+    # seller opening their cabinet create the run an admin is supposed to.
+    with Session(engine) as session:
+        assert not session.exec(
+            select(SellerStatement).where(SellerStatement.seller_id == seller_id)
+        ).all()
+
+    # Somebody else's sales are not in it.
+    others = client.get(f"{API}/staff/payouts/current", headers=theirs)
+    assert others.status_code == 200, others.text
+    assert others.json()["seller_id"] != seller_id
+    assert others.json()["gross_sales"] == 0
+
+    # An admin has no shop of their own, so they say whose.
+    assert client.get(f"{API}/staff/payouts/current", headers=admin).status_code == 400
+    for_them = client.get(
+        f"{API}/staff/payouts/current",
+        params={"seller_id": seller_id},
+        headers=admin,
+    )
+    assert for_them.status_code == 200, for_them.text
+    assert for_them.json()["gross_sales"] == 1_400_000
+    assert client.get(
+        f"{API}/staff/payouts/current", params={"seller_id": 999999}, headers=admin
+    ).status_code == 404
+
+    assert client.get(f"{API}/staff/payouts/current", headers=auth).status_code == 403
+    assert client.get(f"{API}/staff/payouts/current").status_code == 401
+
+    # It is a preview of the run, not a second opinion about it: generating a
+    # period over the same days reaches the same figure from the same lines.
+    period = _period(
+        client, admin, starts="2049-01-01", ends="2049-12-31", label="Joriy sinov"
+    )
+    statement = _statement(client, admin, period["id"], seller_id)
+    assert statement["gross_sales"] == body["gross_sales"]
+    assert statement["commission"] == body["commission"]
+    assert [
+        (line["kind"], line["amount"], line["order_item_id"])
+        for line in _lines(statement, "sale")
+    ] == [
+        (line["kind"], line["amount"], line["order_item_id"])
+        for line in body["lines"]
+        if line["kind"] == "sale"
+    ]
+
+    # Closing it is what turns the number into a promise — and the running
+    # total then reads zero for what has been settled, because a closed
+    # statement's sources are spent.
+    client.post(f"{API}/staff/payouts/periods/{period['id']}/close", headers=admin)
+    settled = client.get(f"{API}/staff/payouts/current", headers=mine).json()
+    assert settled["is_final"] is False
+    assert settled["gross_sales"] == 0, "paid for once"
+    assert not _stock_is_consistent()
+
+
+# ------------------------------------------------------------ the brand index
+
+
+def test_the_brand_index_says_how_many_cards_carry_each_brand(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """`product_count` was in the shape and was always nought.
+
+    The figure was only ever computed in `/products/filters`, where it is
+    scoped to one listing so the tick-boxes add up to the grid beside them. An
+    A-to-Z of marques with "(0)" against every one of them tells a shopper
+    nothing and reads like a bug.
+    """
+    assert client.post(
+        f"{API}/staff/catalog/brands",
+        json={"slug": "sinov-sanoq-index", "name": "Sanoq Index"},
+        headers=admin,
+    ).status_code == 201
+    category = client.get(f"{API}/categories").json()[0]["slug"]
+
+    def counted() -> int:
+        rows = client.get(f"{API}/brands")
+        assert rows.status_code == 200, rows.text
+        return next(
+            row["product_count"]
+            for row in rows.json()
+            if row["slug"] == "sinov-sanoq-index"
+        )
+
+    # A brand with nothing in the shop is still listed — the index is a
+    # directory — and counts nought, which is the truth about it.
+    assert counted() == 0
+
+    card = client.post(
+        f"{API}/staff/catalog/products",
+        json={
+            "sku": "MB-GAP-BRAND-1",
+            "title": "Sanoq kartochkasi",
+            "category_slug": category,
+            "brand_slug": "sinov-sanoq-index",
+            "price": 60_000,
+        },
+        headers=admin,
+    )
+    assert card.status_code == 201, card.text
+
+    # A draft is not in the shop, and tapping the brand would open an empty
+    # listing — the listing is narrowed the same way, so the count is too.
+    assert counted() == 0
+
+    assert client.post(
+        f"{API}/staff/catalog/products/{card.json()['id']}/status",
+        json={"status": "published"},
+        headers=admin,
+    ).status_code == 200
+    assert counted() == 1
+
+    # The same window the filter sheet counts in, so the two screens agree.
+    sheet = client.get(f"{API}/products/filters").json()["brands"]
+    assert next(
+        row["product_count"] for row in sheet if row["slug"] == "sinov-sanoq-index"
+    ) == 1
+
+    # Every seeded marque is counted, not just the one this test wrote: the
+    # figure was nought for all of them.
+    assert sum(row["product_count"] for row in client.get(f"{API}/brands").json()) > 1
+
+    # Withdrawn from the shop, and the count follows it out.
+    assert client.post(
+        f"{API}/staff/catalog/products/{card.json()['id']}/status",
+        json={"status": "archived", "reason": "sinov tugadi"},
+        headers=admin,
+    ).status_code == 200
+    assert counted() == 0
+
+
+def test_the_running_total_names_the_run_it_belongs_to_when_there_is_one(
+    client: TestClient,
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Two windows "so far" can mean, and the answer says which it is.
+
+    Between runs there is no period to belong to — the last one is closed and
+    the next is not open — and answering with silence would be answering "how
+    is this month going" with "an admin has not got round to it". So the days
+    since the last period are worked out instead and come back with no id,
+    because they are not a period: calling them one would invite somebody to
+    close them.
+
+    Once a run does cover today, that is the window, and its dates were
+    somebody's decision rather than ours.
+    """
+    _, mine = _linked_seller(staff, "Oyna Bir", "+998900100041")
+
+    # No run covers today, so the window is the gap and says so.
+    gap = client.get(f"{API}/staff/payouts/current", headers=mine)
+    assert gap.status_code == 200, gap.text
+    assert gap.json()["period_id"] is None
+    assert gap.json()["period_status"] is None
+    assert gap.json()["period_label"], "a window with no name still says what it is"
+    assert gap.json()["ends_on"] == utcnow().date().isoformat(), "through today"
+
+    # Opened. Periods may not overlap and every test here shares one database,
+    # so this run starts today: the days behind it are taken by the storage
+    # test, which dates its window to yesterday. A test added after this one
+    # can no longer open a run covering today — take a window in the future,
+    # the way the rest of this section does.
+    today = utcnow().date()
+    period = _period(
+        client,
+        admin,
+        starts=today.isoformat(),
+        ends=(today + timedelta(days=5)).isoformat(),
+        label="Joriy oy",
+    )
+
+    now = client.get(f"{API}/staff/payouts/current", headers=mine)
+    assert now.status_code == 200, now.text
+    body = now.json()
+    assert body["period_id"] == period["id"]
+    assert body["period_status"] == "open"
+    assert body["period_label"] == "Joriy oy"
+    assert body["starts_on"] == period["starts_on"]
+    assert body["ends_on"] == period["ends_on"], "the run's days, not ours"
+    # Still not the figure they will be paid: closing is what makes it one.
+    assert body["is_final"] is False

@@ -1764,6 +1764,107 @@ class FulfilmentTariffOut(BaseModel):
     label: str
 
 
+class FulfilmentTariffWriteIn(BaseModel):
+    """A new weight band.
+
+    ``max_grams`` is the top of the band, and it is what makes a band a band:
+    the lightest one that still covers a parcel is the one that applies, so
+    two bands sharing a ceiling would make "which band is this" a question
+    with two answers. The endpoint refuses the second.
+
+    Both rates default to nothing rather than to a guess. A fee that has not
+    been decided is better charged as zero than as a number somebody made up,
+    because the seller is going to read it against their contract.
+    """
+
+    max_grams: int = Field(gt=0)
+    fee: int = Field(0, ge=0)
+    storage_per_day: int = Field(0, ge=0)
+    label: str = ""
+
+
+class FulfilmentTariffUpdateIn(BaseModel):
+    """A change to a term of a contract; every field left out is left alone.
+
+    Partial rather than whole-row because the audit trail records fields, not
+    saves: a panel that PUT the entire band back would log four changes every
+    time somebody corrected the label.
+    """
+
+    max_grams: int | None = Field(None, gt=0)
+    fee: int | None = Field(None, ge=0)
+    storage_per_day: int | None = Field(None, ge=0)
+    label: str | None = None
+
+
+# ----------------------------------------------------- the period still running
+
+
+class RunningLineOut(BaseModel):
+    """One row of a running total.
+
+    ``StatementLineOut`` with the ``id`` removed, and the absence is the
+    point: these rows are worked out for the request and stored nowhere, so an
+    id would be a handle on something that does not exist and a panel would be
+    entitled to think it could fetch it again.
+    """
+
+    kind: StatementLineKind
+    amount: int
+    quantity: int
+    title: str
+    note: str
+    occurred_at: datetime
+    order_item_id: int | None
+    return_request_id: int | None
+    offer_id: int | None
+
+
+class RunningTotalOut(BaseModel):
+    """How the period is going so far — deliberately not a statement.
+
+    ``is_final`` is a constant ``false`` rather than a flag that might one day
+    be true. That is the whole shape of the thing: a seller reading this is
+    reading arithmetic over events that have not stopped arriving, and the
+    figure will differ from the one they are paid. Closing the period is what
+    turns a number into a promise, and a closed period answers on
+    ``/statements`` instead.
+
+    An adjustment is not here. Every other line is derived from something that
+    happened — goods delivered, goods returned, days on a shelf — and can be
+    recomputed from the events at any moment. An adjustment is a decision
+    somebody wrote onto a statement with a reason attached, and until a
+    statement exists there is nothing to write it on.
+    """
+
+    is_final: Literal[False] = False
+
+    # Null when nobody has opened a run covering today: the window is then the
+    # gap between the last period and now, which is a real span of days and
+    # not a period. Sales still happen in it.
+    period_id: int | None
+    period_label: str
+    period_status: SettlementStatus | None
+    starts_on: date
+    ends_on: date
+    # When the tally was taken. Two requests a minute apart may disagree, and
+    # this is what says which is the later one.
+    as_of: datetime
+
+    seller_id: int
+    seller_name: str
+
+    gross_sales: int
+    commission: int
+    fulfilment: int
+    refunds: int
+    storage: int
+    payable: int
+
+    line_count: int
+    lines: list[RunningLineOut]
+
+
 # ------------------------------------------------------------------ the courier
 
 # The last mile, which the system could not describe at all.
