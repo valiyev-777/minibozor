@@ -11,9 +11,10 @@ Three panels so far, in one application:
 - **Operator** — returns, review moderation, order status, delivery windows.
 - **Warehouse** — the shelf, incoming batches, stocktakes, removals, and the
   movement ledger.
-- **Admin** — moderation, the catalogue, sellers, roles, the shop window, and
-  the card editor: a product's words in three languages, its photographs, its
-  colour/size tree and its spec table.
+- **Admin** — moderation, the catalogue, sellers, roles, the shop window, the
+  card editor (a product's words in three languages, its photographs, its
+  colour/size tree and its spec table), and the finance screens: payout runs,
+  each seller's account, and what the fees are.
 
 The sidebar is drawn from the signed-in role, so an operator sees the queues, a
 warehouse hand sees the shelves, and an admin sees all three — with headings,
@@ -194,6 +195,48 @@ are worth keeping.
   their editor will live in a seller's own account. Nothing here is abstracted
   to serve both yet — what a seller needs is not known, and generalising now
   would be guessing.
+
+## The finance screens
+
+`src/pages/PayoutsPage.tsx`, `src/pages/payout/` and
+`src/pages/StatementPage.tsx`. Every figure on them is money somebody is paid,
+which changes how they are built.
+
+- **Nothing is rounded, ever.** The API answers in whole so'm and each figure
+  goes through `money()` untouched — `toLocaleString` only groups an integer.
+  `signedMoney()` writes the sign as a word rather than leaving a minus glyph
+  to read as a dash at 12px: a deduction and a credit share one column, and
+  they have to be distinguishable at a glance.
+- **Amounts are `tabular` and right-aligned**, so a column of them can be
+  scanned by shape instead of read digit by digit.
+- **The invariant is shown, not hidden.** `StatementPage` adds the lines up
+  itself and prints the sum beside the total. The backend holds that they are
+  equal; a page that only printed `payable` could not tell anybody when that
+  stopped being true, so when they disagree it says so and says not to pay.
+- **The irreversible buttons are not where a hand lands.** Closing sits apart
+  from the repeatable Generate beside it; paying and correcting live in the
+  page header, away from the rows a cursor travels over. Every confirmation
+  repeats the sum, and the close dialog says in plain words what freezing
+  does to a late refund.
+- **Every line names its source** — order line, return, offer — because
+  "9 100 000" is a number to argue with and its composition is an account to
+  read. That column is the reason the screen exists.
+- **A negative payable is coloured and named.** A period of refunds and
+  storage against no sales means the seller owes us; a debt shown in the same
+  ink as a credit is a debt nobody notices.
+
+## Endpoints the panel wants and the API does not have
+
+- **Editing the weight bands.** `GET /staff/payouts/tariffs` is the only door
+  on to `fulfilment_tariffs` — there is no POST, PATCH or DELETE. So the
+  Tariflar tab is read-only and says so on the screen rather than offering a
+  form that could not save. The two rates on a band are contract terms, so
+  editing them probably wants an audit row and per-seller overrides, which is
+  a stage of its own.
+- **Storage rate constants.** `STORAGE_PER_UNIT_DAY`, `STALE_AFTER_DAYS` and
+  `STALE_MULTIPLIER` live in `app/settlement.py` and are not exposed at all,
+  so the panel cannot show the surcharge rule beside the storage lines it
+  explains. The line's own note spells the arithmetic out instead.
 
 ## Endpoints added for it
 

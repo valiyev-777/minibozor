@@ -9,6 +9,7 @@ import { CountsPage } from "@/pages/CountsPage"
 import { ModerationPage } from "@/pages/ModerationPage"
 import { MovementsPage } from "@/pages/MovementsPage"
 import { OrdersPage } from "@/pages/OrdersPage"
+import { PayoutsPage } from "@/pages/PayoutsPage"
 import { ProductEditPage } from "@/pages/ProductEditPage"
 import { RemovalsPage } from "@/pages/RemovalsPage"
 import { ReturnsPage } from "@/pages/ReturnsPage"
@@ -16,6 +17,7 @@ import { ReviewsPage } from "@/pages/ReviewsPage"
 import { SellersPage } from "@/pages/SellersPage"
 import { ShelfPage } from "@/pages/ShelfPage"
 import { ShowcasePage } from "@/pages/ShowcasePage"
+import { StatementPage } from "@/pages/StatementPage"
 import { SlotsPage } from "@/pages/SlotsPage"
 import { SuppliesPage } from "@/pages/SuppliesPage"
 import { UsersPage } from "@/pages/UsersPage"
@@ -50,6 +52,7 @@ const SCREENS: Record<string, React.ComponentType> = {
   "/sellers": SellersPage,
   "/users": UsersPage,
   "/showcase": ShowcasePage,
+  "/payouts": PayoutsPage,
 }
 
 export function App() {
@@ -87,6 +90,11 @@ export function App() {
             to whoever may see the catalogue. */}
         {mine.some((item) => item.to === "/catalog") ? (
           <Route path="/catalog/products/:id" element={<ProductEditPage />} />
+        ) : null}
+        {/* One seller's account: reached from a row, and long enough to be
+            its own screen rather than a dialog over the list. */}
+        {mine.some((item) => item.to === "/payouts") ? (
+          <Route path="/payouts/statements/:id" element={<StatementPage />} />
         ) : null}
         {/* Anything else — a path for another role included — goes home
             rather than to an empty frame. */}

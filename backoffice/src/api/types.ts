@@ -77,6 +77,19 @@ export type SpecOut = S["SpecOut"]
 export type AdminSpec = S["AdminSpecOut"]
 export type MediaOut = S["MediaOut"]
 
+// ---------------------------------------------------------------- payouts
+
+export type SettlementPeriod = S["SettlementPeriodOut"]
+export type PeriodCreateIn = S["PeriodCreateIn"]
+export type SellerStatement = S["SellerStatementOut"]
+export type SellerStatementDetail = S["SellerStatementDetailOut"]
+export type StatementLine = S["StatementLineOut"]
+export type StatementLineKind = S["StatementLineKind"]
+export type SettlementStatus = S["SettlementStatus"]
+export type StatementPayIn = S["StatementPayIn"]
+export type AdjustmentIn = S["AdjustmentIn"]
+export type FulfilmentTariff = S["FulfilmentTariffOut"]
+
 export type Supply = S["SupplyOut"]
 export type SupplyStatus = S["SupplyStatus"]
 export type SupplyLine = S["SupplyLineOut"]

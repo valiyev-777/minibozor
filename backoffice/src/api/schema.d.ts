@@ -2154,6 +2154,203 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/staff/payouts/periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Periods */
+        get: operations["list_periods_api_v1_staff_payouts_periods_get"];
+        put?: never;
+        /**
+         * Open a payout run over a range of days
+         * @description Refused if it overlaps one that already exists.
+         *
+         *     Two periods covering the same day would either pay a sale twice or leave
+         *     it ambiguous which run it belonged to. The spent-source rule below would
+         *     stop the double payment, but only after the fact and only if somebody
+         *     closed them in the right order — so the overlap is refused instead.
+         */
+        post: operations["create_period_api_v1_staff_payouts_periods_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/payouts/periods/{period_id}/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Work out every seller's account for this period
+         * @description Repeatable while the period is open, and only then.
+         *
+         *     An open period is a running answer: run it on Tuesday and again on Friday
+         *     and Friday's is the one that counts. Once a statement is closed it is not
+         *     rebuilt and its sources are spent, so a later run over a later period
+         *     picks up what arrived in between rather than restating what was settled.
+         */
+        post: operations["generate_api_v1_staff_payouts_periods__period_id__generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/payouts/periods/{period_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Freeze the run — the sellers are about to see it
+         * @description Closing is what makes the figures mean something.
+         *
+         *     A seller who reads what they are owed and is shown a different number next
+         *     week has been told the first number was provisional, which makes every
+         *     number provisional. So this is the point of no return: the lines stop being
+         *     recomputed and the events behind them stop being available to any other
+         *     period.
+         *
+         *     It is not the same as paying. The money leaves per seller, against a
+         *     transfer, on its own door.
+         */
+        post: operations["close_period_api_v1_staff_payouts_periods__period_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/payouts/statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Accounts, filtered by period, seller or state
+         * @description A seller reads their own and nobody else's.
+         *
+         *     The scoping is not a filter they choose: for a seller these are the only
+         *     rows that exist. Admins see everything, which is what makes a dispute
+         *     answerable from one screen.
+         */
+        get: operations["list_statements_api_v1_staff_payouts_statements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/payouts/statements/{statement_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One account with every line that adds up to it
+         * @description The composition, which is the whole reason this model exists.
+         *
+         *     ``9 100 000`` is a number to argue with. The order lines, the returns and
+         *     the days of storage behind it are an account to read — and the seller can
+         *     read their own without asking anybody.
+         */
+        get: operations["get_statement_api_v1_staff_payouts_statements__statement_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/payouts/statements/{statement_id}/adjust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a correction, with the reason
+         * @description The one line a person writes by hand, so it is the one that must explain
+         *     itself. Only while the statement is open — a closed one is finished, and a
+         *     correction to it belongs in the next period where it can be seen.
+         */
+        post: operations["adjust_api_v1_staff_payouts_statements__statement_id__adjust_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/payouts/statements/{statement_id}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The money has left — say when, how, and against what
+         * @description Only a closed statement can be paid, and only once.
+         *
+         *     Paying an open one would be paying a figure still being recomputed. Paying
+         *     a paid one is the mistake this refusal exists for: two transfers against
+         *     one account is money gone that nobody notices until the seller says
+         *     nothing arrived and the log shows two payments to the one who did not
+         *     call.
+         */
+        post: operations["pay_api_v1_staff_payouts_statements__statement_id__pay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/payouts/tariffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What handling costs, by weight band
+         * @description Readable by sellers as well as admins. A fee somebody is charged and
+         *     cannot look up is a fee they can only dispute.
+         */
+        get: operations["list_tariffs_api_v1_staff_payouts_tariffs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/staff/showcase/banners": {
         parameters: {
             query?: never;
@@ -2392,6 +2589,20 @@ export interface components {
             longitude: number | null;
             /** Is Default */
             is_default: boolean;
+        };
+        /**
+         * AdjustmentIn
+         * @description A correction, with the reason attached.
+         *
+         *     Signed, and the note is required. An unexplained adjustment is the one
+         *     line of a statement nobody can defend, so the endpoint refuses a blank
+         *     one rather than accepting a number from nowhere.
+         */
+        AdjustmentIn: {
+            /** Amount */
+            amount: number;
+            /** Note */
+            note: string;
         };
         /** AdminBannerOut */
         AdminBannerOut: {
@@ -3203,6 +3414,22 @@ export interface components {
                 [key: string]: string;
             }[];
         };
+        /**
+         * FulfilmentTariffOut
+         * @description One weight band's two rates: per shipment, and per day on a shelf.
+         */
+        FulfilmentTariffOut: {
+            /** Id */
+            id: number;
+            /** Max Grams */
+            max_grams: number;
+            /** Fee */
+            fee: number;
+            /** Storage Per Day */
+            storage_per_day: number;
+            /** Label */
+            label: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -3734,6 +3961,31 @@ export interface components {
          * @enum {string}
          */
         PaymentMethod: "card" | "cash";
+        /**
+         * PeriodCreateIn
+         * @description A payout run's dates.
+         *
+         *     Chosen rather than derived: a week and a month are both reasonable and
+         *     which one a marketplace uses is a business decision, not something to
+         *     infer from a calendar.
+         */
+        PeriodCreateIn: {
+            /**
+             * Starts On
+             * Format: date
+             */
+            starts_on: string;
+            /**
+             * Ends On
+             * Format: date
+             */
+            ends_on: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+        };
         /** PhoneIn */
         PhoneIn: {
             /**
@@ -4516,6 +4768,123 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * SellerStatementDetailOut
+         * @description The same account with its composition, which is the point of it.
+         *
+         *     A seller told "9 100 000" has a number to argue with. A seller shown the
+         *     order lines, the returns and the days of storage that add up to it has an
+         *     account to read.
+         */
+        SellerStatementDetailOut: {
+            /** Id */
+            id: number;
+            /** Period Id */
+            period_id: number;
+            /** Period Label */
+            period_label: string;
+            /**
+             * Starts On
+             * Format: date
+             */
+            starts_on: string;
+            /**
+             * Ends On
+             * Format: date
+             */
+            ends_on: string;
+            /** Seller Id */
+            seller_id: number;
+            /** Seller Name */
+            seller_name: string;
+            status: components["schemas"]["SettlementStatus"];
+            /** Gross Sales */
+            gross_sales: number;
+            /** Commission */
+            commission: number;
+            /** Fulfilment */
+            fulfilment: number;
+            /** Refunds */
+            refunds: number;
+            /** Storage */
+            storage: number;
+            /** Adjustments */
+            adjustments: number;
+            /** Payable */
+            payable: number;
+            /** Line Count */
+            line_count: number;
+            /** Closed At */
+            closed_at: string | null;
+            /** Paid At */
+            paid_at: string | null;
+            /** Payment Method */
+            payment_method: string;
+            /** Payment Reference */
+            payment_reference: string;
+            /** Note */
+            note: string;
+            /** Lines */
+            lines: components["schemas"]["StatementLineOut"][];
+        };
+        /**
+         * SellerStatementOut
+         * @description A seller's account for one period.
+         *
+         *     The headings are positive figures read as deductions — "commission
+         *     420 000" — while ``payable`` is the signed arithmetic. It can be negative:
+         *     a period of refunds and storage against no sales means the seller owes us,
+         *     and rounding that up to zero would hide a debt rather than settle it.
+         */
+        SellerStatementOut: {
+            /** Id */
+            id: number;
+            /** Period Id */
+            period_id: number;
+            /** Period Label */
+            period_label: string;
+            /**
+             * Starts On
+             * Format: date
+             */
+            starts_on: string;
+            /**
+             * Ends On
+             * Format: date
+             */
+            ends_on: string;
+            /** Seller Id */
+            seller_id: number;
+            /** Seller Name */
+            seller_name: string;
+            status: components["schemas"]["SettlementStatus"];
+            /** Gross Sales */
+            gross_sales: number;
+            /** Commission */
+            commission: number;
+            /** Fulfilment */
+            fulfilment: number;
+            /** Refunds */
+            refunds: number;
+            /** Storage */
+            storage: number;
+            /** Adjustments */
+            adjustments: number;
+            /** Payable */
+            payable: number;
+            /** Line Count */
+            line_count: number;
+            /** Closed At */
+            closed_at: string | null;
+            /** Paid At */
+            paid_at: string | null;
+            /** Payment Method */
+            payment_method: string;
+            /** Payment Reference */
+            payment_reference: string;
+            /** Note */
+            note: string;
+        };
         /** SellerUpdateIn */
         SellerUpdateIn: {
             /** Name */
@@ -4545,6 +4914,36 @@ export interface components {
             /** Night Mode */
             night_mode: boolean;
         };
+        /** SettlementPeriodOut */
+        SettlementPeriodOut: {
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /**
+             * Starts On
+             * Format: date
+             */
+            starts_on: string;
+            /**
+             * Ends On
+             * Format: date
+             */
+            ends_on: string;
+            status: components["schemas"]["SettlementStatus"];
+            /** Closed At */
+            closed_at: string | null;
+            /** Statement Count */
+            statement_count: number;
+            /** Total Payable */
+            total_payable: number;
+        };
+        /**
+         * SettlementStatus
+         * @description Where a period, or one seller's account within it, has got to.
+         * @enum {string}
+         */
+        SettlementStatus: "open" | "closed" | "paid";
         /**
          * ShelfOut
          * @description What the ledger says, what is promised, and what is left to sell.
@@ -4901,6 +5300,76 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * StatementLineKind
+         * @description What one row of a statement is.
+         *
+         *     Signed amounts, so the statement is the sum of its lines the way the shelf
+         *     is the sum of its movements: what is owed to the seller is positive and
+         *     what we keep or claw back is negative. Which *kind* it is stays separate
+         *     from the sign, because a refund's commission comes back and is still part
+         *     of the refund.
+         * @enum {string}
+         */
+        StatementLineKind: "sale" | "commission" | "fulfilment" | "refund" | "refund_commission" | "storage" | "adjustment";
+        /**
+         * StatementLineOut
+         * @description One row of an account, and its source.
+         *
+         *     ``amount`` is signed the way the ledger is: positive is owed to the
+         *     seller, negative is what we keep or claw back. The apps never see this —
+         *     it is a backoffice shape — so the sign convention can be the one the
+         *     arithmetic actually uses rather than one that reads nicely in a column.
+         */
+        StatementLineOut: {
+            /** Id */
+            id: number;
+            kind: components["schemas"]["StatementLineKind"];
+            /** Amount */
+            amount: number;
+            /** Quantity */
+            quantity: number;
+            /** Title */
+            title: string;
+            /** Note */
+            note: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Order Item Id */
+            order_item_id: number | null;
+            /** Return Request Id */
+            return_request_id: number | null;
+            /** Offer Id */
+            offer_id: number | null;
+        };
+        /**
+         * StatementPayIn
+         * @description Marking money as gone.
+         *
+         *     The reference is what makes this checkable later — a transfer number
+         *     somebody can look up when a seller says it never arrived. Not required,
+         *     because cash exists, but asked for.
+         */
+        StatementPayIn: {
+            /**
+             * Method
+             * @example bank o'tkazmasi
+             */
+            method: string;
+            /**
+             * Reference
+             * @default
+             */
+            reference: string;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
         };
         /** StockCountCloseIn */
         StockCountCloseIn: {
@@ -9985,6 +10454,311 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranslationsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_periods_api_v1_staff_payouts_periods_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementPeriodOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_period_api_v1_staff_payouts_periods_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PeriodCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementPeriodOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_api_v1_staff_payouts_periods__period_id__generate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                period_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerStatementOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_period_api_v1_staff_payouts_periods__period_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                period_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettlementPeriodOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_statements_api_v1_staff_payouts_statements_get: {
+        parameters: {
+            query?: {
+                period_id?: number | null;
+                seller_id?: number | null;
+                status?: components["schemas"]["SettlementStatus"] | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerStatementOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_statement_api_v1_staff_payouts_statements__statement_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                statement_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerStatementDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    adjust_api_v1_staff_payouts_statements__statement_id__adjust_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                statement_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustmentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerStatementDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pay_api_v1_staff_payouts_statements__statement_id__pay_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                statement_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatementPayIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerStatementOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tariffs_api_v1_staff_payouts_tariffs_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FulfilmentTariffOut"][];
                 };
             };
             /** @description Validation Error */

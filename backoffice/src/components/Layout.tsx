@@ -6,6 +6,7 @@ import {
   CalendarClock,
   ClipboardList,
   Layers,
+  Landmark,
   LayoutTemplate,
   LibraryBig,
   LogOut,
@@ -97,6 +98,7 @@ export const NAV: NavItem[] = [
   { to: "/sellers", label: "Sotuvchilar", icon: Store, roles: ["admin"] },
   { to: "/users", label: "Foydalanuvchilar", icon: Users, roles: ["admin"] },
   { to: "/showcase", label: "Vitrina", icon: LayoutTemplate, roles: ["admin"] },
+  { to: "/payouts", label: "Moliya", icon: Landmark, roles: ["admin"] },
 ]
 
 /** The rows this role may reach, for the sidebar and for the router alike. */

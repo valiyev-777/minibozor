@@ -3,6 +3,8 @@ import type {
   ProductStatus,
   ReturnStatus,
   ReviewStatus,
+  SettlementStatus,
+  StatementLineKind,
   UserRole,
 } from "@/api/types"
 
@@ -173,4 +175,45 @@ export const PRODUCT_ACTION: Record<ProductStatus, string> = {
   published: "E'lon qilish",
   rejected: "Rad etish",
   archived: "Arxivlash",
+}
+
+// ------------------------------------------------------------------ payouts
+
+export const SETTLEMENT_STATUS: Record<SettlementStatus, string> = {
+  open: "Ochiq",
+  closed: "Yopilgan",
+  paid: "To'langan",
+}
+
+export const SETTLEMENT_TONE: Record<SettlementStatus, Tone> = {
+  open: "accent",
+  closed: "warn",
+  paid: "good",
+}
+
+/**
+ * What each row of a statement is.
+ *
+ * Read beside the sign, not instead of it: "Qaytarish" is a deduction and
+ * "Komissiya qaytdi" is a credit, and the two belong to the same refund.
+ */
+export const LINE_KIND: Record<StatementLineKind, string> = {
+  sale: "Sotuv",
+  commission: "Komissiya",
+  fulfilment: "Yig'ish-yetkazish",
+  refund: "Qaytarish",
+  refund_commission: "Komissiya qaytdi",
+  storage: "Saqlash",
+  adjustment: "Tuzatish",
+}
+
+/** What the row was computed from, for the column that names the source. */
+export const LINE_SOURCE: Record<StatementLineKind, string> = {
+  sale: "Buyurtma satri",
+  commission: "Buyurtma satri",
+  fulfilment: "Buyurtma satri",
+  refund: "Qaytarish",
+  refund_commission: "Qaytarish",
+  storage: "Taklif",
+  adjustment: "Qo'lda",
 }
