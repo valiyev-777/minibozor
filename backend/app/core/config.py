@@ -25,8 +25,22 @@ class Settings(BaseSettings):
     # Named origins, not a wildcard. The API answers with credentials — the
     # backoffice's refresh cookie rides on them — and a browser refuses
     # ``Access-Control-Allow-Origin: *`` together with credentials outright.
-    # Comma-separated; the dev backoffice runs on Vite's default port.
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    #
+    # All three staff applications, because there are three: the backoffice on
+    # 5173, the seller's cabinet on 5174, the courier's on 5175. Only the first
+    # was listed, so the seller and the courier could not reach this API at all
+    # — every request failed in the browser, before it arrived, and the server
+    # had nothing to say about it. Each is named on both hostnames because
+    # ``localhost`` and ``127.0.0.1`` are different origins to a browser and
+    # people type both.
+    #
+    # Comma-separated, and a deployment overrides the lot with MB_CORS_ORIGINS:
+    # these are development ports and belong nowhere else.
+    cors_origins: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:5174,http://127.0.0.1:5174,"
+        "http://localhost:5175,http://127.0.0.1:5175"
+    )
 
     @property
     def is_dev(self) -> bool:

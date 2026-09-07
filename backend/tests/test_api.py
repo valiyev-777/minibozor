@@ -2738,7 +2738,16 @@ def test_the_allowed_origins_are_named_and_never_a_wildcard() -> None:
     from app.core.config import Settings
 
     assert "*" not in settings.cors_origin_list
-    assert "http://localhost:5173" in settings.cors_origin_list
+
+    # All three staff applications, on both hostnames. Listing only the
+    # backoffice is what had actually shipped, and the seller's cabinet and the
+    # courier PWA could not reach this API at all: the browser refused the
+    # request before it was sent, so the server never saw one to complain
+    # about. A test that named the single origin which worked is why that
+    # survived, so this names every one of them.
+    for port in (5173, 5174, 5175):
+        for host in ("localhost", "127.0.0.1"):
+            assert f"http://{host}:{port}" in settings.cors_origin_list
 
     # And a wildcard in the environment is dropped rather than passed through.
     assert Settings(cors_origins="*").cors_origin_list == []
@@ -2747,19 +2756,32 @@ def test_the_allowed_origins_are_named_and_never_a_wildcard() -> None:
     ]
 
 
-def test_a_preflight_answers_the_backoffice_by_name(client: TestClient) -> None:
-    origin = "http://localhost:5173"
-    preflight = client.options(
-        f"{API}/staff/returns",
-        headers={
-            "Origin": origin,
-            "Access-Control-Request-Method": "GET",
-            "Access-Control-Request-Headers": "authorization",
-        },
-    )
-    assert preflight.status_code == 200
-    assert preflight.headers["access-control-allow-origin"] == origin
-    assert preflight.headers["access-control-allow-credentials"] == "true"
+def test_a_preflight_answers_each_staff_application_by_name(
+    client: TestClient,
+) -> None:
+    """One request per application, not one for the first of them.
+
+    The three are separate builds on separate ports and in production on
+    separate hostnames, and being allowed is a per-origin fact. Asserting it
+    for the backoffice alone said nothing about the other two, which were in
+    fact blocked.
+    """
+    for origin in (
+        "http://localhost:5173",   # backoffice
+        "http://localhost:5174",   # seller's cabinet
+        "http://localhost:5175",   # courier PWA
+    ):
+        preflight = client.options(
+            f"{API}/staff/returns",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
+        assert preflight.status_code == 200, origin
+        assert preflight.headers["access-control-allow-origin"] == origin
+        assert preflight.headers["access-control-allow-credentials"] == "true"
 
     # Somebody else's page gets nothing.
     stranger = client.options(
