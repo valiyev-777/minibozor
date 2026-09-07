@@ -304,8 +304,40 @@ def product_reviews(
 
 @router.get("/brands", response_model=list[s.BrandOut])
 def list_brands(session: SessionDep) -> list[s.BrandOut]:
+    """Every brand, with how many cards in the shop carry it.
+
+    The field was always in the shape and was always nought: the figure was
+    only ever computed in ``/products/filters``, where it is scoped to one
+    listing so the tick-boxes add up to the grid beside them. Here it is the
+    whole shop, which is what a brand index is for — an A-to-Z of marques with
+    "(0)" against every one of them tells a shopper nothing and reads like a
+    bug.
+
+    Counted in one grouped query rather than per row: this list is the length
+    of the brand table, and a COUNT each would be a query per marque to draw
+    one screen.
+
+    Published cards only, through the same ``in_the_shop`` narrowing every
+    customer path uses. A brand whose only cards are drafts or refusals counts
+    nought here and that is correct — tapping it would open an empty listing,
+    because the listing is narrowed the same way. Brands with nothing in the
+    shop are still listed: the index is a directory, and dropping rows out of
+    it would change what an existing app is shown.
+    """
+    counts = dict(
+        session.exec(
+            sv.in_the_shop(
+                select(Product.brand_id, func.count()).where(
+                    col(Product.brand_id).is_not(None)
+                )
+            ).group_by(col(Product.brand_id))
+        ).all()
+    )
     rows = session.exec(select(Brand).order_by(col(Brand.name))).all()
-    return [sv.brand_out(session, b) for b in rows]
+    return [
+        sv.brand_out(session, b, product_count=int(counts.get(b.id, 0)))
+        for b in rows
+    ]
 
 
 # --------------------------------------------------------------------------- helpers

@@ -470,6 +470,39 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "По этому отчёту уже выплачено",
         "en": "That statement has already been paid",
     },
+    "period_not_opened": {
+        "uz": "Davr hali ochilmagan — bu oxirgi davrdan keyingi kunlar",
+        "ru": "Период ещё не открыт — это дни после последнего периода",
+        "en": "No run opened yet — these are the days since the last one",
+    },
+    "tariff_not_found": {
+        "uz": "Og'irlik guruhi topilmadi",
+        "ru": "Весовая группа не найдена",
+        "en": "Weight band not found",
+    },
+    "tariff_band_exists": {
+        "uz": "Shu og'irlikda tugaydigan guruh allaqachon bor — ikkitasi "
+              "bo'lsa, posilka qaysi guruhga tushishi qator tartibiga bog'liq "
+              "bo'lib qoladi",
+        "ru": "Группа с таким верхним весом уже есть — при двух таких "
+              "группах то, в какую попадёт посылка, будет зависеть от "
+              "порядка строк",
+        "en": "A band already tops out at that weight — with two of them, "
+              "which one a parcel falls into would depend on row order",
+    },
+    "tariff_top_band": {
+        "uz": "Bu eng og'ir guruh — o'chirilsa, undan pastdagi guruhdan "
+              "og'irroq har bir posilka hech qaysi guruhga tushmaydi va "
+              "yig'ish haqi olinmay qoladi. Avval pastdagi guruh chegarasini "
+              "ko'taring yoki o'rniga yangisini qo'shing.",
+        "ru": "Это самая тяжёлая группа — если её удалить, каждая посылка "
+              "тяжелее предыдущей группы не попадёт ни в одну и сбор не "
+              "возьмётся. Сначала поднимите верхний предел группы ниже или "
+              "добавьте замену.",
+        "en": "That is the heaviest band — delete it and every parcel above "
+              "the band below falls into no band at all and is handled free. "
+              "Raise the ceiling below it, or add the replacement first.",
+    },
     "last_admin": {
         "uz": "Bu oxirgi admin — rolini tushirib bo'lmaydi, aks holda tizimga "
               "hech kim kira olmaydi. Avval boshqa admin tayinlang.",
