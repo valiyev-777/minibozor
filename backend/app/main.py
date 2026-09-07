@@ -17,6 +17,7 @@ from app.routers import (
     cart,
     catalog,
     content,
+    courier,
     delivery,
     favorites,
     home,
@@ -105,6 +106,7 @@ for router in (
     admin.router,
     payouts.router,
     showcase.router,
+    courier.router,
 ):
     app.include_router(router, prefix=API)
 

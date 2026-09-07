@@ -493,6 +493,117 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Это не изображение — даже если имя файла говорит обратное",
         "en": "That file isn't an image — whatever its name says",
     },
+    "idempotency_key_required": {
+        "uz": "Idempotency-Key sarlavhasi kerak — takroriy so'rov ikki marta "
+              "bajarilmasligi uchun",
+        "ru": "Нужен заголовок Idempotency-Key — чтобы повторный запрос не "
+              "выполнился дважды",
+        "en": "An Idempotency-Key header is required, so a retry does not do "
+              "the thing twice",
+    },
+    "idempotency_key_reused": {
+        "uz": "Bu kalit boshqa so'rov uchun ishlatilgan — bir kalit bir "
+              "so'rovga tegishli",
+        "ru": "Этот ключ уже использован для другого запроса — один ключ на "
+              "один запрос",
+        "en": "That key was used for a different request — one key belongs to "
+              "one request",
+    },
+    "shift_required": {
+        "uz": "Avval smenani boshlang — naqd pul smenaga yig'iladi",
+        "ru": "Сначала откройте смену — наличные учитываются по смене",
+        "en": "Start a shift first — cash is counted against one",
+    },
+    "shift_closed": {
+        "uz": "Bu smena allaqachon yopilgan",
+        "ru": "Эта смена уже закрыта",
+        "en": "That shift is already closed",
+    },
+    "shift_open": {
+        "uz": "Smena hali yopilmagan — pul topshirilmagan",
+        "ru": "Смена ещё не закрыта — деньги не сданы",
+        "en": "That shift is not closed yet — the cash has not been handed in",
+    },
+    "shift_counted": {
+        "uz": "Bu smena allaqachon sanalgan",
+        "ru": "Эта смена уже пересчитана",
+        "en": "That shift has already been counted",
+    },
+    "shift_not_found": {
+        "uz": "Smena topilmadi",
+        "ru": "Смена не найдена",
+        "en": "Shift not found",
+    },
+    "not_your_shift": {
+        "uz": "Bu sizning smenangiz emas",
+        "ru": "Это не ваша смена",
+        "en": "That is not your shift",
+    },
+    "not_your_delivery": {
+        "uz": "Bu buyurtma sizga biriktirilmagan",
+        "ru": "Этот заказ не назначен вам",
+        "en": "That order is not on your round",
+    },
+    "not_out_for_delivery": {
+        "uz": "Buyurtma yo'lda emas — urinish yozib bo'lmaydi",
+        "ru": "Заказ не в пути — попытку записать нельзя",
+        "en": "That order is not out for delivery, so an attempt cannot be "
+              "recorded against it",
+    },
+    "cash_mismatch": {
+        "uz": "Naqd summa to'g'ri kelmadi: {owed} so'm olinishi kerak, "
+              "{given} ko'rsatilgan",
+        "ru": "Сумма наличных не сходится: нужно {owed} сум, указано {given}",
+        "en": "The cash does not match: {owed} so'm is owed and {given} was "
+              "entered",
+    },
+    "courier_not_found": {
+        "uz": "Kuryer topilmadi",
+        "ru": "Курьер не найден",
+        "en": "Courier not found",
+    },
+    "courier_inactive": {
+        "uz": "Bu kuryerning hisobi o'chirilgan",
+        "ru": "Аккаунт этого курьера отключён",
+        "en": "That courier's account is switched off",
+    },
+    "order_finished": {
+        "uz": "Buyurtma tugagan — kuryerni o'zgartirib bo'lmaydi",
+        "ru": "Заказ завершён — курьера изменить нельзя",
+        "en": "That order is finished — its courier cannot be changed",
+    },
+    "return_not_approved": {
+        "uz": "Faqat tasdiqlangan ariza bo'yicha yig'uvga chiqiladi",
+        "ru": "Забирать можно только по одобренной заявке",
+        "en": "Only an approved request is worth sending a van for",
+    },
+    "return_already_on_a_run": {
+        "uz": "Bu ariza allaqachon yig'uv reysida",
+        "ru": "Эта заявка уже в маршруте забора",
+        "en": "That request is already on a collection run",
+    },
+    "pickup_not_found": {
+        "uz": "Yig'uv reysi topilmadi",
+        "ru": "Маршрут забора не найден",
+        "en": "Collection run not found",
+    },
+    "not_your_pickup": {
+        "uz": "Bu sizning reysingiz emas",
+        "ru": "Это не ваш маршрут",
+        "en": "That is not your run",
+    },
+    "pickup_line_not_of_run": {
+        "uz": "Bu ariza shu reysda yo'q",
+        "ru": "Этой заявки нет в маршруте",
+        "en": "That request is not on this run",
+    },
+    "pickup_reason_required": {
+        "uz": "Olinmagan bo'lsa sababini yozing — operator shu jumla bilan "
+              "qaror qiladi",
+        "ru": "Если не забрали — напишите причину: оператор решает по ней",
+        "en": "If it was not collected, say why — an operator decides from "
+              "that sentence",
+    },
     "admin_has_no_seller": {
         "uz": "Administratorning o'z do'koni yo'q — sotuvchini «Sotuvchilar» "
               "orqali oching",

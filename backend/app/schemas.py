@@ -13,18 +13,21 @@ from typing import Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import (
+    AttemptResult,
     CardStatus,
     DeliveryKind,
     Language,
     NotificationKind,
     OrderStatus,
     PaymentMethod,
+    PickupRunStatus,
     ProductStatus,
     RemovalReason,
     RemovalStatus,
     ReturnStatus,
     ReviewStatus,
     SettlementStatus,
+    ShiftStatus,
     StatementLineKind,
     StockCountStatus,
     StockMovementKind,
@@ -1759,6 +1762,218 @@ class FulfilmentTariffOut(BaseModel):
     fee: int
     storage_per_day: int
     label: str
+
+
+# ------------------------------------------------------------------ the courier
+
+# The last mile, which the system could not describe at all.
+#
+# Every write shape here is submitted from a phone that may have queued it for
+# an hour and may send it twice. The header ``Idempotency-Key`` is required on
+# all of them; see ``app.idempotency`` for why it is not optional.
+
+
+class CourierOrderOut(BaseModel):
+    """One stop on a round.
+
+    Not the customer's ``OrderOut``. A courier at a door needs the address,
+    the phone, how much cash to ask for and how many times this door has
+    already been tried — and none of the catalogue detail that shape carries.
+    """
+
+    id: int
+    code: str
+    sequence: int
+    status: OrderStatus
+
+    recipient_name: str
+    recipient_phone: str
+    address_line: str
+    address_meta: str
+    delivery_kind: DeliveryKind
+    delivery_day: date | None
+    delivery_window: str
+
+    items_count: int
+    total: int
+    payment_method: PaymentMethod
+    # Whether money changes hands at the door, and how much. Zero on a card
+    # order, which is already paid — asking for it again is the mistake this
+    # field exists to prevent.
+    cash_due: int
+
+    # How this door has gone so far, so a courier knows before they knock.
+    attempts: int
+    last_failure: str
+
+
+class CourierAssignIn(BaseModel):
+    """An operator putting an order on somebody's round."""
+
+    courier_id: int
+    # The stop number. Zero means unplaced, and the list falls back to the
+    # delivery window and then the code, so an unsequenced round is still in
+    # a sensible order rather than an arbitrary one.
+    sequence: int = Field(0, ge=0, le=999)
+    note: str = Field("", max_length=200)
+
+
+class DeliverIn(BaseModel):
+    """Proof that goods changed hands.
+
+    ``recipient_name`` is required and the photograph is not. That is a
+    decision about the work: the name is one field a courier can always fill
+    in while standing in front of the person who took the goods, and it is
+    what answers "I never received it". A photo needs an upload, an upload
+    needs signal, and requiring one would stop a courier in a basement
+    finishing a delivery they have already made.
+    """
+
+    recipient_name: str = Field(min_length=1, max_length=120)
+    # A path from ``POST /staff/media``, uploaded when there was signal to.
+    photo_url: str = Field("", max_length=300)
+    # What was taken at the door. Refused unless it matches what is owed:
+    # a courier who mistypes this is short at the end of the day and cannot
+    # prove why.
+    cash_collected: int = Field(0, ge=0)
+    note: str = Field("", max_length=200)
+
+
+class FailedIn(BaseModel):
+    """A door that did not open.
+
+    The reason is required. "Not delivered" with nothing after it is the row
+    an operator cannot act on, and deciding what happens next — phone the
+    customer, try tomorrow, give up — is a decision made from this sentence.
+    """
+
+    reason: str = Field(min_length=1, max_length=200)
+    photo_url: str = Field("", max_length=300)
+
+
+class DeliveryAttemptOut(BaseModel):
+    id: int
+    order_id: int
+    order_code: str
+    result: AttemptResult
+    reason: str
+    recipient_name: str
+    photo_url: str | None
+    cash_collected: int
+    happened_at: datetime
+
+
+class ShiftOut(BaseModel):
+    """A round, and the money that came back from it.
+
+    Three cash figures because they are three separate claims and the whole
+    value is in where they differ. ``cash_expected`` is the sum of the
+    deliveries and is ours; ``cash_declared`` is the courier's word;
+    ``cash_counted`` is what the office found. ``difference`` is the counted
+    figure against the expected one, and it is null until somebody has
+    counted — a nought would be a claim nobody has made.
+    """
+
+    id: int
+    courier_id: int
+    courier_name: str
+    status: ShiftStatus
+    opened_at: datetime
+    closed_at: datetime | None
+
+    cash_expected: int
+    cash_declared: int | None
+    cash_counted: int | None
+    difference: int | None
+    counted_at: datetime | None
+
+    orders_delivered: int
+    orders_failed: int
+    note: str
+
+
+class ShiftDetailOut(ShiftOut):
+    """The same round with every door on it, so the total is followable."""
+
+    attempts: list[DeliveryAttemptOut]
+
+
+class ShiftCloseIn(BaseModel):
+    """Handing the cash over.
+
+    The declared figure is required even when it matches: a courier saying
+    "this is what I have" is the claim the reconciliation is against, and
+    inferring it from our own total would leave nothing to reconcile.
+    """
+
+    cash_declared: int = Field(ge=0)
+    note: str = Field("", max_length=200)
+
+
+class ShiftCountIn(BaseModel):
+    """What the office actually counted."""
+
+    cash_counted: int = Field(ge=0)
+    note: str = Field("", max_length=200)
+
+
+class PickupLineOut(BaseModel):
+    id: int
+    return_request_id: int
+    order_code: str
+    customer_name: str
+    customer_phone: str
+    address_line: str
+    reason: str                  # why the customer is returning it
+    product_title: str
+    # Null until the courier has been: True and False are answers, null is
+    # "nobody has tried".
+    collected: bool | None
+    note: str                    # why it was not collected, when it was not
+    photo_url: str | None
+    attempted_at: datetime | None
+
+
+class PickupRunOut(BaseModel):
+    id: int
+    code: str
+    courier_id: int
+    courier_name: str
+    status: PickupRunStatus
+    next_statuses: list[PickupRunStatus]
+    created_at: datetime
+    collected_at: datetime | None
+    received_at: datetime | None
+    note: str
+    lines: list[PickupLineOut]
+
+
+class PickupCreateIn(BaseModel):
+    """A round of collections, built from approved returns.
+
+    Only approved ones: a request still being decided is not something to
+    send a van for, and a refused one has nothing to collect.
+    """
+
+    courier_id: int
+    return_request_ids: list[int] = Field(min_length=1, max_length=60)
+    note: str = Field("", max_length=200)
+
+
+class PickupLineIn(BaseModel):
+    return_request_id: int
+    collected: bool
+    # Required when nothing was collected, for the same reason a failed
+    # delivery needs one.
+    reason: str = Field("", max_length=200)
+    photo_url: str = Field("", max_length=300)
+
+
+class PickupCollectIn(BaseModel):
+    """What the courier came back with, door by door."""
+
+    lines: list[PickupLineIn] = Field(min_length=1, max_length=60)
+    note: str = Field("", max_length=200)
 
 
 # ------------------------------------------------------------------ backoffice

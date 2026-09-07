@@ -21,7 +21,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from app import i18n, images
 from app import schemas as s
 from app import services as sv
-from app.deps import SellerUser
+from app.deps import MediaUploader
 
 router = APIRouter(prefix="/staff", tags=["staff"])
 
@@ -33,11 +33,16 @@ router = APIRouter(prefix="/staff", tags=["staff"])
     summary="Upload a picture and get its media path",
 )
 def upload(
-    user: SellerUser,
+    user: MediaUploader,
     file: UploadFile = File(description="A photograph. Any format Pillow reads."),
 ) -> s.MediaOut:
-    """Admins and sellers. A seller photographs the goods they propose, and a
-    card with no picture is a card nobody taps.
+    """Admins, sellers and couriers.
+
+    A seller photographs the goods they propose, and a card with no picture is
+    a card nobody taps. A courier photographs a doorstep, which is the
+    evidence a delivery happened — the same pipeline, and there was no reason
+    to build a second one that decodes and shrinks pictures slightly
+    differently.
 
     Declared ``def`` rather than ``async def`` on purpose: decoding and
     re-encoding a four-megapixel photograph is a second of CPU, and on the

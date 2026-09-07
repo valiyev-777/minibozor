@@ -32,21 +32,37 @@ from app import audit, i18n, inventory
 from app import schemas as s
 from app import services as sv
 from app import transitions as tr
-from app.deps import OperatorUser, SessionDep
+from app.deps import (
+    OperatorUser,
+    PickupHandler,
+    SessionDep,
+    WarehouseUser,
+)
 from app.models import (
+    CourierShift,
     DeliverySlot,
     Notification,
     NotificationKind,
     Order,
     OrderItem,
     OrderStatus,
+    PickupLine,
+    PickupRun,
+    PickupRunStatus,
     Product,
     ReturnRequest,
     ReturnStatus,
     Review,
     ReviewStatus,
+    ShiftStatus,
     User,
+    UserRole,
 )
+
+# The courier's own shapes are rendered by the courier router. Imported rather
+# than duplicated: two renderings of one shift would be two things to keep in
+# step, and the operator is looking at exactly what the courier reported.
+from app.routers import courier as courier_router
 
 router = APIRouter(prefix="/staff", tags=["staff"])
 
@@ -478,6 +494,337 @@ def set_order_status(
     session.commit()
     session.refresh(order)
     return sv.order_out(session, order)
+
+
+# --------------------------------------------------------------------- the last mile
+
+# The operator's half of the courier module. Three things belong here rather
+# than in ``courier.py`` because they are decisions a courier must not make
+# about their own work: who carries what, which returns get a van, and what
+# the office counted when the cash came back.
+
+
+@router.get(
+    "/couriers",
+    response_model=list[s.StaffUserOut],
+    summary="Who is available to carry things",
+)
+def list_couriers(user: OperatorUser, session: SessionDep) -> list[s.StaffUserOut]:
+    rows = session.exec(
+        select(User)
+        .where(User.role == UserRole.COURIER, col(User.is_active).is_(True))
+        .order_by(col(User.full_name), col(User.phone))
+    ).all()
+    return [
+        s.StaffUserOut(
+            id=row.id,
+            phone=row.phone,
+            full_name=row.full_name,
+            role=row.role,
+            is_active=row.is_active,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+
+
+@router.post(
+    "/orders/{order_id}/courier",
+    response_model=s.OrderOut,
+    summary="Put an order on somebody's round",
+)
+def assign_courier(
+    order_id: int,
+    payload: s.CourierAssignIn,
+    user: OperatorUser,
+    session: SessionDep,
+) -> s.OrderOut:
+    """The operator plans the round; the courier drives it.
+
+    Allowed while the order has not finished — a round is usually planned
+    before anything is packed, and reassigning a stop mid-afternoon is
+    ordinary work rather than an exception. Refused once the order is
+    delivered, cancelled or returned: there is nothing left to carry, and
+    changing the name on a finished delivery would rewrite who did it.
+
+    Logged, because "who was carrying it" is the first question asked about a
+    delivery that went wrong.
+    """
+    order = _order(session, order_id)
+    if order.status in (
+        OrderStatus.DELIVERED,
+        OrderStatus.CANCELLED,
+        OrderStatus.RETURNED,
+    ):
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("order_finished"))
+
+    courier = session.get(User, payload.courier_id)
+    if courier is None or courier.role is not UserRole.COURIER:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("courier_not_found"))
+    if not courier.is_active:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("courier_inactive"))
+
+    audit.record(
+        session,
+        actor=user,
+        action="order.courier",
+        entity="order",
+        entity_id=order.id,
+        field="courier_id",
+        old=order.courier_id,
+        new=courier.id,
+        note=payload.note or (courier.full_name or courier.phone),
+    )
+    order.courier_id = courier.id
+    order.courier_sequence = payload.sequence
+    order.updated_at = sv.utcnow()
+    session.add(order)
+    session.commit()
+    session.refresh(order)
+    return sv.order_out(session, order)
+
+
+@router.get(
+    "/shifts",
+    response_model=list[s.ShiftOut],
+    summary="Rounds, and whether the cash added up",
+)
+def list_shifts(
+    user: OperatorUser,
+    session: SessionDep,
+    courier_id: int | None = Query(None),
+    status_filter: ShiftStatus | None = Query(None, alias="status"),
+) -> list[s.ShiftOut]:
+    stmt = select(CourierShift)
+    if courier_id is not None:
+        stmt = stmt.where(CourierShift.courier_id == courier_id)
+    if status_filter is not None:
+        stmt = stmt.where(CourierShift.status == status_filter)
+    rows = session.exec(stmt.order_by(col(CourierShift.id).desc())).all()
+    return [courier_router._shift_out(session, row) for row in rows]
+
+
+@router.get(
+    "/shifts/{shift_id}",
+    response_model=s.ShiftDetailOut,
+    summary="One round, door by door",
+)
+def get_shift(
+    shift_id: int, user: OperatorUser, session: SessionDep
+) -> s.ShiftDetailOut:
+    """Every attempt on the shift, so the cash total is followable.
+
+    The same reason a statement carries its lines: a courier told they are
+    30 000 short has a number to argue with, and a list of doors with a figure
+    against each one is something to check.
+    """
+    shift = session.get(CourierShift, shift_id)
+    if shift is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("shift_not_found"))
+    return courier_router._shift_detail(session, shift)
+
+
+@router.post(
+    "/shifts/{shift_id}/count",
+    response_model=s.ShiftDetailOut,
+    summary="What the office counted",
+)
+def count_shift(
+    shift_id: int,
+    payload: s.ShiftCountIn,
+    user: OperatorUser,
+    session: SessionDep,
+) -> s.ShiftDetailOut:
+    """The third figure, and the only one that settles anything.
+
+    Counted against ``cash_expected`` rather than against what the courier
+    declared: the declaration is one of the claims being checked, so checking
+    it against itself would always agree. A difference is recorded as it is
+    and never reconciled away — an unexplained shortfall is a fact about a
+    day, and the audit row is what makes it findable a month later.
+    """
+    shift = session.get(CourierShift, shift_id)
+    if shift is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("shift_not_found"))
+    if shift.status is not ShiftStatus.CLOSED:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("shift_open"))
+    if shift.cash_counted is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("shift_counted"))
+
+    gap = payload.cash_counted - shift.cash_expected
+    audit.record(
+        session,
+        actor=user,
+        action="shift.count",
+        entity="courier_shift",
+        entity_id=shift.id,
+        field="cash_counted",
+        old=shift.cash_expected,
+        new=payload.cash_counted,
+        note=payload.note or (f"farq {gap}" if gap else "farq yo'q"),
+    )
+    shift.cash_counted = payload.cash_counted
+    shift.counted_by_id = user.id
+    shift.counted_at = sv.utcnow()
+    if payload.note:
+        shift.note = payload.note.strip()
+    session.add(shift)
+    session.commit()
+    session.refresh(shift)
+    return courier_router._shift_detail(session, shift)
+
+
+# --------------------------------------------------------------------- collection runs
+
+
+@router.post(
+    "/pickups",
+    response_model=s.PickupRunOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Send a van for approved returns",
+)
+def create_pickup(
+    payload: s.PickupCreateIn, user: OperatorUser, session: SessionDep
+) -> s.PickupRunOut:
+    """Only approved requests go on a run.
+
+    A request still being decided is not something to send a van for, and a
+    refused one has nothing to collect. A request already on an open run is
+    refused too — two vans for one parcel is one wasted trip and a courier
+    told the goods are gone.
+    """
+    courier = session.get(User, payload.courier_id)
+    if courier is None or courier.role is not UserRole.COURIER:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("courier_not_found"))
+
+    requests: list[ReturnRequest] = []
+    for request_id in dict.fromkeys(payload.return_request_ids):
+        request = session.get(ReturnRequest, request_id)
+        if request is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, i18n.label("return_not_found")
+            )
+        if request.status is not ReturnStatus.APPROVED:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, i18n.label("return_not_approved")
+            )
+        already = session.exec(
+            select(PickupLine)
+            .join(PickupRun, col(PickupLine.run_id) == col(PickupRun.id))
+            .where(
+                PickupLine.return_request_id == request.id,
+                col(PickupRun.status).in_(
+                    [PickupRunStatus.OPEN, PickupRunStatus.COLLECTED]
+                ),
+            )
+        ).first()
+        if already is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, i18n.label("return_already_on_a_run")
+            )
+        requests.append(request)
+
+    run = PickupRun(
+        code=_next_pickup_code(session),
+        courier_id=courier.id,
+        note=payload.note.strip(),
+    )
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+
+    for request in requests:
+        session.add(PickupLine(run_id=run.id, return_request_id=request.id))
+
+    audit.record(
+        session,
+        actor=user,
+        action="pickup.create",
+        entity="pickup_run",
+        entity_id=run.id,
+        field="courier_id",
+        old=None,
+        new=courier.id,
+        note=f"{run.code} · {len(requests)} ariza",
+    )
+    session.commit()
+    session.refresh(run)
+    return courier_router._run_out(session, run)
+
+
+@router.get(
+    "/pickups",
+    response_model=list[s.PickupRunOut],
+    summary="Collection runs, out and back",
+)
+def list_pickups(
+    user: PickupHandler,
+    session: SessionDep,
+    status_filter: PickupRunStatus | None = Query(None, alias="status"),
+) -> list[s.PickupRunOut]:
+    """Read by the warehouse as well as the operator: the goods arrive at a
+    desk, and the person at that desk needs to know what is coming."""
+    stmt = select(PickupRun)
+    if user.role is UserRole.COURIER:
+        stmt = stmt.where(PickupRun.courier_id == user.id)
+    if status_filter is not None:
+        stmt = stmt.where(PickupRun.status == status_filter)
+    rows = session.exec(stmt.order_by(col(PickupRun.id).desc())).all()
+    return [courier_router._run_out(session, row) for row in rows]
+
+
+@router.post(
+    "/pickups/{run_id}/receive",
+    response_model=s.PickupRunOut,
+    summary="The warehouse has the goods",
+)
+def receive_pickup(
+    run_id: int, user: WarehouseUser, session: SessionDep
+) -> s.PickupRunOut:
+    """Booked in, and deliberately not put on a shelf.
+
+    Whether returned goods are sellable is the refund's decision — an operator
+    inspects and says restock or write off, and ``inventory.restock_returned``
+    is called from there. Doing it here as well would put the same shirt back
+    twice, which is the mistake the existing comment in ``operations`` about
+    returns already warns about.
+
+    So this records arrival and nothing else. The run answers where the goods
+    are; the refund answers whether they count.
+    """
+    run = session.get(PickupRun, run_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("pickup_not_found"))
+    tr.ensure(tr.PICKUP_TRANSITIONS, run.status, PickupRunStatus.RECEIVED)
+
+    got = session.exec(
+        select(func.count())
+        .select_from(PickupLine)
+        .where(PickupLine.run_id == run.id, col(PickupLine.collected).is_(True))
+    ).one()
+    audit.record(
+        session,
+        actor=user,
+        action="pickup.receive",
+        entity="pickup_run",
+        entity_id=run.id,
+        field="status",
+        old=PickupRunStatus.COLLECTED,
+        new=PickupRunStatus.RECEIVED,
+        note=f"{run.code} · {int(got)} dona qabul qilindi",
+    )
+    run.status = PickupRunStatus.RECEIVED
+    run.received_at = sv.utcnow()
+    run.received_by_id = user.id
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+    return courier_router._run_out(session, run)
+
+
+def _next_pickup_code(session: SessionDep) -> str:
+    last = session.exec(select(func.count()).select_from(PickupRun)).one()
+    return f"PCK-{int(last) + 1:06d}"
 
 
 # --------------------------------------------------------------------- delivery windows

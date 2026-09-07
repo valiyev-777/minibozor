@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+from sqlalchemy import Integer
 from sqlmodel import Session, col, func, select
 
 from app import i18n
@@ -701,9 +702,30 @@ def order_out(session: Session, o: Order) -> s.OrderOut:
     )
 
 
+# Where the order numbers start. Chosen so the first order of a fresh
+# deployment does not look like the first order ever placed.
+ORDER_CODE_BASE = 104_688
+
+
 def next_order_code(session: Session) -> str:
-    last = session.exec(select(func.count()).select_from(Order)).one()
-    return f"#A-{104_688 + last + 1}"
+    """One past the highest code issued, not one past the number of orders.
+
+    It used to be ``base + count + 1``, which is right only while every code
+    ever issued is contiguous — and the seeded catalogue's are not: it writes
+    ``#A-104512``, ``#A-104688``, ``#A-104692``, ``#A-104693`` and
+    ``#A-104729``. So on the fortieth order the count reached 104729, a code
+    already taken, and the insert failed on the unique index. That is the
+    164th order this system would ever have accepted, and it would have
+    failed in a customer's checkout.
+
+    Read off the maximum instead, so a gap in the sequence costs a number
+    rather than a collision. Done in SQL because it runs in every checkout;
+    a non-numeric tail casts to nought in SQLite, which is harmless.
+    """
+    highest = session.exec(
+        select(func.max(func.cast(func.substr(Order.code, 4), Integer)))
+    ).one()
+    return f"#A-{max(int(highest or 0), ORDER_CODE_BASE) + 1}"
 
 
 def seed_order_events(session: Session, order: Order) -> None:

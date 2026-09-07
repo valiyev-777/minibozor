@@ -6204,3 +6204,645 @@ def test_one_seller_gets_one_offer_per_card(
     ).json()
     assert theirs_view["offer_count"] == 2
     assert theirs_view["my_price"] == 240_000
+
+
+# --------------------------------------------------------- the last mile
+
+
+def _courier(
+    staff: Callable[[UserRole, str], dict[str, str]], phone: str
+) -> tuple[int, dict[str, str]]:
+    headers = staff(UserRole.COURIER, phone)
+    with Session(engine) as session:
+        return session.exec(select(User).where(User.phone == phone)).one().id, headers
+
+
+def _key(name: str) -> dict[str, str]:
+    """One idempotency key, the way the app makes one per queued action."""
+    return {"Idempotency-Key": f"test-{name}"}
+
+
+def _on_a_round(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    courier_id: int,
+    *,
+    cash: bool,
+    sequence: int = 1,
+) -> dict:
+    """An order shipped and assigned, ready to be knocked on."""
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(
+        f"{API}/products", params={"sort": "price_asc"}
+    ).json()["items"][0]
+    client.post(f"{API}/cart/items", json=_pick(product["id"]), headers=auth)
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    created = client.post(
+        f"{API}/orders",
+        json={
+            "address_id": address["id"],
+            **({"payment_method": "cash"} if cash else {}),
+        },
+        headers=auth,
+    )
+    assert created.status_code == 201, created.text
+    order = created.json()
+
+    assigned = client.post(
+        f"{API}/staff/orders/{order['id']}/courier",
+        json={"courier_id": courier_id, "sequence": sequence},
+        headers=operator,
+    )
+    assert assigned.status_code == 200, assigned.text
+    for target in ("packing", "shipped"):
+        moved = client.post(
+            f"{API}/staff/orders/{order['id']}/status",
+            json={"status": target},
+            headers=operator,
+        )
+        assert moved.status_code == 200, moved.text
+    return order
+
+
+def test_an_operator_plans_the_round_and_a_courier_reads_only_their_own(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """`UserRole.COURIER` existed from the first stage and no router ever asked
+    about it — so an order did not record who was carrying it and a courier had
+    no list of their own. The two gaps were the same gap."""
+    mine_id, mine = _courier(staff, "+998900090001")
+    other_id, other = _courier(staff, "+998900090002")
+
+    listed = client.get(f"{API}/staff/couriers", headers=operator)
+    assert listed.status_code == 200, listed.text
+    assert {row["id"] for row in listed.json()} >= {mine_id, other_id}
+    assert all(row["role"] == "courier" for row in listed.json())
+
+    order = _on_a_round(client, auth, operator, mine_id, cash=False, sequence=3)
+
+    round_ = client.get(f"{API}/courier/orders", headers=mine)
+    assert round_.status_code == 200, round_.text
+    stop = next(row for row in round_.json() if row["id"] == order["id"])
+    # What somebody at a door needs, and not the catalogue detail the
+    # customer's own shape carries.
+    assert stop["sequence"] == 3
+    assert stop["recipient_phone"] and stop["address_line"]
+    assert stop["attempts"] == 0 and stop["last_failure"] == ""
+    # A card order is already paid: asking for money again is the mistake
+    # `cash_due` exists to prevent.
+    assert stop["cash_due"] == 0
+
+    # The other courier's round does not contain it, and reaching for it is a
+    # refusal rather than a pretence that it is missing.
+    assert order["id"] not in [row["id"] for row in client.get(
+        f"{API}/courier/orders", headers=other
+    ).json()]
+    poached = client.post(
+        f"{API}/courier/orders/{order['id']}/failed",
+        json={"reason": "boshqa kuryerning buyurtmasi"},
+        headers={**other, **_key("poach")},
+    )
+    assert poached.status_code == 403, poached.text
+
+    # Nobody else's door either.
+    assert client.get(f"{API}/courier/orders", headers=operator).status_code == 403
+    assert client.get(f"{API}/courier/orders", headers=admin).status_code == 403
+    assert client.get(f"{API}/courier/orders").status_code == 401
+
+    # A courier is not somebody an operator can invent.
+    assert client.post(
+        f"{API}/staff/orders/{order['id']}/courier",
+        json={"courier_id": 999_999},
+        headers=operator,
+    ).status_code == 404
+    with Session(engine) as session:
+        not_a_courier = session.exec(
+            select(User).where(User.phone == "+998901234567")
+        ).one().id
+    assert client.post(
+        f"{API}/staff/orders/{order['id']}/courier",
+        json={"courier_id": not_a_courier},
+        headers=operator,
+    ).status_code == 404
+
+    # And a courier does not assign themselves.
+    assert client.post(
+        f"{API}/staff/orders/{order['id']}/courier",
+        json={"courier_id": other_id},
+        headers=mine,
+    ).status_code == 403
+
+    rows = _audit_rows("order.courier", order["id"])
+    assert rows and str(rows[-1].new_value) == str(mine_id)
+
+
+def test_a_retried_delivery_is_not_a_second_sale(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The sentence the whole idempotency design exists for.
+
+    The app queues writes it cannot send and retries them, so "delivered,
+    N so'm at the door" arrives twice as a matter of course. Without a key
+    that is a second sale off the shelf and a second N on the shift, and
+    nobody notices until the courier is accused of being short.
+    """
+    courier_id, courier = _courier(staff, "+998900090011")
+    order = _on_a_round(client, auth, operator, courier_id, cash=True)
+
+    started = client.post(
+        f"{API}/courier/shifts", headers={**courier, **_key("shift-1")}
+    )
+    assert started.status_code == 201, started.text
+    shift_id = started.json()["id"]
+    assert started.json()["cash_expected"] == 0
+
+    stop = next(
+        row
+        for row in client.get(f"{API}/courier/orders", headers=courier).json()
+        if row["id"] == order["id"]
+    )
+    owed = stop["cash_due"]
+    assert owed == order["total"] > 0, "cash at the door"
+
+    body = {"recipient_name": "Aziz Toshmatov", "cash_collected": owed}
+    door = f"{API}/courier/orders/{order['id']}/deliver"
+
+    first = client.post(door, json=body, headers={**courier, **_key("deliver-1")})
+    assert first.status_code == 200, first.text
+    assert first.json()["status"] == "delivered"
+
+    # The same request again, with the same key: the answer, not the act.
+    again = client.post(door, json=body, headers={**courier, **_key("deliver-1")})
+    assert again.status_code == 200, again.text
+    assert again.json() == first.json(), "the stored answer, replayed"
+
+    # Sent a third time for good measure, because the app retries until it
+    # gets an answer and does not count how many times it tried.
+    assert client.post(
+        door, json=body, headers={**courier, **_key("deliver-1")}
+    ).json() == first.json()
+
+    # The goods left the shelf once — read off the ledger rather than off the
+    # cached figure, which is where the claim actually lives. A cash order's
+    # goods were *held* from the moment it was placed, so the cache had
+    # already dropped; what delivery does is turn the hold into a sale, and a
+    # retry that ran twice would leave two sale movements against one order.
+    with Session(engine) as session:
+        sold = session.exec(
+            select(StockMovement).where(
+                StockMovement.order_id == order["id"],
+                StockMovement.kind == StockMovementKind.SALE,
+            )
+        ).all()
+    assert len(sold) == 1, [(m.id, m.quantity, m.reason) for m in sold]
+    assert sold[0].quantity == -1, "signed: what went out"
+
+    # And the cash landed once.
+    shift = client.get(f"{API}/courier/shifts/current", headers=courier).json()
+    assert shift["id"] == shift_id
+    assert shift["cash_expected"] == owed
+    assert shift["orders_delivered"] == 1
+    assert len(shift["attempts"]) == 1, "one door, one row"
+    assert shift["attempts"][0]["cash_collected"] == owed
+
+    # A second attempt on a delivered order is refused rather than replayed:
+    # a new key means a new request, and the order has moved on.
+    assert client.post(
+        door, json=body, headers={**courier, **_key("deliver-2")}
+    ).status_code == 409
+    assert not _stock_is_consistent()
+
+
+def test_the_cash_on_a_shift_is_counted_once_however_often_it_is_sent(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Three doors, one of them sent twice, and the shift adds up to three."""
+    courier_id, courier = _courier(staff, "+998900090021")
+    started = client.post(
+        f"{API}/courier/shifts", headers={**courier, **_key("shift-2")}
+    )
+    assert started.status_code == 201, started.text
+    shift_id = started.json()["id"]
+
+    # Starting again is not an error: the app is probably retrying, and the
+    # answer to "start my shift" when it is started is the shift.
+    twice = client.post(f"{API}/courier/shifts", headers={**courier, **_key("shift-2")})
+    assert twice.status_code == 201
+    assert twice.json()["id"] == shift_id
+    fresh_key = client.post(
+        f"{API}/courier/shifts", headers={**courier, **_key("shift-2b")}
+    )
+    assert fresh_key.json()["id"] == shift_id, "one open shift at a time"
+
+    owed_total = 0
+    for index in range(3):
+        order = _on_a_round(
+            client, auth, operator, courier_id, cash=True, sequence=index + 1
+        )
+        stop = next(
+            row
+            for row in client.get(f"{API}/courier/orders", headers=courier).json()
+            if row["id"] == order["id"]
+        )
+        owed = stop["cash_due"]
+        owed_total += owed
+        door = f"{API}/courier/orders/{order['id']}/deliver"
+        body = {"recipient_name": f"Mijoz {index}", "cash_collected": owed}
+        assert client.post(
+            door, json=body, headers={**courier, **_key(f"d{index}")}
+        ).status_code == 200
+        if index == 1:
+            # The retry the network caused.
+            assert client.post(
+                door, json=body, headers={**courier, **_key(f"d{index}")}
+            ).status_code == 200
+
+    shift = client.get(f"{API}/courier/shifts/current", headers=courier).json()
+    assert shift["cash_expected"] == owed_total
+    assert shift["orders_delivered"] == 3, "not four"
+    # The total is followable: one row per door, and they sum to it.
+    assert len(shift["attempts"]) == 3
+    assert sum(a["cash_collected"] for a in shift["attempts"]) == owed_total
+
+    # Handing it over, one note short.
+    closed = client.post(
+        f"{API}/courier/shifts/{shift_id}/close",
+        json={"cash_declared": owed_total - 50_000, "note": "bittasi yo'q"},
+        headers={**courier, **_key("close-2")},
+    )
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["status"] == "closed"
+    assert closed.json()["cash_expected"] == owed_total
+    assert closed.json()["cash_declared"] == owed_total - 50_000
+    # Nothing counted yet, so no difference is claimed.
+    assert closed.json()["cash_counted"] is None
+    assert closed.json()["difference"] is None
+
+    # Closing twice does not close it twice.
+    assert client.post(
+        f"{API}/courier/shifts/{shift_id}/close",
+        json={"cash_declared": owed_total - 50_000, "note": "bittasi yo'q"},
+        headers={**courier, **_key("close-2")},
+    ).json() == closed.json()
+    # And a fresh key on a closed shift is refused rather than replayed.
+    assert client.post(
+        f"{API}/courier/shifts/{shift_id}/close",
+        json={"cash_declared": 1},
+        headers={**courier, **_key("close-2b")},
+    ).status_code == 409
+
+    # The office counts, and the gap is a fact rather than an argument.
+    counted = client.post(
+        f"{API}/staff/shifts/{shift_id}/count",
+        json={"cash_counted": owed_total - 50_000},
+        headers=operator,
+    )
+    assert counted.status_code == 200, counted.text
+    assert counted.json()["cash_counted"] == owed_total - 50_000
+    assert counted.json()["difference"] == -50_000, "counted against the doors"
+    assert client.post(
+        f"{API}/staff/shifts/{shift_id}/count",
+        json={"cash_counted": owed_total},
+        headers=operator,
+    ).status_code == 409, "counted once"
+
+    rows = _audit_rows("shift.count", shift_id)
+    assert rows and "farq" in rows[-1].note
+    assert _audit_rows("shift.close", shift_id)
+    assert not _stock_is_consistent()
+
+
+def test_a_key_may_not_be_reused_for_a_different_request(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The same key carrying a different body is a bug in the client, not a
+    retry. Replaying the first answer would hide it and lose the second
+    request entirely."""
+    courier_id, courier = _courier(staff, "+998900090031")
+    client.post(f"{API}/courier/shifts", headers={**courier, **_key("shift-3")})
+    order = _on_a_round(client, auth, operator, courier_id, cash=False)
+    door = f"{API}/courier/orders/{order['id']}/failed"
+
+    assert client.post(
+        door, json={"reason": "eshikni ochmadi"}, headers={**courier, **_key("f1")}
+    ).status_code == 200
+
+    clash = client.post(
+        door, json={"reason": "telefon o'chirilgan"}, headers={**courier, **_key("f1")}
+    )
+    assert clash.status_code == 409, clash.text
+    assert "kalit" in clash.json()["detail"]
+
+    # A missing key is refused too: an optional key is a key some client
+    # forgets, and the failure is silent and financial.
+    assert client.post(door, json={"reason": "yana"}, headers=courier).status_code == 422
+
+    # Two couriers may use the same key without colliding.
+    other_id, other = _courier(staff, "+998900090032")
+    client.post(f"{API}/courier/shifts", headers={**other, **_key("shift-3")})
+    theirs = _on_a_round(client, auth, operator, other_id, cash=False)
+    assert client.post(
+        f"{API}/courier/orders/{theirs['id']}/failed",
+        json={"reason": "manzil topilmadi"},
+        headers={**other, **_key("f1")},
+    ).status_code == 200
+
+
+def test_a_delivery_needs_a_name_and_the_photo_is_optional(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The decision, and its reason.
+
+    The name is required: one field a courier can always fill in while
+    standing in front of the person who took the goods, and the answer to "I
+    never received it". The photo is not: an upload needs signal, and
+    requiring one would stop a courier in a basement finishing a delivery they
+    have already made — which is the exact situation the offline design is for.
+    """
+    courier_id, courier = _courier(staff, "+998900090041")
+    client.post(f"{API}/courier/shifts", headers={**courier, **_key("shift-4")})
+    order = _on_a_round(client, auth, operator, courier_id, cash=False)
+    door = f"{API}/courier/orders/{order['id']}/deliver"
+
+    nameless = client.post(
+        door, json={"recipient_name": ""}, headers={**courier, **_key("n1")}
+    )
+    assert nameless.status_code == 422, nameless.text
+
+    # A courier may upload the picture through the same pipeline a seller
+    # uses — that guard was widened rather than a second one built.
+    shot = client.post(
+        f"{API}/staff/media",
+        files={"file": ("door.jpg", _photograph(900, 700), "image/jpeg")},
+        headers=courier,
+    )
+    assert shot.status_code == 201, shot.text
+
+    with_photo = client.post(
+        door,
+        json={"recipient_name": "Qo'shni", "photo_url": shot.json()["media_url"]},
+        headers={**courier, **_key("n2")},
+    )
+    assert with_photo.status_code == 200, with_photo.text
+
+    shift = client.get(f"{API}/courier/shifts/current", headers=courier).json()
+    kept = shift["attempts"][-1]
+    assert kept["recipient_name"] == "Qo'shni"
+    assert kept["photo_url"], "the evidence is stored"
+
+    # And without one it still goes through, noted as such in the log.
+    second = _on_a_round(client, auth, operator, courier_id, cash=False, sequence=2)
+    plain = client.post(
+        f"{API}/courier/orders/{second['id']}/deliver",
+        json={"recipient_name": "Mijozning o'zi"},
+        headers={**courier, **_key("n3")},
+    )
+    assert plain.status_code == 200, plain.text
+    rows = _audit_rows("order.deliver", second["id"])
+    assert rows and "suratsiz" in rows[-1].note
+
+
+def test_a_cash_figure_that_does_not_match_is_refused(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A courier who mistypes it is short at the end of the day with nothing
+    to point at, and a mismatch is far likelier to be a typo than a part
+    payment worth recording."""
+    courier_id, courier = _courier(staff, "+998900090051")
+    client.post(f"{API}/courier/shifts", headers={**courier, **_key("shift-5")})
+    order = _on_a_round(client, auth, operator, courier_id, cash=True)
+    door = f"{API}/courier/orders/{order['id']}/deliver"
+    owed = order["total"]
+
+    wrong = client.post(
+        door,
+        json={"recipient_name": "Mijoz", "cash_collected": owed - 1000},
+        headers={**courier, **_key("c1")},
+    )
+    assert wrong.status_code == 400
+    assert str(owed) in wrong.json()["detail"]
+
+    # And a delivery outside a shift has nowhere to put the money.
+    lone_id, lone = _courier(staff, "+998900090052")
+    theirs = _on_a_round(client, auth, operator, lone_id, cash=True)
+    refused = client.post(
+        f"{API}/courier/orders/{theirs['id']}/deliver",
+        json={
+            "recipient_name": "Mijoz",
+            "cash_collected": theirs["total"],
+        },
+        headers={**lone, **_key("c2")},
+    )
+    assert refused.status_code == 409
+    assert "smena" in refused.json()["detail"].lower()
+
+    assert client.post(
+        door,
+        json={"recipient_name": "Mijoz", "cash_collected": owed},
+        headers={**courier, **_key("c3")},
+    ).status_code == 200
+    assert not _stock_is_consistent()
+
+
+def test_a_failed_attempt_keeps_the_order_and_the_courier(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """There is deliberately no `failed` status: a refusal at a door is an
+    event, not a state of the order — it is still on its way. What a dispute
+    needs is how many times and why, which is a list.
+
+    And giving up is the operator's: the courier is at one door with one
+    refusal, and the person who can see three of them and phone the customer
+    is somebody else.
+    """
+    courier_id, courier = _courier(staff, "+998900090061")
+    client.post(f"{API}/courier/shifts", headers={**courier, **_key("shift-6")})
+    order = _on_a_round(client, auth, operator, courier_id, cash=False)
+    door = f"{API}/courier/orders/{order['id']}/failed"
+
+    for index, reason in enumerate(
+        ("Eshikni ochmadi", "Telefon o'chirilgan", "Manzilda yo'q ekan")
+    ):
+        attempt = client.post(
+            door, json={"reason": reason}, headers={**courier, **_key(f"x{index}")}
+        )
+        assert attempt.status_code == 200, attempt.text
+        # Still shipped, still theirs, and the count is climbing.
+        assert attempt.json()["status"] == "shipped"
+        assert attempt.json()["attempts"] == index + 1
+        assert attempt.json()["last_failure"] == reason
+
+    stop = next(
+        row
+        for row in client.get(f"{API}/courier/orders", headers=courier).json()
+        if row["id"] == order["id"]
+    )
+    assert stop["attempts"] == 3
+
+    # The customer's timeline is untouched: an attempt is not a step their
+    # order took, and writing one would put "delivered" in their history
+    # before it was true.
+    theirs = client.get(f"{API}/orders/{order['id']}", headers=auth).json()
+    assert theirs["status"] == "shipped"
+    assert not any(e["done"] and e["status"] == "delivered" for e in theirs["events"])
+
+    # A reason is required — "not delivered" with nothing after it is the row
+    # nobody can act on.
+    assert client.post(
+        door, json={"reason": ""}, headers={**courier, **_key("x9")}
+    ).status_code == 422
+
+    # The way out is the operator's, and it now exists: goods that never
+    # reached the customer were never sold, so cancelling puts the counts back.
+    assert client.post(
+        f"{API}/staff/orders/{order['id']}/status",
+        json={"status": "cancelled", "note": "uch urinish — mijoz javob bermadi"},
+        headers=operator,
+    ).status_code == 200
+    assert client.get(f"{API}/orders/{order['id']}", headers=auth).json()["status"] == "cancelled"
+    assert not _stock_is_consistent()
+
+
+def test_a_collection_run_brings_returns_back_to_the_warehouse(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A `RemovalOrder` carries goods out to a seller who wants their stock
+    back. This brings goods in from customers whose returns were approved —
+    opposite direction, different paperwork, same van.
+
+    Receiving one puts nothing on a shelf: whether returned goods are sellable
+    is the refund's decision, and doing it here as well would put the same
+    shirt back twice.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, "+998900090071")
+    courier_id, courier = _courier(staff, "+998900090072")
+    request, _, _, _ = _refundable_return(client, auth, operator)
+
+    made = client.post(
+        f"{API}/staff/pickups",
+        json={
+            "courier_id": courier_id,
+            "return_request_ids": [request["id"]],
+            "note": "ertaga ertalab",
+        },
+        headers=operator,
+    )
+    assert made.status_code == 201, made.text
+    run = made.json()
+    assert run["code"].startswith("PCK-")
+    assert run["status"] == "open"
+    assert run["next_statuses"] == ["collected", "cancelled"]
+    line = run["lines"][0]
+    # What a courier needs at the door, without another request.
+    assert line["customer_phone"] and line["address_line"]
+    assert line["collected"] is None, "nobody has tried yet"
+
+    # One van per parcel.
+    assert client.post(
+        f"{API}/staff/pickups",
+        json={"courier_id": courier_id, "return_request_ids": [request["id"]]},
+        headers=operator,
+    ).status_code == 409
+
+    # It is on this courier's list and nobody else's.
+    assert [r["id"] for r in client.get(f"{API}/courier/pickups", headers=courier).json()] == [
+        run["id"]
+    ]
+    _, other = _courier(staff, "+998900090073")
+    assert client.get(f"{API}/courier/pickups", headers=other).json() == []
+    assert client.post(
+        f"{API}/courier/pickups/{run['id']}/collect",
+        json={"lines": [{"return_request_id": request["id"], "collected": True}]},
+        headers={**other, **_key("p0")},
+    ).status_code == 403
+
+    # Not collected needs a reason, for the same purpose a failed delivery does.
+    assert client.post(
+        f"{API}/courier/pickups/{run['id']}/collect",
+        json={"lines": [{"return_request_id": request["id"], "collected": False}]},
+        headers={**courier, **_key("p1")},
+    ).status_code == 400
+
+    got = client.post(
+        f"{API}/courier/pickups/{run['id']}/collect",
+        json={
+            "lines": [{"return_request_id": request["id"], "collected": True}],
+            "note": "qadoq butun",
+        },
+        headers={**courier, **_key("p2")},
+    )
+    assert got.status_code == 200, got.text
+    assert got.json()["status"] == "collected"
+    assert got.json()["lines"][0]["collected"] is True
+    assert got.json()["lines"][0]["attempted_at"]
+
+    # Sent twice, collected once.
+    assert client.post(
+        f"{API}/courier/pickups/{run['id']}/collect",
+        json={
+            "lines": [{"return_request_id": request["id"], "collected": True}],
+            "note": "qadoq butun",
+        },
+        headers={**courier, **_key("p2")},
+    ).json() == got.json()
+
+    # The warehouse books it in — and the shelf does not move.
+    with Session(engine) as session:
+        before = _stock_snapshot(session)
+    received = client.post(
+        f"{API}/staff/pickups/{run['id']}/receive", headers=warehouse
+    )
+    assert received.status_code == 200, received.text
+    assert received.json()["status"] == "received"
+    assert received.json()["received_at"]
+    assert received.json()["next_statuses"] == []
+    with Session(engine) as session:
+        assert _stock_snapshot(session) == before, "the refund decides the shelf"
+
+    # A courier does not book goods in at the warehouse desk.
+    assert client.post(
+        f"{API}/staff/pickups/{run['id']}/receive", headers=courier
+    ).status_code == 403
+    # And twice is not twice.
+    assert client.post(
+        f"{API}/staff/pickups/{run['id']}/receive", headers=warehouse
+    ).status_code == 409
+
+    # The warehouse can see what is coming, which is the point of it arriving
+    # at their desk.
+    seen = client.get(
+        f"{API}/staff/pickups", params={"status": "received"}, headers=warehouse
+    )
+    assert seen.status_code == 200
+    assert run["id"] in [r["id"] for r in seen.json()]
+    assert not _stock_is_consistent()
+
+
+def _stock_snapshot(session: Session) -> dict[int, int]:
+    return {row.id: row.stock_left for row in session.exec(select(Offer)).all()}

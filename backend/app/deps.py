@@ -118,6 +118,15 @@ OperatorUser = Annotated[
 # them, so the shelf is not theirs to count.
 SellerUser = Annotated[User, Depends(require_role(UserRole.SELLER, UserRole.ADMIN))]
 
+# Who may put a picture on the server. Everyone whose work produces one: a
+# seller proposing a card, an admin editing one, a courier standing on a
+# doorstep. Not a customer — their review photos come in through the review
+# endpoint, which knows what they are for.
+MediaUploader = Annotated[
+    User,
+    Depends(require_role(UserRole.SELLER, UserRole.ADMIN, UserRole.COURIER)),
+]
+
 # Counting the shelf. A stock figure changes when something is booked in or out
 # of the warehouse, so it is the warehouse's to move — never the seller's, who
 # would otherwise be able to promise goods nobody has received.
@@ -136,6 +145,22 @@ WarehouseUser = Annotated[
 StockViewer = Annotated[
     User,
     Depends(require_role(UserRole.SELLER, UserRole.WAREHOUSE, UserRole.ADMIN)),
+]
+
+# The last mile. Couriers only, and deliberately not admins: every door in
+# ``app.routers.courier`` is scoped to the caller's own round and own shift,
+# and an admin has neither — they would be handed empty lists and a shift they
+# cannot open. An admin watches the rounds through the operator's screens,
+# where the audit trail records that they looked.
+CourierUser = Annotated[User, Depends(require_role(UserRole.COURIER))]
+
+# Handling the goods once they are back: a courier brings a collection in and
+# the warehouse books it, so both need to read a run.
+PickupHandler = Annotated[
+    User,
+    Depends(
+        require_role(UserRole.COURIER, UserRole.WAREHOUSE, UserRole.OPERATOR, UserRole.ADMIN)
+    ),
 ]
 
 

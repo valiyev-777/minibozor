@@ -19,17 +19,35 @@ from fastapi import HTTPException
 from fastapi import status as http
 
 from app import i18n
-from app.models import OrderStatus, ProductStatus, ReturnStatus, ReviewStatus
+from app.models import (
+    OrderStatus,
+    PickupRunStatus,
+    ProductStatus,
+    ReturnStatus,
+    ReviewStatus,
+)
 
-# An order goes forward, and may be called off while nothing has left the
-# building yet. Cancelling stops at ``packing`` for the same reason the
-# customer's own cancel button does — once it is with a courier, the way out is
-# a delivery and then a return, not a cancellation. A failed delivery wants a
-# row of its own here one day; it is a new rule, not a missing one.
+# An order goes forward, and may be called off while it has not been handed
+# over. ``shipped`` used to be a one-way street to ``delivered`` on the
+# reasoning that once goods are with a courier the way out is a delivery and
+# then a return.
+#
+# Failed deliveries changed that. A courier who has knocked three times at a
+# door nobody answers is not holding a delivery-then-return; they are holding
+# goods that were never sold, and the honest end for that order is a
+# cancellation, which puts the counts back. So ``shipped`` may now be
+# cancelled — **by an operator**. The courier records attempts and never
+# decides to give up: they are at one door with one refusal, and the person
+# who can see three of them and phone the customer is somebody else.
+#
+# There is deliberately no ``failed`` status. A refusal at a door is an event,
+# not a state of the order — the order is still on its way — and what a
+# dispute needs is how many times and why, which is a list of
+# ``DeliveryAttempt`` rows rather than a word.
 ORDER_TRANSITIONS: dict[OrderStatus, frozenset[OrderStatus]] = {
     OrderStatus.PLACED: frozenset({OrderStatus.PACKING, OrderStatus.CANCELLED}),
     OrderStatus.PACKING: frozenset({OrderStatus.SHIPPED, OrderStatus.CANCELLED}),
-    OrderStatus.SHIPPED: frozenset({OrderStatus.DELIVERED}),
+    OrderStatus.SHIPPED: frozenset({OrderStatus.DELIVERED, OrderStatus.CANCELLED}),
     OrderStatus.DELIVERED: frozenset({OrderStatus.RETURNED}),
     OrderStatus.CANCELLED: frozenset(),
     OrderStatus.RETURNED: frozenset(),
@@ -76,6 +94,23 @@ PRODUCT_TRANSITIONS: dict[ProductStatus, frozenset[ProductStatus]] = {
     ),
     ProductStatus.PUBLISHED: frozenset({ProductStatus.ARCHIVED}),
     ProductStatus.ARCHIVED: frozenset({ProductStatus.DRAFT}),
+}
+
+
+# A round of collections from customers, out and back.
+#
+# ``collected`` and ``received`` are kept apart because they are two different
+# people's claims: the courier says they have the goods, and the warehouse
+# says they arrived. Collapsing them would make "the courier collected it and
+# it never reached us" unsayable, which is the one case worth being able to
+# say.
+PICKUP_TRANSITIONS: dict[PickupRunStatus, frozenset[PickupRunStatus]] = {
+    PickupRunStatus.OPEN: frozenset(
+        {PickupRunStatus.COLLECTED, PickupRunStatus.CANCELLED}
+    ),
+    PickupRunStatus.COLLECTED: frozenset({PickupRunStatus.RECEIVED}),
+    PickupRunStatus.RECEIVED: frozenset(),
+    PickupRunStatus.CANCELLED: frozenset(),
 }
 
 

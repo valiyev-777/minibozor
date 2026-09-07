@@ -643,6 +643,18 @@ class Order(SQLModel, table=True):
     recipient_name: str = ""
     recipient_phone: str = ""
 
+    # Who is carrying it, and where it sits in their round.
+    #
+    # An order used to say which window it was booked into and nothing about
+    # who would turn up. So "where is my order" had no answer past the status,
+    # and a courier had no list of their own — the two gaps were the same gap.
+    #
+    # Assigned by an operator, who plans the round; the sequence is the stop
+    # number, so the courier's list comes back in the order somebody meant
+    # rather than in the order the ids happen to fall.
+    courier_id: int | None = Field(default=None, foreign_key="users.id", index=True)
+    courier_sequence: int = 0
+
     subtotal: int = 0
     delivery_fee: int = 0
     discount: int = 0
@@ -1296,3 +1308,218 @@ class StatementLine(SQLModel, table=True):
     # buckets an event into a period, and what lets a refund that arrives
     # after its own period was closed fall into the next one instead.
     occurred_at: datetime = Field(default_factory=utcnow, index=True)
+
+
+# --------------------------------------------------------------------------- the courier
+
+# The courier was a role and nothing else.
+#
+# ``UserRole.COURIER`` was added in the first stage and no router ever asked
+# about it. An order did not record who was carrying it, there was no shift, a
+# delivery left no evidence beyond a status, and cash — which a courier
+# physically holds — was counted nowhere. So the last mile was the one part of
+# the business the system could not describe.
+#
+# Two facts about the work decide the shape of everything below.
+#
+# **The phone has no signal.** A courier works in lifts, basements and
+# stairwells. The app queues what it cannot send and sends it later, possibly
+# twice, possibly much later. So every write here is keyed: a repeat of a
+# request replays the first answer instead of doing the thing again. Counting
+# the same cash twice is the most expensive mistake available in this module,
+# and it is the one the design is built to make impossible.
+#
+# **A knock at a door is an event, not a state.** An order being refused at
+# the door does not put the order into a new status — it is still on its way.
+# What matters is how many times somebody tried and why it failed, and that is
+# a list. So attempts accumulate as rows and the order stays ``shipped``; the
+# decision to give up belongs to an operator, not to the courier at the door.
+
+
+class ShiftStatus(StrEnum):
+    OPEN = "open"        # out on the round
+    CLOSED = "closed"    # back, cash handed over
+
+
+class AttemptResult(StrEnum):
+    """How one knock at one door went."""
+
+    DELIVERED = "delivered"
+    FAILED = "failed"
+
+
+class PickupRunStatus(StrEnum):
+    """Where a round of collections from customers has got to."""
+
+    OPEN = "open"              # assigned, not yet driven
+    COLLECTED = "collected"    # the courier has the goods
+    RECEIVED = "received"      # the warehouse has booked them in
+    CANCELLED = "cancelled"
+
+
+class IdempotencyRecord(SQLModel, table=True):
+    """One completed request, kept so that a repeat replays it.
+
+    The courier's app queues writes it cannot send and retries them, so the
+    same request arrives more than once as a matter of course rather than as a
+    fault. Without this, a retried "delivered, 240 000 so'm in cash" is a
+    second sale off the shelf and a second 240 000 on the shift.
+
+    Keyed per user: two couriers generating the same uuid would otherwise
+    collide, and one of them would be handed the other's answer.
+
+    The request is hashed as well as keyed. The same key with a different body
+    is not a retry — it is a bug in the client, and replaying the first answer
+    would hide it while the second request silently never happened.
+    """
+
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_idempotency"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    key: str = Field(index=True, max_length=80)
+    # Which door it was, so a key reused on a different endpoint is caught
+    # rather than replaying an answer of the wrong shape.
+    endpoint: str = Field(max_length=60)
+    request_hash: str = Field(max_length=64)
+    # What we answered, verbatim, as JSON. Replayed rather than recomputed:
+    # recomputing could give a different answer once the world has moved on,
+    # and the client is entitled to the answer it missed.
+    response: str = ""
+    created_at: datetime = Field(default_factory=utcnow, index=True)
+
+
+class CourierShift(SQLModel, table=True):
+    """One courier's round, and the cash that came back from it.
+
+    Cash is why a shift exists at all. A courier collects money at doors all
+    day and hands it over at the end; without a container for that stretch of
+    time there is nothing to reconcile against and "did the money arrive"
+    has no answer.
+
+    Three figures rather than one, because they are three different claims.
+    ``cash_expected`` is what the deliveries add up to — ours, computed, not
+    editable. ``cash_declared`` is what the courier says they are handing
+    over. ``cash_counted`` is what the office found when it counted. Where
+    they disagree the difference is the point, so nothing here is rounded into
+    agreement.
+    """
+
+    __tablename__ = "courier_shifts"
+
+    id: int | None = Field(default=None, primary_key=True)
+    courier_id: int = Field(foreign_key="users.id", index=True)
+    status: ShiftStatus = Field(default=ShiftStatus.OPEN, index=True)
+
+    opened_at: datetime = Field(default_factory=utcnow)
+    closed_at: datetime | None = None
+
+    # The sum of the cash taken at the doors on this shift. A running total
+    # kept as a column for the same reason a shelf figure is: it is read on
+    # every screen, and the invariant the tests hold us to is that it equals
+    # the sum of the attempts.
+    cash_expected: int = 0
+    # What the courier says they handed over, and what the office counted.
+    # Null until each of those has happened — a nought would be a claim.
+    cash_declared: int | None = None
+    cash_counted: int | None = None
+    counted_by_id: int | None = Field(default=None, foreign_key="users.id")
+    counted_at: datetime | None = None
+
+    orders_delivered: int = 0
+    orders_failed: int = 0
+    note: str = ""
+
+
+class DeliveryAttempt(SQLModel, table=True):
+    """One knock at one door.
+
+    The evidence, and the reason there is no ``failed`` order status: an order
+    refused at the door is still on its way, and what a dispute needs is not a
+    state but a list — who was tried, when, by whom, and what happened.
+
+    ``recipient_name`` is required on a delivery and a photograph is not, and
+    that is a decision about the work rather than about the data. The name is
+    one field the courier can always fill in, standing in front of the person
+    who took the goods, and it is the answer to "I never received it". A photo
+    needs an upload, an upload needs signal, and requiring one would mean a
+    courier in a basement cannot finish a delivery they have already made —
+    which is the exact situation the offline design exists for.
+    """
+
+    __tablename__ = "delivery_attempts"
+
+    id: int | None = Field(default=None, primary_key=True)
+    order_id: int = Field(foreign_key="orders.id", index=True)
+    courier_id: int = Field(foreign_key="users.id", index=True)
+    # Null for an attempt made outside a shift, which the endpoints refuse —
+    # kept nullable so a deleted shift cannot orphan the record of a delivery.
+    shift_id: int | None = Field(
+        default=None, foreign_key="courier_shifts.id", index=True
+    )
+
+    result: AttemptResult = Field(index=True)
+    # Why it failed. Required on a failure: "not delivered" with no reason is
+    # the row nobody can act on, and an operator deciding what to do next has
+    # only this to go on.
+    reason: str = ""
+
+    recipient_name: str = ""
+    photo_url: str = ""
+    # Cash taken at the door, in so'm. Only ever positive and only on a
+    # delivery; a failed attempt collects nothing.
+    cash_collected: int = 0
+
+    happened_at: datetime = Field(default_factory=utcnow, index=True)
+
+
+class PickupRun(SQLModel, table=True):
+    """Approved returns to collect from customers and bring to the warehouse.
+
+    Not a ``RemovalOrder``. That one carries goods *out* to a seller who wants
+    their stock back; this one brings goods *in* from customers whose returns
+    an operator has approved. Opposite direction, different paperwork, and the
+    only thing they share is a van.
+
+    **Receiving a run does not put anything on a shelf.** Whether returned
+    goods are sellable is decided when the refund is made — the operator
+    inspects and says restock or write off — and doing it here as well would
+    put the same shirt back twice. This answers where the goods are; the
+    refund answers whether they count.
+    """
+
+    __tablename__ = "pickup_runs"
+
+    id: int | None = Field(default=None, primary_key=True)
+    code: str = Field(index=True, unique=True)       # "PCK-000004"
+    courier_id: int = Field(foreign_key="users.id", index=True)
+    status: PickupRunStatus = Field(default=PickupRunStatus.OPEN, index=True)
+
+    created_at: datetime = Field(default_factory=utcnow)
+    collected_at: datetime | None = None
+    received_at: datetime | None = None
+    received_by_id: int | None = Field(default=None, foreign_key="users.id")
+    note: str = ""
+
+
+class PickupLine(SQLModel, table=True):
+    """One return request on a collection run."""
+
+    __tablename__ = "pickup_lines"
+    __table_args__ = (
+        UniqueConstraint("run_id", "return_request_id", name="uq_pickup_line"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    run_id: int = Field(foreign_key="pickup_runs.id", index=True)
+    return_request_id: int = Field(
+        foreign_key="return_requests.id", index=True
+    )
+
+    # Null until the courier has been. True and False are both answers; null
+    # is "nobody has tried yet", which is a third thing.
+    collected: bool | None = None
+    reason: str = ""              # why not, when not
+    photo_url: str = ""
+    attempted_at: datetime | None = None
