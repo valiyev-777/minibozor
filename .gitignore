@@ -1,0 +1,6 @@
+# Logs from ./dev.sh — four dev servers' stdout, rewritten on every start.
+.dev-logs/
+
+# Database backups from tools/backup.sh. These hold the real catalogue and
+# real orders, so they are data, never source.
+backups/

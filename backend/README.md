@@ -6,6 +6,15 @@ maps to a single request, and every summary in `/docs` quotes its screen number.
 
 ## Run it
 
+Usually you want the whole system rather than this one service — the API, the
+three web panels and the database, in the order they depend on each other:
+
+```bash
+cd .. && ./dev.sh
+```
+
+See the root README. What follows is this service on its own.
+
 ```bash
 python3 -m venv --without-pip .venv        # this machine has no ensurepip
 python3 /path/to/pip.pyz --python .venv/bin/python install -e ".[dev]"
@@ -24,6 +33,10 @@ otherwise. See [Schema changes](#schema-changes).
 - Interactive docs: <http://localhost:8000/docs>
 - Health check: <http://localhost:8000/health>
 - Product images: <http://localhost:8000/media/products/gazelle.png>
+
+`./run.sh` does the same thing and checks the schema first, so a database that
+is behind is a sentence naming the command rather than a stack trace. It also
+opens the `adb reverse` tunnel when a device is attached.
 
 `--host 0.0.0.0` matters: the Android emulator reaches the host at
 `http://10.0.2.2:8000`, an iOS simulator at `http://localhost:8000`, and a
@@ -175,6 +188,69 @@ more. They are kept for the half that is not schema and could not be a
 migration — deciding that every card predating the `status` column was in the
 shop is a judgement about this catalogue, and the stock ledger's opening
 balances were read off counts as they stood at a moment that has passed.
+
+## Is it alive
+
+```bash
+curl -s localhost:8000/health
+```
+
+```json
+{"status": "ok", "env": "dev",
+ "database": {"reachable": true, "dialect": "sqlite",
+              "revision": "0001_baseline", "expected": "0001_baseline",
+              "at_head": true, "latency_ms": 0.29}}
+```
+
+**200 when it can do its job, 503 when it cannot.** This used to answer
+`{"status": "ok"}` from a function that touched nothing, which is the health
+check that lies: a process whose database has gone away, or whose credentials
+have expired, or which is pointed at a schema it does not expect, answered that
+identically to a healthy one. All it proved was that uvicorn accepted the
+socket, and the socket was never in doubt.
+
+So it asks the database two cheap questions — `SELECT 1`, which also exercises
+the pool's `pool_pre_ping` so a stale socket is found here rather than by the
+next customer, and the stamped Alembic revision, one row from a one-row table.
+Either failing is a 503, because the caller is a script or a load balancer that
+reads the status code and nothing else; a body saying "degraded" behind a 200
+is a body nobody reads.
+
+Deliberately not row counts or table lists. This gets polled, and a health
+check that slows down as the catalogue grows becomes the thing that takes the
+shop down.
+
+`../dev.sh status` reads it, and reports the three web panels beside it.
+
+## Backups and restore
+
+```bash
+tools/backup.sh                                     # → ../backups/<dialect>-<stamp>
+tools/backup.sh /somewhere/else.db                  # or a path you choose
+tools/restore.sh ../backups/sqlite-20260907-173230.db
+```
+
+Both read `MB_DATABASE_URL` — the same value the application opens — so they
+cannot back up one database while the app writes another, and pointing that
+variable elsewhere is how you restore into a scratch copy instead of over your
+own.
+
+**SQLite does not go through `cp`.** A copy taken while anything is connected
+can be internally inconsistent, because SQLite writes through a journal or a
+WAL — and such a file opens cleanly and fails later, on one query, which is the
+worst way for a backup to be broken. `Connection.backup` takes a read lock and
+copies pages consistently, on a live database.
+
+**Postgres goes through `pg_dump --format=custom`** run inside the container,
+so no client needs installing on the host, and the format compresses and can be
+restored selectively.
+
+Each verifies what it wrote rather than trusting the byte count — SQLite with
+`pragma integrity_check`, Postgres with `pg_restore --list`, which fails on a
+truncated dump that a plain redirect can produce silently. A restore saves the
+current state to `pre-restore-*` before overwriting anything, asks for
+confirmation unless `MB_YES=1`, and afterwards says which revision the restored
+database is at, because the schema has just been replaced wholesale.
 
 ## Demo account
 
@@ -346,6 +422,23 @@ accident. Idempotent.
 Staff sign in through the same OTP flow customers use — the role is the only
 difference, so there is no second password store and no second login screen.
 
+**All five at once**, which is what you want before opening the panels:
+
+```bash
+.venv/bin/python -m tools.dev_accounts            # what it would do
+.venv/bin/python -m tools.dev_accounts --apply    # do it
+```
+
+The seed writes a customer and an admin and nothing else, so the operator,
+warehouse, courier and seller accounts do not exist until somebody makes them
+— which meant three of the five interfaces had nobody to let in, and the way
+to find out was to sign in and be refused. This writes the set with fixed
+numbers so the walkthrough can name them, is idempotent, never deletes, and
+refuses to run unless `MB_ENV` is `dev`: fixed numbers on a fixed OTP code are
+publicly known credentials.
+
+**One at a time**, when you know which:
+
 ```bash
 .venv/bin/python -m tools.make_staff +998900000002 operator "Dilnoza Rasulova"
 .venv/bin/python -m tools.make_staff +998900000005 seller "Anvar Qodirov" --seller="Yunusobod Savdo"
@@ -355,7 +448,10 @@ difference, so there is no second password store and no second login screen.
 Roles: `customer`, `admin`, `operator`, `warehouse`, `courier`, `seller`. The
 seed writes one admin (`+998900000001`).
 
-The backoffice that consumes these endpoints is in [`../backoffice`](../backoffice).
+The three panels that consume these endpoints are
+[`../backoffice`](../backoffice), [`../seller`](../seller) and
+[`../courier`](../courier); [`../docs/walkthrough.md`](../docs/walkthrough.md)
+walks one sale through all of them.
 
 The optional PIN (screens 40–44) is a *local* re-entry lock, hashed with argon2
 server-side so it can be verified across devices. It never replaces the JWT.

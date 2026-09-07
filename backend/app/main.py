@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 
 from app import i18n
 from app.core.config import settings
-from app.db import require_current_schema
+from app.db import engine, head_revision, require_current_schema
 from app.images import MEDIA_DIR
 from app.routers import (
     admin,
@@ -130,5 +132,71 @@ for router in (
 
 
 @app.get("/health", tags=["meta"])
-def health() -> dict[str, str]:
-    return {"status": "ok", "env": settings.env}
+def health(response: Response) -> dict:
+    """Is this process able to do its job — not merely running.
+
+    It used to answer ``{"status": "ok"}`` from a function that touched
+    nothing, which is the health check that lies. A process whose database has
+    gone away, or whose credentials have expired, or which is pointed at a
+    schema it does not expect, answers that identically to a healthy one; the
+    only thing it proves is that uvicorn accepted the socket, and the socket
+    was never in doubt.
+
+    So it asks the database two cheap questions:
+
+    * ``SELECT 1`` — the connection is real and the server answers. This also
+      exercises the pool's ``pool_pre_ping``, so a stale socket is discovered
+      here rather than by the next customer.
+    * the stamped Alembic revision — one row from a one-row table. Startup
+      refuses to run unless this matches, but a migration applied underneath a
+      running process would not be noticed by anything else, and a service
+      serving a schema it does not expect is worth knowing about before the
+      first 500.
+
+    **503 when either fails**, because the caller is a script or a load
+    balancer that reads the status code and nothing else. A body that says
+    "degraded" behind a 200 is a body nobody reads. `dev.sh status` and
+    `docker`-style health checks both work off the code alone.
+
+    Deliberately not: row counts, table lists, or anything that grows with the
+    catalogue. This is polled, and a health check that gets slower as the shop
+    gets bigger becomes the thing that takes the shop down.
+    """
+    detail: dict = {
+        "reachable": False,
+        "dialect": engine.dialect.name,
+        "revision": None,
+        "expected": None,
+        "at_head": False,
+    }
+    started = time.perf_counter()
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1")).scalar_one()
+            detail["reachable"] = True
+            row = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).fetchone()
+            detail["revision"] = row[0] if row else None
+    except Exception as error:
+        # The class, not the message: a connection error's text can carry the
+        # host, the user and occasionally the password.
+        detail["error"] = type(error).__name__
+    detail["latency_ms"] = round((time.perf_counter() - started) * 1000, 2)
+
+    try:
+        detail["expected"] = head_revision()
+    except Exception as error:                              # pragma: no cover
+        detail["error"] = type(error).__name__
+    detail["at_head"] = bool(
+        detail["revision"] and detail["revision"] == detail["expected"]
+    )
+
+    healthy = detail["reachable"] and detail["at_head"]
+    if not healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {
+        "status": "ok" if healthy else "unhealthy",
+        "env": settings.env,
+        "database": detail,
+    }

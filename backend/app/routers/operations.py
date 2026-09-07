@@ -1007,6 +1007,7 @@ def _review_out(session: SessionDep, r: Review) -> s.StaffReviewOut:
 
 def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:
     customer = session.get(User, o.user_id)
+    courier = session.get(User, o.courier_id) if o.courier_id else None
     items = session.exec(select(OrderItem).where(OrderItem.order_id == o.id)).all()
     window = (
         f"{o.delivery_start}–{o.delivery_end}" if o.delivery_start and o.delivery_end else ""
@@ -1026,6 +1027,9 @@ def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:
         total=o.total,
         paid=o.paid,
         next_statuses=tr.next_states(tr.ORDER_TRANSITIONS, o.status),
+        courier_id=o.courier_id,
+        courier_name=courier.full_name if courier else "",
+        courier_sequence=o.courier_sequence,
         created_at=o.created_at,
     )
 

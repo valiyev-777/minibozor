@@ -1,45 +1,87 @@
 # Mini Bozor
 
-Marketplace app built from the **Shunaqa Tez** design: a FastAPI backend, native
-Android and iOS clients for the 47-screen shopper app, and a Next.js seller
-panel for the 8-screen merchant cabinet.
+Marketplace built from the **Shunaqa Tez** design: a FastAPI backend, native
+Android and iOS clients for the 47-screen shopper app, and three web panels —
+the back office, the seller's cabinet and the courier's PWA.
 
 ```
-design/     the imported design + extracted tokens, icons and per-screen HTML
-backend/    FastAPI + SQLModel — 60 endpoints, seeded with the design's content
-android/    Kotlin + Jetpack Compose
-ios/        Swift + SwiftUI
-web/        Next.js + TypeScript + Tailwind + shadcn/ui — the seller panel
+design/       the imported design + extracted tokens, icons and per-screen HTML
+backend/      FastAPI + SQLModel + Alembic — 190 endpoints, 53 tables, seeded
+backoffice/   React + TS + Vite — operator, warehouse and admin screens
+seller/       React + TS + Vite — the merchant cabinet
+courier/      React + TS + Vite — the last mile, a PWA that works offline
+android/      Kotlin + Jetpack Compose
+ios/          Swift + SwiftUI
+docs/         walkthrough.md — one sale through every interface, by hand
 ```
 
 ## Run the whole thing
 
 ```bash
-cd backend && ./run.sh          # http://localhost:8000/docs
+./dev.sh
 ```
 
-Then open `android/` in Android Studio, or `ios/` in Xcode, and run. Both debug
-builds point at the local backend (`10.0.2.2:8000` from the Android emulator,
-`localhost:8000` from the iOS simulator).
-
-**Demo account** — phone `+998 90 123 45 67`, SMS code `123456`, PIN `1234`.
-Debug builds show the SMS code on screen, so no gateway is needed.
-
-## The seller panel
-
-`web/` is the desktop cabinet from the design's second panel
-(`Seller Panel.dc.html`) — eight screens covering daily work, the catalogue,
-warehouse shipments, payouts and reviews.
+That is Postgres (if configured), the API and all three panels, in dependency
+order, with a health check on each and one address list at the end. `Ctrl+C`
+stops everything it started.
 
 ```bash
-cd web && npm install && npm run dev   # http://localhost:3000
+./dev.sh status     # is everything alive? one line per service
+./dev.sh down       # stop whatever is still holding our ports
+./dev.sh --help     # and how to move the ports
 ```
 
-Next.js 16 + TypeScript + Tailwind v4 + shadcn/ui, with axios and TanStack Query
-over a Zod contract. It ships its own API as Next.js route handlers, because the
-FastAPI backend is customer-facing only — none of its 60 endpoints are seller
-endpoints yet. Point `NEXT_PUBLIC_API_URL` at a real upstream that serves the
-shapes in `web/src/lib/domain.ts` and the stand-in drops out. See `web/README.md`.
+Then, once, so the panels have somebody to let in:
+
+```bash
+cd backend && .venv/bin/python -m tools.dev_accounts --apply
+```
+
+### Where everything is, and who signs in
+
+| Interface | Address | Roles | Phone |
+|---|---|---|---|
+| API + `/docs` | <http://localhost:8000/docs> | — | — |
+| API health | <http://localhost:8000/health> | — | — |
+| **backoffice** | <http://localhost:5173> | admin | `+998900000001` |
+| | | operator | `+998900000002` |
+| | | warehouse | `+998900000003` |
+| **seller cabinet** | <http://localhost:5174> | seller | `+998900000005` |
+| **courier PWA** | <http://localhost:5175> | courier | `+998900000004` |
+| **shopper app** | Android Studio / Xcode | customer | `+998901234567` |
+| Postgres | `localhost:5434` | — | see `backend/.env` |
+
+Every interface signs in the same way: the phone number, then the SMS code
+**123456**. There is no password and no second login screen — the role on the
+account is the only difference between them. The shopper's optional PIN is
+`1234`. Dev builds return the code in the response, so no SMS gateway is
+involved.
+
+The Android and iOS debug builds point at this same API — `10.0.2.2:8000` from
+an emulator, `localhost:8000` from a simulator, and `backend/run.sh` opens the
+`adb reverse` tunnel for a physical phone.
+
+### Walking it end to end
+
+[`docs/walkthrough.md`](docs/walkthrough.md) takes one sale through every
+interface: the seller proposes a card, the admin publishes it, the seller
+prices it, the warehouse books the goods in, the customer buys, the operator
+ships, the courier delivers, and the seller reads what they are owed. Every
+step was verified against a running stack, and the three that **cannot** be
+done by clicking are marked as such with the reason and the command that gets
+past them.
+
+### One service at a time
+
+```bash
+cd backend && ./run.sh                       # just the API, with adb reverse
+cd backoffice && npm run dev                 # just one panel
+```
+
+`./dev.sh` exists because the order matters: the backend checks its schema
+revision on startup and refuses to run if the database is behind, so Postgres
+has to be up and migrated before uvicorn is launched. Starting the five things
+by hand in four terminals is what this replaces.
 
 ## The design as source of truth
 
@@ -71,18 +113,46 @@ references them.
 The brand mark is drawn as a vector from the icon set rather than shipped as a
 PNG, so it stays sharp at every size and needs no asset.
 
+## Backups
+
+The development database, whichever it is — the scripts read `MB_DATABASE_URL`
+and pick SQLite or Postgres from it:
+
+```bash
+cd backend
+tools/backup.sh                                    # → backups/<dialect>-<stamp>
+tools/restore.sh ../backups/sqlite-20260907-173230.db
+```
+
+Backing up SQLite goes through its online-backup API rather than `cp`: a copy
+taken while anything is connected can be a file that opens cleanly and fails
+later, on one query. Postgres goes through `pg_dump --format=custom` inside the
+container, so nothing has to be installed on the host. Both verify what they
+wrote — `integrity_check` for SQLite, `pg_restore --list` for Postgres — and a
+restore takes its own `pre-restore-*` copy first, because a restore is what
+people reach for when something has already gone wrong.
+
+`backups/` is gitignored: it holds the real catalogue and real orders.
+
 ## Status
 
 | Piece | State |
 |---|---|
 | Design extraction | Complete — tokens, icons, 47 screens, assets |
-| Backend | Complete — 60 endpoints, 32 tables, seeded, 26 tests passing |
-| Android | Complete — 82 Kotlin files, all 47 screens, not yet compiled |
-| iOS | Complete — 60 Swift files, all 47 screens, not yet compiled |
-| Web (seller panel) | Complete — all 8 screens, builds and lints clean; API served by Next.js route handlers until the backend grows seller endpoints |
+| Backend | 190 endpoints, 53 tables, Alembic, runs on SQLite and Postgres, 182 tests passing |
+| backoffice | Operator, warehouse and admin screens; no courier assignment yet (see the walkthrough) |
+| seller cabinet | Catalogue, offers, stock, batches, statements; no proposals list or running total yet |
+| courier PWA | Round, shift, pickups, offline outbox |
+| Android | 82 Kotlin files, all 47 screens, not yet compiled |
+| iOS | 60 Swift files, all 47 screens, not yet compiled |
 
-Neither app has been compiled: this machine has no JDK, Android SDK or Swift
-toolchain, so the first build has to happen on a machine that does.
+Neither mobile client has been compiled: this machine has no JDK, Android SDK
+or Swift toolchain, so the first build has to happen on a machine that does.
 
 Both clients read the same `design/tokens.json` and `design/icons.json`, so a
 change to the design has exactly one place to land on each platform.
+
+The three panels' gaps are listed with their causes at the end of
+[`docs/walkthrough.md`](docs/walkthrough.md). Each is a screen that was not
+built or was built before its endpoint existed — the endpoints are there and
+covered by tests.

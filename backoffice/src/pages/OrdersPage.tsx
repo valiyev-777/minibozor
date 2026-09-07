@@ -2,14 +2,14 @@ import * as React from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Check, Circle } from "lucide-react"
 import { api } from "@/api/client"
-import type { OrderDetail, OrderPage, OrderStatus, StaffOrder } from "@/api/types"
+import type { OrderDetail, OrderPage, OrderStatus, StaffOrder, StaffUser } from "@/api/types"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { DataTable, type Column } from "@/components/DataTable"
 import { Page } from "@/components/Layout"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogPanel } from "@/components/ui/dialog"
-import { Hint, Label, Select, Textarea } from "@/components/ui/field"
+import { Hint, Input, Label, Select, Textarea } from "@/components/ui/field"
 import { ORDER_ACTION, ORDER_STATUS, ORDER_TONE } from "@/lib/labels"
 import { useAction } from "@/lib/mutate"
 import { day, money, when } from "@/lib/utils"
@@ -252,6 +252,8 @@ function OrderDetailDialog({ row, onClose }: { row: StaffOrder; onClose: () => v
                 </dd>
               </dl>
 
+              <CourierAssignment row={row} />
+
               <section>
                 <h2 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
                   Tovarlar
@@ -347,5 +349,137 @@ function OrderDetailDialog({ row, onClose }: { row: StaffOrder; onClose: () => v
         </ConfirmDialog>
       ) : null}
     </>
+  )
+}
+
+/**
+ * Who is carrying this order, and putting somebody on it.
+ *
+ * `POST /staff/orders/{id}/courier` and `GET /staff/couriers` have existed
+ * since the courier app was built, and nothing in any panel called either. So
+ * an order could be packed and marked shipped and still belong to nobody: the
+ * courier's own list came back empty, and their attempt to deliver was refused
+ * with "this order is not assigned to you". The round was plannable in the API
+ * and unplannable by the person whose job it is.
+ *
+ * It reads its starting point from the table row rather than fetching the
+ * order again, and then keeps what it assigned in local state. The row is a
+ * snapshot from the list behind this dialog, and the list is refetched on
+ * success — but not this copy of it, so the confirmation the operator sees has
+ * to come from what they just did.
+ */
+function CourierAssignment({ row }: { row: StaffOrder }) {
+  const [assigned, setAssigned] = React.useState<{ name: string; sequence: number } | null>(
+    row.courier_id ? { name: row.courier_name, sequence: row.courier_sequence } : null,
+  )
+  const [choice, setChoice] = React.useState(row.courier_id ? String(row.courier_id) : "")
+  const [sequence, setSequence] = React.useState(String(row.courier_sequence || ""))
+
+  // Finished is finished. The endpoint refuses delivered, cancelled and
+  // returned — changing the name on a delivery that already happened would
+  // rewrite who did it — so the form is not offered rather than offered and
+  // rejected.
+  const finished = ["delivered", "cancelled", "returned"].includes(row.status)
+
+  const couriers = useQuery({
+    queryKey: ["staff", "couriers"],
+    queryFn: () => api<StaffUser[]>("/staff/couriers"),
+    enabled: !finished,
+  })
+
+  const assign = useAction<void, unknown>({
+    run: () =>
+      api("/staff/orders/" + row.id + "/courier", {
+        method: "POST",
+        json: { courier_id: Number(choice), sequence: Number(sequence) || 0 },
+      }),
+    invalidate: [KEY],
+    success: "Kuryer biriktirildi.",
+    onDone: () => {
+      const picked = couriers.data?.find((c) => String(c.id) === choice)
+      setAssigned({
+        name: picked ? picked.full_name || picked.phone : "",
+        sequence: Number(sequence) || 0,
+      })
+    },
+  })
+
+  return (
+    <section>
+      <h2 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-soft">
+        Kuryer
+      </h2>
+
+      <div className="rounded border border-line px-2.5 py-2">
+        <p className="text-[13px] text-ink">
+          {assigned ? (
+            <>
+              {assigned.name || "—"}
+              {assigned.sequence ? (
+                <span className="text-ink-faint"> · {assigned.sequence}-manzil</span>
+              ) : null}
+            </>
+          ) : (
+            <span className="text-ink-faint">Hech kimga biriktirilmagan</span>
+          )}
+        </p>
+
+        {finished ? (
+          <Hint className="mt-1">
+            Buyurtma tugagan — kuryerni o'zgartirish yetkazganini qayta yozgan bo'lardi.
+          </Hint>
+        ) : (
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <div>
+              <Label htmlFor={`courier-${row.id}`}>Kim olib boradi</Label>
+              <Select
+                id={`courier-${row.id}`}
+                className="w-52"
+                value={choice}
+                onChange={(event) => setChoice(event.target.value)}
+              >
+                <option value="">Tanlanmagan</option>
+                {(couriers.data ?? []).map((courier) => (
+                  <option key={courier.id} value={courier.id}>
+                    {courier.full_name || courier.phone}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              {/* The stop number, so a round comes back in the order somebody
+                  meant rather than by id. Blank is zero, which the API reads
+                  as unplaced and sorts by the delivery window instead. */}
+              <Label htmlFor={`sequence-${row.id}`}>Navbat</Label>
+              <Input
+                id={`sequence-${row.id}`}
+                className="w-20"
+                type="number"
+                min={0}
+                max={999}
+                value={sequence}
+                placeholder="0"
+                onChange={(event) => setSequence(event.target.value)}
+              />
+            </div>
+
+            <Button
+              size="sm"
+              disabled={!choice || assign.isPending}
+              onClick={() => assign.mutate()}
+            >
+              Biriktirish
+            </Button>
+          </div>
+        )}
+
+        {!finished && couriers.data && couriers.data.length === 0 ? (
+          <Hint className="mt-1.5">
+            Faol kuryer yo'q — Foydalanuvchilar bo'limida kuryer roli bilan hisob qo'shing.
+          </Hint>
+        ) : null}
+      </div>
+    </section>
   )
 }

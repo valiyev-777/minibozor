@@ -6318,6 +6318,31 @@ def test_an_operator_plans_the_round_and_a_courier_reads_only_their_own(
     assert stop["sequence"] == 3
     assert stop["recipient_phone"] and stop["address_line"]
     assert stop["attempts"] == 0 and stop["last_failure"] == ""
+
+    # And the operator's own queue says who is carrying it.
+    #
+    # `Order.courier_id` was readable only through the courier's endpoints, so
+    # the panel whose job is planning the round could not see the round: an
+    # unassigned order looked no different from an assigned one, and the
+    # backoffice had no way to show either. Which is why nothing in it called
+    # `POST /staff/orders/{id}/courier` at all, and orders reached `shipped`
+    # belonging to nobody — the courier's list came back empty and their
+    # delivery was refused as not theirs.
+    queue = client.get(f"{API}/staff/orders", headers=operator, params={"page_size": 100})
+    assert queue.status_code == 200, queue.text
+    rows = {row["id"]: row for row in queue.json()["items"]}
+    assert rows[order["id"]]["courier_id"] == mine_id
+    assert rows[order["id"]]["courier_sequence"] == 3
+    # The name, because a row is read by a person and an id is not a person.
+    listed_names = {
+        row["id"]: row["full_name"]
+        for row in client.get(f"{API}/staff/couriers", headers=operator).json()
+    }
+    assert rows[order["id"]]["courier_name"] == listed_names[mine_id]
+
+    # An order nobody is carrying says so rather than naming somebody.
+    unassigned = [row for row in rows.values() if row["courier_id"] is None]
+    assert all(row["courier_name"] == "" for row in unassigned)
     # A card order is already paid: asking for money again is the mistake
     # `cash_due` exists to prevent.
     assert stop["cash_due"] == 0

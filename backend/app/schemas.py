@@ -2158,6 +2158,17 @@ class StaffOrderOut(BaseModel):
     # What this order may become next. The backoffice draws its buttons from
     # this rather than from its own copy of the rules, so the two cannot drift.
     next_statuses: list[OrderStatus]
+    # Who is carrying it, if anybody yet.
+    #
+    # ``Order.courier_id`` has existed since the courier app was built, and
+    # nothing outside the courier's own endpoints could read it — so the
+    # operator's queue could not show an unassigned order as unassigned, and
+    # the panel that is supposed to plan the round had no way to see the round.
+    # The name as well as the id because a row is read by a person and an id
+    # is not a person.
+    courier_id: int | None = None
+    courier_name: str = ""
+    courier_sequence: int = 0
     created_at: datetime
 
 

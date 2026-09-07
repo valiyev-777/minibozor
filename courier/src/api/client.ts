@@ -27,7 +27,7 @@
  *   apps' sake; we ignore that copy.
  */
 
-export const API_URL = import.meta.env["VITE_API_URL"] ?? "http://localhost:8001"
+export const API_URL = import.meta.env["VITE_API_URL"] ?? "http://localhost:8000"
 export const BASE = `${API_URL}/api/v1`
 
 let accessToken: string | null = null

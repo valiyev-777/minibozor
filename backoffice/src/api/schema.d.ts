@@ -301,7 +301,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Brands */
+        /**
+         * List Brands
+         * @description Every brand, with how many cards in the shop carry it.
+         *
+         *     The field was always in the shape and was always nought: the figure was
+         *     only ever computed in ``/products/filters``, where it is scoped to one
+         *     listing so the tick-boxes add up to the grid beside them. Here it is the
+         *     whole shop, which is what a brand index is for — an A-to-Z of marques with
+         *     "(0)" against every one of them tells a shopper nothing and reads like a
+         *     bug.
+         *
+         *     Counted in one grouped query rather than per row: this list is the length
+         *     of the brand table, and a COUNT each would be a query per marque to draw
+         *     one screen.
+         *
+         *     Published cards only, through the same ``in_the_shop`` narrowing every
+         *     customer path uses. A brand whose only cards are drafts or refusals counts
+         *     nought here and that is correct — tapping it would open an empty listing,
+         *     because the listing is narrowed the same way. Brands with nothing in the
+         *     shop are still listed: the index is a directory, and dropping rows out of
+         *     it would change what an existing app is shown.
+         */
         get: operations["list_brands_api_v1_brands_get"];
         put?: never;
         post?: never;
@@ -1140,8 +1161,13 @@ export interface paths {
         put?: never;
         /**
          * Upload a picture and get its media path
-         * @description Admins and sellers. A seller photographs the goods they propose, and a
-         *     card with no picture is a card nobody taps.
+         * @description Admins, sellers and couriers.
+         *
+         *     A seller photographs the goods they propose, and a card with no picture is
+         *     a card nobody taps. A courier photographs a doorstep, which is the
+         *     evidence a delivery happened — the same pipeline, and there was no reason
+         *     to build a second one that decodes and shrinks pictures slightly
+         *     differently.
          *
          *     Declared ``def`` rather than ``async def`` on purpose: decoding and
          *     re-encoding a four-megapixel photograph is a second of CPU, and on the
@@ -1351,6 +1377,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/staff/couriers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who is available to carry things */
+        get: operations["list_couriers_api_v1_staff_couriers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/orders/{order_id}/courier": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put an order on somebody's round
+         * @description The operator plans the round; the courier drives it.
+         *
+         *     Allowed while the order has not finished — a round is usually planned
+         *     before anything is packed, and reassigning a stop mid-afternoon is
+         *     ordinary work rather than an exception. Refused once the order is
+         *     delivered, cancelled or returned: there is nothing left to carry, and
+         *     changing the name on a finished delivery would rewrite who did it.
+         *
+         *     Logged, because "who was carrying it" is the first question asked about a
+         *     delivery that went wrong.
+         */
+        post: operations["assign_courier_api_v1_staff_orders__order_id__courier_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/shifts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rounds, and whether the cash added up */
+        get: operations["list_shifts_api_v1_staff_shifts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/shifts/{shift_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One round, door by door
+         * @description Every attempt on the shift, so the cash total is followable.
+         *
+         *     The same reason a statement carries its lines: a courier told they are
+         *     30 000 short has a number to argue with, and a list of doors with a figure
+         *     against each one is something to check.
+         */
+        get: operations["get_shift_api_v1_staff_shifts__shift_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/shifts/{shift_id}/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What the office counted
+         * @description The third figure, and the only one that settles anything.
+         *
+         *     Counted against ``cash_expected`` rather than against what the courier
+         *     declared: the declaration is one of the claims being checked, so checking
+         *     it against itself would always agree. A difference is recorded as it is
+         *     and never reconciled away — an unexplained shortfall is a fact about a
+         *     day, and the audit row is what makes it findable a month later.
+         */
+        post: operations["count_shift_api_v1_staff_shifts__shift_id__count_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/pickups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Collection runs, out and back
+         * @description Read by the warehouse as well as the operator: the goods arrive at a
+         *     desk, and the person at that desk needs to know what is coming.
+         */
+        get: operations["list_pickups_api_v1_staff_pickups_get"];
+        put?: never;
+        /**
+         * Send a van for approved returns
+         * @description Only approved requests go on a run.
+         *
+         *     A request still being decided is not something to send a van for, and a
+         *     refused one has nothing to collect. A request already on an open run is
+         *     refused too — two vans for one parcel is one wasted trip and a courier
+         *     told the goods are gone.
+         */
+        post: operations["create_pickup_api_v1_staff_pickups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/pickups/{run_id}/receive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The warehouse has the goods
+         * @description Booked in, and deliberately not put on a shelf.
+         *
+         *     Whether returned goods are sellable is the refund's decision — an operator
+         *     inspects and says restock or write off, and ``inventory.restock_returned``
+         *     is called from there. Doing it here as well would put the same shirt back
+         *     twice, which is the mistake the existing comment in ``operations`` about
+         *     returns already warns about.
+         *
+         *     So this records arrival and nothing else. The run answers where the goods
+         *     are; the refund answers whether they count.
+         */
+        post: operations["receive_pickup_api_v1_staff_pickups__run_id__receive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/staff/delivery/slots": {
         parameters: {
             query?: never;
@@ -1384,6 +1582,93 @@ export interface paths {
         head?: never;
         /** Change a window's capacity or its surcharge */
         patch: operations["update_slot_api_v1_staff_delivery_slots__slot_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/staff/sellers/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which shop am I
+         * @description The seller's own row, and the first thing their cabinet asks for.
+         *
+         *     ``/staff/me`` answers with the user — a phone number and a role — and
+         *     nothing about the shop behind it, so a seller who had just been taken on
+         *     could not confirm they were linked to the right one.
+         *
+         *     Declared here rather than in ``admin.py`` beside ``/sellers/{seller_id}``,
+         *     and this router is registered first, so ``me`` is matched as a literal
+         *     before that path's integer. An admin has no shop of their own; they read
+         *     any seller's row through the admin door.
+         */
+        get: operations["my_seller_api_v1_staff_sellers_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/browse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The catalogue as a seller looking for something to stock sees it
+         * @description Published cards only.
+         *
+         *     A draft, a proposal in moderation, a refused card and a withdrawn one are
+         *     somebody else's unfinished work; a seller attaching an offer to one would
+         *     be pricing something that is not in the shop and may never be. This goes
+         *     through the same ``in_the_shop`` narrowing every customer path uses, which
+         *     is why there is one function for it rather than a ``where`` repeated here.
+         *
+         *     Not the admin's listing. That one answers with the Uzbek on the row
+         *     because an editor is about to write it back, and includes every state so
+         *     the moderation queue has somewhere to live. This is read to recognise a
+         *     product, so it is translated and carries the photograph.
+         */
+        get: operations["browse_catalogue_api_v1_staff_catalog_browse_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/catalog/browse/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One card, with the leaves an offer has to name
+         * @description Everything the offer form binds to, in one request.
+         *
+         *     ``leaf_ids`` is the field that closes the gap this endpoint exists for:
+         *     an offer must name every leaf and nothing told a seller what the leaves
+         *     were, so the rule could only be discovered by being refused with a 422.
+         *
+         *     The offers list is the same one the shop shows to anybody, with the same
+         *     seller names on it — see ``SellerCatalogOut`` for why that is not hidden.
+         */
+        get: operations["browse_product_api_v1_staff_catalog_browse__product_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/staff/offers": {
@@ -1847,7 +2132,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * What I proposed and what became of it (seller)
+         * @description The other half of proposing a card, which did not exist.
+         *
+         *     A seller could post a proposal and then never see it again. Approved, it
+         *     turns up in the catalogue by itself and they can find it there. **Refused,
+         *     it went nowhere they could look** — and the refusal carries the one thing
+         *     they need, which is the reason it was refused. So a seller was being asked
+         *     to fix something without being told what was wrong with it, and the only
+         *     way to find out was to ask an admin directly.
+         *
+         *     Every state, not just the refused ones: a proposal in moderation is the
+         *     answer to "has anybody looked at it yet", and one that was published is
+         *     how they confirm the card in the shop is theirs. ``moderation_note`` is on
+         *     every row and is filled in on exactly the refusals.
+         *
+         *     Scoped to the caller's own shop, and that is not a filter they choose: for
+         *     a seller these are the only proposals that exist. An admin has no shop, so
+         *     they read every seller's proposals — the whole queue with its provenance —
+         *     and may narrow it to one with ``seller_id``.
+         */
+        get: operations["list_proposals_api_v1_staff_catalog_proposals_get"];
         put?: never;
         /**
          * Suggest a card for the catalogue (seller)
@@ -2330,6 +2636,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/staff/payouts/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How the period is going so far — not the figure that will be paid
+         * @description The question a seller asks between payouts, and could not ask here.
+         *
+         *     ``/statements`` answers with the runs an admin has generated. Until one is
+         *     generated there is nothing to read, and a seller mid-month was told
+         *     nothing at all — while the sales, the returns and the days of storage were
+         *     all sitting in the database being counted for them.
+         *
+         *     So this runs the same arithmetic ``generate`` runs, over the window that
+         *     covers today, and stores none of it. Two things make that safe to show:
+         *
+         *     **It is marked provisional in the shape itself.** ``is_final`` is the
+         *     constant ``false``. A seller who reads a figure and is paid a different
+         *     one has been told the first number was a guess, which makes every number a
+         *     guess — so this one says it is a guess before they ask.
+         *
+         *     **It cannot be mistaken for a statement.** No id, no lines with ids, no
+         *     status that could become ``paid``. The only door that produces a figure
+         *     somebody is paid is ``close``, and it is an admin's.
+         *
+         *     Why it will differ: goods delivered after the request, a return that
+         *     arrives next week, another day of storage on every unit — and an
+         *     adjustment, which is not derived from anything and so is not here at all.
+         */
+        get: operations["current_api_v1_staff_payouts_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/staff/payouts/tariffs": {
         parameters: {
             query?: never;
@@ -2344,11 +2691,70 @@ export interface paths {
          */
         get: operations["list_tariffs_api_v1_staff_payouts_tariffs_get"];
         put?: never;
-        post?: never;
+        /**
+         * Add a weight band
+         * @description A band is a term of a contract, so writing one is logged with a name
+         *     against it.
+         *
+         *     Refused if a band already tops out at the same weight. ``band_for`` takes
+         *     the lightest band that still covers a parcel, so two bands sharing a
+         *     ceiling make "what does this cost to handle" a question with two answers
+         *     and the one that wins depends on row order — which is not a rule anybody
+         *     could quote back to a seller.
+         */
+        post: operations["create_tariff_api_v1_staff_payouts_tariffs_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/payouts/tariffs/{tariff_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Withdraw a weight band
+         * @description Refused for the heaviest band while any lighter one remains.
+         *
+         *     The heaviest band is the roof: it is what covers everything above the band
+         *     below it, which is why the seed gives it an absurdly large ceiling rather
+         *     than a null. Delete it and every parcel heavier than the next band down
+         *     falls through to no band at all — handled free, and stored at the flat
+         *     fallback rate — which is a free ride nobody decided to give and nothing
+         *     would report. Raise the ceiling of the band below it instead, or add the
+         *     replacement first.
+         *
+         *     The last band standing can go: an installation with no tariffs at all
+         *     charges no handling, which is honest about not having decided yet.
+         */
+        delete: operations["delete_tariff_api_v1_staff_payouts_tariffs__tariff_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change what a weight band charges
+         * @description One audit row per field that actually moved.
+         *
+         *     Per field because "the 2 kg band was edited" is not a fact anybody can
+         *     act on: a seller disputing a handling charge wants to know that the fee
+         *     went from 14 000 to 19 000 on a particular day, by a particular person.
+         *     And only when it moved — a panel that saves a form it did not change
+         *     should not fill the log with a change nobody made.
+         *
+         *     **What this does not do is rewrite history.** A closed statement's lines
+         *     are frozen rows and a sold order line carries the fee it was sold at, so
+         *     a band edited today changes what the *next* parcel is charged and nothing
+         *     that has already been settled. There is a test that says so, because it is
+         *     the property a seller has to be able to rely on and the one that would
+         *     break silently.
+         */
+        patch: operations["update_tariff_api_v1_staff_payouts_tariffs__tariff_id__patch"];
         trace?: never;
     };
     "/api/v1/staff/showcase/banners": {
@@ -2499,6 +2905,204 @@ export interface paths {
         patch: operations["update_promo_api_v1_staff_showcase_promos__code__patch"];
         trace?: never;
     };
+    "/api/v1/courier/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My deliveries, in the order somebody planned
+         * @description Mine and nobody else's — not a filter the caller chose but the only
+         *     rows that exist for them.
+         *
+         *     Sorted by the sequence an operator set, then the delivery window, then the
+         *     code. An unsequenced round still comes back in a sensible order rather
+         *     than in whatever order the ids happen to fall.
+         */
+        get: operations["my_orders_api_v1_courier_orders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier/shifts/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My open shift, if I am out */
+        get: operations["current_shift_api_v1_courier_shifts_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier/shifts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a round
+         * @description One open shift at a time.
+         *
+         *     Two would mean cash landing on whichever one a request happened to find,
+         *     and no way afterwards to say which round a note came from. A courier who
+         *     already has one open gets it back rather than an error: the app is
+         *     probably retrying, and the answer to "start my shift" when it is already
+         *     started is the shift.
+         */
+        post: operations["open_shift_api_v1_courier_shifts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier/shifts/{shift_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Come back, and hand the cash over
+         * @description The courier's claim about the money, recorded against ours.
+         *
+         *     ``cash_expected`` is the sum of the doors and is not editable here.
+         *     ``cash_declared`` is what the courier says they are handing over. The
+         *     office counts later, and the three figures are kept apart so a difference
+         *     is a fact rather than an argument. Closing writes an audit row whether
+         *     they agree or not — money moving is the thing that always gets a name
+         *     against it.
+         */
+        post: operations["close_shift_api_v1_courier_shifts__shift_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier/orders/{order_id}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Handed over — with who took it, and the cash
+         * @description The one write where a repeat would cost real money.
+         *
+         *     A cash order becomes a sale here and not before: the goods were held for
+         *     it from the moment it was placed and this is the moment they leave, which
+         *     is the rule the rest of the system already keeps. Doing that twice would
+         *     take the same shirt off the shelf twice and put the same cash on the shift
+         *     twice — so this is keyed like everything else, and the key is the reason
+         *     the second arrival is free.
+         *
+         *     The cash figure has to match what is owed. A courier who mistypes it is
+         *     short at the end of the day with nothing to point at, and a mismatch is
+         *     far more likely to be a typo than a part payment we want to record.
+         */
+        post: operations["deliver_api_v1_courier_orders__order_id__deliver_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier/orders/{order_id}/failed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Nobody answered — record the attempt, keep the order
+         * @description The order stays where it is, and stays with this courier.
+         *
+         *     No status change, because nothing about the order changed: it is still
+         *     shipped and still on its way. What changed is that there is now a row
+         *     saying somebody tried and what they found, which is what an operator needs
+         *     to decide whether to phone the customer, send the van again, or give up
+         *     and cancel — and giving up is theirs, not the courier's.
+         */
+        post: operations["failed_api_v1_courier_orders__order_id__failed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier/pickups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns to collect from customers */
+        get: operations["my_pickups_api_v1_courier_pickups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier/pickups/{run_id}/collect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What I came back with, door by door
+         * @description Line by line, because a round is rarely all or nothing.
+         *
+         *     A door that did not open needs a reason for the same purpose a failed
+         *     delivery does: somebody has to decide what happens to that return, and
+         *     they decide from this sentence.
+         *
+         *     Nothing here touches stock. Whether returned goods go back on a shelf is
+         *     the refund's decision — the operator inspects and says restock or write
+         *     off — and putting them back here as well would put the same shirt back
+         *     twice.
+         */
+        post: operations["collect_api_v1_courier_pickups__run_id__collect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -2506,7 +3110,37 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Health */
+        /**
+         * Health
+         * @description Is this process able to do its job — not merely running.
+         *
+         *     It used to answer ``{"status": "ok"}`` from a function that touched
+         *     nothing, which is the health check that lies. A process whose database has
+         *     gone away, or whose credentials have expired, or which is pointed at a
+         *     schema it does not expect, answers that identically to a healthy one; the
+         *     only thing it proves is that uvicorn accepted the socket, and the socket
+         *     was never in doubt.
+         *
+         *     So it asks the database two cheap questions:
+         *
+         *     * ``SELECT 1`` — the connection is real and the server answers. This also
+         *       exercises the pool's ``pool_pre_ping``, so a stale socket is discovered
+         *       here rather than by the next customer.
+         *     * the stamped Alembic revision — one row from a one-row table. Startup
+         *       refuses to run unless this matches, but a migration applied underneath a
+         *       running process would not be noticed by anything else, and a service
+         *       serving a schema it does not expect is worth knowing about before the
+         *       first 500.
+         *
+         *     **503 when either fails**, because the caller is a script or a load
+         *     balancer that reads the status code and nothing else. A body that says
+         *     "degraded" behind a 200 is a body nobody reads. `dev.sh status` and
+         *     `docker`-style health checks both work off the code alone.
+         *
+         *     Deliberately not: row counts, table lists, or anything that grows with the
+         *     catalogue. This is polled, and a health check that gets slower as the shop
+         *     gets bigger becomes the thing that takes the shop down.
+         */
         get: operations["health_health_get"];
         put?: never;
         post?: never;
@@ -2933,6 +3567,12 @@ export interface components {
             /** Size Blocked Reason */
             size_blocked_reason: string;
         };
+        /**
+         * AttemptResult
+         * @description How one knock at one door went.
+         * @enum {string}
+         */
+        AttemptResult: "delivered" | "failed";
         /** BannerOut */
         BannerOut: {
             /** Id */
@@ -3351,6 +3991,65 @@ export interface components {
             totals: components["schemas"]["CartTotalsOut"];
         };
         /**
+         * CourierAssignIn
+         * @description An operator putting an order on somebody's round.
+         */
+        CourierAssignIn: {
+            /** Courier Id */
+            courier_id: number;
+            /**
+             * Sequence
+             * @default 0
+             */
+            sequence: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /**
+         * CourierOrderOut
+         * @description One stop on a round.
+         *
+         *     Not the customer's ``OrderOut``. A courier at a door needs the address,
+         *     the phone, how much cash to ask for and how many times this door has
+         *     already been tried — and none of the catalogue detail that shape carries.
+         */
+        CourierOrderOut: {
+            /** Id */
+            id: number;
+            /** Code */
+            code: string;
+            /** Sequence */
+            sequence: number;
+            status: components["schemas"]["OrderStatus"];
+            /** Recipient Name */
+            recipient_name: string;
+            /** Recipient Phone */
+            recipient_phone: string;
+            /** Address Line */
+            address_line: string;
+            /** Address Meta */
+            address_meta: string;
+            delivery_kind: components["schemas"]["DeliveryKind"];
+            /** Delivery Day */
+            delivery_day: string | null;
+            /** Delivery Window */
+            delivery_window: string;
+            /** Items Count */
+            items_count: number;
+            /** Total */
+            total: number;
+            payment_method: components["schemas"]["PaymentMethod"];
+            /** Cash Due */
+            cash_due: number;
+            /** Attempts */
+            attempts: number;
+            /** Last Failure */
+            last_failure: string;
+        };
+        /**
          * DecisionIn
          * @description A refusal, or a note on an approval.
          *
@@ -3371,10 +4070,80 @@ export interface components {
             note: string;
         };
         /**
+         * DeliverIn
+         * @description Proof that goods changed hands.
+         *
+         *     ``recipient_name`` is required and the photograph is not. That is a
+         *     decision about the work: the name is one field a courier can always fill
+         *     in while standing in front of the person who took the goods, and it is
+         *     what answers "I never received it". A photo needs an upload, an upload
+         *     needs signal, and requiring one would stop a courier in a basement
+         *     finishing a delivery they have already made.
+         */
+        DeliverIn: {
+            /** Recipient Name */
+            recipient_name: string;
+            /**
+             * Photo Url
+             * @default
+             */
+            photo_url: string;
+            /**
+             * Cash Collected
+             * @default 0
+             */
+            cash_collected: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** DeliveryAttemptOut */
+        DeliveryAttemptOut: {
+            /** Id */
+            id: number;
+            /** Order Id */
+            order_id: number;
+            /** Order Code */
+            order_code: string;
+            result: components["schemas"]["AttemptResult"];
+            /** Reason */
+            reason: string;
+            /** Recipient Name */
+            recipient_name: string;
+            /** Photo Url */
+            photo_url: string | null;
+            /** Cash Collected */
+            cash_collected: number;
+            /**
+             * Happened At
+             * Format: date-time
+             */
+            happened_at: string;
+        };
+        /**
          * DeliveryKind
          * @enum {string}
          */
         DeliveryKind: "courier" | "pickup";
+        /**
+         * FailedIn
+         * @description A door that did not open.
+         *
+         *     The reason is required. "Not delivered" with nothing after it is the row
+         *     an operator cannot act on, and deciding what happens next — phone the
+         *     customer, try tomorrow, give up — is a decision made from this sentence.
+         */
+        FailedIn: {
+            /** Reason */
+            reason: string;
+            /**
+             * Photo Url
+             * @default
+             */
+            photo_url: string;
+        };
         /** FaqOut */
         FaqOut: {
             /** Id */
@@ -3428,6 +4197,56 @@ export interface components {
             /** Storage Per Day */
             storage_per_day: number;
             /** Label */
+            label: string;
+        };
+        /**
+         * FulfilmentTariffUpdateIn
+         * @description A change to a term of a contract; every field left out is left alone.
+         *
+         *     Partial rather than whole-row because the audit trail records fields, not
+         *     saves: a panel that PUT the entire band back would log four changes every
+         *     time somebody corrected the label.
+         */
+        FulfilmentTariffUpdateIn: {
+            /** Max Grams */
+            max_grams?: number | null;
+            /** Fee */
+            fee?: number | null;
+            /** Storage Per Day */
+            storage_per_day?: number | null;
+            /** Label */
+            label?: string | null;
+        };
+        /**
+         * FulfilmentTariffWriteIn
+         * @description A new weight band.
+         *
+         *     ``max_grams`` is the top of the band, and it is what makes a band a band:
+         *     the lightest one that still covers a parcel is the one that applies, so
+         *     two bands sharing a ceiling would make "which band is this" a question
+         *     with two answers. The endpoint refuses the second.
+         *
+         *     Both rates default to nothing rather than to a guess. A fee that has not
+         *     been decided is better charged as zero than as a number somebody made up,
+         *     because the seller is going to read it against their contract.
+         */
+        FulfilmentTariffWriteIn: {
+            /** Max Grams */
+            max_grams: number;
+            /**
+             * Fee
+             * @default 0
+             */
+            fee: number;
+            /**
+             * Storage Per Day
+             * @default 0
+             */
+            storage_per_day: number;
+            /**
+             * Label
+             * @default
+             */
             label: string;
         };
         /** HTTPValidationError */
@@ -3930,6 +4749,19 @@ export interface components {
             /** Has More */
             has_more: boolean;
         };
+        /** Page[SellerCatalogOut] */
+        Page_SellerCatalogOut_: {
+            /** Items */
+            items: components["schemas"]["SellerCatalogOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+            /** Has More */
+            has_more: boolean;
+        };
         /** Page[StaffOrderOut] */
         Page_StaffOrderOut_: {
             /** Items */
@@ -3994,6 +4826,81 @@ export interface components {
              */
             phone: string;
         };
+        /**
+         * PickupCollectIn
+         * @description What the courier came back with, door by door.
+         */
+        PickupCollectIn: {
+            /** Lines */
+            lines: components["schemas"]["PickupLineIn"][];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /**
+         * PickupCreateIn
+         * @description A round of collections, built from approved returns.
+         *
+         *     Only approved ones: a request still being decided is not something to
+         *     send a van for, and a refused one has nothing to collect.
+         */
+        PickupCreateIn: {
+            /** Courier Id */
+            courier_id: number;
+            /** Return Request Ids */
+            return_request_ids: number[];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** PickupLineIn */
+        PickupLineIn: {
+            /** Return Request Id */
+            return_request_id: number;
+            /** Collected */
+            collected: boolean;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Photo Url
+             * @default
+             */
+            photo_url: string;
+        };
+        /** PickupLineOut */
+        PickupLineOut: {
+            /** Id */
+            id: number;
+            /** Return Request Id */
+            return_request_id: number;
+            /** Order Code */
+            order_code: string;
+            /** Customer Name */
+            customer_name: string;
+            /** Customer Phone */
+            customer_phone: string;
+            /** Address Line */
+            address_line: string;
+            /** Reason */
+            reason: string;
+            /** Product Title */
+            product_title: string;
+            /** Collected */
+            collected: boolean | null;
+            /** Note */
+            note: string;
+            /** Photo Url */
+            photo_url: string | null;
+            /** Attempted At */
+            attempted_at: string | null;
+        };
         /** PickupPointOut */
         PickupPointOut: {
             /** Id */
@@ -4007,6 +4914,39 @@ export interface components {
             /** Distance Km */
             distance_km: number | null;
         };
+        /** PickupRunOut */
+        PickupRunOut: {
+            /** Id */
+            id: number;
+            /** Code */
+            code: string;
+            /** Courier Id */
+            courier_id: number;
+            /** Courier Name */
+            courier_name: string;
+            status: components["schemas"]["PickupRunStatus"];
+            /** Next Statuses */
+            next_statuses: components["schemas"]["PickupRunStatus"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Collected At */
+            collected_at: string | null;
+            /** Received At */
+            received_at: string | null;
+            /** Note */
+            note: string;
+            /** Lines */
+            lines: components["schemas"]["PickupLineOut"][];
+        };
+        /**
+         * PickupRunStatus
+         * @description Where a round of collections from customers has got to.
+         * @enum {string}
+         */
+        PickupRunStatus: "open" | "collected" | "received" | "cancelled";
         /** PinChangeIn */
         PinChangeIn: {
             /** Current Pin */
@@ -4677,6 +5617,102 @@ export interface components {
              */
             note: string;
         };
+        /**
+         * RunningLineOut
+         * @description One row of a running total.
+         *
+         *     ``StatementLineOut`` with the ``id`` removed, and the absence is the
+         *     point: these rows are worked out for the request and stored nowhere, so an
+         *     id would be a handle on something that does not exist and a panel would be
+         *     entitled to think it could fetch it again.
+         */
+        RunningLineOut: {
+            kind: components["schemas"]["StatementLineKind"];
+            /** Amount */
+            amount: number;
+            /** Quantity */
+            quantity: number;
+            /** Title */
+            title: string;
+            /** Note */
+            note: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Order Item Id */
+            order_item_id: number | null;
+            /** Return Request Id */
+            return_request_id: number | null;
+            /** Offer Id */
+            offer_id: number | null;
+        };
+        /**
+         * RunningTotalOut
+         * @description How the period is going so far — deliberately not a statement.
+         *
+         *     ``is_final`` is a constant ``false`` rather than a flag that might one day
+         *     be true. That is the whole shape of the thing: a seller reading this is
+         *     reading arithmetic over events that have not stopped arriving, and the
+         *     figure will differ from the one they are paid. Closing the period is what
+         *     turns a number into a promise, and a closed period answers on
+         *     ``/statements`` instead.
+         *
+         *     An adjustment is not here. Every other line is derived from something that
+         *     happened — goods delivered, goods returned, days on a shelf — and can be
+         *     recomputed from the events at any moment. An adjustment is a decision
+         *     somebody wrote onto a statement with a reason attached, and until a
+         *     statement exists there is nothing to write it on.
+         */
+        RunningTotalOut: {
+            /**
+             * Is Final
+             * @default false
+             * @constant
+             */
+            is_final: false;
+            /** Period Id */
+            period_id: number | null;
+            /** Period Label */
+            period_label: string;
+            period_status: components["schemas"]["SettlementStatus"] | null;
+            /**
+             * Starts On
+             * Format: date
+             */
+            starts_on: string;
+            /**
+             * Ends On
+             * Format: date
+             */
+            ends_on: string;
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Seller Id */
+            seller_id: number;
+            /** Seller Name */
+            seller_name: string;
+            /** Gross Sales */
+            gross_sales: number;
+            /** Commission */
+            commission: number;
+            /** Fulfilment */
+            fulfilment: number;
+            /** Refunds */
+            refunds: number;
+            /** Storage */
+            storage: number;
+            /** Payable */
+            payable: number;
+            /** Line Count */
+            line_count: number;
+            /** Lines */
+            lines: components["schemas"]["RunningLineOut"][];
+        };
         /** SearchLandingOut */
         SearchLandingOut: {
             /** Recent */
@@ -4738,6 +5774,106 @@ export interface components {
             active: boolean;
         };
         /**
+         * SellerCatalogDetailOut
+         * @description One card with everything the offer form needs in one request.
+         *
+         *     ``leaf_ids`` is the answer to the rule above, in the shape the write
+         *     endpoint takes: read it, send it as ``variant_ids``, and the offer covers
+         *     the whole card. Deriving it from ``variants`` is possible and inviting a
+         *     client to re-derive a backend rule is how the two drift.
+         */
+        SellerCatalogDetailOut: {
+            /** Id */
+            id: number;
+            /** Sku */
+            sku: string;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Category Slug */
+            category_slug: string;
+            /** Category Name */
+            category_name: string;
+            /** Brand Name */
+            brand_name: string | null;
+            /** Price */
+            price: number;
+            /** Old Price */
+            old_price: number | null;
+            /** In Stock */
+            in_stock: boolean;
+            /** Offer Count */
+            offer_count: number;
+            /** Variant Count */
+            variant_count: number;
+            /** Mine */
+            mine: boolean;
+            /** My Offer Id */
+            my_offer_id: number | null;
+            /** My Price */
+            my_price: number | null;
+            /** Description */
+            description: string;
+            /** Variants */
+            variants: components["schemas"]["SellerVariantOut"][];
+            /** Leaf Ids */
+            leaf_ids: number[];
+            /** Offers */
+            offers: components["schemas"]["OfferOut"][];
+        };
+        /**
+         * SellerCatalogOut
+         * @description A card as somebody deciding whether to stock it sees it.
+         *
+         *     Not the admin's shape. That one answers with the Uzbek on the row because
+         *     an editor is about to write it back; this one is read to *recognise* a
+         *     product, so it is translated and carries the photograph.
+         *
+         *     **The shop price is here on purpose.** Every seller's name, price and
+         *     stock is already returned by ``GET /products/{id}/offers``, which needs no
+         *     token at all — so withholding it would protect nothing and only make a
+         *     seller price blind or price by opening the shop in another tab. What it
+         *     tells them is the thing they actually need: what this goes for, and how
+         *     many people are already selling it.
+         */
+        SellerCatalogOut: {
+            /** Id */
+            id: number;
+            /** Sku */
+            sku: string;
+            /** Title */
+            title: string;
+            /** Subtitle */
+            subtitle: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Category Slug */
+            category_slug: string;
+            /** Category Name */
+            category_name: string;
+            /** Brand Name */
+            brand_name: string | null;
+            /** Price */
+            price: number;
+            /** Old Price */
+            old_price: number | null;
+            /** In Stock */
+            in_stock: boolean;
+            /** Offer Count */
+            offer_count: number;
+            /** Variant Count */
+            variant_count: number;
+            /** Mine */
+            mine: boolean;
+            /** My Offer Id */
+            my_offer_id: number | null;
+            /** My Price */
+            my_price: number | null;
+        };
+        /**
          * SellerCreateIn
          * @description A seller, and optionally the account that signs in as them.
          *
@@ -4760,6 +5896,41 @@ export interface components {
             commission_percent: number;
             /** User Phone */
             user_phone?: string | null;
+        };
+        /**
+         * SellerMeOut
+         * @description Which shop am I.
+         *
+         *     ``/staff/me`` answers with the *user* — a phone number and a role — and
+         *     says nothing about the ``sellers`` row behind it. So the cabinet greeted
+         *     people by phone number, and a seller who had just been taken on had no way
+         *     to confirm they were linked to the right shop, which is the one thing they
+         *     would want to check first.
+         *
+         *     The commission rate is here because it is a term of their own contract and
+         *     they are entitled to read it. It is also the figure every statement is
+         *     computed from, so a seller who cannot see it cannot check a payout.
+         */
+        SellerMeOut: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Phone */
+            phone: string;
+            /** Commission Percent */
+            commission_percent: number;
+            /** Active */
+            active: boolean;
+            /** Linked At */
+            linked_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Offer Count */
+            offer_count: number;
         };
         /** SellerOut */
         SellerOut: {
@@ -4898,6 +6069,31 @@ export interface components {
             /** User Phone */
             user_phone?: string | null;
         };
+        /**
+         * SellerVariantOut
+         * @description A colour or a size, and whether an offer must name it.
+         *
+         *     ``is_leaf`` is the whole point. An offer has to name every leaf — the
+         *     sizes of a product that has sizes, its colours otherwise — and naming
+         *     some of them is refused, because an offer covering half a card leaves the
+         *     rest of it without figures. The rule was already enforced with a 422 and
+         *     there was no way for a seller to find out what the leaves were.
+         */
+        SellerVariantOut: {
+            /** Id */
+            id: number;
+            kind: components["schemas"]["VariantKind"];
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Parent Id */
+            parent_id: number | null;
+            /** Is Leaf */
+            is_leaf: boolean;
+        };
         /** SettingsIn */
         SettingsIn: {
             language?: components["schemas"]["Language"] | null;
@@ -4962,6 +6158,122 @@ export interface components {
             /** Sellable */
             sellable: number;
         };
+        /**
+         * ShiftCloseIn
+         * @description Handing the cash over.
+         *
+         *     The declared figure is required even when it matches: a courier saying
+         *     "this is what I have" is the claim the reconciliation is against, and
+         *     inferring it from our own total would leave nothing to reconcile.
+         */
+        ShiftCloseIn: {
+            /** Cash Declared */
+            cash_declared: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /**
+         * ShiftCountIn
+         * @description What the office actually counted.
+         */
+        ShiftCountIn: {
+            /** Cash Counted */
+            cash_counted: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /**
+         * ShiftDetailOut
+         * @description The same round with every door on it, so the total is followable.
+         */
+        ShiftDetailOut: {
+            /** Id */
+            id: number;
+            /** Courier Id */
+            courier_id: number;
+            /** Courier Name */
+            courier_name: string;
+            status: components["schemas"]["ShiftStatus"];
+            /**
+             * Opened At
+             * Format: date-time
+             */
+            opened_at: string;
+            /** Closed At */
+            closed_at: string | null;
+            /** Cash Expected */
+            cash_expected: number;
+            /** Cash Declared */
+            cash_declared: number | null;
+            /** Cash Counted */
+            cash_counted: number | null;
+            /** Difference */
+            difference: number | null;
+            /** Counted At */
+            counted_at: string | null;
+            /** Orders Delivered */
+            orders_delivered: number;
+            /** Orders Failed */
+            orders_failed: number;
+            /** Note */
+            note: string;
+            /** Attempts */
+            attempts: components["schemas"]["DeliveryAttemptOut"][];
+        };
+        /**
+         * ShiftOut
+         * @description A round, and the money that came back from it.
+         *
+         *     Three cash figures because they are three separate claims and the whole
+         *     value is in where they differ. ``cash_expected`` is the sum of the
+         *     deliveries and is ours; ``cash_declared`` is the courier's word;
+         *     ``cash_counted`` is what the office found. ``difference`` is the counted
+         *     figure against the expected one, and it is null until somebody has
+         *     counted — a nought would be a claim nobody has made.
+         */
+        ShiftOut: {
+            /** Id */
+            id: number;
+            /** Courier Id */
+            courier_id: number;
+            /** Courier Name */
+            courier_name: string;
+            status: components["schemas"]["ShiftStatus"];
+            /**
+             * Opened At
+             * Format: date-time
+             */
+            opened_at: string;
+            /** Closed At */
+            closed_at: string | null;
+            /** Cash Expected */
+            cash_expected: number;
+            /** Cash Declared */
+            cash_declared: number | null;
+            /** Cash Counted */
+            cash_counted: number | null;
+            /** Difference */
+            difference: number | null;
+            /** Counted At */
+            counted_at: string | null;
+            /** Orders Delivered */
+            orders_delivered: number;
+            /** Orders Failed */
+            orders_failed: number;
+            /** Note */
+            note: string;
+        };
+        /**
+         * ShiftStatus
+         * @enum {string}
+         */
+        ShiftStatus: "open" | "closed";
         /**
          * SlotCreateIn
          * @description Open the same windows across a set of days.
@@ -5188,6 +6500,18 @@ export interface components {
             paid: boolean;
             /** Next Statuses */
             next_statuses: components["schemas"]["OrderStatus"][];
+            /** Courier Id */
+            courier_id?: number | null;
+            /**
+             * Courier Name
+             * @default
+             */
+            courier_name: string;
+            /**
+             * Courier Sequence
+             * @default 0
+             */
+            courier_sequence: number;
             /**
              * Created At
              * Format: date-time
@@ -8627,6 +9951,279 @@ export interface operations {
             };
         };
     };
+    list_couriers_api_v1_staff_couriers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffUserOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_courier_api_v1_staff_orders__order_id__courier_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourierAssignIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shifts_api_v1_staff_shifts_get: {
+        parameters: {
+            query?: {
+                courier_id?: number | null;
+                status?: components["schemas"]["ShiftStatus"] | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_shift_api_v1_staff_shifts__shift_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                shift_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    count_shift_api_v1_staff_shifts__shift_id__count_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                shift_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShiftCountIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_pickups_api_v1_staff_pickups_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["PickupRunStatus"] | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupRunOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_pickup_api_v1_staff_pickups_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickupCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    receive_pickup_api_v1_staff_pickups__run_id__receive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_slots_api_v1_staff_delivery_slots_get: {
         parameters: {
             query?: {
@@ -8722,6 +10319,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffSlotOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_seller_api_v1_staff_sellers_me_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerMeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    browse_catalogue_api_v1_staff_catalog_browse_get: {
+        parameters: {
+            query?: {
+                /** @description Part of a title or a SKU */
+                q?: string | null;
+                /** @description Category slug */
+                category?: string | null;
+                /** @description true: only cards I already offer; false: only the rest */
+                mine?: boolean | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SellerCatalogOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    browse_product_api_v1_staff_catalog_browse__product_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerCatalogDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -9774,6 +11475,46 @@ export interface operations {
             };
         };
     };
+    list_proposals_api_v1_staff_catalog_proposals_get: {
+        parameters: {
+            query?: {
+                /** @description `rejected` is the one that needs reading */
+                status?: components["schemas"]["ProductStatus"] | null;
+                /** @description Part of a title or a SKU */
+                q?: string | null;
+                /** @description Admins only: whose proposals to read */
+                seller_id?: number | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AdminProductOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     propose_product_api_v1_staff_catalog_proposals_post: {
         parameters: {
             query?: never;
@@ -10741,6 +12482,40 @@ export interface operations {
             };
         };
     };
+    current_api_v1_staff_payouts_current_get: {
+        parameters: {
+            query?: {
+                /** @description Admins only: whose running total to read */
+                seller_id?: number | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunningTotalOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tariffs_api_v1_staff_payouts_tariffs_get: {
         parameters: {
             query?: never;
@@ -10759,6 +12534,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FulfilmentTariffOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_tariff_api_v1_staff_payouts_tariffs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FulfilmentTariffWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FulfilmentTariffOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_tariff_api_v1_staff_payouts_tariffs__tariff_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                tariff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_tariff_api_v1_staff_payouts_tariffs__tariff_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                tariff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FulfilmentTariffUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FulfilmentTariffOut"];
                 };
             };
             /** @description Validation Error */
@@ -11250,6 +13130,296 @@ export interface operations {
             };
         };
     };
+    my_orders_api_v1_courier_orders_get: {
+        parameters: {
+            query?: {
+                /** @description default: everything still open */
+                day?: string | null;
+                /** @description Include finished stops */
+                done?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourierOrderOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_shift_api_v1_courier_shifts_current_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftDetailOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_shift_api_v1_courier_shifts_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A uuid per queued action */
+                "Idempotency-Key": string;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_shift_api_v1_courier_shifts__shift_id__close_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A uuid per queued action */
+                "Idempotency-Key": string;
+                authorization?: string | null;
+            };
+            path: {
+                shift_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShiftCloseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deliver_api_v1_courier_orders__order_id__deliver_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A uuid per queued action */
+                "Idempotency-Key": string;
+                authorization?: string | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliverIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourierOrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    failed_api_v1_courier_orders__order_id__failed_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A uuid per queued action */
+                "Idempotency-Key": string;
+                authorization?: string | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FailedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourierOrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_pickups_api_v1_courier_pickups_get: {
+        parameters: {
+            query?: {
+                /** @description Include runs already handed in */
+                done?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupRunOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collect_api_v1_courier_pickups__run_id__collect_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A uuid per queued action */
+                "Idempotency-Key": string;
+                authorization?: string | null;
+            };
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickupCollectIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_health_get: {
         parameters: {
             query?: never;
@@ -11266,7 +13436,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        [key: string]: string;
+                        [key: string]: unknown;
                     };
                 };
             };
