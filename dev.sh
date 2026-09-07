@@ -222,6 +222,7 @@ preflight() {
   # into a refusal for anybody who would rather nothing touched their tree.
   local app
   for app in backoffice seller courier; do
+    [ -d "$ROOT/$app" ] || { warn "$app/ not present yet — skipping"; continue; }
     if [ ! -d "$ROOT/$app/node_modules" ]; then
       if [ -n "${MB_NO_INSTALL:-}" ]; then
         die "$app/node_modules is missing. Run:  cd $app && npm install"
@@ -233,6 +234,7 @@ preflight() {
     fi
   done
   for app in backoffice seller courier; do
+    [ -d "$ROOT/$app" ] || continue
     [ -x "$ROOT/$app/node_modules/.bin/vite" ] || die \
       "$app/node_modules exists but has no vite binary. Try:  cd $app && npm install"
   done
@@ -244,6 +246,7 @@ preflight() {
   for pair in "$API_PORT:backend" "$BACKOFFICE_PORT:backoffice" \
               "$SELLER_PORT:seller" "$COURIER_PORT:courier"; do
     port="${pair%%:*}"; name="${pair##*:}"
+    [ "$name" = backend ] || [ -d "$ROOT/$name" ] || continue
     if port_busy "$port"; then
       bad ":$port is taken — $name wants it — $(describe_pid "$(port_holder "$port")")"
       busy=1
@@ -393,6 +396,7 @@ bring_up() {
   local app port
   for pair in "backoffice:$BACKOFFICE_PORT" "seller:$SELLER_PORT" "courier:$COURIER_PORT"; do
     app="${pair%%:*}"; port="${pair##*:}"
+    [ -d "$ROOT/$app" ] || continue
     start_service "$app" "$port" "$ROOT/$app" \
       "$ROOT/$app/node_modules/.bin/vite" --port "$port" --strictPort
   done
@@ -400,6 +404,7 @@ bring_up() {
   local name
   for pair in "backoffice:$BACKOFFICE_PORT" "seller:$SELLER_PORT" "courier:$COURIER_PORT"; do
     name="${pair%%:*}"; port="${pair##*:}"
+    [ -d "$ROOT/$name" ] || continue
     if code="$(wait_for_http "http://localhost:$port/")"; then
       ok "$name answering on :$port"
     else
@@ -508,6 +513,7 @@ print("database {} (want {}, have {})".format(why, d["expected"], d["revision"])
   local name port
   for pair in "backoffice:$BACKOFFICE_PORT" "seller:$SELLER_PORT" "courier:$COURIER_PORT"; do
     name="${pair%%:*}"; port="${pair##*:}"
+    [ -d "$ROOT/$name" ] || continue
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 "http://localhost:$port/" 2>/dev/null)"
     [ -z "$code" ] && code=000
     if [ "$code" = "200" ]; then
