@@ -265,6 +265,14 @@ class Seller(SQLModel, table=True):
     # holding UserRole.SELLER still needs this to answer "which of these offers
     # are mine". The house seller has nobody: it is us.
     user_id: int | None = Field(default=None, foreign_key="users.id", index=True)
+    # When that account was pointed at this seller.
+    #
+    # Not the same as ``created_at``: a seller is taken on first and an account
+    # is attached afterwards, sometimes weeks later. The seller's own cabinet
+    # answers "since when am I selling here" from this, and it is the date
+    # their first statement can be read against. Null on a seller nobody signs
+    # in as — the house seller is us.
+    linked_at: datetime | None = None
     # What we keep of each item sold. Per seller, because the rate is what a
     # contract says and contracts differ; five per cent is the standard one.
     commission_percent: int = 5

@@ -1512,6 +1512,118 @@ class MediaOut(BaseModel):
     bytes: int
 
 
+# ------------------------------------------------------------------ the seller's own
+
+# The marketplace's founding move — a seller arrives and puts their goods up —
+# did not work. Offering a product needs a ``product_id``, and the only
+# catalogue listing was the admin's; so a seller could edit the offers
+# somebody had opened for them and could not open one.
+#
+# These three shapes close that. What runs through all of them: a seller is an
+# outside party, so each answers exactly what they need and nothing about
+# anybody else's arrangement with us.
+
+
+class SellerMeOut(BaseModel):
+    """Which shop am I.
+
+    ``/staff/me`` answers with the *user* — a phone number and a role — and
+    says nothing about the ``sellers`` row behind it. So the cabinet greeted
+    people by phone number, and a seller who had just been taken on had no way
+    to confirm they were linked to the right shop, which is the one thing they
+    would want to check first.
+
+    The commission rate is here because it is a term of their own contract and
+    they are entitled to read it. It is also the figure every statement is
+    computed from, so a seller who cannot see it cannot check a payout.
+    """
+
+    id: int
+    name: str
+    phone: str
+    commission_percent: int
+    active: bool
+    # When this account was pointed at this shop. Null for a shop linked
+    # before the column existed and whose link was never recorded.
+    linked_at: datetime | None
+    # When we took the shop on, which is earlier and is not the same thing.
+    created_at: datetime
+    offer_count: int
+
+
+class SellerVariantOut(BaseModel):
+    """A colour or a size, and whether an offer must name it.
+
+    ``is_leaf`` is the whole point. An offer has to name every leaf — the
+    sizes of a product that has sizes, its colours otherwise — and naming
+    some of them is refused, because an offer covering half a card leaves the
+    rest of it without figures. The rule was already enforced with a 422 and
+    there was no way for a seller to find out what the leaves were.
+    """
+
+    id: int
+    kind: VariantKind
+    label: str
+    value: str
+    image_url: str | None
+    parent_id: int | None
+    is_leaf: bool
+
+
+class SellerCatalogOut(BaseModel):
+    """A card as somebody deciding whether to stock it sees it.
+
+    Not the admin's shape. That one answers with the Uzbek on the row because
+    an editor is about to write it back; this one is read to *recognise* a
+    product, so it is translated and carries the photograph.
+
+    **The shop price is here on purpose.** Every seller's name, price and
+    stock is already returned by ``GET /products/{id}/offers``, which needs no
+    token at all — so withholding it would protect nothing and only make a
+    seller price blind or price by opening the shop in another tab. What it
+    tells them is the thing they actually need: what this goes for, and how
+    many people are already selling it.
+    """
+
+    id: int
+    sku: str
+    title: str
+    subtitle: str
+    image_url: str | None
+    category_slug: str
+    category_name: str
+    brand_name: str | None
+
+    # The winning offer's figures, which is what a shopper is shown.
+    price: int
+    old_price: int | None
+    in_stock: bool
+    offer_count: int
+    variant_count: int
+
+    # Whether this is already mine, so a list can say "you sell this" instead
+    # of offering a button that answers 409.
+    mine: bool
+    my_offer_id: int | None
+    my_price: int | None
+
+
+class SellerCatalogDetailOut(SellerCatalogOut):
+    """One card with everything the offer form needs in one request.
+
+    ``leaf_ids`` is the answer to the rule above, in the shape the write
+    endpoint takes: read it, send it as ``variant_ids``, and the offer covers
+    the whole card. Deriving it from ``variants`` is possible and inviting a
+    client to re-derive a backend rule is how the two drift.
+    """
+
+    description: str
+    variants: list[SellerVariantOut]
+    leaf_ids: list[int]
+    # Everyone selling it, cheapest first — the same list the shop shows.
+    offers: list[OfferOut]
+
+
 # ------------------------------------------------------------------ payouts
 
 # What a seller is owed, and what it is made of.

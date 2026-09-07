@@ -493,6 +493,14 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Это не изображение — даже если имя файла говорит обратное",
         "en": "That file isn't an image — whatever its name says",
     },
+    "admin_has_no_seller": {
+        "uz": "Administratorning o'z do'koni yo'q — sotuvchini «Sotuvchilar» "
+              "orqali oching",
+        "ru": "У администратора нет своего магазина — откройте продавца через "
+              "«Продавцы»",
+        "en": "An admin has no shop of their own — open a seller from the "
+              "sellers list instead",
+    },
     "seller_account_missing": {
         "uz": "Hisobingiz sotuvchiga bog'lanmagan",
         "ru": "Ваш аккаунт не привязан к продавцу",

@@ -24,14 +24,17 @@ figures on ``Product``. There is no second copy of that logic here.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from app import audit, i18n
 from app import offers as of
 from app import schemas as s
+from app import services as sv
 from app import stock as st
 from app.deps import SellerUser, SessionDep, StockViewer, WarehouseUser
 from app.models import (
+    Brand,
+    Category,
     Offer,
     OfferVariant,
     Product,
@@ -46,6 +49,166 @@ router = APIRouter(prefix="/staff", tags=["staff"])
 
 
 # --------------------------------------------------------------------------- the seller's side
+
+
+@router.get(
+    "/sellers/me",
+    response_model=s.SellerMeOut,
+    summary="Which shop am I",
+)
+def my_seller(user: SellerUser, session: SessionDep) -> s.SellerMeOut:
+    """The seller's own row, and the first thing their cabinet asks for.
+
+    ``/staff/me`` answers with the user — a phone number and a role — and
+    nothing about the shop behind it, so a seller who had just been taken on
+    could not confirm they were linked to the right one.
+
+    Declared here rather than in ``admin.py`` beside ``/sellers/{seller_id}``,
+    and this router is registered first, so ``me`` is matched as a literal
+    before that path's integer. An admin has no shop of their own; they read
+    any seller's row through the admin door.
+    """
+    if user.role is UserRole.ADMIN:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, i18n.label("admin_has_no_seller")
+        )
+    seller = _own_seller(session, user)
+    offers = session.exec(
+        select(func.count()).select_from(Offer).where(Offer.seller_id == seller.id)
+    ).one()
+    return s.SellerMeOut(
+        id=seller.id,
+        name=seller.name,
+        phone=seller.phone,
+        commission_percent=seller.commission_percent,
+        active=seller.active,
+        linked_at=seller.linked_at,
+        created_at=seller.created_at,
+        offer_count=int(offers),
+    )
+
+
+@router.get(
+    "/catalog/browse",
+    response_model=s.Page[s.SellerCatalogOut],
+    summary="The catalogue as a seller looking for something to stock sees it",
+)
+def browse_catalogue(
+    user: SellerUser,
+    session: SessionDep,
+    q: str | None = Query(None, description="Part of a title or a SKU"),
+    category: str | None = Query(None, description="Category slug"),
+    mine: bool | None = Query(
+        None, description="true: only cards I already offer; false: only the rest"
+    ),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(24, ge=1, le=60),
+) -> s.Page[s.SellerCatalogOut]:
+    """Published cards only.
+
+    A draft, a proposal in moderation, a refused card and a withdrawn one are
+    somebody else's unfinished work; a seller attaching an offer to one would
+    be pricing something that is not in the shop and may never be. This goes
+    through the same ``in_the_shop`` narrowing every customer path uses, which
+    is why there is one function for it rather than a ``where`` repeated here.
+
+    Not the admin's listing. That one answers with the Uzbek on the row
+    because an editor is about to write it back, and includes every state so
+    the moderation queue has somewhere to live. This is read to recognise a
+    product, so it is translated and carries the photograph.
+    """
+    seller = _own_seller_or_none(session, user)
+
+    stmt = sv.in_the_shop(select(Product))
+    if q:
+        needle = f"%{q.lower()}%"
+        stmt = stmt.where(
+            func.lower(Product.title).like(needle) | func.lower(Product.sku).like(needle)
+        )
+    if category:
+        row = session.exec(select(Category).where(Category.slug == category)).first()
+        if row is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, i18n.label("category_not_found")
+            )
+        stmt = stmt.where(Product.category_id == row.id)
+
+    if mine is not None and seller is not None:
+        owned = session.exec(
+            select(Offer.product_id).where(Offer.seller_id == seller.id)
+        ).all()
+        stmt = (
+            stmt.where(col(Product.id).in_(owned or [-1]))
+            if mine
+            else stmt.where(col(Product.id).notin_(owned or [-1]))
+        )
+
+    total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
+    rows = session.exec(
+        stmt.order_by(col(Product.sold_count).desc(), col(Product.id))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    return s.Page[s.SellerCatalogOut](
+        items=[_catalogue_out(session, row, seller) for row in rows],
+        page=page,
+        page_size=page_size,
+        total=total,
+        has_more=page * page_size < total,
+    )
+
+
+@router.get(
+    "/catalog/browse/{product_id}",
+    response_model=s.SellerCatalogDetailOut,
+    summary="One card, with the leaves an offer has to name",
+)
+def browse_product(
+    product_id: int, user: SellerUser, session: SessionDep
+) -> s.SellerCatalogDetailOut:
+    """Everything the offer form binds to, in one request.
+
+    ``leaf_ids`` is the field that closes the gap this endpoint exists for:
+    an offer must name every leaf and nothing told a seller what the leaves
+    were, so the rule could only be discovered by being refused with a 422.
+
+    The offers list is the same one the shop shows to anybody, with the same
+    seller names on it — see ``SellerCatalogOut`` for why that is not hidden.
+    """
+    product = session.get(Product, product_id)
+    if not sv.is_in_the_shop(product):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
+
+    seller = _own_seller_or_none(session, user)
+    variants = session.exec(
+        select(ProductVariant)
+        .where(ProductVariant.product_id == product.id)
+        .order_by(col(ProductVariant.sort), col(ProductVariant.id))
+    ).all()
+    leaves = {v.id for v in of.leaf_variants(session, product.id)}
+    winner = of.winning_offer(session, product.id)
+
+    return s.SellerCatalogDetailOut(
+        **_catalogue_out(session, product, seller).model_dump(),
+        description=i18n.t(session, "product", product.id, "description", product.description),
+        variants=[
+            s.SellerVariantOut(
+                id=v.id,
+                kind=v.kind,
+                label=i18n.t(session, "variant", v.id, "label", v.label),
+                value=v.value,
+                image_url=sv.media_url(v.image_url),
+                parent_id=v.parent_id,
+                is_leaf=v.id in leaves,
+            )
+            for v in variants
+        ],
+        leaf_ids=[v.id for v in of.leaf_variants(session, product.id)],
+        offers=[
+            sv.offer_out(session, offer, winner_id=winner.id if winner else None)
+            for offer in of.offers_for(session, product.id)
+        ],
+    )
 
 
 @router.get(
@@ -257,6 +420,66 @@ def _own_seller(session: SessionDep, user: User) -> Seller:
             status.HTTP_403_FORBIDDEN, i18n.label("seller_account_missing")
         )
     return seller
+
+
+def _own_seller_or_none(session: SessionDep, user: User) -> Seller | None:
+    """The caller's own shop, or None when they have no shop of their own.
+
+    An admin reading these lists has none — they are looking at the catalogue,
+    not shopping for something to stock — so the "is this mine" columns come
+    back empty for them rather than guessing at a seller.
+    """
+    if user.role is UserRole.ADMIN:
+        return None
+    return _own_seller(session, user)
+
+
+def _catalogue_out(
+    session: SessionDep, product: Product, seller: Seller | None
+) -> s.SellerCatalogOut:
+    """A published card as a seller reads it.
+
+    Translated, because this is read to recognise a product rather than to
+    edit it. The ``mine`` flag is what lets a list say "you already sell this"
+    instead of offering a button whose only answer is a 409.
+    """
+    category = session.get(Category, product.category_id)
+    brand = session.get(Brand, product.brand_id) if product.brand_id else None
+    offers = of.offers_for(session, product.id, active_only=False)
+    mine = next((o for o in offers if seller and o.seller_id == seller.id), None)
+    variants = session.exec(
+        select(func.count())
+        .select_from(ProductVariant)
+        .where(ProductVariant.product_id == product.id)
+    ).one()
+
+    return s.SellerCatalogOut(
+        id=product.id,
+        sku=product.sku,
+        title=i18n.t(session, "product", product.id, "title", product.title),
+        subtitle=i18n.t(session, "product", product.id, "subtitle", product.subtitle),
+        image_url=sv.primary_image(session, product.id),
+        category_slug=category.slug if category else "",
+        category_name=(
+            i18n.t(session, "category", category.id, "name", category.name)
+            if category
+            else ""
+        ),
+        brand_name=(
+            i18n.t(session, "brand", brand.id, "name", brand.name) if brand else None
+        ),
+        price=product.price,
+        old_price=product.old_price,
+        in_stock=product.in_stock,
+        # Every seller on the card, withdrawn ones included: "three people
+        # already sell this" is the honest figure for somebody deciding
+        # whether to be the fourth.
+        offer_count=len(offers),
+        variant_count=int(variants),
+        mine=mine is not None,
+        my_offer_id=mine.id if mine else None,
+        my_price=mine.price if mine else None,
+    )
 
 
 def _seller_for_new_offer(

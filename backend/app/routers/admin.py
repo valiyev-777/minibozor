@@ -210,6 +210,11 @@ def _link_account(
         note=f"{seller.name} bilan bog'landi",
     )
 
+    if seller.user_id != account.id:
+        # Stamped with the link, not with the seller row: the cabinet answers
+        # "since when am I selling here" from this, and re-pointing a shop at
+        # a different account starts that again.
+        seller.linked_at = sv.utcnow()
     seller.user_id = account.id
     session.add(seller)
 

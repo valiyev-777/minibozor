@@ -5902,3 +5902,305 @@ def test_the_handling_tariff_is_readable_by_the_people_charged_it(
     )
     assert client.get(f"{API}/staff/payouts/tariffs", headers=admin).status_code == 200
     assert client.get(f"{API}/staff/payouts/tariffs", headers=auth).status_code == 403
+
+
+# --------------------------------------------------------- the seller's own way in
+
+
+def test_a_seller_can_see_which_shop_they_are_and_nobody_elses(
+    client: TestClient,
+    admin: dict[str, str],
+    auth: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """`/staff/me` answers with the user — a phone number and a role — and says
+    nothing about the shop behind it. So the cabinet greeted people by phone
+    number, and somebody just taken on could not confirm they were linked to
+    the right shop, which is the first thing they would check."""
+    mine_id, mine = _linked_seller(staff, "Katalog Bir", "+998900080001", commission=12)
+    other_id, other = _linked_seller(staff, "Katalog Ikki", "+998900080002", commission=7)
+
+    shop = client.get(f"{API}/staff/sellers/me", headers=mine)
+    assert shop.status_code == 200, shop.text
+    body = shop.json()
+    assert (body["id"], body["name"]) == (mine_id, "Katalog Bir")
+    # A term of their own contract, and the figure every statement is computed
+    # from — a seller who cannot read it cannot check a payout.
+    assert body["commission_percent"] == 12
+    assert body["active"] is True
+    assert body["created_at"]
+
+    # The other seller gets their own row, never this one.
+    theirs = client.get(f"{API}/staff/sellers/me", headers=other).json()
+    assert (theirs["id"], theirs["name"]) == (other_id, "Katalog Ikki")
+    assert theirs["commission_percent"] == 7
+
+    # And no door to anybody else's: the admin's list stays the admin's.
+    assert client.get(f"{API}/staff/sellers/{other_id}", headers=mine).status_code == 403
+    assert client.get(f"{API}/staff/sellers", headers=mine).status_code == 403
+    assert client.get(f"{API}/staff/sellers/me", headers=auth).status_code == 403
+    assert client.get(f"{API}/staff/sellers/me").status_code == 401
+
+    # An admin has no shop of their own and is told so rather than guessed at.
+    refused = client.get(f"{API}/staff/sellers/me", headers=admin)
+    assert refused.status_code == 400
+    assert "do'kon" in refused.json()["detail"]
+
+    # Linking is what stamps the date, so it is there for anybody linked
+    # through the front door.
+    phone = "+998900080003"
+    sign_in_needed = client.post(
+        f"{API}/staff/sellers",
+        json={"name": "Katalog Uch", "phone": "+998781119977"},
+        headers=admin,
+    )
+    assert sign_in_needed.status_code == 201, sign_in_needed.text
+    third_id = sign_in_needed.json()["id"]
+    fresh = staff(UserRole.CUSTOMER, phone)
+    linked = client.patch(
+        f"{API}/staff/sellers/{third_id}", json={"user_phone": phone}, headers=admin
+    )
+    assert linked.status_code == 200, linked.text
+    third = client.get(f"{API}/staff/sellers/me", headers=fresh).json()
+    assert third["name"] == "Katalog Uch"
+    assert third["linked_at"], "the moment the account was pointed at the shop"
+    assert third["offer_count"] == 0
+
+
+def test_the_sellers_catalogue_shows_only_what_is_in_the_shop(
+    client: TestClient,
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A draft, a proposal in moderation, a refused card and a withdrawn one
+    are somebody else's unfinished work. Pricing one would be pricing
+    something that is not in the shop and may never be."""
+    _, mine = _linked_seller(staff, "Katalog To'rt", "+998900080011")
+    listing = client.get(f"{API}/categories").json()
+
+    made: dict[str, int] = {}
+    for sku, title in (("SINOV-BROWSE-DRAFT", "Qoralama tovar"),
+                       ("SINOV-BROWSE-LIVE", "Sotuvdagi tovar")):
+        card = client.post(
+            f"{API}/staff/catalog/products",
+            json={
+                "sku": sku,
+                "title": title,
+                "category_slug": listing[0]["slug"],
+                "price": 250_000,
+            },
+            headers=admin,
+        )
+        assert card.status_code == 201, card.text
+        made[sku] = card.json()["id"]
+
+    client.post(
+        f"{API}/staff/catalog/products/{made['SINOV-BROWSE-LIVE']}/status",
+        json={"status": "published"},
+        headers=admin,
+    )
+
+    page = client.get(
+        f"{API}/staff/catalog/browse", params={"q": "SINOV-BROWSE"}, headers=mine
+    )
+    assert page.status_code == 200, page.text
+    ids = {row["id"] for row in page.json()["items"]}
+    assert made["SINOV-BROWSE-LIVE"] in ids
+    assert made["SINOV-BROWSE-DRAFT"] not in ids, "a draft is not for sale"
+
+    # Reading the draft directly is a 404 too, not a 403: it is not a card
+    # this seller is being refused, it is not in the shop.
+    assert client.get(
+        f"{API}/staff/catalog/browse/{made['SINOV-BROWSE-DRAFT']}", headers=mine
+    ).status_code == 404
+
+    # Withdrawn again, and it leaves.
+    client.post(
+        f"{API}/staff/catalog/products/{made['SINOV-BROWSE-LIVE']}/status",
+        json={"status": "archived", "reason": "sinov"},
+        headers=admin,
+    )
+    after = client.get(
+        f"{API}/staff/catalog/browse", params={"q": "SINOV-BROWSE"}, headers=mine
+    ).json()
+    assert after["items"] == []
+
+    # It is a card list, not the admin's editing shape: what a seller needs to
+    # recognise a product, and no moderation note.
+    live = client.get(f"{API}/staff/catalog/browse", headers=mine).json()["items"]
+    assert live, "the seeded catalogue is published"
+    assert set(live[0]) >= {"title", "image_url", "offer_count", "mine", "price"}
+    assert "moderation_note" not in live[0]
+    assert "status" not in live[0]
+
+    assert client.get(f"{API}/staff/catalog/browse").status_code == 401
+
+
+def test_a_seller_reads_the_leaves_then_offers_the_whole_card(
+    client: TestClient,
+    admin: dict[str, str],
+    auth: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The founding move of a marketplace, end to end: somebody arrives, finds
+    a card, prices it, sends goods, and the shop shows their price.
+
+    Until now the middle of that was impossible. An offer has to name every
+    leaf — a rule enforced with a 422 — and nothing told a seller what the
+    leaves were.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, "+998900080021")
+    seller_id, mine = _linked_seller(staff, "Katalog Besh", "+998900080022")
+    product_id, leaf = _card_with_a_colour(client, admin, "MB-BROWSE-1", with_a_size=True)
+    # A second size, so "name every leaf" is a rule with something to catch:
+    # a card with one leaf cannot be partially named.
+    with Session(engine) as session:
+        colour_id = session.get(ProductVariant, leaf).parent_id
+    assert client.post(
+        f"{API}/staff/catalog/products/{product_id}/variants",
+        json={"kind": "size", "label": "XL", "value": "XL", "parent_id": colour_id},
+        headers=admin,
+    ).status_code == 201
+
+    card = client.get(f"{API}/staff/catalog/browse/{product_id}", headers=mine)
+    assert card.status_code == 200, card.text
+    body = card.json()
+    assert body["mine"] is False and body["my_offer_id"] is None
+
+    # The tree, with the rows an offer must name marked as such.
+    leaves = [v for v in body["variants"] if v["is_leaf"]]
+    assert len(leaves) == 2, body["variants"]
+    assert {v["kind"] for v in leaves} == {"size"}, "sizes are the leaves here"
+    assert body["leaf_ids"] == [v["id"] for v in leaves]
+    # The colour is in the tree and is not a leaf: its count is rolled up.
+    assert any(v["kind"] == "color" and not v["is_leaf"] for v in body["variants"])
+
+    # Naming only some of them is still refused — the rule has not moved, and
+    # this is the 422 a seller used to hit with no way of knowing why.
+    partial = client.post(
+        f"{API}/staff/offers",
+        json={"product_id": product_id, "price": 200_000, "variant_ids": [leaves[0]["id"]]},
+        headers=mine,
+    )
+    assert partial.status_code == 422, partial.text
+    assert leaves[1]["label"] in partial.json()["detail"], "it names what is missing"
+
+    # A variant of some other card is refused too.
+    assert client.post(
+        f"{API}/staff/offers",
+        json={"product_id": product_id, "price": 200_000, "variant_ids": [999_999]},
+        headers=mine,
+    ).status_code in (400, 422)
+
+    offer = client.post(
+        f"{API}/staff/offers",
+        json={
+            "product_id": product_id,
+            "price": 180_000,
+            "old_price": 240_000,
+            "variant_ids": body["leaf_ids"],
+        },
+        headers=mine,
+    )
+    assert offer.status_code == 201, offer.text
+    offer_id = offer.json()["id"]
+    assert offer.json()["seller"]["id"] == seller_id
+    # Nothing on the shelf until the warehouse books something in, so a new
+    # offer does not win the card the moment it is made.
+    assert offer.json()["stock_left"] == 0
+
+    # The browse list now says it is theirs, so a screen can stop offering a
+    # button whose only answer is a 409.
+    again = client.get(f"{API}/staff/catalog/browse/{product_id}", headers=mine).json()
+    assert again["mine"] is True
+    assert (again["my_offer_id"], again["my_price"]) == (offer_id, 180_000)
+
+    # Goods arrive.
+    leaf_id = body["leaf_ids"][0]
+    supply = client.post(
+        f"{API}/staff/supplies",
+        json={"lines": [{"offer_id": offer_id, "variant_id": leaf_id, "quantity": 6}]},
+        headers=mine,
+    )
+    assert supply.status_code == 201, supply.text
+    received = client.post(
+        f"{API}/staff/supplies/{supply.json()['id']}/receive",
+        json={
+            "lines": [
+                {"line_id": supply.json()["lines"][0]["id"], "received_quantity": 6}
+            ]
+        },
+        headers=warehouse,
+    )
+    assert received.status_code == 200, received.text
+
+    # And the shop card carries their price, to a shopper who is nobody.
+    page = client.get(f"{API}/products/{product_id}")
+    assert page.status_code == 200
+    assert page.json()["price"] == 180_000
+    assert page.json()["in_stock"] is True
+    sellers = client.get(f"{API}/products/{product_id}/offers").json()
+    assert [o["seller"]["name"] for o in sellers if o["is_winner"]] == ["Katalog Besh"]
+
+    # Which is exactly why the browse list does not hide a competitor's price:
+    # it is already public to anybody, token or not.
+    assert client.get(f"{API}/products/{product_id}/offers", headers=auth).status_code == 200
+    assert not _stock_is_consistent()
+
+
+def test_one_seller_gets_one_offer_per_card(
+    client: TestClient,
+    admin: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Two offers from one seller on one card is two prices for the same goods
+    from the same person — the cheaper would always win and the other would
+    sit there confusing the shelf."""
+    _, mine = _linked_seller(staff, "Katalog Olti", "+998900080031")
+    other_id, other = _linked_seller(staff, "Katalog Yetti", "+998900080032")
+    product_id, _ = _card_with_a_colour(client, admin, "MB-BROWSE-2", with_a_size=False)
+
+    def body(price: int, **extra: object) -> dict:
+        leaves = client.get(
+            f"{API}/staff/catalog/browse/{product_id}", headers=mine
+        ).json()["leaf_ids"]
+        return {"product_id": product_id, "price": price, "variant_ids": leaves, **extra}
+
+    first = client.post(f"{API}/staff/offers", json=body(300_000), headers=mine)
+    assert first.status_code == 201, first.text
+
+    second = client.post(f"{API}/staff/offers", json=body(250_000), headers=mine)
+    assert second.status_code == 409, second.text
+    assert "taklif" in second.json()["detail"]
+    # Changing the price is how a seller lowers it, and that door works.
+    assert client.patch(
+        f"{API}/staff/offers/{first.json()['id']}", json={"price": 250_000}, headers=mine
+    ).status_code == 200
+
+    # A different seller on the same card is the whole point of the model.
+    theirs = client.post(f"{API}/staff/offers", json=body(240_000), headers=other)
+    assert theirs.status_code == 201, theirs.text
+
+    # And offering as somebody else is refused rather than quietly corrected.
+    assert client.post(
+        f"{API}/staff/offers", json=body(1_000, seller_id=other_id), headers=mine
+    ).status_code == 403
+
+    # Each seller reads their own offers and only their own.
+    def sellers_on(headers: dict[str, str]) -> set[str]:
+        rows = client.get(f"{API}/staff/offers", headers=headers).json()
+        return {row["seller"]["name"] for row in rows}
+
+    assert sellers_on(mine) == {"Katalog Olti"}
+    assert sellers_on(other) == {"Katalog Yetti"}
+
+    # The browse list tells each of them the truth about the same card: the
+    # public offer count, and their own price.
+    seen = client.get(f"{API}/staff/catalog/browse/{product_id}", headers=mine).json()
+    assert seen["offer_count"] == 2
+    assert seen["my_price"] == 250_000
+    theirs_view = client.get(
+        f"{API}/staff/catalog/browse/{product_id}", headers=other
+    ).json()
+    assert theirs_view["offer_count"] == 2
+    assert theirs_view["my_price"] == 240_000
