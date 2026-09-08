@@ -1,5 +1,6 @@
 package uz.minibozor.ui.product
 
+import uz.minibozor.core.util.Features
 import uz.minibozor.core.util.AppStrings
 import uz.minibozor.R
 import androidx.lifecycle.ViewModel
@@ -92,11 +93,17 @@ class ProductViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            (catalog.reviewSummary(id) as? Outcome.Success)?.let { r ->
-                _state.update { it.copy(summary = r.data) }
-            }
-            (catalog.reviews(id, null, 1) as? Outcome.Success)?.let { r ->
-                _state.update { it.copy(topReviews = r.data.items.take(2)) }
+            // Both of these answer 404 while reviews are off, and the failure
+            // was already being swallowed — but a 404 swallowed on every
+            // product page open is still two round-trips and two lines of
+            // noise in the server's log. See core/util/Features.kt.
+            if (Features.REVIEWS) {
+                (catalog.reviewSummary(id) as? Outcome.Success)?.let { r ->
+                    _state.update { it.copy(summary = r.data) }
+                }
+                (catalog.reviews(id, null, 1) as? Outcome.Success)?.let { r ->
+                    _state.update { it.copy(topReviews = r.data.items.take(2)) }
+                }
             }
             (catalog.similar(id) as? Outcome.Success)?.let { r ->
                 _state.update { it.copy(similar = r.data) }

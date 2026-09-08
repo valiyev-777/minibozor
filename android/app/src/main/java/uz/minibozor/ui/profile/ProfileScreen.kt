@@ -39,6 +39,7 @@ import uz.minibozor.core.design.component.MbListRow
 import uz.minibozor.core.design.component.MbScreen
 import uz.minibozor.core.design.component.MbTabBarSpacer
 import uz.minibozor.core.design.icon.MbIcon
+import uz.minibozor.core.util.Features
 import uz.minibozor.core.util.formatPhone
 
 private data class QuickAction(val glyph: String, val label: String, val route: String)
@@ -56,10 +57,13 @@ fun ProfileScreen(
 
     LaunchedEffect(state.signedOut) { if (state.signedOut) onSignedOut() }
 
-    val quickActions = listOf(
+    // "Sharhlarim" only while there are reviews to have. See
+    // core/util/Features.kt — the screen behind it stays, the row does not.
+    val quickActions = listOfNotNull(
         QuickAction("box", stringResource(R.string.buyurtmalar), "orders"),
         QuickAction("heart", stringResource(R.string.sevimlilar), "favorites"),
-        QuickAction("star", stringResource(R.string.sharhlarim), "my_reviews"),
+        QuickAction("star", stringResource(R.string.sharhlarim), "my_reviews")
+            .takeIf { Features.REVIEWS },
         QuickAction("ret", stringResource(R.string.qaytarish), "returns"),
     )
 
@@ -146,11 +150,23 @@ fun ProfileScreen(
             overview?.addressesCount ?: 0,
             overview?.addressesCount ?: 0,
         )) to "addresses",
-                        Triple("star", stringResource(R.string.sharhlarim), pluralStringResource(
-            R.plurals.n_items,
-            overview?.reviewsCount ?: 0,
-            overview?.reviewsCount ?: 0,
-        )) to "my_reviews",
+                        *(
+                            if (Features.REVIEWS) {
+                                arrayOf(
+                                    Triple(
+                                        "star",
+                                        stringResource(R.string.sharhlarim),
+                                        pluralStringResource(
+                                            R.plurals.n_items,
+                                            overview?.reviewsCount ?: 0,
+                                            overview?.reviewsCount ?: 0,
+                                        ),
+                                    ) to "my_reviews",
+                                )
+                            } else {
+                                emptyArray()
+                            }
+                            ),
                         Triple(
                             "bell",
                             stringResource(R.string.bildirishnomalar),

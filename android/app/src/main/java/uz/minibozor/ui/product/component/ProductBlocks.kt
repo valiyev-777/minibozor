@@ -53,13 +53,27 @@ import uz.minibozor.data.remote.dto.VariantDto
  * photographs sit beside it as the way through to the reviews. The description
  * still exists; it is further down, where a decided buyer goes looking for it.
  */
+/**
+ * Two of these are nullable, and each nullable one means "say nothing" rather
+ * than "say nought".
+ *
+ * `reviewsCount = null` drops the "N sharh" line: the count is only worth
+ * printing when the reviews behind it can be opened, and a page that promises
+ * 136 of them and has none to show is worse than a page that promises
+ * nothing. `onClick = null` drops the tap, for the same reason — a tile that
+ * depresses and goes nowhere reads as a broken app.
+ *
+ * The *rating* is not nullable and stays either way: it is a cached column on
+ * the product, and a page that suddenly has no rating at all reads as a
+ * regression rather than as a feature being off. See `core/util/Features.kt`.
+ */
 @Composable
 fun RatingPanel(
     rating: Double,
-    reviewsCount: Int,
+    reviewsCount: Int?,
     photos: List<String>,
     photosTotal: Int,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -67,7 +81,13 @@ fun RatingPanel(
             .fillMaxWidth()
             .clip(MbTheme.shapes.tile)
             .border(1.dp, MbTheme.colors.border, MbTheme.shapes.tile)
-            .mbClickable(MbTheme.shapes.tile, onClick = onClick)
+            .then(
+                if (onClick != null) {
+                    Modifier.mbClickable(MbTheme.shapes.tile, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -79,22 +99,28 @@ fun RatingPanel(
                 MbText(ratingText(rating), MbTheme.type.title1)
                 MbStars(rating, size = 17.dp)
             }
-            Spacer(Modifier.height(5.dp))
-            // Reviews only. The order count used to sit here beside them, and
-            // the line below now prints what has sold as one half of its own
-            // answer — the same number twice in forty vertical points was one
-            // too many.
-            MbText(
-                pluralStringResource(R.plurals.n_reviews, reviewsCount, reviewsCount),
-                MbTheme.type.caption,
-                MbTheme.colors.textSecondary,
-                maxLines = 1,
-            )
+            if (reviewsCount != null) {
+                Spacer(Modifier.height(5.dp))
+                // Reviews only. The order count used to sit here beside them,
+                // and the line below now prints what has sold as one half of
+                // its own answer — the same number twice in forty vertical
+                // points was one too many.
+                MbText(
+                    pluralStringResource(R.plurals.n_reviews, reviewsCount, reviewsCount),
+                    MbTheme.type.caption,
+                    MbTheme.colors.textSecondary,
+                    maxLines = 1,
+                )
+            }
         }
         if (photos.isNotEmpty()) {
             Spacer(Modifier.width(10.dp))
             MbPhotoStack(photos, photosTotal)
-        } else {
+        } else if (onClick != null) {
+            // The chevron is a promise that there is somewhere to go. With
+            // reviews off there is not, and a panel that offers the arrow and
+            // then does nothing when pressed is the one thing worse than a
+            // panel with no arrow.
             MbIcon("chevron-right", size = 16.dp, tint = MbTheme.colors.icon)
         }
     }

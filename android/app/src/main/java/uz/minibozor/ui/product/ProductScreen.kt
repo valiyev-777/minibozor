@@ -75,6 +75,7 @@ import uz.minibozor.ui.product.component.RatingPanel
 import uz.minibozor.ui.product.component.ReviewRow
 import uz.minibozor.ui.product.component.SellerLine
 import uz.minibozor.ui.product.component.ShelfLine
+import uz.minibozor.core.util.Features
 import uz.minibozor.ui.product.component.SizePicker
 
 /**
@@ -424,14 +425,27 @@ fun ProductScreen(
                                     // stranger's page owes a buyer at this point
                                     // is other buyers, not the seller's own
                                     // prose.
+                                    // The rating stays while reviews are off —
+                                    // it is a cached column on the product and
+                                    // a page that suddenly has no rating reads
+                                    // as a regression. What goes is the tap:
+                                    // without `Features.REVIEWS` there is
+                                    // nothing behind it. See Features.kt.
                                     Spacer(Modifier.height(16.dp))
                                     RatingPanel(
                                         rating = state.summary?.rating ?: product.rating,
-                                        reviewsCount = state.summary?.total
-                                            ?: product.reviewsCount,
+                                        reviewsCount = if (Features.REVIEWS) {
+                                            state.summary?.total ?: product.reviewsCount
+                                        } else {
+                                            null
+                                        },
                                         photos = state.summary?.photos.orEmpty(),
                                         photosTotal = state.summary?.photosTotal ?: 0,
-                                        onClick = { onOpenReviews(product.id) },
+                                        onClick = if (Features.REVIEWS) {
+                                            { onOpenReviews(product.id) }
+                                        } else {
+                                            null
+                                        },
                                     )
                                     // What is on the shelf, right under what
                                     // other people made of it: the evidence
@@ -635,7 +649,12 @@ fun ProductScreen(
                             }
                         }
 
-                        item(key = "reviews") {
+                        // The section, not just its button. Left in place it
+                        // said "hali sharh yo'q — birinchi bo'ling", which is
+                        // not true: there are no reviews because the feature
+                        // is gone, and inviting somebody to be the first leads
+                        // to a 404. See Features.kt.
+                        if (Features.REVIEWS) item(key = "reviews") {
                             MbReveal(reveal, "reviews", BlockReviews, modifier = SectionGap) {
                                 MbCard(shape = RectangleShape) {
                                     SectionHeader(

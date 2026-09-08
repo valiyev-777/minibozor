@@ -54,6 +54,7 @@ import uz.minibozor.core.design.component.MbTabHeader
 import uz.minibozor.core.design.component.MbTextField
 import uz.minibozor.core.design.component.MbTotalRow
 import uz.minibozor.core.design.icon.MbIcon
+import uz.minibozor.core.util.Features
 import uz.minibozor.core.util.grouped
 import uz.minibozor.core.util.sum
 import uz.minibozor.data.remote.dto.CartItemDto
@@ -183,7 +184,11 @@ fun CartScreen(
                             )
                         }
 
-                        item(key = "promo") {
+                        // The field asking for a code, while there are codes.
+                        // The cart's own shape still carries `discount` and
+                        // `promo_code`, so nothing else here changed — see
+                        // core/util/Features.kt.
+                        if (Features.PROMO_CODES) item(key = "promo") {
                             PromoCard(
                                 applied = promo,
                                 error = promoError,
