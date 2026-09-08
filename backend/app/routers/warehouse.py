@@ -115,7 +115,17 @@ def list_supplies(
         stmt = stmt.where(Supply.seller_id == _own_seller(session, user).id)
     if status_filter is not None:
         stmt = stmt.where(Supply.status == status_filter)
-    rows = session.exec(stmt.order_by(col(Supply.declared_at).desc())).all()
+    # The same rule as the order queue: a queue is worked from the front, a
+    # history is read from the top. `declared` is a shelf of boxes waiting to
+    # be counted, and serving the newest first is how the box that arrived on
+    # Monday is still there on Friday.
+    waiting = status_filter is SupplyStatus.DECLARED
+    rows = session.exec(
+        stmt.order_by(
+            col(Supply.declared_at) if waiting else col(Supply.declared_at).desc(),
+            col(Supply.id) if waiting else col(Supply.id).desc(),
+        )
+    ).all()
     return [_supply_out(session, row) for row in rows]
 
 
@@ -435,7 +445,15 @@ def list_removals(
         stmt = stmt.where(RemovalOrder.seller_id == _own_seller(session, user).id)
     if status_filter is not None:
         stmt = stmt.where(RemovalOrder.status == status_filter)
-    rows = session.exec(stmt.order_by(col(RemovalOrder.requested_at).desc())).all()
+    # And the same again: a removal somebody has to go and pick is a queue.
+    queue = status_filter in (RemovalStatus.REQUESTED, RemovalStatus.READY)
+    rows = session.exec(
+        stmt.order_by(
+            col(RemovalOrder.requested_at) if queue
+            else col(RemovalOrder.requested_at).desc(),
+            col(RemovalOrder.id) if queue else col(RemovalOrder.id).desc(),
+        )
+    ).all()
     return [_removal_out(session, row) for row in rows]
 
 

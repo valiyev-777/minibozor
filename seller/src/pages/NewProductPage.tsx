@@ -44,6 +44,8 @@ type ColorDraft = {
   value: string
   imageUrl: string | null
   sizes: SizeDraft[]
+  /** How many of this colour, when the colour is the leaf. */
+  quantity: string
 }
 
 let nextKey = 1
@@ -52,6 +54,7 @@ const key = () => nextKey++
 const emptySize = (): SizeDraft => ({ key: key(), label: "", quantity: "" })
 const emptyColor = (): ColorDraft => ({
   key: key(),
+  quantity: "",
   label: "",
   value: "",
   imageUrl: null,
@@ -99,11 +102,15 @@ export function NewProductPage() {
   const namedColours = colors.filter((colour) => colour.label.trim())
   const withoutPhoto = namedColours.filter((colour) => !colour.imageUrl)
 
-  const totalDeclared = colors.reduce(
-    (sum, colour) =>
-      sum + colour.sizes.reduce((inner, size) => inner + (Number(size.quantity) || 0), 0),
-    0,
-  )
+  const totalDeclared = colors.reduce((sum, colour) => {
+    const bySize = colour.sizes.reduce(
+      (inner, size) => inner + (Number(size.quantity) || 0),
+      0,
+    )
+    // A colour with sizes is counted on them; one without is counted on
+    // itself, and that figure used to be dropped on the floor.
+    return sum + (bySize || Number(colour.quantity) || 0)
+  }, 0)
 
   const pickImages = async (files: FileList | null) => {
     if (!files?.length) return
@@ -143,6 +150,9 @@ export function NewProductPage() {
           label: colour.label.trim(),
           value: colour.value.trim(),
           image_url: colour.imageUrl,
+          // Only meaningful when the colour has no sizes: with sizes, they
+          // are the leaves and counting the colour too would count twice.
+          quantity: Number(colour.quantity) || 0,
           sizes: colour.sizes
             .filter((size) => size.label.trim())
             .map((size) => ({
@@ -369,6 +379,28 @@ export function NewProductPage() {
                     : undefined
                 }
               />
+
+              {/* A colour with no size rows filled in is counted on itself,
+                  so it needs its own figure. Shown rather than hidden behind
+                  a mode switch: a seller of bags never fills a size in, and
+                  the box is simply where their count goes. */}
+              {colour.sizes.every((size) => !size.label.trim()) ? (
+                <div className="max-w-xs space-y-1.5">
+                  <Label htmlFor={`colour-qty-${colour.key}`}>{t.quantity}</Label>
+                  <Input
+                    id={`colour-qty-${colour.key}`}
+                    inputMode="numeric"
+                    value={colour.quantity}
+                    placeholder="0"
+                    onChange={(e) =>
+                      patchColor(colourIndex, {
+                        quantity: e.target.value.replace(/\D/g, ""),
+                      })
+                    }
+                  />
+                  <Hint>{t.sizelessHint}</Hint>
+                </div>
+              ) : null}
 
               <div className="space-y-2">
                 <p className="text-[length:var(--text-small)] font-medium text-ink">

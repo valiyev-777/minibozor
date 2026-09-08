@@ -43,7 +43,7 @@ export function EditBox({ listing }: { listing: Listing }) {
         <Button
           type="button"
           size="sm"
-          variant={open ? "quiet" : "outline"}
+          variant={open ? "ghost" : "outline"}
           onClick={() => setOpen(!open)}
         >
           {open ? <X /> : <Pencil />}

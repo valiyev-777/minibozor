@@ -123,7 +123,18 @@ def list_returns(
             col(ReturnRequest.inspection).is_not(None),
             col(ReturnRequest.seller_decision).is_(None),
         )
-    rows = session.exec(stmt.order_by(col(ReturnRequest.created_at))).all()
+    # The same rule as the order queue: the two states somebody is working
+    # oldest-first, everything else newest-first. `submitted` is an operator's
+    # decision waiting to be made and `approved` is a van waiting to be sent;
+    # a seller reading their returns wants the one that came back today.
+    queue = status_filter in (ReturnStatus.SUBMITTED, ReturnStatus.APPROVED)
+    rows = session.exec(
+        stmt.order_by(
+            col(ReturnRequest.created_at) if queue
+            else col(ReturnRequest.created_at).desc(),
+            col(ReturnRequest.id) if queue else col(ReturnRequest.id).desc(),
+        )
+    ).all()
     return [_return_out(session, r) for r in _mine(session, user, rows)]
 
 
@@ -494,10 +505,21 @@ def order_queue(
     if user.role is UserRole.SELLER:
         stmt = stmt.where(col(Order.id).in_(_my_order_ids(session, user)))
     total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
-    # Oldest first: a queue is worked from the front, which is the opposite of
-    # how the customer's own list is sorted.
+    # A queue is worked from the front; a history is read from the top.
+    #
+    # Which this is depends on what was asked for. The warehouse asks for
+    # `placed` and wants the oldest first — that is a bench queue, and serving
+    # the newest order first is how the first one waits all day. Everybody
+    # else, and anybody asking for everything, is reading rather than working:
+    # a seller opening their sales and an operator scanning the whole list both
+    # want this morning at the top, and both used to get an order from three
+    # weeks ago and page forward looking for today.
+    working = status_filter in (OrderStatus.PLACED, OrderStatus.PACKING)
     rows = session.exec(
-        stmt.order_by(col(Order.created_at))
+        stmt.order_by(
+            col(Order.created_at) if working else col(Order.created_at).desc(),
+            col(Order.id) if working else col(Order.id).desc(),
+        )
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
@@ -1071,6 +1093,24 @@ def _must_be_mine(session: SessionDep, user: User, request: ReturnRequest) -> No
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("return_not_found"))
 
 
+def _summary(items: list[OrderItem]) -> str:
+    """What to fetch, in one line.
+
+    The first line named in full with its variant, and a count of the rest —
+    a picker recognises an order by the thing in it, and an order of six
+    different things is a row that would wrap to four lines if it listed them.
+    """
+    if not items:
+        return ""
+    first = items[0]
+    head = first.title
+    if first.variant_label:
+        head = f"{head} · {first.variant_label}"
+    if first.quantity > 1:
+        head = f"{head} × {first.quantity}"
+    return head if len(items) == 1 else f"{head} +{len(items) - 1}"
+
+
 def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:
     customer = session.get(User, o.user_id)
     courier = session.get(User, o.courier_id) if o.courier_id else None
@@ -1090,6 +1130,7 @@ def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:
         delivery_day=o.delivery_day,
         delivery_window=window,
         items_count=sum(i.quantity for i in items),
+        items_summary=_summary(items),
         total=o.total,
         paid=o.paid,
         # The moves the rules allow, minus the one that is not staff's to

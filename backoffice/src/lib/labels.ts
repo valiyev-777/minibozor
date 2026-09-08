@@ -143,6 +143,10 @@ export const t = {
   reason: "Sabab",
   who: "Kim",
   when: "Qachon",
+  batchCode: "Raqami",
+  whatIsInIt: "Nima keldi",
+  whatToPick: "Nima yig'iladi",
+  status: "Holat",
   writeOff: "Hisobdan chiqarish",
   writtenOff: "Hisobdan chiqarildi",
 
@@ -177,7 +181,6 @@ export const t = {
   added: "Qo'shildi",
   moderation: "Tovarlar",
   productsWaiting: "Qabul kutayotgan tovarlar",
-  editCard: "Tovarni tuzatish",
   editHint:
     "Tahrir — tasdiqlash emas. Tovar sotuvga ombor partiyani qabul qilganda chiqadi.",
   title: "Nomi",
@@ -253,4 +256,21 @@ export const roleName: Record<string, string> = {
   attemptDelivered: "Yetkazildi",
   handedTo: "Kim oldi",
   seller: "Sotuvchi",
+}
+
+/**
+ * An order's stage, in one word, for a row.
+ *
+ * The server's `status_label` is the customer's phrase — "Buyurtma qabul
+ * qilindi" — which is right in an app and wrong in a column: it wraps, and it
+ * tells a picker how the *customer* feels about the order rather than what is
+ * to be done with it. `placed` is "new" at a bench.
+ */
+export const orderWord: Record<string, string> = {
+  placed: "Yangi",
+  packing: "Tayyor",
+  shipped: "Yo'lda",
+  delivered: "Yetkazilgan",
+  cancelled: "Bekor",
+  returned: "Qaytdi",
 }

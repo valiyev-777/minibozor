@@ -88,6 +88,7 @@ export const t = {
   addSize: "O'lcham qo'shish",
   sizeLabel: "O'lcham",
   quantity: "Miqdor",
+  sizelessHint: "O'lcham kiritsangiz, qoldiq o'lchamlar bo'yicha sanaladi va bu maydon kerak emas.",
   weight: "Vazn (gramm)",
   oldPrice: "Eski narx",
   submit: "Omborga topshirish",
@@ -98,6 +99,16 @@ export const t = {
 
   // one product
   addMore: "Qo'shimcha topshirish",
+  addVariant: "Yangi rang / o'lcham",
+  newColour: "Yangi rang",
+  newSize: "Yangi o'lcham",
+  underColour: "Qaysi rangga",
+  sizesAndCount: "O'lchamlar va soni",
+  removeSize: "O'lchamni olib tashlash",
+  variantAdded: "Qo'shildi — ombor sanashini kutadi",
+  addVariantHint:
+    "Yangi rang yoki o'lcham darhol sotuvga chiqmaydi: ombor sanab qabul " +
+    "qilganda ilovada ko'rinadi.",
   addMoreTitle: "Yana qancha olib kelasiz?",
   takeBack: "Olib ketaman",
   takeBackTitle: "Ombordan qancha olib ketasiz?",

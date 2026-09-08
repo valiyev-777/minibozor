@@ -17,7 +17,6 @@ import { ReturnPage } from "@/pages/ReturnPage"
 import { SellersPage } from "@/pages/SellersPage"
 import { UsersPage } from "@/pages/UsersPage"
 import { CatalogPage } from "@/pages/CatalogPage"
-import { ProductEditPage } from "@/pages/ProductEditPage"
 
 /**
  * The routes, guarded by the same table that draws the menu.
@@ -47,7 +46,6 @@ const ELEMENTS: Record<string, React.ReactNode> = {
   "/sellers": <SellersPage />,
   "/users": <UsersPage />,
   "/catalog": <CatalogPage />,
-  "/products/:id/edit": <ProductEditPage />,
 }
 
 export function App() {

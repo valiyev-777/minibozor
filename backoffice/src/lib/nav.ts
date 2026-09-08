@@ -62,7 +62,6 @@ export const SCREENS: readonly Screen[] = [
   { path: "/sellers", label: t.sellers, roles: ADMIN, menu: true },
   { path: "/users", label: t.users, roles: ADMIN, menu: true },
   { path: "/catalog", label: t.catalog, roles: ADMIN, menu: true },
-  { path: "/products/:id/edit", label: t.product, roles: ADMIN },
 ]
 
 /** May this role open this screen? The admin may open everything. */

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeft, PackagePlus, Truck } from "lucide-react"
+import { ArrowLeft, PackagePlus, Plus, Truck } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/api/client"
 import type { Listing, Offer, Removal, Supply } from "@/api/types"
@@ -11,6 +11,7 @@ import { Async } from "@/ui/states"
 import { Detail, Panel, Row } from "@/components/Panel"
 import { Thumb } from "@/components/Thumb"
 import { EditBox } from "@/pages/product/EditBox"
+import { AddVariantForm } from "@/pages/product/AddVariantForm"
 import { useAction } from "@/lib/mutate"
 import { num, som } from "@/lib/format"
 import { t } from "@/lib/labels"
@@ -202,18 +203,32 @@ function PriceBox({ listing }: { listing: Listing }) {
  * decision now opens one form over every size and sends one document.
  */
 function StockBox({ listing }: { listing: Listing }) {
-  const [open, setOpen] = React.useState<null | "send" | "take">(null)
+  const [open, setOpen] = React.useState<null | "send" | "take" | "add">(null)
   const waiting = listing.stage === "awaiting_warehouse"
 
   return (
     <Panel
       title={t.stock}
       action={
-        !waiting ? (
-          <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {/* Adding a colour or a size is allowed at every stage, including
+              while the first box is still uncounted: a shop that has just got
+              the same shirt in blue should not have to wait for the black ones
+              to be booked in, and the alternative was opening a second card
+              for one product. */}
+          <Button
+            size="sm"
+            variant={open === "add" ? "ghost" : "outline"}
+            onClick={() => setOpen(open === "add" ? null : "add")}
+          >
+            <Plus />
+            {t.addVariant}
+          </Button>
+          {!waiting ? (
+            <>
             <Button
               size="sm"
-              variant={open === "send" ? "quiet" : "primary"}
+              variant={open === "send" ? "ghost" : "primary"}
               onClick={() => setOpen(open === "send" ? null : "send")}
             >
               <PackagePlus />
@@ -229,8 +244,9 @@ function StockBox({ listing }: { listing: Listing }) {
                 {t.takeBack}
               </Button>
             ) : null}
-          </div>
-        ) : null
+            </>
+          ) : null}
+        </div>
       }
     >
       {listing.stock.map((cell) => {
@@ -271,12 +287,10 @@ function StockBox({ listing }: { listing: Listing }) {
         )}
       </div>
 
-      {open ? (
-        <QuantityForm
-          listing={listing}
-          kind={open}
-          onClose={() => setOpen(null)}
-        />
+      {open === "add" ? (
+        <AddVariantForm listing={listing} onClose={() => setOpen(null)} />
+      ) : open ? (
+        <QuantityForm listing={listing} kind={open} onClose={() => setOpen(null)} />
       ) : null}
     </Panel>
   )

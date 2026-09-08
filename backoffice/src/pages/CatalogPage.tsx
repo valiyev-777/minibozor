@@ -1,5 +1,4 @@
 import * as React from "react"
-import { Link } from "react-router-dom"
 import { Plus, Trash2 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/api/client"
@@ -22,11 +21,17 @@ import { productStatus, t } from "@/lib/labels"
  * that were filed. Splitting them into three menu rows would be three clicks
  * for one sitting.
  *
- * **Nothing here publishes anything.** The moderation list is a list of cards
- * whose goods have not arrived yet — receiving the batch is what puts one in
- * the shop, in the warehouse's hands — and an admin's job on it is to *fix*
- * what a seller wrote. The hint on the row says so, because "moderatsiya" in
- * every other marketplace means approve-or-reject and here it does not.
+ * **Nothing here publishes anything, and nothing here edits a seller's card.**
+ * The list of cards waiting on a batch is a list, and that is all it is:
+ * receiving the goods is what puts one in the shop, in the warehouse's hands,
+ * and the words and photographs belong to the seller who wrote them. An admin
+ * used to be able to rewrite them from here, which is somebody at head office
+ * editing a shopkeeper's own shop; a seller who mistypes a name fixes it in
+ * their own cabinet now.
+ *
+ * What is left for an admin is the vocabulary — the categories and brands a
+ * seller files a product *under* — because those are the shop's shelving
+ * rather than anybody's goods.
  */
 export function CatalogPage() {
   return (
@@ -81,9 +86,6 @@ function Moderation() {
                   <Badge tone="warn">
                     {productStatus[product.status] ?? product.status}
                   </Badge>
-                  <Button asChild size="sm">
-                    <Link to={`/products/${product.id}/edit`}>{t.editCard}</Link>
-                  </Button>
                 </Row>
               ))}
             </>

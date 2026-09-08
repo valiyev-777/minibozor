@@ -29,6 +29,8 @@ from app.models import (
     Order,
     OrderItem,
     Product,
+    Translation,
+    ProductSpec,
     ProductStatus,
     ProductVariant,
     ReturnRequest,
@@ -3412,7 +3414,15 @@ def _write_a_card(
     writes a ``sellers`` row directly: the subject of these tests is what
     happens *to* a card that already exists. Returns the id; the tests read it
     back through the admin's own door, which is the one still in the API.
+
+    ``brand_slug`` and ``translations`` are written here too. They used to go
+    in with a ``PATCH`` through the admin's editor, and that editor is gone —
+    a card's words are the seller's, and head office rewriting them was the
+    reach that was removed. A fixture is a starting state rather than a story
+    about how it got there, so it writes the state.
     """
+    brand_slug = fields.pop("brand_slug", None)
+    translations = fields.pop("translations", None)
     with Session(engine) as session:
         if category_slug:
             category = session.exec(
@@ -3420,16 +3430,38 @@ def _write_a_card(
             ).one()
         else:
             category = session.exec(select(Category).order_by(col(Category.id))).first()
+        brand = (
+            session.exec(select(Brand).where(Brand.slug == brand_slug)).one()
+            if brand_slug
+            else None
+        )
         product = Product(
             sku=sku,
             title=title,
             subtitle=fields.pop("subtitle", "sinov"),
             category_id=category.id,
+            brand_id=brand.id if brand else None,
             price=price,
             status=status,
             **fields,
         )
         session.add(product)
+        session.commit()
+        session.refresh(product)
+
+        # The other languages, straight into the table the API reads them
+        # from. `{"ru": {"title": ..., "badge": ...}, "en": {...}}`.
+        for lang, fields_by_lang in (translations or {}).items():
+            for field, text in fields_by_lang.items():
+                session.add(
+                    Translation(
+                        entity="product",
+                        entity_id=product.id,
+                        lang=lang,
+                        field=field,
+                        value=text,
+                    )
+                )
         session.commit()
         return product.id
 
@@ -3484,29 +3516,20 @@ def _admin_card(
     translations: dict | None = None,
     **fields,
 ) -> dict:
-    """A card for the admin's own editing endpoints to work on.
+    """A card in a given state, read back through the door that still exists.
 
-    The row is written directly — see ``_write_a_card`` — and everything the
-    admin's doors still own is then written through them: the brand and the
-    Russian and English go in with a ``PATCH``, which is where they live now
-    that no endpoint creates a card. That is the door these tests are about
-    anyway; creating the row was only ever how they got something to edit.
+    Everything is written directly — see ``_write_a_card`` — including the
+    brand and the other languages, which used to go in with a ``PATCH``
+    through the admin's editor. That editor is gone: a card's words and
+    pictures are the seller's, and an admin reading the catalogue is reading
+    it. So this writes the state and reads it back; there is no longer a door
+    that would have done the writing.
     """
     product_id = _write_a_card(
         sku=sku, title=title, price=price, status=status,
-        category_slug=category_slug, **fields,
+        category_slug=category_slug, brand_slug=brand_slug,
+        translations=translations, **fields,
     )
-    patch: dict = {}
-    if brand_slug is not None:
-        patch["brand_slug"] = brand_slug
-    if translations is not None:
-        patch["translations"] = translations
-    if patch:
-        done = client.patch(
-            f"{API}/staff/catalog/products/{product_id}", json=patch, headers=admin
-        )
-        assert done.status_code == 200, done.text
-        return done.json()
     got = client.get(f"{API}/staff/catalog/products/{product_id}", headers=admin)
     assert got.status_code == 200, got.text
     return got.json()
@@ -3737,87 +3760,18 @@ def test_a_card_nobody_has_approved_is_not_in_the_shop(
     assert not any(visible().values())
 
 
-def test_a_sellers_proposal_never_lands_in_the_shop(
-    client: TestClient,
-    admin: dict[str, str],
-    sign_in: Callable[[str], dict[str, str]],
-) -> None:
-    """A suggestion is not a card in the shop, and no seller can make it one.
-
-    ``POST /staff/catalog/proposals`` is the older door — a seller suggesting a
-    card for the platform's own catalogue — and it still exists. What has gone
-    is the admin's decision beside it: nothing publishes a card by saying so
-    any more. A proposal reaches the shop the way everything else does, by
-    goods arriving against it, and the seller's own line for that is
-    ``POST /staff/catalog/listings`` (see the section at the end of this file).
-    """
-    phone = "+998900030031"
-    sign_in(phone)
-    client.post(
-        f"{API}/staff/sellers",
-        json={"name": "Uchtepa Savdo", "user_phone": phone},
-        headers=admin,
-    )
-    seller = sign_in(phone)
-
-    proposed = _new_card(
-        client,
-        seller,
-        sku="MB-PROP-1",
-        title="Sotuvchi taklifi, stol chirog'i",
-        path="/staff/catalog/proposals",
-    )
-    assert proposed["status"] == "moderating", "not in the shop, whoever sent it"
-    assert proposed["proposed_by"]["name"] == "Uchtepa Savdo"
-    assert client.get(f"{API}/products/{proposed['id']}").status_code == 404
-
-    # A seller cannot write straight into the catalogue — and neither can an
-    # admin. That door is gone from the API rather than guarded, which is a
-    # 405 on the path the list endpoint still answers on.
-    body = {
-        "sku": "MB-PROP-2",
-        "title": "O'zim yozdim",
-        "category_slug": client.get(f"{API}/categories").json()[0]["slug"],
-        "price": 100_000,
-    }
-    for headers in (seller, admin):
-        assert client.post(
-            f"{API}/staff/catalog/products", json=body, headers=headers
-        ).status_code == 405
-    # Nor is there a status door to approve one's own proposal with.
-    assert client.post(
-        f"{API}/staff/catalog/products/{proposed['id']}/status",
-        json={"status": "published"},
-        headers=seller,
-    ).status_code == 404
-
-    # It is in the admin's queue, where somebody will see it.
-    queue = client.get(
-        f"{API}/staff/catalog/products", params={"status": "moderating"}, headers=admin
-    ).json()
-    assert any(row["id"] == proposed["id"] for row in queue["items"])
-
-    # And an admin may fix what the seller wrote — editing a card is still
-    # theirs, which is the half of moderation that survived.
-    fixed = client.patch(
-        f"{API}/staff/catalog/products/{proposed['id']}",
-        json={"subtitle": "Admin tuzatdi"},
-        headers=admin,
-    )
-    assert fixed.status_code == 200, fixed.text
-    assert fixed.json()["subtitle"] == "Admin tuzatdi"
-    assert fixed.json()["status"] == "moderating", "editing is not approving"
-    assert client.get(f"{API}/products/{proposed['id']}").status_code == 404
-
-
 def _card_with_a_colour(
     client: TestClient, admin: dict[str, str], sku: str, *, with_a_size: bool
 ) -> tuple[int, int]:
     """A published card carrying a colour, and optionally a size of it.
 
-    The row is written directly and the variants go through the admin's own
-    endpoints, which are the ones under test — see ``_write_a_card`` for why
-    the card itself is not built through a door any more.
+    Written straight into the database, variants and all. It used to put the
+    card in by hand and then add the variants through the admin's own endpoint
+    — but an admin has no variant endpoint any more: a card's colours are the
+    seller's goods, and the doors that let head office rewrite them were
+    removed with the rest of that reach. Writing both halves the same way is
+    also the honest shape for a fixture, which is a *starting state* and not a
+    story about how it got there.
     """
     product_id = _write_a_card(
         sku=sku,
@@ -3826,23 +3780,34 @@ def _card_with_a_colour(
         status=ProductStatus.PUBLISHED,
     )
 
-    colour = client.post(
-        f"{API}/staff/catalog/products/{product_id}/variants",
-        json={"kind": "color", "label": "Qora", "value": "#0E0F12"},
-        headers=admin,
-    )
-    assert colour.status_code == 201, colour.text
-    colour_id = colour.json()[0]["id"]
-
-    leaf_id = colour_id
-    if with_a_size:
-        sized = client.post(
-            f"{API}/staff/catalog/products/{product_id}/variants",
-            json={"kind": "size", "label": "L", "value": "L", "parent_id": colour_id},
-            headers=admin,
+    with Session(engine) as session:
+        colour = ProductVariant(
+            product_id=product_id,
+            kind=VariantKind.COLOR,
+            label="Qora",
+            value="#0E0F12",
+            sort=0,
+            in_stock=True,
         )
-        assert sized.status_code == 201, sized.text
-        leaf_id = next(v["id"] for v in sized.json() if v["kind"] == "size")
+        session.add(colour)
+        session.commit()
+        session.refresh(colour)
+        leaf_id = colour.id
+
+        if with_a_size:
+            size = ProductVariant(
+                product_id=product_id,
+                kind=VariantKind.SIZE,
+                label="L",
+                value="L",
+                parent_id=colour.id,
+                sort=0,
+                in_stock=True,
+            )
+            session.add(size)
+            session.commit()
+            session.refresh(size)
+            leaf_id = size.id
 
     return product_id, leaf_id
 
@@ -3893,76 +3858,89 @@ def _stock_a_leaf(
     return offer_id
 
 
-def test_a_variant_with_a_history_cannot_be_deleted(
-    client: TestClient,
-    admin: dict[str, str],
-    staff: Callable[[UserRole, str], dict[str, str]],
-) -> None:
-    """The ledger would stop explaining its own totals, and an old order would
-    point at a row that is not there."""
-    warehouse = staff(UserRole.WAREHOUSE, "+998900030041")
-    product_id, leaf_id = _card_with_a_colour(
-        client, admin, "MB-VAR-1", with_a_size=True
-    )
-
-    # Before anything has happened to it, a variant is just a row.
-    spare = client.post(
-        f"{API}/staff/catalog/products/{product_id}/variants",
-        json={"kind": "color", "label": "Oq", "value": "#FFFFFF"},
-        headers=admin,
-    ).json()
-    spare_id = next(v["id"] for v in spare if v["label"] == "Oq")
-    assert client.delete(
-        f"{API}/staff/catalog/products/{product_id}/variants/{spare_id}",
-        headers=admin,
-    ).status_code == 200
-
-    _stock_a_leaf(client, admin, warehouse, product_id, leaf_id, 3)
-
-    refused = client.delete(
-        f"{API}/staff/catalog/products/{product_id}/variants/{leaf_id}",
-        headers=admin,
-    )
-    assert refused.status_code == 409
-    assert "harakat" in refused.json()["detail"]
-    assert not _stock_is_consistent()
-
-
 def test_a_size_cannot_be_added_under_stock_that_is_already_counted(
     client: TestClient,
-    admin: dict[str, str],
     staff: Callable[[UserRole, str], dict[str, str]],
 ) -> None:
-    """A shelf counted on colours would have every figure sitting a level
-    above where the ledger looks for it, with no way to say how the colour's
-    stock divides between the new sizes."""
-    warehouse = staff(UserRole.WAREHOUSE, "+998900030042")
-    product_id, colour_id = _card_with_a_colour(
-        client, admin, "MB-VAR-2", with_a_size=False
-    )
+    """A shelf counted on colours would have every figure sitting a level above
+    where the ledger looks for it, with no way to say how the colour's stock
+    divides between the new sizes.
 
-    # No stock yet, so the grid may still change shape.
+    Asserted at the seller's door, because that is the only door left: the
+    admin's variant endpoints went with the rest of head office's reach into a
+    seller's card, and this rule came with them rather than being lost.
+    """
+    _, mine = _linked_seller(staff, "O'lcham Do'kon", "+998900030042")
+    warehouse = staff(UserRole.WAREHOUSE, "+998900030043")
+    images = _two_pictures(client, mine)
+
+    # A colour with no sizes: the count, when it comes, sits on the colour.
+    made = client.post(
+        f"{API}/staff/catalog/listings",
+        json={
+            "title": "Sanoqli kiyim",
+            "category_slug": client.get(f"{API}/categories").json()[0]["slug"],
+            "price": 300_000,
+            "images": images,
+            "colors": [
+                {"label": "Qora", "value": "#0E0F12", "image_url": images[0],
+                 "sizes": [], "quantity": 3},
+            ],
+        },
+        headers=mine,
+    )
+    assert made.status_code == 201, made.text
+    product_id = made.json()["id"]
+
+    # Nothing counted yet, so the grid may still change shape.
     allowed = client.post(
-        f"{API}/staff/catalog/products/{product_id}/variants",
-        json={"kind": "size", "label": "S", "value": "S", "parent_id": colour_id},
-        headers=admin,
+        f"{API}/staff/catalog/listings/{product_id}/variants",
+        json={"colors": [{"label": "Qora", "sizes": [{"label": "S", "quantity": 2}]}]},
+        headers=mine,
     )
-    assert allowed.status_code == 201
+    assert allowed.status_code == 201, allowed.text
 
-    other_id, other_colour = _card_with_a_colour(
-        client, admin, "MB-VAR-3", with_a_size=False
+    # A second card, counted in on its colour, may not.
+    other = client.post(
+        f"{API}/staff/catalog/listings",
+        json={
+            "title": "Sanoqli kiyim 2",
+            "category_slug": client.get(f"{API}/categories").json()[0]["slug"],
+            "price": 300_000,
+            "images": images,
+            "colors": [
+                {"label": "Qora", "value": "#0E0F12", "image_url": images[0],
+                 "sizes": [], "quantity": 4},
+            ],
+        },
+        headers=mine,
     )
-    _stock_a_leaf(client, admin, warehouse, other_id, other_colour, 4)
+    assert other.status_code == 201, other.text
+    other_id = other.json()["id"]
+
+    batch = client.get(
+        f"{API}/staff/supplies", params={"status": "declared"}, headers=warehouse
+    ).json()
+    coming = next(
+        row for row in batch
+        if any(line["product_title"] == "Sanoqli kiyim 2" for line in row["lines"])
+    )
+    received = client.post(
+        f"{API}/staff/supplies/{coming['id']}/receive",
+        json={"lines": [
+            {"line_id": line["id"], "received_quantity": 4} for line in coming["lines"]
+        ]},
+        headers=warehouse,
+    )
+    assert received.status_code == 200, received.text
 
     blocked = client.post(
-        f"{API}/staff/catalog/products/{other_id}/variants",
-        json={"kind": "size", "label": "M", "value": "M", "parent_id": other_colour},
-        headers=admin,
+        f"{API}/staff/catalog/listings/{other_id}/variants",
+        json={"colors": [{"label": "Qora", "sizes": [{"label": "M", "quantity": 2}]}]},
+        headers=mine,
     )
-    assert blocked.status_code == 409
+    assert blocked.status_code == 409, blocked.text
     assert "sanoq" in blocked.json()["detail"]
-    assert not _stock_is_consistent()
-
 
 def test_standing_a_seller_down_takes_their_offers_with_them(
     client: TestClient,
@@ -4204,35 +4182,49 @@ def _trilingual_card(client: TestClient, admin: dict[str, str]) -> dict:
     )
     product = created
 
-    variant = client.post(
-        f"{API}/staff/catalog/products/{product['id']}/variants",
-        json={
-            "kind": "color",
-            "label": "Ko'k",
-            "value": "#2E5AAC",
-            "translations": {"ru": {"label": "Синий"}, "en": {"label": "Blue"}},
-        },
-        headers=admin,
-    )
-    assert variant.status_code == 201, variant.text
-
-    specs = client.put(
-        f"{API}/staff/catalog/products/{product['id']}/specs",
-        json={
-            "specs": [
-                {
-                    "key": "Material",
-                    "value": "Sopol",
-                    "translations": {
-                        "ru": {"key": "Материал", "value": "Керамика"},
-                        "en": {"key": "Material", "value": "Ceramic"},
-                    },
-                }
-            ]
-        },
-        headers=admin,
-    )
-    assert specs.status_code == 200, specs.text
+    # The colour and the spec table, written directly with their other
+    # languages — the admin's variant and spec doors are gone, and what this
+    # test is about is the *reading* side: whether a card written in three
+    # languages answers in all three.
+    with Session(engine) as session:
+        colour = ProductVariant(
+            product_id=product["id"],
+            kind=VariantKind.COLOR,
+            label="Ko'k",
+            value="#2E5AAC",
+            sort=0,
+            in_stock=True,
+        )
+        spec = ProductSpec(
+            product_id=product["id"], key="Material", value="Sopol", sort=0
+        )
+        session.add(colour)
+        session.add(spec)
+        session.commit()
+        session.refresh(colour)
+        session.refresh(spec)
+        for lang, label in (("ru", "Синий"), ("en", "Blue")):
+            session.add(
+                Translation(
+                    entity="variant", entity_id=colour.id,
+                    lang=lang, field="label", value=label,
+                )
+            )
+        for lang, k, v in (
+            ("ru", "Материал", "Керамика"),
+            ("en", "Material", "Ceramic"),
+        ):
+            session.add(
+                Translation(
+                    entity="spec", entity_id=spec.id, lang=lang, field="key", value=k
+                )
+            )
+            session.add(
+                Translation(
+                    entity="spec", entity_id=spec.id, lang=lang, field="value", value=v
+                )
+            )
+        session.commit()
 
     _set_status(product["id"], ProductStatus.PUBLISHED)
     return product
@@ -4308,110 +4300,6 @@ def test_a_card_with_no_translation_is_uzbek_in_every_language(
         assert body["subtitle"] == "Faqat o'zbekcha"
 
 
-def test_a_translation_can_be_read_back_and_taken_away(
-    client: TestClient, admin: dict[str, str]
-) -> None:
-    """The catalogue endpoints answer in one language and fall back silently,
-    which is right for a shopper and no use to an editor trying to see what is
-    still missing."""
-    product = _admin_card(
-        client,
-        admin,
-        sku="SINOV-I18N-3",
-        title="Piyola",
-        price=30_000,
-        status=ProductStatus.PUBLISHED,
-        translations={"ru": {"title": "Пиала"}},
-    )
-    door = f"{API}/staff/catalog/translations/product/{product['id']}"
-
-    held = client.get(door, headers=admin)
-    assert held.status_code == 200, held.text
-    assert held.json()["uz"]["title"] == "Piyola"
-    assert held.json()["translations"]["ru"]["title"] == "Пиала"
-    assert "en" not in held.json()["translations"]
-
-    # A field left out of the payload is left alone; the English arriving
-    # later does not wipe the Russian that was already there.
-    client.patch(
-        f"{API}/staff/catalog/products/{product['id']}",
-        json={"translations": {"en": {"title": "Tea bowl"}}},
-        headers=admin,
-    )
-    assert client.get(door, headers=admin).json()["translations"] == {
-        "ru": {"title": "Пиала"},
-        "en": {"title": "Tea bowl"},
-    }
-
-    # Blank is not the same as absent: it takes the row away, and the card
-    # falls back to its Uzbek again.
-    client.patch(
-        f"{API}/staff/catalog/products/{product['id']}",
-        json={"translations": {"ru": {"title": ""}}},
-        headers=admin,
-    )
-    assert "ru" not in client.get(door, headers=admin).json()["translations"]
-    assert client.get(
-        f"{API}/products/{product['id']}", headers=_ru()
-    ).json()["title"] == "Piyola"
-
-    # A field the shape does not have is a bug in the caller, not a silent
-    # no-op that shows up months later as a card nobody translated.
-    assert client.patch(
-        f"{API}/staff/catalog/products/{product['id']}",
-        json={"translations": {"ru": {"nomi": "Пиала"}}},
-        headers=admin,
-    ).status_code == 422
-    assert client.patch(
-        f"{API}/staff/catalog/products/{product['id']}",
-        json={"translations": {"de": {"title": "Teeschale"}}},
-        headers=admin,
-    ).status_code == 422
-    # Uzbek is the row itself, and is not written here.
-    assert client.get(door).status_code == 401
-
-
-def test_a_replaced_spec_table_does_not_inherit_the_old_rows_words(
-    client: TestClient, admin: dict[str, str]
-) -> None:
-    """SQLite hands a deleted row's id straight back out, so a spec table
-    replaced in place would arrive in Russian describing something else."""
-    product = _admin_card(
-        client,
-        admin,
-        sku="SINOV-I18N-4",
-        title="Likobcha",
-        price=20_000,
-        status=ProductStatus.PUBLISHED,
-    )
-    specs_url = f"{API}/staff/catalog/products/{product['id']}/specs"
-
-    client.put(
-        specs_url,
-        json={
-            "specs": [
-                {
-                    "key": "Rang",
-                    "value": "Oq",
-                    "translations": {"ru": {"key": "Цвет", "value": "Белый"}},
-                }
-            ]
-        },
-        headers=admin,
-    )
-    client.put(
-        specs_url,
-        json={"specs": [{"key": "Og'irlik", "value": "300 g"}]},
-        headers=admin,
-    )
-
-    ru = client.get(f"{API}/products/{product['id']}", headers=_ru()).json()
-    assert [(s["key"], s["value"]) for s in ru["specs"]] == [("Og'irlik", "300 g")]
-
-
-# --------------------------------------------------------- photographs
-
-
 def _photograph(width: int, height: int, fmt: str = "JPEG") -> bytes:
     """A picture of the size a phone actually takes one."""
     from io import BytesIO
@@ -4466,27 +4354,11 @@ def test_a_photograph_is_re_encoded_shrunk_and_renamed(
         assert written.size == (1600, 1200)
     assert client.get(f"/media/{body['media_url']}").status_code == 200
 
-    # And the path is the shape the rest of the catalogue already stores, so
-    # it goes straight back as a product image.
-    product = _admin_card(
-        client, admin, sku="SINOV-MEDIA-1", title="Suratli kartochka", price=55_000
-    )
-    attached = client.post(
-        f"{API}/staff/catalog/products/{product['id']}/images",
-        json={"url": body["media_url"]},
-        headers=admin,
-    )
-    assert attached.status_code == 201, attached.text
-    assert attached.json() == [body["media_url"]]
-
-    # A picture already inside the box is re-encoded but never enlarged.
-    small = client.post(
-        f"{API}/staff/media",
-        files={"file": ("swatch.png", _photograph(640, 640, "PNG"), "image/png")},
-        headers=admin,
-    ).json()
-    assert (small["width"], small["height"]) == (640, 640)
-
+    # The path is the shape the rest of the catalogue already stores, which is
+    # what a listing sends back as `images` and `colors[].image_url`. The door
+    # that used to attach one to a card from here — the admin's image
+    # endpoint — is gone: a card's photographs are the seller's, and
+    # `POST /staff/catalog/listings` is where they arrive.
 
 def test_a_file_that_is_not_an_image_is_refused_however_it_is_named(
     client: TestClient, admin: dict[str, str]
@@ -4709,217 +4581,6 @@ def test_the_queue_can_be_counted_without_fetching_it(
         == waiting
     )
     assert client.get(f"{API}/staff/catalog/summary").status_code == 401
-
-
-def test_a_draft_card_can_be_read_back_in_full_to_be_edited(
-    client: TestClient, admin: dict[str, str]
-) -> None:
-    """A draft is invisible through `/products/{id}` — that path is narrowed to
-    what is in the shop, which is the point of it. So until now nothing could
-    read back the description, the photographs, the colours or the specs of a
-    card that had not been published, and an edit form had nothing to open."""
-    made = _admin_card(
-        client,
-        admin,
-        sku="SINOV-EDIT-1",
-        title="Tahrir kartochkasi",
-        subtitle="qoralama",
-        description="Uzun tavsif matni.",
-        badge="Yangi",
-        warranty="Kafolat 1 yil",
-        price=60_000,
-        translations={"ru": {"title": "Карточка", "description": "Описание."}},
-    )
-    product_id = made["id"]
-
-    # The draft is not in the shop, and reading it there says so.
-    assert client.get(f"{API}/products/{product_id}").status_code == 404
-
-    card = client.get(f"{API}/staff/catalog/products/{product_id}", headers=admin)
-    assert card.status_code == 200, card.text
-    body = card.json()
-    assert body["description"] == "Uzun tavsif matni."
-    assert (body["badge"], body["warranty"]) == ("Yangi", "Kafolat 1 yil")
-    assert body["is_original"] is True
-    # Every language at once, so the editor can mark the empty cells.
-    assert body["translations"]["ru"]["title"] == "Карточка"
-    assert "en" not in body["translations"]
-
-    # The list shape stays lean — a description per row is prose fetched to
-    # draw a table.
-    page = client.get(
-        f"{API}/staff/catalog/products", params={"q": "SINOV-EDIT-1"}, headers=admin
-    ).json()
-    assert "description" not in page["items"][0]
-
-    specs = client.put(
-        f"{API}/staff/catalog/products/{product_id}/specs",
-        json={
-            "specs": [
-                {
-                    "key": "Material",
-                    "value": "Sopol",
-                    "translations": {"ru": {"key": "Материал"}},
-                }
-            ]
-        },
-        headers=admin,
-    )
-    assert specs.status_code == 200, specs.text
-    read_back = client.get(
-        f"{API}/staff/catalog/products/{product_id}/specs", headers=admin
-    )
-    assert read_back.status_code == 200, read_back.text
-    assert [(r["key"], r["value"]) for r in read_back.json()] == [("Material", "Sopol")]
-
-    # With the Russian on the row. The table is only ever replaced whole, so a
-    # form that could not read this back would delete it by saving an
-    # unrelated row.
-    assert read_back.json()[0]["translations"]["ru"]["key"] == "Материал"
-
-    # Saving the table again, carrying the translation with it, keeps it.
-    client.put(
-        f"{API}/staff/catalog/products/{product_id}/specs",
-        json={
-            "specs": [
-                {
-                    "key": "Material",
-                    "value": "Sopol",
-                    "translations": {"ru": {"key": "Материал"}},
-                },
-                {"key": "Vazn", "value": "300 g"},
-            ]
-        },
-        headers=admin,
-    )
-    again = client.get(
-        f"{API}/staff/catalog/products/{product_id}/specs", headers=admin
-    ).json()
-    assert [r["key"] for r in again] == ["Material", "Vazn"]
-    assert again[0]["translations"]["ru"]["key"] == "Материал"
-    # And the new row inherits nothing from whatever held its id before.
-    assert again[1]["translations"] == {}
-
-
-def test_photographs_can_be_reordered_because_the_ids_are_readable(
-    client: TestClient, admin: dict[str, str]
-) -> None:
-    """`DELETE .../images/{image_id}` has always existed and nothing ever told
-    the panel what `image_id` was — the write endpoints answer with bare URLs,
-    which redraws a gallery and cannot edit one."""
-    product_id = _write_a_card(
-        sku="SINOV-RASM-1", title="Rasmli kartochka", price=70_000
-    )
-
-    for index, name in enumerate(("bir.png", "ikki.png", "uch.png")):
-        client.post(
-            f"{API}/staff/catalog/products/{product_id}/images",
-            json={"url": f"products/{name}", "sort": index},
-            headers=admin,
-        )
-
-    images = client.get(
-        f"{API}/staff/catalog/products/{product_id}/images", headers=admin
-    )
-    assert images.status_code == 200, images.text
-    rows = images.json()
-    assert [r["url"] for r in rows] == ["products/bir.png", "products/ikki.png", "products/uch.png"]
-    assert all(isinstance(r["id"], int) for r in rows)
-
-    door = f"{API}/staff/catalog/products/{product_id}/images/order"
-    flipped = [rows[2]["id"], rows[0]["id"], rows[1]["id"]]
-    moved = client.put(door, json={"ids": flipped}, headers=admin)
-    assert moved.status_code == 200, moved.text
-    assert [r["url"] for r in moved.json()] == [
-        "products/uch.png", "products/bir.png", "products/ikki.png"
-    ]
-
-    # The whole list or nothing: a partial order would leave the rest holding
-    # numbers that mean something else.
-    assert client.put(
-        door, json={"ids": [rows[0]["id"]]}, headers=admin
-    ).status_code == 400
-    assert client.put(
-        door, json={"ids": [rows[0]["id"], rows[0]["id"], rows[1]["id"]]}, headers=admin
-    ).status_code == 400
-
-    # The first photograph is the cover, so the order reaches the shop.
-    _set_status(product_id, ProductStatus.PUBLISHED)
-    assert client.get(f"{API}/products/{product_id}").json()["images"][0] == "products/uch.png"
-
-    # And an id read here is the id the delete takes.
-    gone = client.delete(
-        f"{API}/staff/catalog/products/{product_id}/images/{rows[0]['id']}",
-        headers=admin,
-    )
-    assert gone.status_code == 200
-    assert len(client.get(
-        f"{API}/staff/catalog/products/{product_id}/images", headers=admin
-    ).json()) == 2
-
-
-def test_the_editor_is_told_what_it_may_not_do_before_it_tries(
-    client: TestClient,
-    admin: dict[str, str],
-    staff: Callable[[UserRole, str], dict[str, str]],
-) -> None:
-    """Both guards come from the functions the write endpoints refuse with, so
-    a greyed-out button and a 409 are the same rule rather than two copies of
-    it that drift."""
-    warehouse = staff(UserRole.WAREHOUSE, "+998900030051")
-    door = f"{API}/staff/catalog/products"
-
-    # A colour with nothing against it yet: deletable, and the tree can still
-    # change shape.
-    product_id, colour_id = _card_with_a_colour(
-        client, admin, "MB-GUARD-1", with_a_size=False
-    )
-    open_ = client.get(f"{door}/{product_id}/variants", headers=admin)
-    assert open_.status_code == 200, open_.text
-    assert open_.json()["can_add_size"] is True
-    assert open_.json()["size_blocked_reason"] == ""
-    colour = next(v for v in open_.json()["variants"] if v["id"] == colour_id)
-    assert colour["can_delete"] is True and colour["blocked_reason"] == ""
-
-    # Stock arrives on the colour. Now a first size would move where the shelf
-    # is counted, and the editor is told so rather than finding out.
-    _stock_a_leaf(client, admin, warehouse, product_id, colour_id, 4)
-    stocked = client.get(f"{door}/{product_id}/variants", headers=admin).json()
-    assert stocked["can_add_size"] is False
-    assert "sanoq" in stocked["size_blocked_reason"]
-
-    # And it is the same sentence the write endpoint refuses with.
-    refused = client.post(
-        f"{door}/{product_id}/variants",
-        json={"kind": "size", "label": "M", "value": "M", "parent_id": colour_id},
-        headers=admin,
-    )
-    assert refused.status_code == 409
-    assert refused.json()["detail"] == stocked["size_blocked_reason"]
-
-    # The movement against the colour also makes it undeletable, and says why.
-    blocked = next(v for v in stocked["variants"] if v["id"] == colour_id)
-    assert blocked["can_delete"] is False
-    assert "harakat" in blocked["blocked_reason"]
-    gone = client.delete(f"{door}/{product_id}/variants/{colour_id}", headers=admin)
-    assert gone.status_code == 409
-    assert gone.json()["detail"] == blocked["blocked_reason"]
-
-    # A colour holding sizes is blocked for a different reason, and says that
-    # one instead.
-    parent_id, leaf_id = _card_with_a_colour(
-        client, admin, "MB-GUARD-2", with_a_size=True
-    )
-    tree = client.get(f"{door}/{parent_id}/variants", headers=admin).json()
-    colour_row = next(v for v in tree["variants"] if v["kind"] == "color")
-    assert colour_row["can_delete"] is False
-    assert "o'lcham" in colour_row["blocked_reason"]
-    # Its size is a leaf with nothing against it, so that one may go.
-    assert next(v for v in tree["variants"] if v["id"] == leaf_id)["can_delete"] is True
-    assert not _stock_is_consistent()
-
-
-# --------------------------------------------------------- paying the sellers
 
 
 def _period(
@@ -6253,112 +5914,6 @@ def _stock_snapshot(session: Session) -> dict[int, int]:
 # ------------------------------------------------ what became of what I proposed
 
 
-def test_a_seller_reads_what_became_of_the_card_they_proposed(
-    client: TestClient,
-    admin: dict[str, str],
-    auth: dict[str, str],
-    staff: Callable[[UserRole, str], dict[str, str]],
-) -> None:
-    """A refusal carries a reason, and the seller could not read it.
-
-    Proposing worked. Approved, the card turns up in the shop and they can
-    find it there. Refused, it went nowhere they could look — so a seller was
-    being asked to fix something without being told what was wrong with it,
-    and the only way to find out was to telephone an admin.
-    """
-    seller_id, mine = _linked_seller(staff, "Taklif Bir", "+998900100001")
-    _, theirs = _linked_seller(staff, "Taklif Ikki", "+998900100002")
-    category = client.get(f"{API}/categories").json()[0]["slug"]
-
-    def propose(sku: str, headers: dict[str, str]) -> dict:
-        made = client.post(
-            f"{API}/staff/catalog/proposals",
-            json={
-                "sku": sku,
-                "title": f"Taklif {sku}",
-                "category_slug": category,
-                "price": 90_000,
-            },
-            headers=headers,
-        )
-        assert made.status_code == 201, made.text
-        return made.json()
-
-    refused = propose("MB-GAP-PROP-1", mine)
-    accepted = propose("MB-GAP-PROP-2", mine)
-    somebody_elses = propose("MB-GAP-PROP-3", theirs)
-
-    # Before anybody has looked: in the queue, and the seller can see that it
-    # is — "has anybody read it yet" is the other half of the question.
-    waiting = client.get(f"{API}/staff/catalog/proposals", headers=mine)
-    assert waiting.status_code == 200, waiting.text
-    rows = {row["id"]: row for row in waiting.json()["items"]}
-    assert rows[refused["id"]]["status"] == "moderating"
-    assert rows[refused["id"]]["moderation_note"] == ""
-
-    # Nobody else's proposals, and that is not a filter they chose: for a
-    # seller these are the only rows that exist.
-    assert somebody_elses["id"] not in rows
-    assert {row["proposed_by"]["id"] for row in waiting.json()["items"]} == {seller_id}
-
-    # Somebody answers. The *answering* is the warehouse's now — receiving a
-    # batch publishes a card and refusing one takes it down with its reason,
-    # both in ``app.routers.warehouse``, and both have their own tests. This
-    # one is about what the seller can read afterwards, so the two outcomes
-    # are written rather than driven.
-    _refuse(refused["id"], "Surat yo'q — kamida bitta kerak")
-    _set_status(accepted["id"], ProductStatus.PUBLISHED)
-
-    # The refusal, and the reason for it, which is the whole point.
-    after = client.get(f"{API}/staff/catalog/proposals", headers=mine).json()["items"]
-    rows = {row["id"]: row for row in after}
-    assert rows[refused["id"]]["status"] == "rejected"
-    assert rows[refused["id"]]["moderation_note"] == "Surat yo'q — kamida bitta kerak"
-    # And the approved one is here too, so a seller can confirm the card in the
-    # shop is theirs rather than hunting the catalogue for it.
-    assert rows[accepted["id"]]["status"] == "published"
-    assert rows[accepted["id"]]["moderation_note"] == ""
-
-    # The list a seller actually opens after being told "one was refused".
-    only_refused = client.get(
-        f"{API}/staff/catalog/proposals", params={"status": "rejected"}, headers=mine
-    )
-    assert only_refused.status_code == 200, only_refused.text
-    assert [row["id"] for row in only_refused.json()["items"]] == [refused["id"]]
-    assert only_refused.json()["total"] == 1
-
-    # Findable by SKU, which is what a seller's own system calls it.
-    found = client.get(
-        f"{API}/staff/catalog/proposals",
-        params={"q": "MB-GAP-PROP-2"},
-        headers=mine,
-    ).json()["items"]
-    assert [row["id"] for row in found] == [accepted["id"]]
-
-    # An admin has no shop, so they read every seller's proposals — with the
-    # provenance on each row — and may narrow it to one.
-    everybody = client.get(f"{API}/staff/catalog/proposals", headers=admin)
-    assert everybody.status_code == 200, everybody.text
-    seen = {row["id"] for row in everybody.json()["items"]}
-    assert {refused["id"], accepted["id"], somebody_elses["id"]} <= seen
-    # A draft the platform wrote itself is not a proposal and has no business
-    # in a list about somebody else's suggestions.
-    assert all(row["proposed_by"] for row in everybody.json()["items"])
-    narrowed = client.get(
-        f"{API}/staff/catalog/proposals",
-        params={"seller_id": seller_id},
-        headers=admin,
-    ).json()["items"]
-    assert somebody_elses["id"] not in {row["id"] for row in narrowed}
-
-    # Not a customer's list, and not an anonymous one.
-    assert client.get(f"{API}/staff/catalog/proposals", headers=auth).status_code == 403
-    assert client.get(f"{API}/staff/catalog/proposals").status_code == 401
-
-
-# ----------------------------------------------- a weight band is a contract term
-
-
 def test_a_weight_band_can_be_edited_and_every_change_is_logged(
     client: TestClient,
     admin: dict[str, str],
@@ -7069,6 +6624,20 @@ def test_every_column_type_survives_the_round_trip_on_this_database() -> None:
 # warehouse confirms is that the goods turned up, not that the listing was
 # permitted. These hold that whole line together, because it is one line and
 # breaking it anywhere leaves a seller with a product nobody can buy.
+
+
+def _two_pictures(client: TestClient, seller: dict[str, str]) -> list[str]:
+    """Two real photographs, uploaded the way a seller uploads them."""
+    out = []
+    for name in ("front.jpg", "back.jpg"):
+        got = client.post(
+            f"{API}/staff/media",
+            files={"file": (name, _photograph(900, 900), "image/jpeg")},
+            headers=seller,
+        )
+        assert got.status_code == 201, got.text
+        out.append(got.json()["media_url"])
+    return out
 
 
 def _listing_body(

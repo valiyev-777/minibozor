@@ -35,6 +35,20 @@ const FILTERS: { key: SupplyStatus | ""; label: string }[] = [
   { key: "", label: t.all },
 ]
 
+/**
+ * What is in a batch, in one line.
+ *
+ * One product is its name; several are the first and a count of the rest,
+ * because a picker reading a list needs to recognise the box rather than to
+ * inventory it — the batch's own screen has every line.
+ */
+function titlesOf(batch: Supply): string {
+  const names = [...new Set(batch.lines.map((line) => line.product_title).filter(Boolean))]
+  if (names.length === 0) return "—"
+  if (names.length === 1) return names[0]!
+  return `${names[0]} +${names.length - 1}`
+}
+
 export function SuppliesPage() {
   // The default is the day's work: everything promised and not yet counted.
   const [status, setStatus] = useFilter<SupplyStatus>("status", "declared")
@@ -72,12 +86,11 @@ export function SuppliesPage() {
 
       <Panel>
         <div className="hidden border-b border-line-soft px-5 py-2 text-[length:var(--text-micro)] uppercase tracking-wide text-ink-faint sm:flex sm:gap-4">
-          <span className="w-28">{t.supply}</span>
-          <span className="flex-1">{t.seller}</span>
-          <span className="w-20 text-right">Satr</span>
+          <span className="w-28">{t.batchCode}</span>
+          <span className="flex-1">{t.whatIsInIt}</span>
           <span className="w-24 text-right">{t.declared}</span>
           <span className="w-40 text-right">{t.when}</span>
-          <span className="w-28">Holat</span>
+          <span className="w-28">{t.status}</span>
         </div>
         <Async
           query={supplies}
@@ -94,11 +107,19 @@ export function SuppliesPage() {
                   >
                     {batch.code}
                   </Link>
-                  <span className="min-w-0 flex-1 truncate text-ink">
-                    {batch.seller.name}
-                  </span>
-                  <span className="tabular w-20 text-right text-ink-soft">
-                    {num(batch.lines.length)}
+                  {/* What is in the box, and whose it is.
+                      This row used to say the seller's name, a line count and
+                      a total — so a picker facing a shelf of boxes could tell
+                      how many *rows* a batch had and not what was in it. The
+                      product is the thing they are looking for; the seller is
+                      how they know which pile it came from. */}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-ink">
+                      {titlesOf(batch)}
+                    </span>
+                    <span className="block truncate text-[length:var(--text-micro)] text-ink-faint">
+                      {batch.seller.name}
+                    </span>
                   </span>
                   <span className="tabular w-24 text-right text-ink">
                     {num(batch.lines.reduce((sum, l) => sum + l.declared_quantity, 0))}

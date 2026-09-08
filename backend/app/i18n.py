@@ -265,6 +265,16 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "Cancelling is the operator's — the warehouse picks and hands "
               "over, and nothing else",
     },
+    "offer_missing": {
+        "uz": "Bu tovarda sizning narxingiz yo'q — avval narx qo'ying",
+        "ru": "У этого товара нет вашей цены — сначала укажите цену",
+        "en": "This product has no offer of yours — set a price first",
+    },
+    "nothing_new": {
+        "uz": "Yangi rang yoki o'lcham yo'q va miqdor ham kiritilmagan",
+        "ru": "Нет ни нового цвета или размера, ни количества",
+        "en": "Nothing new here, and no quantity either",
+    },
     "colour_needs_photo": {
         "uz": "Har rangning o'z rasmi bo'lishi kerak. Rasmsiz rang: {colours}",
         "ru": "У каждого цвета должно быть своё фото. Без фото: {colours}",

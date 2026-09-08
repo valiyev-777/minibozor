@@ -11,7 +11,7 @@ import { useRole } from "@/auth/session"
 import { useAction } from "@/lib/mutate"
 import { useFilter } from "@/lib/useFilter"
 import { moment, num, som } from "@/lib/format"
-import { t } from "@/lib/labels"
+import { orderWord, t } from "@/lib/labels"
 
 /**
  * One queue, two jobs, and the difference is the default filter.
@@ -57,6 +57,10 @@ export function OrdersPage() {
     "status",
     role === "warehouse" ? "placed" : "",
   )
+  // Whether anybody could be carrying these yet. `placed` and `packing` are
+  // both still on a shelf, so the courier column would be dashes.
+  const onTheRoad = status !== "placed" && status !== "packing"
+
   const orders = useQuery({
     queryKey: ["orders", status],
     queryFn: () =>
@@ -106,14 +110,14 @@ export function OrdersPage() {
             screen where that costs real time. */}
         <div className="hidden border-b border-line-soft px-5 py-2 text-[length:var(--text-micro)] uppercase tracking-wide text-ink-faint lg:flex lg:gap-4">
           <span className="w-28">{t.order}</span>
-          <span className="flex-1">{t.customer}</span>
+          <span className="flex-1">{t.whatToPick}</span>
           <span className="w-14 text-right">{t.items}</span>
           <span className="w-28 text-right">{t.total}</span>
           <span className="w-20">{t.paid}</span>
-          <span className="w-32">{t.courier}</span>
-          <span className="w-32 text-right">{t.when}</span>
-          <span className="w-28">Holat</span>
-          <span className="w-44" />
+          {onTheRoad ? <span className="w-32">{t.courier}</span> : null}
+          <span className="w-28 text-right">{t.when}</span>
+          <span className="w-24">{t.status}</span>
+          <span className="w-40" />
         </div>
         <Async query={orders} lines={6}>
           {(page) =>
@@ -129,10 +133,16 @@ export function OrdersPage() {
                     >
                       {order.code}
                     </Link>
+                    {/* What to fetch, then who for. The row used to lead with
+                        the customer's name and their address, which is an
+                        operator's business on the telephone and no use at all
+                        to somebody at a bench holding an empty box — they had
+                        to open every order to find out what was in it. */}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-ink">{order.customer_name || "—"}</p>
+                      <p className="truncate text-ink">{order.items_summary || "—"}</p>
                       <p className="truncate text-[length:var(--text-micro)] text-ink-faint">
-                        {order.address_line}
+                        {order.customer_name || "—"}
+                        {order.address_line ? ` · ${order.address_line}` : ""}
                       </p>
                     </div>
                     <span className="tabular w-14 text-right text-ink-soft">
@@ -146,17 +156,21 @@ export function OrdersPage() {
                         {order.paid ? t.paid : t.unpaid}
                       </Badge>
                     </span>
-                    <span className="w-32 truncate text-[length:var(--text-small)] text-ink-soft">
-                      {order.courier_name || "—"}
-                    </span>
-                    <span className="w-32 text-right text-[length:var(--text-small)] text-ink-faint">
+                    {onTheRoad ? (
+                      <span className="w-32 truncate text-[length:var(--text-small)] text-ink-soft">
+                        {order.courier_name || "—"}
+                      </span>
+                    ) : null}
+                    <span className="w-28 text-right text-[length:var(--text-small)] text-ink-faint">
                       {moment(order.created_at)}
                     </span>
-                    <span className="w-28">
-                      <Badge tone={TONE[order.status]}>{order.status_label}</Badge>
+                    <span className="w-24">
+                      <Badge tone={TONE[order.status]}>
+                        {orderWord[order.status] ?? order.status_label}
+                      </Badge>
                     </span>
 
-                    <div className="flex w-44 justify-end gap-1">
+                    <div className="flex w-40 justify-end gap-1">
                       {order.next_statuses
                         .filter((next) => MOVE[next])
                         .map((next) => (

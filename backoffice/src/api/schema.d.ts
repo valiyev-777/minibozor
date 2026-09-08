@@ -1545,6 +1545,48 @@ export interface paths {
         patch: operations["edit_listing_api_v1_staff_catalog_listings__product_id__patch"];
         trace?: never;
     };
+    "/api/v1/staff/catalog/listings/{product_id}/variants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a colour or a size to my own card, and the goods with it
+         * @description A colour or a size the card did not have, and a batch on its way.
+         *
+         *     This did not exist, and its absence was the sharpest edge on the seller's
+         *     side: a shop that started selling a shirt in black and later got it in blue
+         *     had to open a **second card** for the blue one — a second set of
+         *     photographs, a second price to keep in step, and two rows in the shop for
+         *     one thing. The only thing "add more" could do was send another box of a
+         *     colour that already existed.
+         *
+         *     **Creating the variant and declaring the goods is one act.** A colour with
+         *     no supply is a swatch a customer can tap and never buy; a supply for a
+         *     variant that does not exist is not expressible. Two endpoints would leave
+         *     both halves reachable on their own, and one of the two would be somebody's
+         *     afternoon.
+         *
+         *     Existing labels are reused rather than refused. A seller adding `XL` to
+         *     black and blue sends both colours with all their sizes — that is what the
+         *     form in front of them looks like — and only the parts that are new get
+         *     written. So this is safe to send twice, which matters because the seller's
+         *     screen is the same one they add a plain restock from.
+         *
+         *     A new colour needs its own photograph, for the same reason creation does:
+         *     the shopper's page swaps the hero when a swatch is tapped.
+         */
+        post: operations["add_variants_api_v1_staff_catalog_listings__product_id__variants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/staff/supplies": {
         parameters: {
             query?: never;
@@ -1856,8 +1898,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Product */
-        patch: operations["update_product_api_v1_staff_catalog_products__product_id__patch"];
+        patch?: never;
         trace?: never;
     };
     "/api/v1/staff/catalog/proposals": {
@@ -1989,186 +2030,6 @@ export interface paths {
         head?: never;
         /** Update Brand */
         patch: operations["update_brand_api_v1_staff_catalog_brands__slug__patch"];
-        trace?: never;
-    };
-    "/api/v1/staff/catalog/products/{product_id}/images": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The gallery, with the ids to edit it by
-         * @description The write endpoints answer with bare URLs, which redraws a gallery and
-         *     does not edit one: ``DELETE .../images/{image_id}`` has always been here
-         *     and nothing ever told the panel what ``image_id`` was.
-         */
-        get: operations["list_images_api_v1_staff_catalog_products__product_id__images_get"];
-        put?: never;
-        /** Add Image */
-        post: operations["add_image_api_v1_staff_catalog_products__product_id__images_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/staff/catalog/products/{product_id}/images/order": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set the order of the photographs, first one being the cover
-         * @description The whole list, the way the showcase takes its orders.
-         *
-         *     Every row named once and none left out: a partial list would leave the
-         *     rest holding numbers that mean something else. The first photograph is the
-         *     one every tile in the shop shows, so this is not only arrangement.
-         */
-        put: operations["reorder_images_api_v1_staff_catalog_products__product_id__images_order_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/staff/catalog/products/{product_id}/images/{image_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove Image */
-        delete: operations["remove_image_api_v1_staff_catalog_products__product_id__images__image_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/staff/catalog/products/{product_id}/variants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The colour and size tree, and what may be done to it
-         * @description Every variant with its own delete guard, and the tree's size guard.
-         *
-         *     Both answers come from the functions the write endpoints refuse with, so
-         *     a button greyed out here and a 409 from there are the same rule rather
-         *     than two copies of it. The editor can then say why in advance, which is
-         *     the whole difference between a form that explains itself and one that
-         *     waits to be wrong at.
-         */
-        get: operations["list_variants_api_v1_staff_catalog_products__product_id__variants_get"];
-        put?: never;
-        /**
-         * Add Variant
-         * @description Add a colour, or a size of a colour.
-         *
-         *     Refused if it would move where the shelf is counted. A product whose
-         *     leaves are colours has its stock recorded on those colours; adding the
-         *     first size makes the sizes the leaves, and every existing count would then
-         *     be sitting a level above where the ledger expects to find it — with no way
-         *     to say how the colour's stock should divide between the new sizes. Add the
-         *     sizes before the stock, or count the shelf out and back in.
-         */
-        post: operations["add_variant_api_v1_staff_catalog_products__product_id__variants_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/staff/catalog/products/{product_id}/variants/{variant_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Remove Variant
-         * @description Refused once anything has happened to it.
-         *
-         *     A variant named by a movement or by an order line is part of a record: the
-         *     ledger would stop explaining its own totals and an old order would point
-         *     at a row that is not there. Take it out of stock instead — that is what
-         *     "we do not sell this any more" means when it has been sold before.
-         */
-        delete: operations["remove_variant_api_v1_staff_catalog_products__product_id__variants__variant_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/staff/catalog/products/{product_id}/specs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The spec table as it stands, translations included
-         * @description A draft card cannot be read through ``/products/{id}``: that path is
-         *     narrowed to what is in the shop, which is the point of it. So the editor
-         *     needs its own way to see the rows it is about to replace.
-         *
-         *     With the translations, because replacing is all this table supports. The
-         *     editor has to send back every row it means to keep and every word in every
-         *     language on it; anything it could not read is a thing it would delete by
-         *     saving something else.
-         */
-        get: operations["list_specs_api_v1_staff_catalog_products__product_id__specs_get"];
-        /** Replace the spec table, in order */
-        put: operations["replace_specs_api_v1_staff_catalog_products__product_id__specs_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/staff/catalog/translations/{entity}/{entity_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * What Russian and English a row already has
-         * @description The one read the panel cannot get from the catalogue endpoints.
-         *
-         *     Those answer in a single language and fall back to Uzbek without saying
-         *     so, which is exactly right for a shopper and no use to somebody trying to
-         *     see what is still missing. This returns the Uzbek on the row beside every
-         *     translation held for it, so an editor can show three columns and mark the
-         *     empty cells.
-         */
-        get: operations["get_translations_api_v1_staff_catalog_translations__entity___entity_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/staff/payouts/periods": {
@@ -2875,22 +2736,6 @@ export interface components {
             child_count: number;
         };
         /**
-         * AdminImageOut
-         * @description A photograph with the id needed to remove or reorder it.
-         *
-         *     The write endpoints answer with bare URLs, which is enough to redraw a
-         *     gallery and not enough to edit one: ``DELETE .../images/{image_id}`` has
-         *     always existed and nothing told the panel what ``image_id`` was.
-         */
-        AdminImageOut: {
-            /** Id */
-            id: number;
-            /** Url */
-            url: string;
-            /** Sort */
-            sort: number;
-        };
-        /**
          * AdminProductDetailOut
          * @description One card, with everything the edit form binds to.
          *
@@ -3017,79 +2862,6 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-        };
-        /**
-         * AdminSpecOut
-         * @description A spec row as the editor has to hold it, translations included.
-         *
-         *     ``SpecOut`` is key and value, which is all a product page shows. An editor
-         *     needs more, and not for convenience: ``PUT .../specs`` replaces the whole
-         *     table, so every row it does not send is gone — translations with it. A
-         *     form that could not read the Russian back would quietly delete it on the
-         *     next save of an unrelated row.
-         */
-        AdminSpecOut: {
-            /** Id */
-            id: number;
-            /** Key */
-            key: string;
-            /** Value */
-            value: string;
-            /** Translations */
-            translations: {
-                [key: string]: {
-                    [key: string]: string;
-                };
-            };
-        };
-        /**
-         * AdminVariantOut
-         * @description A colour or a size, and whether it may be deleted.
-         *
-         *     ``can_delete`` is the backend's own answer, from the same function the
-         *     delete endpoint refuses with — not a rule copied into the browser that
-         *     would drift from it. A panel that greys the button out and says why is
-         *     telling the truth; one that lets somebody click and then shows a 409 has
-         *     made them find out the hard way.
-         */
-        AdminVariantOut: {
-            /** Id */
-            id: number;
-            kind: components["schemas"]["VariantKind"];
-            /** Label */
-            label: string;
-            /** Value */
-            value: string;
-            /** Image Url */
-            image_url: string | null;
-            /** Parent Id */
-            parent_id: number | null;
-            /** Sort */
-            sort: number;
-            /** Stock Left */
-            stock_left: number | null;
-            /** In Stock */
-            in_stock: boolean;
-            /** Can Delete */
-            can_delete: boolean;
-            /** Blocked Reason */
-            blocked_reason: string;
-        };
-        /**
-         * AdminVariantsOut
-         * @description The tree, plus whether a size may be added to it at all.
-         *
-         *     The second guard the editor has to show in advance: a colour with stock
-         *     against it cannot take its first size, because the shelf is counted on the
-         *     colour and the size would move where the counting happens.
-         */
-        AdminVariantsOut: {
-            /** Variants */
-            variants: components["schemas"]["AdminVariantOut"][];
-            /** Can Add Size */
-            can_add_size: boolean;
-            /** Size Blocked Reason */
-            size_blocked_reason: string;
         };
         /**
          * AttemptResult
@@ -3751,16 +3523,6 @@ export interface components {
             /** Sections */
             sections: components["schemas"]["SectionOut"][];
         };
-        /** ImageWriteIn */
-        ImageWriteIn: {
-            /** Url */
-            url: string;
-            /**
-             * Sort
-             * @default 0
-             */
-            sort: number;
-        };
         /**
          * Language
          * @enum {string}
@@ -3812,6 +3574,11 @@ export interface components {
             image_url?: string | null;
             /** Sizes */
             sizes?: components["schemas"]["ListingSizeIn"][];
+            /**
+             * Quantity
+             * @default 0
+             */
+            quantity: number;
         };
         /**
          * ListingCreateIn
@@ -3933,6 +3700,23 @@ export interface components {
             on_hand: number;
             /** Sellable */
             sellable: number;
+        };
+        /**
+         * ListingVariantsIn
+         * @description Colours and sizes to add to a card that already exists.
+         *
+         *     The same shape as creation's ``colors``, on purpose: the form a seller
+         *     fills in to add a colour is the form they filled in to make the card, and
+         *     a second shape for it would be a second thing to keep in step.
+         *
+         *     Sending a colour that is already there is not an error — only the new
+         *     parts are written, and any quantities become a batch. Which means a seller
+         *     can send the whole grid they are looking at and let the server work out
+         *     what is new, rather than the screen having to.
+         */
+        ListingVariantsIn: {
+            /** Colors */
+            colors: components["schemas"]["ListingColorIn"][];
         };
         /**
          * MediaOut
@@ -4742,39 +4526,6 @@ export interface components {
             /** Warranty */
             warranty?: string | null;
         };
-        /**
-         * ProductUpdateIn
-         * @description Everything about a card except its price, its stock and its status.
-         *
-         *     Those three have owners: the price belongs to an offer, the stock to the
-         *     ledger, and the status to a moderation decision with a reason attached.
-         */
-        ProductUpdateIn: {
-            /** Title */
-            title?: string | null;
-            /** Subtitle */
-            subtitle?: string | null;
-            /** Description */
-            description?: string | null;
-            /** Category Slug */
-            category_slug?: string | null;
-            /** Brand Slug */
-            brand_slug?: string | null;
-            /** Badge */
-            badge?: string | null;
-            /** Warranty */
-            warranty?: string | null;
-            /** Is Original */
-            is_original?: boolean | null;
-            /** Free Delivery */
-            free_delivery?: boolean | null;
-            /** Next Day Delivery */
-            next_day_delivery?: boolean | null;
-            /** Translations */
-            translations?: {
-                [key: string]: components["schemas"]["ProductTextIn"];
-            };
-        };
         /** ProfileOverviewOut */
         ProfileOverviewOut: {
             user: components["schemas"]["UserOut"];
@@ -4919,18 +4670,6 @@ export interface components {
          * @enum {string}
          */
         RemovalStatus: "requested" | "ready" | "collected" | "cancelled";
-        /**
-         * ReorderIn
-         * @description The whole order, in one call.
-         *
-         *     A screen where rows are dragged into place knows the final order and
-         *     nothing else. Sending it as one list means the order cannot be left half
-         *     applied, and it costs one request instead of one per row.
-         */
-        ReorderIn: {
-            /** Ids */
-            ids: number[];
-        };
         /** ReturnIn */
         ReturnIn: {
             /** Order Item Id */
@@ -5588,33 +5327,6 @@ export interface components {
             /** Value */
             value: string;
         };
-        /** SpecTextIn */
-        SpecTextIn: {
-            /** Key */
-            key?: string | null;
-            /** Value */
-            value?: string | null;
-        };
-        /** SpecWriteIn */
-        SpecWriteIn: {
-            /** Key */
-            key: string;
-            /** Value */
-            value: string;
-            /** Translations */
-            translations?: {
-                [key: string]: components["schemas"]["SpecTextIn"];
-            };
-        };
-        /**
-         * SpecsReplaceIn
-         * @description The whole list, in order. Specs are read as a table, not edited row by
-         *     row, and replacing them is how the order gets fixed.
-         */
-        SpecsReplaceIn: {
-            /** Specs */
-            specs?: components["schemas"]["SpecWriteIn"][];
-        };
         /**
          * StaffMeOut
          * @description Who the backoffice is talking to, and therefore which one to show.
@@ -5699,6 +5411,8 @@ export interface components {
             delivery_window: string;
             /** Items Count */
             items_count: number;
+            /** Items Summary */
+            items_summary: string;
             /** Total */
             total: number;
             /** Paid */
@@ -6073,30 +5787,6 @@ export interface components {
              */
             is_new_user: boolean;
         };
-        /**
-         * TranslationsOut
-         * @description What is held for one row, in every language at once.
-         *
-         *     The read path answers in one language and falls back to Uzbek without
-         *     saying so, which is right for a shopper and useless to somebody trying to
-         *     see what is still missing.
-         */
-        TranslationsOut: {
-            /** Entity */
-            entity: string;
-            /** Entity Id */
-            entity_id: number;
-            /** Uz */
-            uz: {
-                [key: string]: string;
-            };
-            /** Translations */
-            translations: {
-                [key: string]: {
-                    [key: string]: string;
-                };
-            };
-        };
         /** UserOut */
         UserOut: {
             /** Id */
@@ -6175,32 +5865,6 @@ export interface components {
             stock_left?: number | null;
             /** Parent Id */
             parent_id?: number | null;
-        };
-        /** VariantTextIn */
-        VariantTextIn: {
-            /** Label */
-            label?: string | null;
-        };
-        /** VariantWriteIn */
-        VariantWriteIn: {
-            kind: components["schemas"]["VariantKind"];
-            /** Label */
-            label: string;
-            /** Value */
-            value: string;
-            /** Image Url */
-            image_url?: string | null;
-            /** Parent Id */
-            parent_id?: number | null;
-            /**
-             * Sort
-             * @default 0
-             */
-            sort: number;
-            /** Translations */
-            translations?: {
-                [key: string]: components["schemas"]["VariantTextIn"];
-            };
         };
         /**
          * WriteOffIn
@@ -9315,6 +8979,43 @@ export interface operations {
             };
         };
     };
+    add_variants_api_v1_staff_catalog_listings__product_id__variants_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListingVariantsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerListingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_supplies_api_v1_staff_supplies_get: {
         parameters: {
             query?: {
@@ -9971,43 +9672,6 @@ export interface operations {
             };
         };
     };
-    update_product_api_v1_staff_catalog_products__product_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                product_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProductUpdateIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminProductOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_proposals_api_v1_staff_catalog_proposals_get: {
         parameters: {
             query?: {
@@ -10342,355 +10006,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BrandOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_images_api_v1_staff_catalog_products__product_id__images_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                product_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminImageOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_image_api_v1_staff_catalog_products__product_id__images_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                product_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImageWriteIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string[];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    reorder_images_api_v1_staff_catalog_products__product_id__images_order_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                product_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReorderIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminImageOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_image_api_v1_staff_catalog_products__product_id__images__image_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                product_id: number;
-                image_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string[];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_variants_api_v1_staff_catalog_products__product_id__variants_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                product_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminVariantsOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    add_variant_api_v1_staff_catalog_products__product_id__variants_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                product_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VariantWriteIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VariantOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_variant_api_v1_staff_catalog_products__product_id__variants__variant_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                product_id: number;
-                variant_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VariantOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_specs_api_v1_staff_catalog_products__product_id__specs_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                product_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminSpecOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    replace_specs_api_v1_staff_catalog_products__product_id__specs_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                product_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SpecsReplaceIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SpecOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_translations_api_v1_staff_catalog_translations__entity___entity_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                entity: string;
-                entity_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TranslationsOut"];
                 };
             };
             /** @description Validation Error */

@@ -1502,6 +1502,31 @@ class ListingColorIn(BaseModel):
     # looking at the thing, not at a hex circle.
     image_url: str | None = None
     sizes: list[ListingSizeIn] = Field(default_factory=list, max_length=40)
+    # How many of this colour, when the colour is the leaf.
+    #
+    # A bag or a watch has colours and no sizes, and the count then sits on
+    # the colour — but there was nowhere to put it: every quantity lived on a
+    # size, so a sizeless colour was always declared as nought and a seller of
+    # bags submitted a card the warehouse was expecting no box for. Ignored
+    # when the colour has sizes, because then the sizes are the leaves and
+    # counting the colour as well would count the shelf twice.
+    quantity: int = Field(0, ge=0, le=100_000)
+
+
+class ListingVariantsIn(BaseModel):
+    """Colours and sizes to add to a card that already exists.
+
+    The same shape as creation's ``colors``, on purpose: the form a seller
+    fills in to add a colour is the form they filled in to make the card, and
+    a second shape for it would be a second thing to keep in step.
+
+    Sending a colour that is already there is not an error — only the new
+    parts are written, and any quantities become a batch. Which means a seller
+    can send the whole grid they are looking at and let the server work out
+    what is new, rather than the screen having to.
+    """
+
+    colors: list[ListingColorIn] = Field(min_length=1, max_length=20)
 
 
 class ListingEditIn(BaseModel):
@@ -2147,6 +2172,16 @@ class StaffOrderOut(BaseModel):
     delivery_day: date | None
     delivery_window: str
     items_count: int
+    # What is in it, short enough for a row.
+    #
+    # The queue used to carry a count and nothing else, so a picker reading it
+    # knew an order had one thing in it and not what the thing was — which is
+    # the whole of their job. They had to open every order to find out what to
+    # fetch, and on a bench with twenty of them that is twenty round trips.
+    #
+    # A sentence rather than the lines themselves: a row has space for one, and
+    # the order's own screen has every line with its price.
+    items_summary: str
     total: int
     paid: bool
     # What this order may become next. The backoffice draws its buttons from

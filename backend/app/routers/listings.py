@@ -153,8 +153,11 @@ def create_listing(
         session.refresh(swatch)
 
         if not colour.sizes:
-            # No sizes: the colour is the cell that gets counted.
-            leaves.append((swatch, swatch.label, None, 0))
+            # No sizes: the colour is the cell that gets counted, and its own
+            # `quantity` is what is coming. This used to be a hard nought,
+            # which meant a seller of bags submitted a card and the warehouse
+            # was expecting no box.
+            leaves.append((swatch, swatch.label, None, colour.quantity))
             continue
 
         for s_order, size in enumerate(colour.sizes):
@@ -380,6 +383,167 @@ def edit_listing(
         ),
     )
     session.add(product)
+    session.commit()
+    session.refresh(product)
+    return _listing_out(session, product, seller)
+
+
+@router.post(
+    "/listings/{product_id}/variants",
+    response_model=s.SellerListingOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a colour or a size to my own card, and the goods with it",
+)
+def add_variants(
+    product_id: int,
+    payload: s.ListingVariantsIn,
+    user: SellerUser,
+    session: SessionDep,
+) -> s.SellerListingOut:
+    """A colour or a size the card did not have, and a batch on its way.
+
+    This did not exist, and its absence was the sharpest edge on the seller's
+    side: a shop that started selling a shirt in black and later got it in blue
+    had to open a **second card** for the blue one — a second set of
+    photographs, a second price to keep in step, and two rows in the shop for
+    one thing. The only thing "add more" could do was send another box of a
+    colour that already existed.
+
+    **Creating the variant and declaring the goods is one act.** A colour with
+    no supply is a swatch a customer can tap and never buy; a supply for a
+    variant that does not exist is not expressible. Two endpoints would leave
+    both halves reachable on their own, and one of the two would be somebody's
+    afternoon.
+
+    Existing labels are reused rather than refused. A seller adding `XL` to
+    black and blue sends both colours with all their sizes — that is what the
+    form in front of them looks like — and only the parts that are new get
+    written. So this is safe to send twice, which matters because the seller's
+    screen is the same one they add a plain restock from.
+
+    A new colour needs its own photograph, for the same reason creation does:
+    the shopper's page swaps the hero when a swatch is tapped.
+    """
+    seller = _own_seller(session, user)
+    product = session.get(Product, product_id)
+    if product is None or product.proposed_by_id != seller.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
+
+    offer = session.exec(
+        select(Offer)
+        .where(Offer.product_id == product.id)
+        .where(Offer.seller_id == seller.id)
+    ).first()
+    if offer is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("offer_missing"))
+
+    existing = session.exec(
+        select(ProductVariant).where(ProductVariant.product_id == product.id)
+    ).all()
+    colours = {v.label.strip().casefold(): v for v in existing if v.kind is VariantKind.COLOR}
+
+    # Only the colours that are actually new need a photograph. Demanding one
+    # for a colour already on the card would mean re-uploading its picture to
+    # add a size to it.
+    _colours_have_photographs(
+        [c for c in payload.colors if c.label.strip().casefold() not in colours]
+    )
+
+    leaves: list[tuple[ProductVariant, str, str | None, int]] = []
+    made = 0
+    for colour in payload.colors:
+        key = colour.label.strip().casefold()
+        swatch = colours.get(key)
+        if swatch is None:
+            swatch = ProductVariant(
+                product_id=product.id,
+                kind=VariantKind.COLOR,
+                label=colour.label.strip(),
+                value=(colour.value or colour.label).strip(),
+                image_url=colour.image_url,
+                sort=max((v.sort for v in existing if v.kind is VariantKind.COLOR), default=-1) + 1,
+                stock_left=None,
+                in_stock=True,
+            )
+            session.add(swatch)
+            session.commit()
+            session.refresh(swatch)
+            colours[key] = swatch
+            made += 1
+            session.add(OfferVariant(offer_id=offer.id, variant_id=swatch.id, stock_left=0))
+            session.commit()
+
+        if not colour.sizes:
+            leaves.append((swatch, swatch.label, None, colour.quantity))
+            continue
+
+        # A colour with nothing under it is counted on itself, so putting
+        # sizes under it moves the count a level down from where the ledger
+        # already put it — and there is no honest way to say how eight black
+        # shirts divide between an S and an M nobody has counted. This rule
+        # came off the admin's variant door when that door was removed; it is
+        # the seller's door now, and the rule belongs with it.
+        counted = session.exec(
+            select(OfferVariant)
+            .where(OfferVariant.offer_id == offer.id)
+            .where(OfferVariant.variant_id == swatch.id)
+        ).first()
+        has_sizes = session.exec(
+            select(ProductVariant).where(ProductVariant.parent_id == swatch.id)
+        ).first()
+        if has_sizes is None and counted is not None and counted.stock_left > 0:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, i18n.label("variant_would_move_the_count")
+            )
+
+        under = {
+            v.label.strip().casefold(): v
+            for v in session.exec(
+                select(ProductVariant).where(ProductVariant.parent_id == swatch.id)
+            ).all()
+        }
+        for size in colour.sizes:
+            cell = under.get(size.label.strip().casefold())
+            if cell is None:
+                cell = ProductVariant(
+                    product_id=product.id,
+                    kind=VariantKind.SIZE,
+                    label=size.label.strip(),
+                    value=(size.value or size.label).strip(),
+                    parent_id=swatch.id,
+                    sort=len(under),
+                    stock_left=None,
+                    in_stock=True,
+                )
+                session.add(cell)
+                session.commit()
+                session.refresh(cell)
+                under[size.label.strip().casefold()] = cell
+                made += 1
+                session.add(
+                    OfferVariant(offer_id=offer.id, variant_id=cell.id, stock_left=0)
+                )
+                session.commit()
+            leaves.append((cell, swatch.label, cell.label, size.quantity))
+
+    if made == 0 and not any(qty > 0 for _v, _c, _s, qty in leaves):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("nothing_new"))
+
+    supply = _declare(session, seller, offer, leaves)
+
+    audit.record(
+        session,
+        actor=user,
+        action="listing.variants",
+        entity="product",
+        entity_id=product.id,
+        field="variants",
+        old=len(existing),
+        new=len(existing) + made,
+        note=supply.code if supply else "",
+    )
+    session.commit()
+    of.refresh(session, product.id)
     session.commit()
     session.refresh(product)
     return _listing_out(session, product, seller)
