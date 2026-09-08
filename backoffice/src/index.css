@@ -1,5 +1,0 @@
-@import "tailwindcss";
-/* The one design system, shared with the seller's cabinet and the courier's
- * app. Tokens, density and the three meanings live in ../../shared/theme.css.
- * Nothing panel-specific belongs here. */
-@import "../../shared/theme.css";

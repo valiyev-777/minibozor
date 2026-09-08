@@ -7,9 +7,9 @@ the back office, the seller's cabinet and the courier's PWA.
 ```
 design/       the imported design + extracted tokens, icons and per-screen HTML
 backend/      FastAPI + SQLModel + Alembic — 190 endpoints, 53 tables, seeded
-backoffice/   React + TS + Vite — operator, warehouse and admin screens
-seller/       React + TS + Vite — the merchant cabinet
-courier/      React + TS + Vite — the last mile, a PWA that works offline
+backoffice/   (removed — being rebuilt; see PANELS.md)
+seller/       (removed — being rebuilt; see PANELS.md)
+courier/      (removed — being rebuilt; see PANELS.md)
 android/      Kotlin + Jetpack Compose
 ios/          Swift + SwiftUI
 docs/         walkthrough.md — one sale through every interface, by hand

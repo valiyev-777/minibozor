@@ -1,8 +1,0 @@
-@import "tailwindcss";
-/* The one design system, shared with the backoffice and the seller's cabinet.
- * Tokens, density and the three meanings live in ../../shared/theme.css.
- *
- * This app is the only one that opts into dark — `allow-dark` on <html> — and
- * not as a preference: under a dark sky the phone switches and it is usually
- * right, because its light sensor is looking at the same sky the courier is. */
-@import "../../shared/theme.css";
