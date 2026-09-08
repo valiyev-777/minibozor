@@ -13,15 +13,14 @@ import { t } from "@/lib/labels"
 /**
  * The frame: which shop this is, where to go, and the bell.
  *
- * Six screens and no sub-navigation, so the nav is one row of links rather
+ * Five screens and no sub-navigation, so the nav is one row of links rather
  * than the backoffice's rail. It scrolls sideways on a narrow phone instead of
  * collapsing into a menu — a shopkeeper checking their returns on a handset
- * should not have to open a drawer to find six words, and the row is the
+ * should not have to open a drawer to find five words, and the row is the
  * whole map of the application.
  */
 const LINKS = [
   { to: "/products", label: t.products },
-  { to: "/supplies", label: t.supplies },
   { to: "/orders", label: t.orders },
   { to: "/returns", label: t.returns },
   { to: "/account", label: t.account },

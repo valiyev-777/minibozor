@@ -76,7 +76,7 @@ window will confuse you rather than the software.
 ## 0. Sign in to all three
 
 **What you should see.** The seller lands on **Tovarlarim**, the warehouse on
-**Topshiruvlar**, the operator on **Buyurtmalar**, the admin on
+**Qabul qilish**, the operator on **Buyurtmalar**, the admin on
 **Boshqaruv** — whatever each of them does first. The courier lands on
 **Bugun**.
 
@@ -89,21 +89,24 @@ name, the category, the description, the photographs, the price, and a colour
 with the sizes under it — each size with how many are coming.
 
 Fill it in, add a picture, put one colour (`Oq`) with one size (`M`, quantity
-`3`), and press **Topshirish**.
+`3`), and press **Omborga topshirish**.
 
 **What you should see.** A green toast naming the product and a batch code —
 `SUP-000013` — and the screen you land on is the product, reading **Omborga
-kutilmoqda**. The grid shows `E'lon qilingan 3`, `Omborda 0`, `Sotuvga tayyor
-0`.
+kutilmoqda**. The grid shows one figure per size — `3 dona` — under the
+heading **Topshirildi**, and the line below it says the warehouse has not
+counted yet.
 
-That nought is the point. Nothing you typed reached a stock figure: the
-quantities became `declared_quantity` on a supply line, and the shelf does not
-move until somebody counts the box. The product is not in the shop either —
+One figure, and which one it is follows the stage. Nothing you typed reached a
+stock figure: the quantities became `declared_quantity` on a supply line, and
+the shelf does not move until somebody counts the box. Showing `Omborda 0`
+beside it, as this screen once did, invited the reading that the goods had
+gone missing. The product is not in the shop either —
 `GET /products/{id}` is a 404 for it.
 
 ## 2. The warehouse counts it in · backoffice `:5173`, warehouse
 
-**Topshiruvlar** opens on `status=declared`, which is the day's work. The
+**Qabul qilish** opens on `status=declared`, which is the day's work. The
 batch from step 1 is at the top; open it.
 
 The receive screen shows the promise and an empty box beside it. **The boxes

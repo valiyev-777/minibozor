@@ -96,8 +96,16 @@ export function ProductsPage() {
                       <p className="tabular text-[length:var(--text-body)] text-ink">
                         {som(row.price)}
                       </p>
+                      {/* One figure, and which one follows the stage: a
+                          card still waiting has nothing on a shelf to
+                          report, so the honest number is what was handed
+                          in. */}
                       <p className="tabular text-[length:var(--text-micro)] text-ink-soft">
-                        {t.sellable}: {num(row.sellable_total)}
+                        {row.stage === "awaiting_warehouse"
+                          ? `${t.declaredShort}: ${num(
+                              row.stock.reduce((sum, cell) => sum + cell.declared, 0),
+                            )}`
+                          : `${t.onHand}: ${num(row.on_hand_total)}`}
                       </p>
                     </div>
                     <Badge tone={TONE[row.stage]}>{row.stage_label}</Badge>

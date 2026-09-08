@@ -17,7 +17,6 @@ export const t = {
   // the shell
   app: "Sotuvchi kabineti",
   products: "Tovarlarim",
-  supplies: "Topshiruvlar",
   orders: "Buyurtmalar",
   returns: "Qaytarishlar",
   account: "Hisob",
@@ -40,8 +39,13 @@ export const t = {
   productsEmptyHint:
     "Tovarni kiritib, omborga topshirasiz. Ombor sanab qabul qilgach, tovar ilovada ko'rinadi.",
   onHand: "Omborda",
-  sellable: "Sotuvga tayyor",
-  declared: "E'lon qilingan",
+  declaredShort: "Topshirildi",
+  willSend: "Jami omborga topshiriladi",
+  stock: "O'lchamlar va soni",
+  pieces: "dona",
+  inOrder: "buyurtmada",
+  totalOnHand: "Jami omborda",
+  awaitingCount: "Ombor sanashini kutmoqda. Sanab qabul qilgach, tovar ilovada ko'rinadi.",
   price: "Narx",
   refusalReason: "Rad etish sababi",
   /** Why the *customer* sent it back — not why anybody refused anything. */
@@ -64,7 +68,7 @@ export const t = {
   quantity: "Miqdor",
   weight: "Vazn (gramm)",
   oldPrice: "Eski narx",
-  submit: "Topshirish",
+  submit: "Omborga topshirish",
   submitting: "Yuborilmoqda…",
   submitHint:
     "Topshirgandan keyin tovar ombor sanog'ini kutadi. Qabul qilinsa — sotuvda, " +
@@ -72,7 +76,11 @@ export const t = {
 
   // one product
   addMore: "Qo'shimcha topshirish",
+  addMoreTitle: "Yana qancha olib kelasiz?",
   takeBack: "Olib ketaman",
+  takeBackTitle: "Ombordan qancha olib ketasiz?",
+  moreThanOnHand: "Omborda bunchasi yo'q",
+  cancel: "Bekor qilish",
   savePrice: "Narxni saqlash",
   priceSaved: "Narx o'zgartirildi",
   supplyDeclared: "Topshiruv e'lon qilindi",
@@ -82,14 +90,6 @@ export const t = {
   removalUnsold: "Sotilmayapti",
   nothingToSend: "Miqdorni kiriting — nol topshiruv emas",
   nothingToTakeBack: "Omborda tovar yo'q",
-
-  // supplies
-  suppliesEmpty: "Topshiruv yo'q",
-  suppliesEmptyHint: "Tovar qo'shsangiz, ombor kutadigan partiya shu yerda paydo bo'ladi.",
-  received: "Qabul qilingan",
-  difference: "Farq",
-  declaredAt: "E'lon qilindi",
-  receivedAt: "Qabul qilindi",
 
   // orders
   ordersEmpty: "Buyurtma yo'q",
@@ -122,13 +122,6 @@ export const t = {
   accountEmpty: "Hali hisob yo'q",
   accountEmptyHint: "Birinchi savdodan keyin bu yerda sotildi, qaytdi va to'lanadigan ko'rinadi.",
 } as const
-
-/** The three refusal-free words a supply's status can be. */
-export const supplyStatus: Record<string, string> = {
-  declared: "Kutilmoqda",
-  received: "Qabul qilindi",
-  cancelled: "Rad etildi",
-}
 
 export const removalStatus: Record<string, string> = {
   requested: "So'rov yuborildi",

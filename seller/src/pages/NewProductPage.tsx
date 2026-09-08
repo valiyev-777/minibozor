@@ -460,7 +460,7 @@ export function NewProductPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel)] border border-line bg-surface px-5 py-4">
         <div>
           <p className="tabular text-[length:var(--text-body)] font-medium text-ink">
-            {t.declared}: {num(totalDeclared)}
+            {t.willSend}: {num(totalDeclared)} {t.pieces}
           </p>
           <p className="max-w-md text-[length:var(--text-small)] text-ink-soft">
             {t.submitHint}

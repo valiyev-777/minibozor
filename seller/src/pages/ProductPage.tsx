@@ -12,7 +12,7 @@ import { Detail, Panel, Row } from "@/components/Panel"
 import { Thumb } from "@/components/Thumb"
 import { useAction } from "@/lib/mutate"
 import { num, som } from "@/lib/format"
-import { supplyStatus, t } from "@/lib/labels"
+import { t } from "@/lib/labels"
 
 /**
  * One product, and the three things a seller can still do to it.
@@ -86,11 +86,16 @@ function Detailed({ row }: { row: Listing }) {
             <p className="text-[length:var(--text-micro)] text-ink-faint">{row.sku}</p>
           </div>
           <div className="flex gap-8">
-            <Detail label={t.onHand}>
-              <span className="tabular">{num(row.on_hand_total)}</span>
-            </Detail>
-            <Detail label={t.sellable}>
-              <span className="tabular">{num(row.sellable_total)}</span>
+            <Detail
+              label={row.stage === "awaiting_warehouse" ? t.declaredShort : t.onHand}
+            >
+              <span className="tabular">
+                {num(
+                  row.stage === "awaiting_warehouse"
+                    ? row.stock.reduce((sum, cell) => sum + cell.declared, 0)
+                    : row.on_hand_total,
+                )}
+              </span>
             </Detail>
           </div>
         </div>
@@ -178,150 +183,224 @@ function PriceBox({ listing }: { listing: Listing }) {
 }
 
 /**
- * The grid, one row per countable cell, with the two decisions beside it.
+ * The goods, as one number a shopkeeper recognises.
  *
- * `declared` and `on_hand` are shown side by side deliberately: the gap
- * between what a seller said was coming and what the warehouse found is the
- * only thing either party wants to talk about afterwards.
+ * There used to be three columns here — declared, on hand, sellable — and a
+ * seller reading them had to work out which of the three was the answer to
+ * "how many have I got". They are one number now, and which number it is
+ * follows the stage: before the warehouse has counted, the only true figure
+ * is what was handed in; afterwards it is what is on the shelf, with the part
+ * already promised to an order named beside it rather than given a column of
+ * its own.
+ *
+ * The two decisions moved off the rows for the same reason. A seller does not
+ * bring one size to the warehouse; they bring a box with several in it, and
+ * a row of inputs repeated per size made a phone screen unreadable. Each
+ * decision now opens one form over every size and sends one document.
  */
 function StockBox({ listing }: { listing: Listing }) {
-  const [sending, setSending] = React.useState<Record<number, string>>({})
-  const [taking, setTaking] = React.useState<Record<number, string>>({})
-
-  const declare = useAction<{ variantId: number; quantity: number }, Supply>({
-    run: ({ variantId, quantity }) =>
-      api<Supply>("/staff/supplies", {
-        method: "POST",
-        json: {
-          lines: [
-            { offer_id: listing.offer_id, variant_id: variantId, quantity },
-          ],
-        },
-      }),
-    invalidate: [["listings"], ["listing", String(listing.id)], ["supplies"]],
-    success: (made) => `${t.supplyDeclared} — ${made.code}`,
-    onDone: () => setSending({}),
-  })
-
-  const remove = useAction<{ variantId: number; quantity: number }, Removal>({
-    run: ({ variantId, quantity }) =>
-      api<Removal>("/staff/removals", {
-        method: "POST",
-        json: {
-          // `unsold` rather than a choice on this screen. A seller taking
-          // goods back off a product page is taking back stock that is not
-          // moving; "unsellable" is a claim about damage, which is the
-          // warehouse's to make when they look at it.
-          reason: "unsold",
-          lines: [
-            { offer_id: listing.offer_id, variant_id: variantId, quantity },
-          ],
-        },
-      }),
-    invalidate: [["listings"], ["listing", String(listing.id)], ["removals"]],
-    success: (made) => `${t.removalRequested} — ${made.code}`,
-    onDone: () => setTaking({}),
-  })
+  const [open, setOpen] = React.useState<null | "send" | "take">(null)
+  const waiting = listing.stage === "awaiting_warehouse"
 
   return (
-    <Panel title={`${t.colors} · ${t.sizes}`}>
-      <div className="hidden border-t border-line-soft px-5 py-2 text-[length:var(--text-micro)] uppercase tracking-wide text-ink-faint sm:flex sm:gap-4">
-        <span className="flex-1">{t.colors}</span>
-        <span className="w-16 text-right">{t.declared}</span>
-        <span className="w-16 text-right">{t.onHand}</span>
-        <span className="w-16 text-right">{t.sellable}</span>
-        <span className="w-[19rem]" />
-      </div>
-
-      {listing.stock.map((cell) => (
-        <Row key={cell.variant_id} className="sm:flex-nowrap">
-          <p className="min-w-0 flex-1 text-[length:var(--text-body)] text-ink">
-            {cell.color_label}
-            {cell.size_label ? (
-              <span className="text-ink-soft"> · {cell.size_label}</span>
-            ) : null}
-          </p>
-          <span className="tabular w-16 text-right text-[length:var(--text-body)] text-ink-soft">
-            {num(cell.declared)}
-          </span>
-          <span className="tabular w-16 text-right text-[length:var(--text-body)] text-ink">
-            {num(cell.on_hand)}
-          </span>
-          <span className="tabular w-16 text-right text-[length:var(--text-body)] text-ink">
-            {num(cell.sellable)}
-          </span>
-
-          <div className="flex w-full flex-wrap items-center gap-2 sm:w-[19rem] sm:justify-end">
-            <Input
-              inputMode="numeric"
-              aria-label={`${cell.color_label} ${cell.size_label ?? ""} ${t.quantity}`}
-              className="w-20"
-              placeholder="0"
-              value={sending[cell.variant_id] ?? ""}
-              onChange={(event) =>
-                setSending({
-                  ...sending,
-                  [cell.variant_id]: event.target.value.replace(/\D/g, ""),
-                })
-              }
-            />
+    <Panel
+      title={t.stock}
+      action={
+        !waiting ? (
+          <div className="flex gap-2">
             <Button
               size="sm"
-              disabled={
-                !Number(sending[cell.variant_id]) || declare.isPending || !listing.offer_id
-              }
-              onClick={() =>
-                declare.mutate({
-                  variantId: cell.variant_id,
-                  quantity: Number(sending[cell.variant_id]),
-                })
-              }
+              variant={open === "send" ? "quiet" : "primary"}
+              onClick={() => setOpen(open === "send" ? null : "send")}
             >
               <PackagePlus />
               {t.addMore}
             </Button>
-
-            {cell.on_hand > 0 ? (
-              <>
-                <Input
-                  inputMode="numeric"
-                  aria-label={`${cell.color_label} ${t.takeBack}`}
-                  className="w-20"
-                  placeholder={String(cell.on_hand)}
-                  value={taking[cell.variant_id] ?? ""}
-                  onChange={(event) =>
-                    setTaking({
-                      ...taking,
-                      [cell.variant_id]: event.target.value.replace(/\D/g, ""),
-                    })
-                  }
-                />
-                <Button
-                  size="sm"
-                  variant="quiet"
-                  disabled={!Number(taking[cell.variant_id]) || remove.isPending}
-                  onClick={() =>
-                    remove.mutate({
-                      variantId: cell.variant_id,
-                      quantity: Number(taking[cell.variant_id]),
-                    })
-                  }
-                >
-                  <Truck />
-                  {t.takeBack}
-                </Button>
-              </>
+            {listing.on_hand_total > 0 ? (
+              <Button
+                size="sm"
+                variant="quiet"
+                onClick={() => setOpen(open === "take" ? null : "take")}
+              >
+                <Truck />
+                {t.takeBack}
+              </Button>
             ) : null}
           </div>
-        </Row>
-      ))}
+        ) : null
+      }
+    >
+      {listing.stock.map((cell) => {
+        const promised = cell.on_hand - cell.sellable
+        return (
+          <Row key={cell.variant_id}>
+            <p className="min-w-0 flex-1 text-[length:var(--text-body)] text-ink">
+              {cell.color_label}
+              {cell.size_label ? (
+                <span className="text-ink-soft"> · {cell.size_label}</span>
+              ) : null}
+            </p>
+            <span className="text-right text-[length:var(--text-body)] text-ink">
+              <span className="tabular font-semibold">
+                {num(waiting ? cell.declared : cell.on_hand)}
+              </span>{" "}
+              <span className="text-ink-soft">{t.pieces}</span>
+              {!waiting && promised > 0 ? (
+                <span className="text-[length:var(--text-micro)] text-ink-faint">
+                  {" "}
+                  · {num(promised)} {t.inOrder}
+                </span>
+              ) : null}
+            </span>
+          </Row>
+        )
+      })}
 
-      {listing.supply_code ? (
-        <div className="border-t border-line-soft px-5 py-3 text-[length:var(--text-small)] text-ink-soft">
-          {t.supplies}: <span className="text-ink">{listing.supply_code}</span> ·{" "}
-          {supplyStatus[listing.supply_status ?? ""] ?? listing.supply_status}
-        </div>
+      <div className="border-t border-line-soft px-5 py-3 text-[length:var(--text-small)] text-ink-soft">
+        {waiting ? (
+          t.awaitingCount
+        ) : (
+          <>
+            {t.totalOnHand}:{" "}
+            <span className="tabular text-ink">{num(listing.on_hand_total)}</span>{" "}
+            {t.pieces}
+          </>
+        )}
+      </div>
+
+      {open ? (
+        <QuantityForm
+          listing={listing}
+          kind={open}
+          onClose={() => setOpen(null)}
+        />
       ) : null}
     </Panel>
+  )
+}
+
+/**
+ * One quantity per size, and one document out of the lot.
+ *
+ * Both decisions have the same shape — a number against each size — so they
+ * share the form and differ only in the endpoint and in what a blank means:
+ * sending is bounded by nothing, taking back is bounded by what is on the
+ * shelf, and the placeholder says that figure so nobody has to guess it.
+ */
+function QuantityForm({
+  listing,
+  kind,
+  onClose,
+}: {
+  listing: Listing
+  kind: "send" | "take"
+  onClose: () => void
+}) {
+  const [qty, setQty] = React.useState<Record<number, string>>({})
+
+  const lines = listing.stock
+    .map((cell) => ({ cell, quantity: Number(qty[cell.variant_id] ?? "") }))
+    .filter((line) => line.quantity > 0)
+
+  const overshoot =
+    kind === "take" && lines.some((line) => line.quantity > line.cell.on_hand)
+
+  const send = useAction<void, Supply | Removal>({
+    run: () =>
+      kind === "send"
+        ? api<Supply>("/staff/supplies", {
+            method: "POST",
+            json: {
+              lines: lines.map((line) => ({
+                offer_id: listing.offer_id,
+                variant_id: line.cell.variant_id,
+                quantity: line.quantity,
+              })),
+            },
+          })
+        : api<Removal>("/staff/removals", {
+            method: "POST",
+            json: {
+              // `unsold` rather than a choice on this screen. A seller taking
+              // goods back off a product page is taking back stock that is
+              // not moving; "unsellable" is a claim about damage, which is
+              // the warehouse's to make when they look at it.
+              reason: "unsold",
+              lines: lines.map((line) => ({
+                offer_id: listing.offer_id,
+                variant_id: line.cell.variant_id,
+                quantity: line.quantity,
+              })),
+            },
+          }),
+    invalidate: [
+      ["listings"],
+      ["listing", String(listing.id)],
+      [kind === "send" ? "supplies" : "removals"],
+    ],
+    success: kind === "send" ? t.supplyDeclared : t.removalRequested,
+    onDone: () => {
+      setQty({})
+      onClose()
+    },
+  })
+
+  return (
+    <form
+      className="border-t border-line bg-surface-soft px-5 py-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        send.mutate()
+      }}
+    >
+      <p className="mb-3 text-[length:var(--text-small)] font-semibold text-ink">
+        {kind === "send" ? t.addMoreTitle : t.takeBackTitle}
+      </p>
+
+      <div className="space-y-2">
+        {listing.stock.map((cell) => (
+          <div key={cell.variant_id} className="flex items-center gap-3">
+            <span className="min-w-0 flex-1 text-[length:var(--text-body)] text-ink">
+              {cell.color_label}
+              {cell.size_label ? (
+                <span className="text-ink-soft"> · {cell.size_label}</span>
+              ) : null}
+            </span>
+            <Input
+              inputMode="numeric"
+              aria-label={`${cell.color_label} ${cell.size_label ?? ""} ${t.quantity}`}
+              className="w-24"
+              placeholder={kind === "take" ? String(cell.on_hand) : "0"}
+              value={qty[cell.variant_id] ?? ""}
+              onChange={(event) =>
+                setQty({
+                  ...qty,
+                  [cell.variant_id]: event.target.value.replace(/\D/g, ""),
+                })
+              }
+            />
+          </div>
+        ))}
+      </div>
+
+      {overshoot ? (
+        <p role="alert" className="mt-3 text-[length:var(--text-small)] text-danger">
+          {t.moreThanOnHand}
+        </p>
+      ) : null}
+
+      <div className="mt-4 flex gap-2">
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={!lines.length || overshoot || send.isPending}
+        >
+          {kind === "send" ? t.addMore : t.takeBack}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onClose}>
+          {t.cancel}
+        </Button>
+      </div>
+    </form>
   )
 }

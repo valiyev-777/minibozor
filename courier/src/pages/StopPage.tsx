@@ -59,7 +59,7 @@ export function StopPage() {
         {(row) =>
           row === null ? (
             <p className="rounded-[var(--radius-panel)] border border-line bg-surface px-4 py-6 text-center text-ink-soft">
-              Bu manzil reysingizda yo'q.
+              Bu manzil sizning vazifalaringizda yo'q.
             </p>
           ) : (
             <Door stop={row} />

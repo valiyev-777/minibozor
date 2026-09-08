@@ -7,7 +7,6 @@ import { Shell } from "@/components/Shell"
 import { ProductsPage } from "@/pages/ProductsPage"
 import { NewProductPage } from "@/pages/NewProductPage"
 import { ProductPage } from "@/pages/ProductPage"
-import { SuppliesPage } from "@/pages/SuppliesPage"
 import { OrdersPage } from "@/pages/OrdersPage"
 import { ReturnsPage } from "@/pages/ReturnsPage"
 import { AccountPage } from "@/pages/AccountPage"
@@ -41,7 +40,6 @@ export function App() {
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/new" element={<NewProductPage />} />
           <Route path="/products/:id" element={<ProductPage />} />
-          <Route path="/supplies" element={<SuppliesPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/returns" element={<ReturnsPage />} />
           <Route path="/account" element={<AccountPage />} />

@@ -50,7 +50,7 @@ export function RunPage() {
         {(row) =>
           row === null ? (
             <p className="rounded-[var(--radius-panel)] border border-line bg-surface px-4 py-6 text-center text-ink-soft">
-              Bu reys sizniki emas.
+              Bu vazifa sizga berilmagan.
             </p>
           ) : (
             <Doors run={row} />
