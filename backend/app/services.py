@@ -139,6 +139,25 @@ def is_in_the_shop(product: Product | None) -> bool:
     return product is not None and product.status is ProductStatus.PUBLISHED
 
 
+def colour_image(session: Session, variant_id: int | None) -> str | None:
+    """The photograph of the goods in one colour, if that colour has one.
+
+    A colour is chosen by looking at the thing, so a basket line for a black
+    shirt showing the white cover photograph is a line the shopper does not
+    recognise as theirs — and the first place they notice is the order, which
+    is the worst place to be surprised. Every colour now has a photograph (the
+    seller cannot submit one without: see ``listings._colours_have_photographs``),
+    but older rows may not, so this answers ``None`` and the caller falls back
+    to the product's cover.
+    """
+    if variant_id is None:
+        return None
+    variant = session.get(ProductVariant, variant_id)
+    if variant is None or not variant.image_url:
+        return None
+    return media_url(variant.image_url)
+
+
 def primary_image(session: Session, product_id: int) -> str | None:
     img = session.exec(
         select(ProductImage)
@@ -397,7 +416,10 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
         id=item.id,
         product_id=product.id,
         title=i18n.t(session, "product", product.id, "title", product.title),
-        image_url=primary_image(session, product.id),
+        # The colour's own photograph when the line has a colour, because that
+        # is the thing in the basket. The product's cover is the fallback.
+        image_url=colour_image(session, item.color_variant_id)
+        or primary_image(session, product.id),
         variant_label=" · ".join(labels)
         if labels
         else i18n.t(session, "product", product.id, "subtitle", product.subtitle),

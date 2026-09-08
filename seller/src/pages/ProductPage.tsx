@@ -10,6 +10,7 @@ import { Input, Label } from "@/ui/field"
 import { Async } from "@/ui/states"
 import { Detail, Panel, Row } from "@/components/Panel"
 import { Thumb } from "@/components/Thumb"
+import { EditBox } from "@/pages/product/EditBox"
 import { useAction } from "@/lib/mutate"
 import { num, som } from "@/lib/format"
 import { t } from "@/lib/labels"
@@ -112,6 +113,8 @@ function Detailed({ row }: { row: Listing }) {
           </div>
         ) : null}
       </Panel>
+
+      <EditBox listing={row} />
 
       {row.offer_id ? <PriceBox listing={row} /> : null}
 

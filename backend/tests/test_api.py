@@ -7358,6 +7358,21 @@ def test_a_listing_refuses_what_would_make_the_shelf_uncountable(
         f"{API}/staff/catalog/listings", json={**body, "images": []}, headers=mine
     ).status_code == 400
 
+    # And neither is a picture *per colour*. The shopper's page swaps the hero
+    # when a swatch is tapped, so a colour with nothing behind it leaves them
+    # looking at the previous one — they tap "Qora", see a white shirt, and buy
+    # the wrong thing or nothing. The refusal names the colour, because a seller
+    # with eight of them should not have to guess which is short.
+    naked = {**body, "colors": [
+        body["colors"][0],
+        {**body["colors"][1], "image_url": None},
+    ]}
+    refused = client.post(f"{API}/staff/catalog/listings", json=naked, headers=mine)
+    assert refused.status_code == 400, refused.text
+    said = refused.json()["detail"]
+    assert body["colors"][1]["label"] in said, said
+    assert body["colors"][0]["label"] not in said, said
+
     # Somebody else's door.
     assert client.post(
         f"{API}/staff/catalog/listings", json=body, headers=admin

@@ -265,6 +265,11 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "Cancelling is the operator's — the warehouse picks and hands "
               "over, and nothing else",
     },
+    "colour_needs_photo": {
+        "uz": "Har rangning o'z rasmi bo'lishi kerak. Rasmsiz rang: {colours}",
+        "ru": "У каждого цвета должно быть своё фото. Без фото: {colours}",
+        "en": "Every colour needs its own photograph. Without one: {colours}",
+    },
     "order_taken": {
         "uz": "Bu zakasni boshqa kuryer olib ketdi",
         "ru": "Этот заказ уже забрал другой курьер",

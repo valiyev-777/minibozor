@@ -10,6 +10,7 @@ import { Field, Hint, Input, Label, Select, Textarea } from "@/ui/field"
 import { messageOf } from "@/ui/states"
 import { Panel } from "@/components/Panel"
 import { Thumb } from "@/components/Thumb"
+import { ColourPicker } from "@/components/ColourPicker"
 import { PageTitle } from "@/components/Shell"
 import { useAction } from "@/lib/mutate"
 import { num } from "@/lib/format"
@@ -91,6 +92,12 @@ export function NewProductPage() {
     success: (made) => `${made.title} topshirildi — ${made.supply_code ?? ""}`.trim(),
     onDone: (made) => navigate(`/products/${made.id}`),
   })
+
+  // The one field the backend will refuse, checked here so the seller is told
+  // before they press rather than after. Named colours only: an empty draft
+  // row is not a colour anybody has started yet.
+  const namedColours = colors.filter((colour) => colour.label.trim())
+  const withoutPhoto = namedColours.filter((colour) => !colour.imageUrl)
 
   const totalDeclared = colors.reduce(
     (sum, colour) =>
@@ -341,40 +348,27 @@ export function NewProductPage() {
               key={colour.key}
               className="space-y-3 rounded-[var(--radius-control)] border border-line p-4"
             >
-              <div className="grid gap-3 sm:grid-cols-[1fr_10rem_auto]">
-                <div className="space-y-1.5">
-                  <Label htmlFor={`colour-${colour.key}`}>{t.colorLabel}</Label>
-                  <Input
-                    id={`colour-${colour.key}`}
-                    value={colour.label}
-                    onChange={(e) => patchColor(colourIndex, { label: e.target.value })}
-                    placeholder="Oq"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`swatch-${colour.key}`}>{t.colorValue}</Label>
-                  <Input
-                    id={`swatch-${colour.key}`}
-                    value={colour.value}
-                    onChange={(e) => patchColor(colourIndex, { value: e.target.value })}
-                    placeholder="#FFFFFF"
-                  />
-                </div>
-                {colors.length > 1 ? (
-                  <Button
-                    type="button"
-                    variant="quiet"
-                    size="icon"
-                    aria-label="Rangni olib tashlash"
-                    className="self-end"
-                    onClick={() =>
-                      setColors(colors.filter((_, i) => i !== colourIndex))
-                    }
-                  >
-                    <Trash2 />
-                  </Button>
-                ) : null}
-              </div>
+              <ColourPicker
+                colour={{
+                  label: colour.label,
+                  value: colour.value,
+                  image_url: colour.imageUrl ?? "",
+                }}
+                onChange={(patch) =>
+                  patchColor(colourIndex, {
+                    ...(patch.label !== undefined ? { label: patch.label } : {}),
+                    ...(patch.value !== undefined ? { value: patch.value } : {}),
+                    ...(patch.image_url !== undefined
+                      ? { imageUrl: patch.image_url || null }
+                      : {}),
+                  })
+                }
+                onRemove={
+                  colors.length > 1
+                    ? () => setColors(colors.filter((_, i) => i !== colourIndex))
+                    : undefined
+                }
+              />
 
               <div className="space-y-2">
                 <p className="text-[length:var(--text-small)] font-medium text-ink">
@@ -462,15 +456,27 @@ export function NewProductPage() {
           <p className="tabular text-[length:var(--text-body)] font-medium text-ink">
             {t.willSend}: {num(totalDeclared)} {t.pieces}
           </p>
-          <p className="max-w-md text-[length:var(--text-small)] text-ink-soft">
-            {t.submitHint}
-          </p>
+          {/* The refusal, said here rather than after the round trip, and
+              naming the colours so a seller with eight of them knows which
+              two to go back to. */}
+          {withoutPhoto.length ? (
+            <p
+              role="alert"
+              className="max-w-md text-[length:var(--text-small)] font-medium text-danger"
+            >
+              {t.colorNeedsPhoto}: {withoutPhoto.map((c) => c.label.trim()).join(", ")}
+            </p>
+          ) : (
+            <p className="max-w-md text-[length:var(--text-small)] text-ink-soft">
+              {t.submitHint}
+            </p>
+          )}
         </div>
         <Button
           type="submit"
           variant="primary"
           size="lg"
-          disabled={submit.isPending || uploading}
+          disabled={submit.isPending || uploading || withoutPhoto.length > 0}
         >
           {submit.isPending ? t.submitting : t.submit}
         </Button>

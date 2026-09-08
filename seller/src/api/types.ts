@@ -30,6 +30,7 @@ export type Shop = S["SellerMeOut"]
 
 export type Listing = S["SellerListingOut"]
 export type ListingCreateIn = S["ListingCreateIn"]
+export type ListingEditIn = S["ListingEditIn"]
 export type ListingColorIn = S["ListingColorIn"]
 export type ListingSizeIn = S["ListingSizeIn"]
 export type ListingStock = S["ListingStockOut"]

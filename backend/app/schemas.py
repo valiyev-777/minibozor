@@ -1504,6 +1504,40 @@ class ListingColorIn(BaseModel):
     sizes: list[ListingSizeIn] = Field(default_factory=list, max_length=40)
 
 
+class ListingEditIn(BaseModel):
+    """What a seller may change about their own card after it exists.
+
+    Not ``ProductUpdateIn``. That shape is an admin's, and it carries fields a
+    seller has no business setting on their own goods — ``is_original``, a
+    badge, a warranty, free delivery. Those are claims the shop makes, and a
+    seller who could tick "original" for themselves has made the tick
+    worthless.
+
+    What is here is the description of the thing: what it is called, what it
+    is, which shelf of the catalogue it belongs on, and its photographs. Every
+    field is optional and only what arrives is written, so a screen that edits
+    the title alone sends the title alone.
+
+    ``images`` replaces the whole list when given, in order, first one primary.
+    Not a patch per picture: reordering, removing and adding are one act to
+    the person doing it — they drag the pictures into the order they want and
+    save — and three endpoints for it would need the client to work out the
+    difference between two lists and then send it as a diff nobody can read in
+    a log.
+
+    Price, stock and status are absent and stay absent. The price belongs to
+    the offer (``PATCH /staff/offers/{id}``), the stock to the ledger, and the
+    status to the warehouse counting the goods in.
+    """
+
+    title: str | None = Field(None, min_length=2, max_length=200)
+    subtitle: str | None = Field(None, max_length=200)
+    description: str | None = None
+    category_slug: str | None = None
+    weight_grams: int | None = Field(None, ge=0)
+    images: list[str] | None = Field(None, max_length=12)
+
+
 class ListingCreateIn(BaseModel):
     """Everything a seller's new product is, in one request.
 

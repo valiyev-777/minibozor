@@ -1517,7 +1517,32 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Fix my own card — its words, its shelf, its photographs
+         * @description A seller's own card, corrected by the seller.
+         *
+         *     This did not exist, and its absence was the reason a seller who mistyped a
+         *     name had nothing to do about it: the only editable thing on their product
+         *     was the price, and every other field belonged to an admin's screen. A shop
+         *     where fixing a typo means asking somebody at head office is a shop whose
+         *     cards stay wrong.
+         *
+         *     **Theirs and only theirs**, matched on ``proposed_by_id``, and a 404 rather
+         *     than a 403 for somebody else's product: which cards exist in another
+         *     seller's shop is not a fact we owe them.
+         *
+         *     Allowed in every stage, including ``on_sale``. A card in the shop with the
+         *     wrong description is worse than one being edited, and the alternative —
+         *     withdraw, fix, resubmit, wait for a recount — would mean nobody ever fixes
+         *     anything. A refused card is the case this matters most for: the refusal
+         *     reason says what to fix and this is the door to fix it through.
+         *
+         *     What it does not touch: the price, the stock, the status, and the colours.
+         *     The first three have owners of their own. The colours are the goods
+         *     themselves — a colour is a row on a shelf with a count against it, so
+         *     adding or removing one is a supply or a removal, not an edit.
+         */
+        patch: operations["edit_listing_api_v1_staff_catalog_listings__product_id__patch"];
         trace?: never;
     };
     "/api/v1/staff/supplies": {
@@ -3827,6 +3852,46 @@ export interface components {
             images?: string[];
             /** Colors */
             colors?: components["schemas"]["ListingColorIn"][];
+        };
+        /**
+         * ListingEditIn
+         * @description What a seller may change about their own card after it exists.
+         *
+         *     Not ``ProductUpdateIn``. That shape is an admin's, and it carries fields a
+         *     seller has no business setting on their own goods — ``is_original``, a
+         *     badge, a warranty, free delivery. Those are claims the shop makes, and a
+         *     seller who could tick "original" for themselves has made the tick
+         *     worthless.
+         *
+         *     What is here is the description of the thing: what it is called, what it
+         *     is, which shelf of the catalogue it belongs on, and its photographs. Every
+         *     field is optional and only what arrives is written, so a screen that edits
+         *     the title alone sends the title alone.
+         *
+         *     ``images`` replaces the whole list when given, in order, first one primary.
+         *     Not a patch per picture: reordering, removing and adding are one act to
+         *     the person doing it — they drag the pictures into the order they want and
+         *     save — and three endpoints for it would need the client to work out the
+         *     difference between two lists and then send it as a diff nobody can read in
+         *     a log.
+         *
+         *     Price, stock and status are absent and stay absent. The price belongs to
+         *     the offer (``PATCH /staff/offers/{id}``), the stock to the ledger, and the
+         *     status to the warehouse counting the goods in.
+         */
+        ListingEditIn: {
+            /** Title */
+            title?: string | null;
+            /** Subtitle */
+            subtitle?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Category Slug */
+            category_slug?: string | null;
+            /** Weight Grams */
+            weight_grams?: number | null;
+            /** Images */
+            images?: string[] | null;
         };
         /**
          * ListingSizeIn
@@ -9192,6 +9257,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerListingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_listing_api_v1_staff_catalog_listings__product_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListingEditIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

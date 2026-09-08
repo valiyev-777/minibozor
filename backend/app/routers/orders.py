@@ -23,6 +23,7 @@ from app.models import (
     PaymentMethod,
     PickupPoint,
     Product,
+    ProductVariant,
     ReturnReason,
     ReturnRequest,
     Seller,
@@ -145,7 +146,14 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
             order_id=order.id,
             product_id=item.product_id,
             title=item.title,
-            image_url=_raw_image(session, item.product_id),
+            # The colour's photograph, snapshotted like everything else on the
+            # line: a customer opening this order in six months should see the
+            # thing they bought, not whatever the card's cover is by then.
+            image_url=_colour_or_cover(
+                session,
+                cart_item.color_variant_id if cart_item else None,
+                item.product_id,
+            ),
             variant_id=cart_item.variant_id if cart_item else None,
             color_variant_id=cart_item.color_variant_id if cart_item else None,
             # Who is owed for this line, snapshotted with everything else about
@@ -445,6 +453,21 @@ def _commission(session: SessionDep, offer: Offer | None) -> int:
         return 0
     seller = session.get(Seller, offer.seller_id)
     return seller.commission_percent if seller else 0
+
+
+def _colour_or_cover(
+    session: SessionDep, color_variant_id: int | None, product_id: int | None
+) -> str:
+    """The colour's photograph if the line has one, else the card's cover.
+
+    Relative paths on both sides, because this is a snapshot and the media
+    host is allowed to move.
+    """
+    if color_variant_id is not None:
+        variant = session.get(ProductVariant, color_variant_id)
+        if variant is not None and variant.image_url:
+            return variant.image_url
+    return _raw_image(session, product_id)
 
 
 def _raw_image(session: SessionDep, product_id: int | None) -> str:

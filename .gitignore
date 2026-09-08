@@ -4,3 +4,6 @@
 # Database backups from tools/backup.sh. These hold the real catalogue and
 # real orders, so they are data, never source.
 backups/
+
+# The desktop app's own download folder, when it lands in the repo.
+Claude outputs/

@@ -246,8 +246,28 @@ fun ProductScreen(
         onPauseOrDispose { light(!darkTheme) }
     }
 
+    // The gallery: the card's own photographs, and then any colour's that is
+    // not already among them.
+    //
+    // This is the fix for a colour that did nothing. The mapping below finds a
+    // colour's page by looking its photograph up *in the gallery*, so a colour
+    // photographed separately from the card — which is now every colour, since
+    // a seller cannot submit one without its own photograph — had no page, no
+    // entry in `pageOfColor`, and tapping its swatch moved nothing. The
+    // customer tapped "black", went on looking at a white shirt, and either
+    // bought the wrong thing or did not buy.
+    //
+    // Card photographs first so the cover stays the cover, then the colours in
+    // the order the seller listed them, each one appearing once.
+    val gallery = remember(product) {
+        val colourShots = product?.variants.orEmpty()
+            .filter { it.kind == "color" }
+            .mapNotNull { it.imageUrl }
+        (product?.images.orEmpty() + colourShots).distinct()
+    }
+
     val heroPager = rememberPagerState(
-        pageCount = { maxOf(product?.images?.size ?: 1, 1) },
+        pageCount = { maxOf(gallery.size, 1) },
     )
 
     val context = LocalContext.current
@@ -261,10 +281,9 @@ fun ProductScreen(
     val productColors = remember(product) {
         product?.variants.orEmpty().filter { it.kind == "color" }
     }
-    val pageOfColor = remember(product) {
+    val pageOfColor = remember(gallery, productColors) {
         productColors.mapNotNull { color ->
-            val page = product?.images.orEmpty()
-                .indexOf(color.imageUrl ?: return@mapNotNull null)
+            val page = gallery.indexOf(color.imageUrl ?: return@mapNotNull null)
             if (page < 0) null else color.id to page
         }.toMap()
     }
@@ -355,7 +374,7 @@ fun ProductScreen(
                             // of bare page above it the whole way up.
                             MbReveal(reveal, "hero", BlockHero, rise = 0.dp) {
                                 Hero(
-                                    images = product.images,
+                                    images = gallery,
                                     closed = { closed },
                                     pager = heroPager,
                                     // Read here, in the lambda, so the scroll is
@@ -486,7 +505,7 @@ fun ProductScreen(
                                                 colors = colors,
                                                 selectedId = state.selectedColorId,
                                                 onSelect = viewModel::selectColor,
-                                                productImages = product.images,
+                                                productImages = gallery,
                                             )
                                         }
                                         if (sizes.isNotEmpty() && colors.isNotEmpty()) {
@@ -756,7 +775,7 @@ fun ProductScreen(
             // that was tapped and goes back into it.
             viewerPage?.let { page ->
                 HeroViewer(
-                    images = product?.images.orEmpty(),
+                    images = gallery,
                     initialPage = page,
                     origin = viewerOrigin,
                     onClose = { viewerPage = null },

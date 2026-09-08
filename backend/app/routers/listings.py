@@ -102,6 +102,7 @@ def create_listing(
     if not payload.images:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("images_required"))
     _sizes_are_consistent(payload)
+    _colours_have_photographs(payload.colors)
 
     product = Product(
         # The seller does not think in SKUs and should not have to invent a
@@ -299,7 +300,114 @@ def get_listing(
     return _listing_out(session, product, seller)
 
 
+@router.patch(
+    "/listings/{product_id}",
+    response_model=s.SellerListingOut,
+    summary="Fix my own card — its words, its shelf, its photographs",
+)
+def edit_listing(
+    product_id: int,
+    payload: s.ListingEditIn,
+    user: SellerUser,
+    session: SessionDep,
+) -> s.SellerListingOut:
+    """A seller's own card, corrected by the seller.
+
+    This did not exist, and its absence was the reason a seller who mistyped a
+    name had nothing to do about it: the only editable thing on their product
+    was the price, and every other field belonged to an admin's screen. A shop
+    where fixing a typo means asking somebody at head office is a shop whose
+    cards stay wrong.
+
+    **Theirs and only theirs**, matched on ``proposed_by_id``, and a 404 rather
+    than a 403 for somebody else's product: which cards exist in another
+    seller's shop is not a fact we owe them.
+
+    Allowed in every stage, including ``on_sale``. A card in the shop with the
+    wrong description is worse than one being edited, and the alternative —
+    withdraw, fix, resubmit, wait for a recount — would mean nobody ever fixes
+    anything. A refused card is the case this matters most for: the refusal
+    reason says what to fix and this is the door to fix it through.
+
+    What it does not touch: the price, the stock, the status, and the colours.
+    The first three have owners of their own. The colours are the goods
+    themselves — a colour is a row on a shelf with a count against it, so
+    adding or removing one is a supply or a removal, not an edit.
+    """
+    seller = _own_seller(session, user)
+    product = session.get(Product, product_id)
+    if product is None or product.proposed_by_id != seller.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
+
+    if payload.category_slug is not None:
+        product.category_id = _category(session, payload.category_slug).id
+
+    for field in ("title", "subtitle", "description"):
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(product, field, value.strip())
+    if payload.weight_grams is not None:
+        product.weight_grams = payload.weight_grams
+
+    if payload.images is not None:
+        # A card with no picture is a card nobody taps, which is the same rule
+        # creation has — so an edit may reorder and replace the list but not
+        # empty it.
+        if not payload.images:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, i18n.label("images_required")
+            )
+        for row in session.exec(
+            select(ProductImage).where(ProductImage.product_id == product.id)
+        ).all():
+            session.delete(row)
+        for order, path in enumerate(payload.images):
+            session.add(ProductImage(product_id=product.id, url=path, sort=order))
+
+    audit.record(
+        session,
+        actor=user,
+        action="listing.edit",
+        entity="product",
+        entity_id=product.id,
+        field="listing",
+        old=None,
+        new=", ".join(
+            name
+            for name in ("title", "subtitle", "description", "category_slug",
+                         "weight_grams", "images")
+            if getattr(payload, name) is not None
+        ),
+    )
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+    return _listing_out(session, product, seller)
+
+
 # -------------------------------------------------------------------- helpers
+
+
+def _colours_have_photographs(colours: list[s.ListingColorIn]) -> None:
+    """A colour without a photograph is not a colour anybody can choose.
+
+    The shopper's page swaps the picture when a colour is tapped — that is the
+    whole point of having colours on a card. A swatch with no picture behind it
+    leaves the hero showing the previous colour, so the customer taps "black",
+    sees a white shirt, and either buys the wrong thing or does not buy. The
+    hex circle is a label for the picture, not a substitute for it.
+
+    So the rule is the same one the card itself has for images: it is refused
+    at the door rather than accepted and worked around downstream. Which
+    colour is named, because a seller with eight of them should not have to
+    guess which one the message is about.
+    """
+    missing = [c.label.strip() for c in colours if not (c.image_url or "").strip()]
+    if missing:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            i18n.label("colour_needs_photo", colours=", ".join(missing)),
+        )
 
 
 def _sizes_are_consistent(payload: s.ListingCreateIn) -> None:

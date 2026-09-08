@@ -39,6 +39,17 @@ export const t = {
   productsEmptyHint:
     "Tovarni kiritib, omborga topshirasiz. Ombor sanab qabul qilgach, tovar ilovada ko'rinadi.",
   onHand: "Omborda",
+  status: "Holat",
+  cardDetails: "Tovar ma'lumotlari",
+  edit: "Tahrirlash",
+  save: "Saqlash",
+  cardSaved: "Saqlandi",
+  primaryImage: "Asosiy",
+  imagesHint: "Birinchi rasm — kartochkaning asosiy rasmi. Kamida bitta kerak.",
+  all: "Hammasi",
+  searchProducts: "Nomi yoki SKU bo'yicha qidirish",
+  nothingFound: "Topilmadi",
+  nothingFoundHint: "Boshqa so'z bilan qidirib ko'ring yoki filtrni olib tashlang.",
   declaredShort: "Topshirildi",
   willSend: "Jami omborga topshiriladi",
   stock: "O'lchamlar va soni",
@@ -60,8 +71,19 @@ export const t = {
   addImage: "Rasm qo'shish",
   colors: "Ranglar",
   addColor: "Rang qo'shish",
-  colorLabel: "Rang nomi",
-  colorValue: "Rang kodi",
+  colorLabel: "Rangni tanlang",
+  colorName: "Rang nomi",
+  colorNotChosen: "Rang tanlanmagan",
+  otherColor: "Boshqa rang",
+  removeColor: "Rangni olib tashlash",
+  colorPhoto: "Shu rangdagi rasm",
+  colorPhotoHint:
+    "Majburiy. Xaridor rangni tanlaganda tepadagi rasm shu rasmga o'zgaradi — " +
+    "rasmsiz rang tanlansa, xaridor boshqa rangning rasmini ko'rib qoladi.",
+  addPhoto: "Rasm qo'shish",
+  removePhoto: "Rasmni olib tashlash",
+  uploadFailed: "Rasm yuklanmadi",
+  colorNeedsPhoto: "Har rangga rasm qo'shing",
   sizes: "O'lchamlar",
   addSize: "O'lcham qo'shish",
   sizeLabel: "O'lcham",
@@ -128,4 +150,20 @@ export const removalStatus: Record<string, string> = {
   ready: "Tayyor",
   collected: "Olib ketildi",
   cancelled: "Bekor qilindi",
+}
+
+/**
+ * The stage, in one word, for a filter chip.
+ *
+ * Short forms of what the server sends in `stage_label`: that field is a
+ * phrase meant to be read on a row ("Yig'ildi — kuryer kutilmoqda"), and a
+ * chip has room for a word and a number.
+ */
+export const stageWord: Record<string, string> = {
+  rejected: "Rad etilgan",
+  awaiting_warehouse: "Kutilmoqda",
+  in_warehouse: "Omborda",
+  on_sale: "Sotuvda",
+  sold_out: "Tugagan",
+  archived: "Arxivda",
 }

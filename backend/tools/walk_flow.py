@@ -205,6 +205,11 @@ def main() -> int:
                 "colors": [{
                     "label": "Oq",
                     "value": "#FFFFFF",
+                    # Its own photograph, because a colour with none is
+                    # refused: the shopper's page swaps the picture when a
+                    # swatch is tapped, and a swatch with nothing behind it
+                    # shows them the previous colour.
+                    "image_url": api.upload_png("seller"),
                     "sizes": [
                         {"label": "S", "quantity": 10},
                         {"label": "M", "quantity": 15},
@@ -399,11 +404,13 @@ def main() -> int:
         api.ok("POST", f"/staff/returns/{made['id']}/approve", who="operator", json_body={})
 
         # The goods come home. A run needs a courier named up front — the
-        # collection is somebody's errand, not an open request.
-        couriers = api.ok("GET", "/staff/couriers", who="operator")
-        crows = couriers if isinstance(couriers, list) else couriers.get("items", [])
+        # collection is somebody's errand, not an open request — and it has to
+        # be *this* walk's courier, not whoever `/staff/couriers` lists first:
+        # a run belongs to the person it was made for, and collecting somebody
+        # else's is a 403.
         run = api.ok("POST", "/staff/pickups", who="operator",
-                     json_body={"courier_id": crows[0]["id"],
+                     json_body={"courier_id": api.ok("GET", "/staff/me",
+                                                     who="courier")["id"],
                                 "return_request_ids": [made["id"]]})
         state["run"] = run["id"]
         api.ok("POST", f"/courier/pickups/{run['id']}/collect", who="courier",
@@ -446,6 +453,7 @@ def main() -> int:
                 "price": 150000,
                 "images": [picture],
                 "colors": [{"label": "Qora", "value": "#000000",
+                            "image_url": api.upload_png("seller"),
                             "sizes": [{"label": "48", "quantity": 4}]}],
             },
         )
@@ -496,10 +504,9 @@ def main() -> int:
         # A collection run is still somebody's errand — the operator sends a
         # van for approved returns, which is not the same act as a courier
         # choosing a delivery off the board.
-        couriers = api.ok("GET", "/staff/couriers", who="operator")
-        crows = couriers if isinstance(couriers, list) else couriers.get("items", [])
         run = api.ok("POST", "/staff/pickups", who="operator",
-                     json_body={"courier_id": crows[0]["id"],
+                     json_body={"courier_id": api.ok("GET", "/staff/me",
+                                                     who="courier")["id"],
                                 "return_request_ids": [back["id"]]})
         api.ok("POST", f"/courier/pickups/{run['id']}/collect", who="courier",
                json_body={"lines": [{"return_request_id": back["id"], "collected": True}]},
@@ -642,6 +649,74 @@ def main() -> int:
                     theirs["delivered_total"] == 0, theirs)
         return (f"{after['delivered_today']} bugun · "
                 f"{after['earned_total']:,} so'm jami".replace(",", " "))
+
+    # ------------------------------------------------------------ 18
+    @walk("Rasmsiz rang qabul qilinmaydi — sotuvchi qaysi rang ekanini biladi")
+    def _():
+        picture = api.upload_png("seller")
+        refused, why = api.call(
+            "POST", "/staff/catalog/listings", who="seller",
+            json_body={
+                "title": "Rasmsiz rang",
+                "category_slug": state["category"],
+                "price": 60000,
+                "images": [picture],
+                "colors": [
+                    {"label": "Qora", "value": "#000000",
+                     "image_url": api.upload_png("seller"),
+                     "sizes": [{"label": "M", "quantity": 2}]},
+                    # This one has none.
+                    {"label": "Ko'k", "value": "#2563C9",
+                     "sizes": [{"label": "M", "quantity": 2}]},
+                ],
+            },
+        )
+        walk.expect("a colour with no photograph is refused", refused == 400,
+                    (refused, why))
+        detail = (why or {}).get("detail", "") if isinstance(why, dict) else str(why)
+        walk.expect("and the refusal names the colour, not just the rule",
+                    "Ko'k" in detail and "Qora" not in detail, detail)
+        return "400 · \"Ko'k\""
+
+    # ------------------------------------------------------------ 19
+    @walk("Savatda va buyurtmada tanlangan rangning rasmi ko'rinadi")
+    def _():
+        page = api.ok("GET", f"/products/{state['product']}")
+        colour = next(v for v in page["variants"] if v["kind"] == "color")
+        walk.expect("the colour carries its own photograph",
+                    bool(colour.get("image_url")), colour)
+        size = next(
+            v for v in page["variants"]
+            if v["kind"] == "size" and v["in_stock"]
+            and v.get("parent_id") in (None, colour["id"])
+        )
+
+        api.ok("DELETE", "/cart", who="customer", expect=(200, 204))
+        api.ok("POST", "/cart/items", who="customer",
+               json_body={"product_id": state["product"],
+                          "color_variant_id": colour["id"],
+                          "variant_id": size["id"], "quantity": 1})
+        basket = api.ok("GET", "/cart", who="customer")
+        line = (basket.get("items") or [None])[0]
+        walk.expect("the basket line shows the colour's photograph, not the cover",
+                    line and line["image_url"] and
+                    colour["image_url"].split("/")[-1] in line["image_url"],
+                    (colour["image_url"], line and line["image_url"]))
+
+        points = api.ok("GET", "/delivery/pickup-points", who="customer")
+        pts = points if isinstance(points, list) else points.get("items", [])
+        order = api.ok("POST", "/orders", who="customer",
+                       json_body={"pickup_point_id": pts[0]["id"],
+                                  "payment_method": "cash",
+                                  "recipient_name": "Muhammadsodiq",
+                                  "recipient_phone": "+998901234567"})
+        full = api.ok("GET", f"/orders/{order['id']}", who="customer")
+        row = (full.get("items") or [None])[0]
+        walk.expect("and so does the order, for as long as it exists",
+                    row and row["image_url"] and
+                    colour["image_url"].split("/")[-1] in row["image_url"],
+                    (colour["image_url"], row and row["image_url"]))
+        return "rang rasmi savatda ham, buyurtmada ham"
 
     print()
     if walk.failures:
