@@ -14,6 +14,7 @@ from app.models import (
     Brand,
     CartItem,
     Category,
+    DeliveryAttempt,
     DeliverySlot,
     Favorite,
     Offer,
@@ -565,7 +566,14 @@ def order_summary(session: Session, o: Order) -> s.OrderSummaryOut:
     )
 
 
-def order_out(session: Session, o: Order) -> s.OrderOut:
+def order_out(session: Session, o: Order, *, with_attempts: bool = False) -> s.OrderOut:
+    """One order, in the shape both the customer and staff read.
+
+    ``with_attempts`` is off by default: the doors a courier knocked on are
+    staff's business, and a customer's own timeline already says the order is
+    on its way. An operator asks it on, because deciding whether to give up on
+    a delivery is exactly the decision the list of knocks exists for.
+    """
     summary = order_summary(session, o)
     items = session.exec(select(OrderItem).where(OrderItem.order_id == o.id)).all()
     events = session.exec(
@@ -611,12 +619,50 @@ def order_out(session: Session, o: Order) -> s.OrderOut:
             )
             for e in events
         ],
+        attempts=_attempts_out(session, o) if with_attempts else [],
     )
 
 
 # Where the order numbers start. Chosen so the first order of a fresh
 # deployment does not look like the first order ever placed.
 ORDER_CODE_BASE = 104_688
+
+
+def _attempts_out(session: Session, o: Order) -> list[s.DeliveryAttemptOut]:
+    """Every knock at this order's door, oldest first, with the courier named.
+
+    Named rather than numbered: an operator ringing a customer to ask what
+    happened wants to know which of their couriers to ask next, and a
+    ``courier_id`` is not something anybody says out loud.
+    """
+    rows = session.exec(
+        select(DeliveryAttempt)
+        .where(DeliveryAttempt.order_id == o.id)
+        .order_by(col(DeliveryAttempt.happened_at))
+    ).all()
+    if not rows:
+        return []
+    names = {
+        user.id: user.full_name
+        for user in session.exec(
+            select(User).where(col(User.id).in_({row.courier_id for row in rows}))
+        ).all()
+    }
+    return [
+        s.DeliveryAttemptOut(
+            id=row.id,
+            order_id=row.order_id,
+            order_code=o.code,
+            courier_name=names.get(row.courier_id, ""),
+            result=row.result,
+            reason=row.reason,
+            recipient_name=row.recipient_name,
+            photo_url=media_url(row.photo_url) or "",
+            cash_collected=row.cash_collected,
+            happened_at=row.happened_at,
+        )
+        for row in rows
+    ]
 
 
 def next_order_code(session: Session) -> str:

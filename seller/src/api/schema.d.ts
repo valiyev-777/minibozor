@@ -3005,6 +3005,12 @@ export interface components {
             /** Size Blocked Reason */
             size_blocked_reason: string;
         };
+        /**
+         * AttemptResult
+         * @description How one knock at one door went.
+         * @enum {string}
+         */
+        AttemptResult: "delivered" | "failed";
         /** BannerOut */
         BannerOut: {
             /** Id */
@@ -3459,6 +3465,45 @@ export interface components {
              * @default
              */
             note: string;
+        };
+        /**
+         * DeliveryAttemptOut
+         * @description One knock at one door.
+         *
+         *     The courier's own list carries a *count* and the last reason, which is
+         *     what somebody about to knock needs. An operator is answering a different
+         *     question — has this been tried enough to give up on — and a number cannot
+         *     answer it: three attempts at one wrong buzzer and three on three different
+         *     days are the same count and different decisions. So this is the row, with
+         *     who knocked and when.
+         *
+         *     ``courier_name`` and not ``courier_id``: an operator ringing the customer
+         *     to ask what happened wants to know which of their couriers to ask next,
+         *     and an id is not something anybody says out loud.
+         */
+        DeliveryAttemptOut: {
+            /** Id */
+            id: number;
+            /** Order Id */
+            order_id: number;
+            /** Order Code */
+            order_code: string;
+            /** Courier Name */
+            courier_name: string;
+            result: components["schemas"]["AttemptResult"];
+            /** Reason */
+            reason: string;
+            /** Recipient Name */
+            recipient_name: string;
+            /** Photo Url */
+            photo_url: string | null;
+            /** Cash Collected */
+            cash_collected: number;
+            /**
+             * Happened At
+             * Format: date-time
+             */
+            happened_at: string;
         };
         /**
          * DeliveryKind
@@ -4033,6 +4078,11 @@ export interface components {
             items: components["schemas"]["OrderItemOut"][];
             /** Events */
             events: components["schemas"]["OrderEventOut"][];
+            /**
+             * Attempts
+             * @default []
+             */
+            attempts: components["schemas"]["DeliveryAttemptOut"][];
         };
         /**
          * OrderStatus

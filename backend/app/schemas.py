@@ -555,6 +555,33 @@ class OrderSummaryOut(BaseModel):
     can_track: bool
 
 
+class DeliveryAttemptOut(BaseModel):
+    """One knock at one door.
+
+    The courier's own list carries a *count* and the last reason, which is
+    what somebody about to knock needs. An operator is answering a different
+    question — has this been tried enough to give up on — and a number cannot
+    answer it: three attempts at one wrong buzzer and three on three different
+    days are the same count and different decisions. So this is the row, with
+    who knocked and when.
+
+    ``courier_name`` and not ``courier_id``: an operator ringing the customer
+    to ask what happened wants to know which of their couriers to ask next,
+    and an id is not something anybody says out loud.
+    """
+
+    id: int
+    order_id: int
+    order_code: str
+    courier_name: str
+    result: AttemptResult
+    reason: str
+    recipient_name: str
+    photo_url: str | None
+    cash_collected: int
+    happened_at: datetime
+
+
 class OrderOut(OrderSummaryOut):
     delivery_kind: DeliveryKind
     address_line: str
@@ -572,6 +599,15 @@ class OrderOut(OrderSummaryOut):
     discount: int
     items: list[OrderItemOut]
     events: list[OrderEventOut]
+    # Every knock, and empty for a customer looking at their own order — the
+    # doors that were tried are staff's business and the customer's timeline
+    # already says "on its way".
+    #
+    # It lives on the shared shape rather than a staff-only one because the
+    # operator's detail screen *is* the customer's shape (see
+    # `operations.get_order`), and the alternative was a second rendering of
+    # an order to keep in step with this one.
+    attempts: list[DeliveryAttemptOut] = []
 
 
 class CheckoutIn(BaseModel):
@@ -1885,18 +1921,6 @@ class FailedIn(BaseModel):
 
     reason: str = Field(min_length=1, max_length=200)
     photo_url: str = Field("", max_length=300)
-
-
-class DeliveryAttemptOut(BaseModel):
-    id: int
-    order_id: int
-    order_code: str
-    result: AttemptResult
-    reason: str
-    recipient_name: str
-    photo_url: str | None
-    cash_collected: int
-    happened_at: datetime
 
 
 class PickupLineOut(BaseModel):

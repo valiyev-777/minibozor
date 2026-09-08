@@ -524,7 +524,10 @@ def get_order(
     order = _order(session, order_id)
     if user.role is UserRole.SELLER and order.id not in _my_order_ids(session, user):
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("order_not_found"))
-    return sv.order_out(session, order)
+    # With the knocks on it. A courier who has been turned away three times
+    # does not decide to give up — an operator does, and this list is what
+    # they decide on. A seller sees them too: their goods are at that door.
+    return sv.order_out(session, order, with_attempts=True)
 
 
 def _my_order_ids(session: SessionDep, user: User) -> list[int]:

@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom"
 import { ArrowLeft, Ban, Truck } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/api/client"
-import type { Courier, Order, OrderDetail } from "@/api/types"
+import type { Courier, DeliveryAttempt, Order, OrderDetail } from "@/api/types"
 import { Badge } from "@/ui/badge"
 import { Button } from "@/ui/button"
 import { Input, Label, Select, Textarea } from "@/ui/field"
@@ -136,6 +136,15 @@ export function OrderPage() {
               ))}
             </Panel>
 
+            {/* Every knock, when there has been one. Absent rather than an
+                empty box on the ordinary order that arrived first time: a
+                heading with nothing under it reads as a thing gone missing.
+
+                It sits above the operator's controls on purpose — deciding
+                to give up is made from this list, and a decision should be
+                below what it is made from. */}
+            {full.attempts.length ? <Attempts rows={full.attempts} /> : null}
+
             {role === "warehouse" ? null : (
               <Operator orderId={full.id} canCancel={Boolean(row.data?.next_statuses.includes("cancelled"))} />
             )}
@@ -143,6 +152,40 @@ export function OrderPage() {
         )}
       </Async>
     </>
+  )
+}
+
+/**
+ * The doors that were knocked on, oldest first.
+ *
+ * A count would not do. Three attempts at one wrong buzzer and three on three
+ * different days are the same number and different decisions, so each row
+ * carries who went, when, and the sentence they wrote — which is the whole
+ * reason `POST /courier/orders/{id}/failed` makes a reason mandatory.
+ */
+function Attempts({ rows }: { rows: DeliveryAttempt[] }) {
+  return (
+    <Panel title={`${t.attempts} · ${num(rows.length)}`}>
+      {rows.map((row) => (
+        <Row key={row.id} className="sm:flex-nowrap">
+          <Badge tone={row.result === "delivered" ? "good" : "danger"}>
+            {row.result === "delivered" ? t.attemptDelivered : t.attemptFailed}
+          </Badge>
+          <div className="min-w-0 flex-1">
+            <p className="text-ink">{row.reason || row.recipient_name || "—"}</p>
+            <p className="text-[length:var(--text-micro)] text-ink-faint">
+              {row.courier_name}
+              {row.result === "delivered" && row.recipient_name
+                ? ` · ${t.handedTo}: ${row.recipient_name}`
+                : ""}
+            </p>
+          </div>
+          <span className="w-40 text-right text-[length:var(--text-small)] text-ink-soft">
+            {moment(row.happened_at)}
+          </span>
+        </Row>
+      ))}
+    </Panel>
   )
 }
 
