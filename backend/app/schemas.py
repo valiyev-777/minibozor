@@ -24,8 +24,10 @@ from app.models import (
     ProductStatus,
     RemovalReason,
     RemovalStatus,
+    ReturnInspection,
     ReturnStatus,
     ReviewStatus,
+    SellerReturnDecision,
     SettlementStatus,
     ShiftStatus,
     StatementLineKind,
@@ -851,6 +853,18 @@ class SupplyReceiveLineIn(BaseModel):
 class SupplyReceiveIn(BaseModel):
     lines: list[SupplyReceiveLineIn] = Field(min_length=1, max_length=500)
     note: str = ""
+
+
+class SupplyCancelIn(BaseModel):
+    """Why a batch is not being received.
+
+    Required, and the same shape whoever sends it: a seller calling off a
+    pallet writes what changed, the warehouse refusing one writes what was
+    wrong with it. When the batch was a product's first, this sentence is the
+    entire answer the seller gets about why their product is not in the shop.
+    """
+
+    reason: str = Field(min_length=1, max_length=500)
 
 
 class SupplyLineOut(StockLineOut):
@@ -2224,6 +2238,17 @@ class PickupCollectIn(BaseModel):
 
 
 class StaffReturnOut(BaseModel):
+    """One return request, read by an operator, the warehouse or the seller.
+
+    The last four fields are the reason all three read the same shape. A
+    return is answered twice after the money — the warehouse says what
+    arrived, the seller says what to do about it — and every screen involved
+    needs to see both answers to know whose turn it is. ``seller_decisions``
+    carries the moves that are open the way ``next_statuses`` does: a damaged
+    shirt cannot be relisted, and that rule belongs here rather than written
+    again in three clients.
+    """
+
     id: int
     order_id: int
     order_code: str
@@ -2238,6 +2263,41 @@ class StaffReturnOut(BaseModel):
     refund_amount: int
     next_statuses: list[ReturnStatus]
     created_at: datetime
+
+    # Whose goods these are, so a seller's list can say and an operator's can
+    # tell two sellers' parcels apart.
+    seller_id: int | None = None
+    seller_name: str = ""
+    product_title: str = ""
+
+    inspection: ReturnInspection | None = None
+    inspection_label: str = ""
+    inspection_note: str = ""
+    inspected_at: datetime | None = None
+
+    seller_decision: SellerReturnDecision | None = None
+    seller_decision_label: str = ""
+    seller_decisions: list[SellerReturnDecision] = []
+    decision_due_at: datetime | None = None
+    decided_at: datetime | None = None
+    relisted: bool = False
+
+
+class ReturnInspectIn(BaseModel):
+    """The warehouse's verdict on a parcel that came back.
+
+    ``result`` has no default. Somebody has to look at the shirt, and a
+    default here would be a verdict arrived at by pressing Save.
+    """
+
+    result: ReturnInspection
+    note: str = ""
+
+
+class SellerDecisionIn(BaseModel):
+    """The seller's answer: sell it again, or come and get it."""
+
+    decision: SellerReturnDecision
 
 
 class StaffReviewOut(BaseModel):

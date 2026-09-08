@@ -29,12 +29,16 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
 from app import audit, i18n, inventory
+from app import returns as rt
 from app import schemas as s
 from app import services as sv
 from app import transitions as tr
+from app.core.config import settings
 from app.deps import (
     OperatorUser,
     PickupHandler,
+    ReturnViewer,
+    SellerUser,
     SessionDep,
     WarehouseUser,
 )
@@ -50,10 +54,13 @@ from app.models import (
     PickupRun,
     PickupRunStatus,
     Product,
+    ReturnInspection,
     ReturnRequest,
     ReturnStatus,
     Review,
     ReviewStatus,
+    Seller,
+    SellerReturnDecision,
     ShiftStatus,
     User,
     UserRole,
@@ -73,25 +80,203 @@ router = APIRouter(prefix="/staff", tags=["staff"])
 @router.get(
     "/returns",
     response_model=list[s.StaffReturnOut],
-    summary="Return requests waiting for a decision",
+    summary="Return requests waiting for somebody",
 )
 def list_returns(
-    user: OperatorUser,
+    user: ReturnViewer,
     session: SessionDep,
     status_filter: ReturnStatus | None = Query(
         None, alias="status", description="default: everything, oldest first"
     ),
+    awaiting: str | None = Query(
+        None,
+        description="'inspection' — arrived, nobody has looked; "
+        "'decision' — inspected, the seller has not answered",
+    ),
 ) -> list[s.StaffReturnOut]:
+    """One list, read by four roles, filtered by whose turn it is.
+
+    ``awaiting`` rather than a screen per role, because the question every
+    screen asks is the same one — what is waiting for me — and it is a
+    property of the row, not of the reader.
+    """
+    # A seller's deadline expires whether or not anybody is watching, so the
+    # overdue ones are settled before the list is read rather than when a
+    # scheduler we do not have gets round to it.
+    rt.sweep_overdue(session)
+
     stmt = select(ReturnRequest)
     if status_filter is not None:
         stmt = stmt.where(ReturnRequest.status == status_filter)
+    if awaiting == "inspection":
+        stmt = stmt.where(
+            col(ReturnRequest.status).in_(
+                [ReturnStatus.APPROVED, ReturnStatus.REFUNDED]
+            ),
+            col(ReturnRequest.inspection).is_(None),
+        )
+    elif awaiting == "decision":
+        stmt = stmt.where(
+            col(ReturnRequest.inspection).is_not(None),
+            col(ReturnRequest.seller_decision).is_(None),
+        )
     rows = session.exec(stmt.order_by(col(ReturnRequest.created_at))).all()
-    return [_return_out(session, r) for r in rows]
+    return [_return_out(session, r) for r in _mine(session, user, rows)]
 
 
 @router.get("/returns/{return_id}", response_model=s.StaffReturnOut)
-def get_return(return_id: int, user: OperatorUser, session: SessionDep) -> s.StaffReturnOut:
-    return _return_out(session, _return(session, return_id))
+def get_return(
+    return_id: int, user: ReturnViewer, session: SessionDep
+) -> s.StaffReturnOut:
+    request = _return(session, return_id)
+    _must_be_mine(session, user, request)
+    return _return_out(session, request)
+
+
+@router.post(
+    "/returns/{return_id}/inspect",
+    response_model=s.StaffReturnOut,
+    summary="What the warehouse found in the parcel",
+)
+def inspect_return(
+    return_id: int,
+    payload: s.ReturnInspectIn,
+    user: WarehouseUser,
+    session: SessionDep,
+) -> s.StaffReturnOut:
+    """Whole or damaged, and the seller is asked what to do next.
+
+    Only once. A second verdict on the same parcel is two people disagreeing
+    about a shirt one of them is holding, and the way to settle that is a
+    conversation rather than an overwrite — the first answer is the one the
+    seller was told and the one their deadline runs from.
+
+    The deadline is set here and only for goods that came back whole, because
+    only those have an answer that can expire: ``sweep_overdue`` relists what
+    nobody decided, and nothing relists something damaged.
+    """
+    request = _return(session, return_id)
+    if request.status not in (ReturnStatus.APPROVED, ReturnStatus.REFUNDED):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("return_not_here_yet")
+        )
+    if request.inspection is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("return_already_inspected")
+        )
+
+    request.inspection = payload.result
+    request.inspection_note = payload.note.strip()
+    request.inspected_at = sv.utcnow()
+    request.inspected_by_id = user.id
+    if payload.result is ReturnInspection.OK:
+        request.decision_due_at = rt.deadline()
+    session.add(request)
+
+    audit.record(
+        session,
+        actor=user,
+        action="return.inspect",
+        entity="return_request",
+        entity_id=request.id,
+        field="inspection",
+        old=None,
+        new=payload.result,
+        note=request.inspection_note,
+    )
+
+    order = session.get(Order, request.order_id)
+    code = order.code if order else ""
+    if payload.result is ReturnInspection.OK:
+        text = i18n.label(
+            "return_inspected_ok_note",
+            code=code,
+            days=settings.return_decision_days,
+        )
+    else:
+        text = i18n.label(
+            "return_inspected_damaged_note",
+            code=code,
+            note=request.inspection_note or i18n.label("inspection_damaged"),
+        )
+    rt.notify_seller(
+        session, request, title=i18n.label("return_inspected"), text=text
+    )
+
+    session.commit()
+    session.refresh(request)
+    return _return_out(session, request)
+
+
+@router.post(
+    "/returns/{return_id}/decide",
+    response_model=s.StaffReturnOut,
+    summary="The seller says what to do with goods that came back",
+)
+def decide_return(
+    return_id: int,
+    payload: s.SellerDecisionIn,
+    user: SellerUser,
+    session: SessionDep,
+) -> s.StaffReturnOut:
+    """Back on sale, or the seller collects it.
+
+    ``relist`` moves the shelf through ``app.returns.relist``, which is
+    guarded: an operator who already refunded with ``restock: true`` has
+    moved it, and one shirt back is one shirt back. The decision is recorded
+    either way — "the seller chose to sell it again" is a fact about the
+    seller, not about the ledger, and it is true whichever call moved the
+    count.
+
+    ``take_back`` moves nothing. The goods are off the shelf already and stay
+    off it; leaving the warehouse is a removal order, which is its own flow
+    with its own paperwork.
+    """
+    request = _return(session, return_id)
+    _must_be_mine(session, user, request)
+
+    if request.inspection is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("return_not_inspected")
+        )
+    if request.seller_decision is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("return_already_decided")
+        )
+    if (
+        payload.decision is SellerReturnDecision.RELIST
+        and request.inspection is not ReturnInspection.OK
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("relist_needs_whole_goods")
+        )
+
+    request.seller_decision = payload.decision
+    request.decided_at = sv.utcnow()
+    session.add(request)
+
+    audit.record(
+        session,
+        actor=user,
+        action="return.decide",
+        entity="return_request",
+        entity_id=request.id,
+        field="seller_decision",
+        old=None,
+        new=payload.decision,
+        note=i18n.label(f"decision_{payload.decision.value}"),
+    )
+    if payload.decision is SellerReturnDecision.RELIST:
+        rt.relist(
+            session,
+            request,
+            actor=user,
+            note=i18n.label("decision_relist"),
+        )
+
+    session.commit()
+    session.refresh(request)
+    return _return_out(session, request)
 
 
 @router.post(
@@ -205,13 +390,10 @@ def _decide_return(
             note=payload.note or payload.reason,
         )
         if restock:
-            inventory.restock_returned(
-                session,
-                lines,
-                actor=actor,
-                action="return.restock",
-                note=payload.note,
-            )
+            # Through ``app.returns`` rather than straight at the inventory:
+            # the seller may also choose to relist the same parcel, and the
+            # guard in there is what keeps one shirt from coming back twice.
+            rt.relist(session, request, actor=actor, note=payload.note)
 
     request.status = target
     if target is ReturnStatus.REJECTED:
@@ -248,15 +430,13 @@ def _decide_return(
 def _returned_lines(
     session: SessionDep, request: ReturnRequest, order: Order | None
 ) -> list[OrderItem]:
-    """What is coming back: the line the request named, or the whole order.
+    """What is coming back — see ``app.returns.returned_lines``.
 
-    The lines rather than a figure, because the same answer settles both
-    questions a refund asks — how much money goes back, and which counts do.
+    Kept as a name here because three things in this file ask the question and
+    the answer moved to ``app.returns`` when the warehouse and the seller
+    started asking it too.
     """
-    if request.order_item_id:
-        item = session.get(OrderItem, request.order_item_id)
-        return [item] if item is not None else []
-    return inventory.order_items(session, order) if order else []
+    return rt.returned_lines(session, request, order)
 
 
 def _refund_amount(
@@ -967,6 +1147,15 @@ def _order(session: SessionDep, order_id: int) -> Order:
 def _return_out(session: SessionDep, r: ReturnRequest) -> s.StaffReturnOut:
     order = session.get(Order, r.order_id)
     customer = session.get(User, r.user_id)
+    seller = rt.seller_of(session, r)
+    lines = rt.returned_lines(session, r, order)
+    product = None
+    for line in lines:
+        if line.product_id:
+            product = session.get(Product, line.product_id)
+            if product is not None:
+                break
+
     return s.StaffReturnOut(
         id=r.id,
         order_id=r.order_id,
@@ -982,7 +1171,74 @@ def _return_out(session: SessionDep, r: ReturnRequest) -> s.StaffReturnOut:
         refund_amount=r.refund_amount,
         next_statuses=tr.next_states(tr.RETURN_TRANSITIONS, r.status),
         created_at=r.created_at,
+        seller_id=seller.id if seller else None,
+        seller_name=seller.name if seller else "",
+        product_title=product.title if product else "",
+        inspection=r.inspection,
+        inspection_label=(
+            i18n.label(f"inspection_{r.inspection.value}") if r.inspection else ""
+        ),
+        inspection_note=r.inspection_note,
+        inspected_at=r.inspected_at,
+        seller_decision=r.seller_decision,
+        seller_decision_label=(
+            i18n.label(f"decision_{r.seller_decision.value}")
+            if r.seller_decision
+            else ""
+        ),
+        seller_decisions=_open_decisions(r),
+        decision_due_at=r.decision_due_at,
+        decided_at=r.decided_at,
+        relisted=r.relisted_at is not None,
     )
+
+
+def _open_decisions(r: ReturnRequest) -> list[SellerReturnDecision]:
+    """Which decisions the seller may still make, from the row's own state.
+
+    The same reasoning as ``next_statuses``: the rule that damaged goods do
+    not go back on sale is enforced in ``decide_return``, and a client that
+    draws its buttons from a second copy of that rule is a client that will
+    eventually offer a button the server refuses.
+    """
+    if r.inspection is None or r.seller_decision is not None:
+        return []
+    if r.inspection is ReturnInspection.OK:
+        return [SellerReturnDecision.RELIST, SellerReturnDecision.TAKE_BACK]
+    return [SellerReturnDecision.TAKE_BACK]
+
+
+def _mine(
+    session: SessionDep, user: User, rows: list[ReturnRequest]
+) -> list[ReturnRequest]:
+    """Only the rows this reader is entitled to.
+
+    Everybody but a seller reads all of them: an operator decides the money on
+    any request, and the warehouse holds the parcels whoever sent them. A
+    seller reads the ones on their own goods and nothing else.
+    """
+    if user.role is not UserRole.SELLER:
+        return list(rows)
+    seller = session.exec(select(Seller).where(Seller.user_id == user.id)).first()
+    if seller is None:
+        return []
+    mine = []
+    for row in rows:
+        owner = rt.seller_of(session, row)
+        if owner is not None and owner.id == seller.id:
+            mine.append(row)
+    return mine
+
+
+def _must_be_mine(session: SessionDep, user: User, request: ReturnRequest) -> None:
+    """404 rather than 403 for another seller's parcel.
+
+    A seller asking for an id that is not theirs should not be able to tell
+    "there is no such request" from "there is, and it is somebody else's" —
+    the second sentence is a fact about a competitor's returns.
+    """
+    if not _mine(session, user, [request]):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("return_not_found"))
 
 
 def _review_out(session: SessionDep, r: Review) -> s.StaffReviewOut:

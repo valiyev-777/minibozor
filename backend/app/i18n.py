@@ -815,6 +815,109 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "По {code} возвращено {amount} сум",
         "en": "{amount} UZS returned for {code}",
     },
+    # ------------------------------------------- the goods after the refund
+    #
+    # Two people are told two different things about the same parcel: the
+    # warehouse's verdict goes to the seller, because it is the seller who has
+    # to answer it, and the answer has a deadline on it. The customer is not
+    # in this conversation at all — their money is already back.
+    "inspection_ok": {
+        "uz": "Butun",
+        "ru": "Целый",
+        "en": "Whole",
+    },
+    "inspection_damaged": {
+        "uz": "Buzilgan",
+        "ru": "Повреждён",
+        "en": "Damaged",
+    },
+    "decision_relist": {
+        "uz": "Qayta sotuvga",
+        "ru": "Снова в продажу",
+        "en": "Back on sale",
+    },
+    "decision_take_back": {
+        "uz": "Olib ketaman",
+        "ru": "Забираю",
+        "en": "I will collect it",
+    },
+    "return_inspected": {
+        "uz": "Qaytgan tovar tekshirildi",
+        "ru": "Возврат осмотрен",
+        "en": "A return has been inspected",
+    },
+    "return_inspected_ok_note": {
+        "uz": "{code} bo'yicha qaytgan tovar butun. {days} kun ichida qaror "
+              "qilmasangiz, avtomatik qayta sotuvga qo'yiladi.",
+        "ru": "Возврат по {code} целый. Если не решите за {days} дней, он "
+              "автоматически вернётся в продажу.",
+        "en": "The goods returned on {code} are whole. Undecided after "
+              "{days} days, they go back on sale by themselves.",
+    },
+    "return_inspected_damaged_note": {
+        "uz": "{code} bo'yicha qaytgan tovar buzilgan: {note}. Sotuvga "
+              "qo'yilmaydi — olib ketishni tanlang.",
+        "ru": "Возврат по {code} повреждён: {note}. В продажу не пойдёт — "
+              "выберите вывоз.",
+        "en": "The goods returned on {code} came back damaged: {note}. They "
+              "will not go back on sale — choose collection.",
+    },
+    "return_relisted": {
+        "uz": "Tovar qayta sotuvga qo'yildi",
+        "ru": "Товар снова в продаже",
+        "en": "Back on sale",
+    },
+    "return_relisted_by_default": {
+        "uz": "Muddat ichida qaror bo'lmadi — tovar qayta sotuvga qo'yildi",
+        "ru": "Решения не было в срок — товар снова в продаже",
+        "en": "No decision inside the deadline — the goods went back on sale",
+    },
+    "return_decision_expired": {
+        "uz": "Qaror muddati o'tdi",
+        "ru": "Срок решения истёк",
+        "en": "The decision deadline passed",
+    },
+    "return_not_inspected": {
+        "uz": "Tovar hali tekshirilmagan — ombor natijasini kutish kerak",
+        "ru": "Товар ещё не осмотрен — нужен результат склада",
+        "en": "Nobody has looked at the goods yet",
+    },
+    "return_already_inspected": {
+        "uz": "Bu ariza allaqachon tekshirilgan",
+        "ru": "Эта заявка уже осмотрена",
+        "en": "That request has already been inspected",
+    },
+    "return_already_decided": {
+        "uz": "Qaror allaqachon qabul qilingan",
+        "ru": "Решение уже принято",
+        "en": "That has already been decided",
+    },
+    "return_not_here_yet": {
+        "uz": "Tovar hali omborga kelmagan — avval qaytarish tasdiqlanadi",
+        "ru": "Товар ещё не на складе — сначала возврат одобряют",
+        "en": "The goods are not here yet — a return is approved first",
+    },
+    "relist_needs_whole_goods": {
+        "uz": "Buzilgan tovarni sotuvga qaytarib bo'lmaydi",
+        "ru": "Повреждённый товар нельзя вернуть в продажу",
+        "en": "Damaged goods do not go back on sale",
+    },
+    "not_your_return": {
+        "uz": "Bu sizning tovaringiz emas",
+        "ru": "Это не ваш товар",
+        "en": "Those are not your goods",
+    },
+    # a batch the warehouse refused
+    "supply_rejected": {
+        "uz": "Partiya qabul qilinmadi",
+        "ru": "Поставка не принята",
+        "en": "A batch was refused",
+    },
+    "supply_rejected_note": {
+        "uz": "{code} qabul qilinmadi: {reason}",
+        "ru": "{code} не принята: {reason}",
+        "en": "{code} was refused: {reason}",
+    },
     "review_published": {
         "uz": "Sharhingiz e'lon qilindi",
         "ru": "Ваш отзыв опубликован",

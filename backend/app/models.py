@@ -97,6 +97,34 @@ class ReturnStatus(StrEnum):
     REFUNDED = "refunded"
 
 
+class ReturnInspection(StrEnum):
+    """What the warehouse found when it opened the parcel.
+
+    A returned shirt is not one thing: it is either a shirt that can be sold
+    again or a shirt that cannot, and until somebody has looked at it neither
+    the seller nor the shelf can be told which. That is why this is nullable
+    on the request — ``None`` is not a third outcome, it is "nobody has
+    looked yet", and the seller's decision screen is empty until it is set.
+    """
+
+    OK = "ok"              # whole, sellable again
+    DAMAGED = "damaged"    # came back unsellable
+
+
+class SellerReturnDecision(StrEnum):
+    """What the seller wants done with goods that came back.
+
+    Only the seller can answer this: the goods are theirs, and the choice is
+    between the shelf they pay us to hold and a trip to collect them. We do
+    not choose for them — except when they say nothing at all, which
+    ``app.returns.sweep_overdue`` treats as ``relist`` after a deadline
+    because unsellable-by-silence is worse for them than the alternative.
+    """
+
+    RELIST = "relist"        # back on the shelf, on sale again
+    TAKE_BACK = "take_back"  # the seller collects it
+
+
 class VariantKind(StrEnum):
     SIZE = "size"
     COLOR = "color"
@@ -778,6 +806,35 @@ class ReturnRequest(SQLModel, table=True):
     # paid, so with only ``created_at`` a refund granted in February would
     # land in January's account — and January may already be closed.
     refunded_at: datetime | None = None
+
+    # ------------------------------------------------- the goods, after the money
+    #
+    # A refund answers the customer. It says nothing about the shirt, which is
+    # in a box at the warehouse belonging to a seller who has not been asked
+    # anything yet. Two people answer for it in turn and both answers live
+    # here, because "who decided the shirt was damaged" and "who decided not
+    # to sell it again" are the two questions a disputed count comes down to.
+    #
+    # The warehouse first: what arrived.
+    inspection: ReturnInspection | None = Field(default=None, index=True)
+    inspection_note: str = ""
+    inspected_at: datetime | None = None
+    inspected_by_id: int | None = Field(default=None, foreign_key="users.id")
+
+    # Then the seller: what to do about it. ``decision_due_at`` is set by the
+    # inspection, not by the request — the clock starts when there is
+    # something to decide about, and a seller cannot be late answering a
+    # question nobody has asked them.
+    seller_decision: SellerReturnDecision | None = Field(default=None, index=True)
+    decided_at: datetime | None = None
+    decision_due_at: datetime | None = Field(default=None, index=True)
+
+    # And whether the shelf has already been moved for this request, by
+    # whichever of the two paths got there first — a refund that restocked, or
+    # a seller who chose to relist. One shirt back is one shirt back; this is
+    # what stops it being two.
+    relisted_at: datetime | None = None
+
     created_at: datetime = Field(default_factory=utcnow)
 
 

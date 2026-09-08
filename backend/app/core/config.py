@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     otp_dev_code: str = "123456"
 
+    # How long a seller has to say what to do with goods that came back.
+    #
+    # The deadline exists because silence has a cost and somebody pays it
+    # either way: goods sitting undecided are goods nobody can sell and
+    # nobody has collected. So an unanswered question expires into the
+    # answer that costs the seller least — the shirt passed inspection, so it
+    # goes back on sale rather than sitting in a box. A seller who wanted it
+    # back can still ask for a removal.
+    return_decision_days: int = 7
+
     # Named origins, not a wildcard. The API answers with credentials — the
     # backoffice's refresh cookie rides on them — and a browser refuses
     # ``Access-Control-Allow-Origin: *`` together with credentials outright.

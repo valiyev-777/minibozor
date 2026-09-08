@@ -154,6 +154,24 @@ StockViewer = Annotated[
 # where the audit trail records that they looked.
 CourierUser = Annotated[User, Depends(require_role(UserRole.COURIER))]
 
+# Reading a return request. Four roles, because a returned shirt passes
+# through four hands and every one of them has a question only this row
+# answers: the operator decides the money, the warehouse says what arrived,
+# the seller says what to do about it, and the admin does any of the three.
+#
+# A seller sees only returns on their own goods — scoped in the endpoint,
+# because that is not a filter they choose but the only rows that exist for
+# them. Not a customer: their own request is on their own orders screen, in
+# the shape the shipped apps already read.
+ReturnViewer = Annotated[
+    User,
+    Depends(
+        require_role(
+            UserRole.SELLER, UserRole.WAREHOUSE, UserRole.OPERATOR, UserRole.ADMIN
+        )
+    ),
+]
+
 # Handling the goods once they are back: a courier brings a collection in and
 # the warehouse books it, so both need to read a run.
 PickupHandler = Annotated[

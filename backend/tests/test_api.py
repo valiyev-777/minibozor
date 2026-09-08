@@ -30,6 +30,7 @@ from app.models import (
     Product,
     ProductVariant,
     PromoCode,
+    ReturnRequest,
     Review,
     ReviewStatus,
     Seller,
@@ -7699,11 +7700,18 @@ def test_every_column_type_survives_the_round_trip_on_this_database() -> None:
 
         # And the enum is usable in a WHERE, which is where a native type
         # would bite if the value were being sent as the wrong thing.
+        # Against `stamp` rather than a fresh `utcnow()`. `stamp` is
+        # `utcnow()` with its microseconds *replaced* by 123456, so whenever
+        # the real clock was below that it sits a fraction of a second in the
+        # future — and this comparison, made microseconds later in the same
+        # second, then failed about one run in eight. The datetime is still
+        # being compared in a WHERE, which is the whole point of the
+        # assertion; it is just being compared with a value that is not a race.
         found = fresh.exec(
             select(Review).where(
                 Review.id == review_id,
                 col(Review.status).in_([ReviewStatus.PUBLISHED]),
-                Review.created_at <= utcnow(),
+                Review.created_at <= stamp,
             )
         ).first()
         assert found is not None, "enum in an IN, datetime in a comparison"
@@ -8070,3 +8078,651 @@ def test_a_seller_reads_the_reason_their_product_was_refused(
     assert client.get(
         f"{API}/staff/catalog/listings/{product_id}", headers=theirs
     ).status_code == 404
+
+
+# ================================= the goods after the refund: B2 and B3
+
+# A refund answers the customer. It answers nothing about the shirt, which is
+# in a box at the warehouse belonging to a seller nobody has asked anything
+# yet. Two people answer for it in turn — the warehouse says what arrived, the
+# seller says what to do about it — and these hold that pair together with the
+# other half of receiving a batch: refusing one.
+
+
+def _received_listing(
+    client: TestClient,
+    staff: Callable[[UserRole, str], dict[str, str]],
+    *,
+    title: str,
+    seller_name: str,
+    seller_phone: str,
+    warehouse_phone: str,
+) -> tuple[int, dict[str, str], dict[str, str], dict]:
+    """A seller's own product, counted in and on sale.
+
+    Returns the product id, the seller's headers, the warehouse's, and the
+    listing as the seller last saw it.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, warehouse_phone)
+    _, mine = _linked_seller(staff, seller_name, seller_phone)
+
+    made = client.post(
+        f"{API}/staff/catalog/listings",
+        json=_listing_body(client, mine, title),
+        headers=mine,
+    )
+    assert made.status_code == 201, made.text
+    listing = made.json()
+
+    batch = next(
+        row
+        for row in client.get(
+            f"{API}/staff/supplies", params={"status": "declared"}, headers=warehouse
+        ).json()
+        if row["code"] == listing["supply_code"]
+    )
+    received = client.post(
+        f"{API}/staff/supplies/{batch['id']}/receive",
+        json={
+            "lines": [
+                {"line_id": row["id"], "received_quantity": row["declared_quantity"]}
+                for row in batch["lines"]
+            ]
+        },
+        headers=warehouse,
+    )
+    assert received.status_code == 200, received.text
+    return listing["id"], mine, warehouse, listing
+
+
+def _sold_and_returned(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    product_id: int,
+) -> dict:
+    """One of the seller's shirts bought, delivered, and asked back.
+
+    Left at ``approved``: the money is a separate decision from the goods, and
+    every test below is about the goods.
+    """
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(f"{API}/products/{product_id}").json()
+    colour = next(v for v in product["variants"] if v["kind"] == "color")
+    size = next(
+        v
+        for v in product["variants"]
+        if v["kind"] == "size" and v["parent_id"] == colour["id"]
+    )
+    added = client.post(
+        f"{API}/cart/items",
+        json={
+            "product_id": product_id,
+            "color_variant_id": colour["id"],
+            "variant_id": size["id"],
+            "quantity": 1,
+        },
+        headers=auth,
+    )
+    assert added.status_code in (200, 201), added.text
+
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    days = client.get(f"{API}/delivery/slots", params={"days": 5}, headers=auth).json()
+    slot = next(sl for day in days for sl in day["slots"] if sl["available"])
+    order = client.post(
+        f"{API}/orders",
+        json={"address_id": address["id"], "slot_id": slot["id"]},
+        headers=auth,
+    )
+    assert order.status_code == 201, order.text
+    order_id = order.json()["id"]
+
+    for target in ("packing", "shipped", "delivered"):
+        moved = client.post(
+            f"{API}/staff/orders/{order_id}/status",
+            json={"status": target},
+            headers=operator,
+        )
+        assert moved.status_code == 200, moved.text
+
+    request = client.post(
+        f"{API}/orders/{order_id}/return",
+        json={"reason": "O'lchami kelmadi"},
+        headers=auth,
+    )
+    assert request.status_code == 201, request.text
+    approved = client.post(
+        f"{API}/staff/returns/{request.json()['id']}/approve",
+        json={},
+        headers=operator,
+    )
+    assert approved.status_code == 200, approved.text
+    return approved.json()
+
+
+def _shelf(product_id: int, variant_id: int | None = None) -> int:
+    """What the winning offer holds, through the ledger's own reader."""
+    with Session(engine) as session:
+        offer = of.winning_offer(session, product_id) or of.offers_for(
+            session, product_id, active_only=False
+        )[0]
+        return st.on_hand(session, offer.id, variant_id)
+
+
+# ------------------------------------------------------- B2: refusing a batch
+
+
+def test_a_refused_batch_takes_the_product_down_with_it(
+    client: TestClient, staff: Callable[[UserRole, str], dict[str, str]]
+) -> None:
+    """Receiving publishes; refusing is the other half of the same decision.
+
+    Nothing was counted in, so nothing would ever publish this card — it would
+    sit ``moderating`` for ever with nobody waiting on anything. The refusal
+    takes it down and hands the seller the one sentence they need to fix it.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, "+998900130001")
+    _, mine = _linked_seller(staff, "Rad Do'kon", "+998900130002")
+
+    made = client.post(
+        f"{API}/staff/catalog/listings",
+        json=_listing_body(client, mine, "Rad etiladigan futbolka"),
+        headers=mine,
+    )
+    assert made.status_code == 201, made.text
+    listing = made.json()
+    product_id = listing["id"]
+
+    batch = next(
+        row
+        for row in client.get(
+            f"{API}/staff/supplies", params={"status": "declared"}, headers=warehouse
+        ).json()
+        if row["code"] == listing["supply_code"]
+    )
+
+    # The reason is the whole content of the answer, so there is no refusing
+    # without one.
+    blank = client.post(
+        f"{API}/staff/supplies/{batch['id']}/cancel",
+        json={"reason": "   "},
+        headers=warehouse,
+    )
+    assert blank.status_code == 400, blank.text
+
+    refused = client.post(
+        f"{API}/staff/supplies/{batch['id']}/cancel",
+        json={"reason": "Kelgan tovar kartochkadagi rangda emas"},
+        headers=warehouse,
+    )
+    assert refused.status_code == 200, refused.text
+    assert refused.json()["status"] == "cancelled"
+
+    row = client.get(
+        f"{API}/staff/catalog/listings/{product_id}", headers=mine
+    ).json()
+    assert row["status"] == "rejected"
+    assert row["stage"] == "rejected"
+    assert row["moderation_note"] == "Kelgan tovar kartochkadagi rangda emas"
+
+    # Not in the shop, and the seller was told rather than left to notice.
+    assert client.get(f"{API}/products/{product_id}").status_code == 404
+    with Session(engine) as session:
+        seller = session.exec(select(Seller).where(Seller.name == "Rad Do'kon")).one()
+        told = session.exec(
+            select(Notification).where(Notification.user_id == seller.user_id)
+        ).all()
+    assert any(listing["supply_code"] in row.text for row in told)
+
+    # Logged as a status change like any other, with the reason on it.
+    rows = _audit_rows("product.status", product_id)
+    assert rows and rows[-1].new_value == "rejected"
+    assert "rangda emas" in rows[-1].note
+
+
+def test_refusing_a_later_batch_leaves_a_product_that_is_already_selling(
+    client: TestClient, staff: Callable[[UserRole, str], dict[str, str]]
+) -> None:
+    """A card in the shop has stock from an earlier batch.
+
+    Refusing a second pallet is not a reason to stop selling what is on the
+    shelf, and taking the card down would be exactly that.
+    """
+    product_id, mine, warehouse, _ = _received_listing(
+        client,
+        staff,
+        title="Ikkinchi partiyali futbolka",
+        seller_name="Ikki Partiya",
+        seller_phone="+998900130012",
+        warehouse_phone="+998900130011",
+    )
+    on_sale = client.get(
+        f"{API}/staff/catalog/listings/{product_id}", headers=mine
+    ).json()
+    assert on_sale["stage"] == "on_sale"
+
+    offer_id = on_sale["offer_id"]
+    with Session(engine) as session:
+        leaf = of.leaf_variants(session, product_id)[0].id
+    second = client.post(
+        f"{API}/staff/supplies",
+        json={
+            "note": "qo'shimcha",
+            "lines": [
+                {"offer_id": offer_id, "variant_id": leaf, "quantity": 5}
+            ],
+        },
+        headers=mine,
+    )
+    assert second.status_code == 201, second.text
+
+    refused = client.post(
+        f"{API}/staff/supplies/{second.json()['id']}/cancel",
+        json={"reason": "Yetib kelmadi"},
+        headers=warehouse,
+    )
+    assert refused.status_code == 200, refused.text
+
+    still = client.get(
+        f"{API}/staff/catalog/listings/{product_id}", headers=mine
+    ).json()
+    assert still["status"] == "published"
+    assert still["stage"] == "on_sale"
+    assert client.get(f"{API}/products/{product_id}").status_code == 200
+
+
+# ------------------------------------- B3: the inspection and the seller's answer
+
+
+def test_the_warehouse_says_what_came_back_and_the_seller_sells_it_again(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The whole of B3, in the order it happens."""
+    product_id, mine, warehouse, _ = _received_listing(
+        client,
+        staff,
+        title="Qaytadigan futbolka",
+        seller_name="Qaytish Do'kon",
+        seller_phone="+998900130022",
+        warehouse_phone="+998900130021",
+    )
+    request = _sold_and_returned(client, auth, operator, product_id)
+    sold_shelf = _shelf(product_id)
+
+    # Nobody has looked yet, so the seller has nothing to answer.
+    waiting = client.get(f"{API}/staff/returns/{request['id']}", headers=mine).json()
+    assert waiting["inspection"] is None
+    assert waiting["seller_decisions"] == []
+    assert waiting["seller_name"] == "Qaytish Do'kon"
+    assert waiting["product_title"] == "Qaytadigan futbolka"
+    early = client.post(
+        f"{API}/staff/returns/{request['id']}/decide",
+        json={"decision": "relist"},
+        headers=mine,
+    )
+    assert early.status_code == 409, early.text
+
+    # The warehouse opens the parcel.
+    looked = client.post(
+        f"{API}/staff/returns/{request['id']}/inspect",
+        json={"result": "ok", "note": "Yorliqlari joyida"},
+        headers=warehouse,
+    )
+    assert looked.status_code == 200, looked.text
+    seen = looked.json()
+    assert seen["inspection"] == "ok"
+    assert seen["inspection_label"]
+    assert seen["decision_due_at"]
+    assert seen["seller_decisions"] == ["relist", "take_back"]
+    # Looking at it did not move the shelf: that is the seller's answer.
+    assert _shelf(product_id) == sold_shelf
+
+    # A second verdict is two people disagreeing about a shirt one of them is
+    # holding, and the first answer is the one the seller was told.
+    again = client.post(
+        f"{API}/staff/returns/{request['id']}/inspect",
+        json={"result": "damaged"},
+        headers=warehouse,
+    )
+    assert again.status_code == 409, again.text
+
+    # The seller was asked, in their own words, with the deadline in it.
+    with Session(engine) as session:
+        seller = session.exec(
+            select(Seller).where(Seller.name == "Qaytish Do'kon")
+        ).one()
+        told = session.exec(
+            select(Notification).where(Notification.user_id == seller.user_id)
+        ).all()
+    assert any(str(settings.return_decision_days) in row.text for row in told)
+
+    # And the queue answers "what is waiting for me" for both of them.
+    assert request["id"] in [
+        row["id"]
+        for row in client.get(
+            f"{API}/staff/returns", params={"awaiting": "decision"}, headers=mine
+        ).json()
+    ]
+
+    decided = client.post(
+        f"{API}/staff/returns/{request['id']}/decide",
+        json={"decision": "relist"},
+        headers=mine,
+    )
+    assert decided.status_code == 200, decided.text
+    answer = decided.json()
+    assert answer["seller_decision"] == "relist"
+    assert answer["seller_decision_label"]
+    assert answer["relisted"] is True
+    assert answer["seller_decisions"] == []
+
+    assert _shelf(product_id) == sold_shelf + 1
+    assert not _stock_is_consistent()
+
+    # Asked and answered — a second answer is not an overwrite.
+    twice = client.post(
+        f"{API}/staff/returns/{request['id']}/decide",
+        json={"decision": "take_back"},
+        headers=mine,
+    )
+    assert twice.status_code == 409, twice.text
+
+    rows = _audit_rows("return.decide", request["id"])
+    assert rows and rows[-1].new_value == "relist"
+
+
+def test_damaged_goods_do_not_go_back_on_sale(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The one decision the seller may not make, refused by the server and
+    left off the buttons it hands the client."""
+    product_id, mine, warehouse, _ = _received_listing(
+        client,
+        staff,
+        title="Buzilgan futbolka",
+        seller_name="Buzilgan Do'kon",
+        seller_phone="+998900130032",
+        warehouse_phone="+998900130031",
+    )
+    request = _sold_and_returned(client, auth, operator, product_id)
+    sold_shelf = _shelf(product_id)
+
+    seen = client.post(
+        f"{API}/staff/returns/{request['id']}/inspect",
+        json={"result": "damaged", "note": "Yoqasi yirilgan"},
+        headers=warehouse,
+    ).json()
+    assert seen["inspection"] == "damaged"
+    # No deadline: nothing relists something damaged, so there is no answer
+    # that can expire.
+    assert seen["decision_due_at"] is None
+    assert seen["seller_decisions"] == ["take_back"]
+
+    refused = client.post(
+        f"{API}/staff/returns/{request['id']}/decide",
+        json={"decision": "relist"},
+        headers=mine,
+    )
+    assert refused.status_code == 409, refused.text
+
+    taken = client.post(
+        f"{API}/staff/returns/{request['id']}/decide",
+        json={"decision": "take_back"},
+        headers=mine,
+    )
+    assert taken.status_code == 200, taken.text
+    assert taken.json()["relisted"] is False
+    assert _shelf(product_id) == sold_shelf
+
+
+def test_an_unanswered_deadline_puts_the_goods_back_on_sale(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Silence expires into the answer that costs the seller least.
+
+    The clock is moved back rather than waited out, and the sweep runs off the
+    side of a read because there is no scheduler here — see
+    ``app.returns.sweep_overdue``.
+    """
+    product_id, mine, warehouse, _ = _received_listing(
+        client,
+        staff,
+        title="Javobsiz futbolka",
+        seller_name="Javobsiz Do'kon",
+        seller_phone="+998900130042",
+        warehouse_phone="+998900130041",
+    )
+    request = _sold_and_returned(client, auth, operator, product_id)
+    sold_shelf = _shelf(product_id)
+
+    assert client.post(
+        f"{API}/staff/returns/{request['id']}/inspect",
+        json={"result": "ok"},
+        headers=warehouse,
+    ).status_code == 200
+
+    with Session(engine) as session:
+        row = session.get(ReturnRequest, request["id"])
+        row.decision_due_at = utcnow() - timedelta(days=1)
+        session.add(row)
+        session.commit()
+
+    # Any returns screen settles it — this one is the seller's own.
+    listed = client.get(f"{API}/staff/returns", headers=mine).json()
+    swept = next(row for row in listed if row["id"] == request["id"])
+    assert swept["seller_decision"] == "relist"
+    assert swept["relisted"] is True
+    assert _shelf(product_id) == sold_shelf + 1
+    assert not _stock_is_consistent()
+
+    rows = _audit_rows("return.decide", request["id"])
+    assert rows and rows[-1].actor_id is None
+
+
+def test_a_damaged_parcel_is_never_swept_back_onto_the_shelf(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A seller who ignores the question is asked again, not sold something
+    broken."""
+    product_id, mine, warehouse, _ = _received_listing(
+        client,
+        staff,
+        title="Eskirgan futbolka",
+        seller_name="Eskirgan Do'kon",
+        seller_phone="+998900130052",
+        warehouse_phone="+998900130051",
+    )
+    request = _sold_and_returned(client, auth, operator, product_id)
+    sold_shelf = _shelf(product_id)
+
+    client.post(
+        f"{API}/staff/returns/{request['id']}/inspect",
+        json={"result": "damaged"},
+        headers=warehouse,
+    )
+    with Session(engine) as session:
+        row = session.get(ReturnRequest, request["id"])
+        # Even if a deadline somehow got onto it, the sweep is about whole
+        # goods and only whole goods.
+        row.decision_due_at = utcnow() - timedelta(days=30)
+        session.add(row)
+        session.commit()
+
+    still = next(
+        row
+        for row in client.get(f"{API}/staff/returns", headers=mine).json()
+        if row["id"] == request["id"]
+    )
+    assert still["seller_decision"] is None
+    assert still["relisted"] is False
+    assert _shelf(product_id) == sold_shelf
+
+
+def test_one_shirt_back_is_one_shirt_back(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Two people can agree about the same parcel minutes apart.
+
+    An operator refunding with ``restock: true`` and a seller choosing
+    ``relist`` are two roads to the same shelf, walked by people who do not
+    know about each other. The decision is recorded both times; the count
+    moves once.
+    """
+    product_id, mine, warehouse, _ = _received_listing(
+        client,
+        staff,
+        title="Ikki marta futbolka",
+        seller_name="Ikki Marta",
+        seller_phone="+998900130062",
+        warehouse_phone="+998900130061",
+    )
+    request = _sold_and_returned(client, auth, operator, product_id)
+    sold_shelf = _shelf(product_id)
+
+    paid = client.post(
+        f"{API}/staff/returns/{request['id']}/refund",
+        json={"restock": True, "note": "Butun holida qaytdi"},
+        headers=operator,
+    )
+    assert paid.status_code == 200, paid.text
+    assert paid.json()["relisted"] is True
+    assert _shelf(product_id) == sold_shelf + 1
+
+    client.post(
+        f"{API}/staff/returns/{request['id']}/inspect",
+        json={"result": "ok"},
+        headers=warehouse,
+    )
+    decided = client.post(
+        f"{API}/staff/returns/{request['id']}/decide",
+        json={"decision": "relist"},
+        headers=mine,
+    )
+    assert decided.status_code == 200, decided.text
+    assert decided.json()["seller_decision"] == "relist"
+
+    # The seller's answer is on the record and the shelf did not move twice.
+    assert _shelf(product_id) == sold_shelf + 1
+    assert _audit_rows("return.decide", request["id"])
+    assert not _stock_is_consistent()
+
+
+def test_a_seller_reads_only_returns_on_their_own_goods(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """Not a filter they choose — the only rows that exist for them.
+
+    And an id that is not theirs is a 404 rather than a 403: "there is one,
+    and it is somebody else's" is a fact about a competitor's returns.
+    """
+    product_id, mine, warehouse, _ = _received_listing(
+        client,
+        staff,
+        title="Mening qaytishim",
+        seller_name="Menikidir",
+        seller_phone="+998900130072",
+        warehouse_phone="+998900130071",
+    )
+    request = _sold_and_returned(client, auth, operator, product_id)
+
+    _, theirs = _linked_seller(staff, "Boshqa Qaytish", "+998900130073")
+    assert request["id"] not in [
+        row["id"] for row in client.get(f"{API}/staff/returns", headers=theirs).json()
+    ]
+    assert client.get(
+        f"{API}/staff/returns/{request['id']}", headers=theirs
+    ).status_code == 404
+    assert client.post(
+        f"{API}/staff/returns/{request['id']}/decide",
+        json={"decision": "take_back"},
+        headers=theirs,
+    ).status_code == 404
+
+    # The operator and the warehouse read every parcel, whoever sent it.
+    for headers in (operator, warehouse):
+        assert request["id"] in [
+            row["id"]
+            for row in client.get(f"{API}/staff/returns", headers=headers).json()
+        ]
+
+    # A customer's own request is on their own orders screen, not this one.
+    assert client.get(f"{API}/staff/returns", headers=auth).status_code == 403
+
+
+def test_nothing_is_inspected_before_it_could_have_arrived(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """A request still being decided is not a parcel on a desk."""
+    product_id, _mine, warehouse, _ = _received_listing(
+        client,
+        staff,
+        title="Kelmagan futbolka",
+        seller_name="Kelmagan Do'kon",
+        seller_phone="+998900130082",
+        warehouse_phone="+998900130081",
+    )
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(f"{API}/products/{product_id}").json()
+    colour = next(v for v in product["variants"] if v["kind"] == "color")
+    size = next(
+        v
+        for v in product["variants"]
+        if v["kind"] == "size" and v["parent_id"] == colour["id"]
+    )
+    client.post(
+        f"{API}/cart/items",
+        json={
+            "product_id": product_id,
+            "color_variant_id": colour["id"],
+            "variant_id": size["id"],
+            "quantity": 1,
+        },
+        headers=auth,
+    )
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    days = client.get(f"{API}/delivery/slots", params={"days": 5}, headers=auth).json()
+    slot = next(sl for day in days for sl in day["slots"] if sl["available"])
+    order_id = client.post(
+        f"{API}/orders",
+        json={"address_id": address["id"], "slot_id": slot["id"]},
+        headers=auth,
+    ).json()["id"]
+    for target in ("packing", "shipped", "delivered"):
+        client.post(
+            f"{API}/staff/orders/{order_id}/status",
+            json={"status": target},
+            headers=operator,
+        )
+    request = client.post(
+        f"{API}/orders/{order_id}/return",
+        json={"reason": "Kerak emas"},
+        headers=auth,
+    ).json()
+
+    too_early = client.post(
+        f"{API}/staff/returns/{request['id']}/inspect",
+        json={"result": "ok"},
+        headers=warehouse,
+    )
+    assert too_early.status_code == 409, too_early.text

@@ -32,6 +32,8 @@ from app import schemas as s
 from app import stock as st
 from app.deps import SellerUser, SessionDep, StockViewer, WarehouseUser
 from app.models import (
+    Notification,
+    NotificationKind,
     Offer,
     Product,
     ProductStatus,
@@ -264,18 +266,45 @@ def _publish_on_arrival(
 @router.post(
     "/supplies/{supply_id}/cancel",
     response_model=s.SupplyOut,
-    summary="Call off a batch that has not arrived",
+    summary="Refuse a batch, or call off one that has not arrived",
 )
 def cancel_supply(
-    supply_id: int, user: StockViewer, session: SessionDep
+    supply_id: int,
+    payload: s.SupplyCancelIn,
+    user: StockViewer,
+    session: SessionDep,
 ) -> s.SupplyOut:
+    """The other half of receiving, and the reason is not optional.
+
+    This one door does two jobs that are the same act by different people. A
+    seller calls off a pallet they have decided not to send. The warehouse
+    refuses one that turned up wrong — short, damaged, not what the card
+    describes — and when it is that seller's *first* batch, refusing it is the
+    only answer the product ever gets: nothing was counted in, so
+    ``receive_supply`` never publishes it, and it would otherwise sit
+    ``moderating`` for ever with nobody waiting on anything.
+
+    So a refusal takes the card down with it and the seller is told why, in
+    one sentence, on the card and in a notification. A refused product is not
+    a dead end — ``REJECTED → MODERATING`` is a legal move: the seller fixes
+    what was wrong and sends it again.
+
+    The reason is required because it is the whole content of the answer. A
+    seller looking at a refused product with no sentence attached is being
+    asked to fix something without being told what is wrong with it.
+    """
     supply = _visible_supply(session, user, supply_id)
     if supply.status is not SupplyStatus.DECLARED:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             i18n.label("bad_transition", from_=supply.status.value, to="cancelled"),
         )
+    reason = payload.reason.strip()
+    if not reason:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("reason_required"))
+
     supply.status = SupplyStatus.CANCELLED
+    supply.note = reason
     session.add(supply)
     audit.record(
         session,
@@ -286,10 +315,81 @@ def cancel_supply(
         field="status",
         old=SupplyStatus.DECLARED,
         new=SupplyStatus.CANCELLED,
+        note=reason,
     )
     session.commit()
+
+    for product_id in sorted(_products_of(session, supply)):
+        _reject_on_refusal(session, supply, product_id, user, reason)
+    session.commit()
+
     session.refresh(supply)
     return _supply_out(session, supply)
+
+
+def _products_of(session: SessionDep, supply: Supply) -> set[int]:
+    """The cards this batch was carrying goods for."""
+    found: set[int] = set()
+    for line in session.exec(
+        select(SupplyLine).where(SupplyLine.supply_id == supply.id)
+    ).all():
+        offer = session.get(Offer, line.offer_id)
+        if offer is not None:
+            found.add(offer.product_id)
+    return found
+
+
+def _reject_on_refusal(
+    session: SessionDep, supply: Supply, product_id: int, actor: User, reason: str
+) -> None:
+    """Take a card down with the batch that was refused, once.
+
+    The mirror of ``_publish_on_arrival`` and guarded the same way: only this
+    seller's own product, and only one still waiting on its first batch. A
+    product already in the shop is untouched — it has stock from an earlier
+    batch, and refusing a later pallet is not a reason to stop selling what is
+    on the shelf.
+    """
+    product = session.get(Product, product_id)
+    if product is None or product.status is not ProductStatus.MODERATING:
+        return
+    if product.proposed_by_id != supply.seller_id:
+        return
+
+    audit.record(
+        session,
+        actor=actor,
+        action="product.status",
+        entity="product",
+        entity_id=product.id,
+        field="status",
+        old=ProductStatus.MODERATING,
+        new=ProductStatus.REJECTED,
+        note=f"{supply.code}: {reason}",
+    )
+    product.status = ProductStatus.REJECTED
+    # The sentence the seller reads on their own product screen. Same field
+    # the moderation flow used, because it is the same question being
+    # answered: why is this not in the shop.
+    product.moderation_note = reason
+    session.add(product)
+
+    seller = session.get(Seller, supply.seller_id)
+    if seller is not None and seller.user_id is not None:
+        session.add(
+            Notification(
+                user_id=seller.user_id,
+                kind=NotificationKind.SYSTEM,
+                icon="box",
+                title=i18n.label("supply_rejected"),
+                text=i18n.label(
+                    "supply_rejected_note", code=supply.code, reason=reason
+                ),
+                deep_link=f"minibozor://products/{product.id}",
+            )
+        )
+    session.commit()
+    of.refresh(session, product.id)
 
 
 # --------------------------------------------------------------------------- stocktakes
