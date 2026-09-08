@@ -18,10 +18,13 @@ export type StaffMe = S["StaffMeOut"]
 export type TokenPair = S["TokenPair"]
 export type OtpRequested = S["OtpRequested"]
 
-/** One stop on the round, in the order somebody planned. */
+/** One stop: either mine already, or on the board and anybody's to take. */
 export type Stop = S["CourierOrderOut"]
 export type DeliverIn = S["DeliverIn"]
 export type FailedIn = S["FailedIn"]
+
+/** What I have delivered and what it came to. */
+export type Earnings = S["CourierEarningsOut"]
 
 /** A collection run: approved returns to pick up from customers. */
 export type Run = S["PickupRunOut"]

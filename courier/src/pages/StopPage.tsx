@@ -155,15 +155,22 @@ function Door({ stop }: { stop: Stop }) {
         {stop.address_meta ? (
           <p className="selectable text-ink-soft">{stop.address_meta}</p>
         ) : null}
+        {/* Who is expecting it, with the parcel and the money. The name was
+            inside the call button and had to be truncated to fit the number
+            beside it — "Muha…" over a door buzzer is worse than useless, and
+            the button's job is the number. */}
         <p className="text-[length:var(--text-small)] text-ink-soft">
+          <span className="text-ink">{stop.recipient_name}</span> ·{" "}
           {num(stop.items_count)} {t.items} · {som(stop.total)}
           {stop.delivery_window ? ` · ${stop.delivery_window}` : ""}
         </p>
 
+        {/* One thing, undiminishable: the number never truncates, because a
+            half-dialled number cannot be dialled. */}
         <Button asChild variant="outline" size="lg" block>
           <a href={`tel:${stop.recipient_phone}`}>
             <Phone />
-            {stop.recipient_name} · {stop.recipient_phone}
+            <span className="tabular">{stop.recipient_phone}</span>
           </a>
         </Button>
 

@@ -1845,6 +1845,40 @@ class RunningTotalOut(BaseModel):
 # all of them; see ``app.idempotency`` for why it is not optional.
 
 
+class CourierEarningsOut(BaseModel):
+    """What a courier has done and what it came to.
+
+    Theirs alone, and it is the reason a courier opens the app when they are
+    not at a door: nobody works a round they cannot count. Three windows
+    rather than one running total — today is what they are doing now, the
+    month is what their rent is measured against, and the lifetime figure is
+    the one that makes a long day feel like it added up to something.
+
+    ``cash_on_hand`` is not earnings and is deliberately next to them: money
+    taken at doors belongs to the office and a courier carrying it needs to
+    see how much of it they are carrying. Confusing the two is how a courier
+    ends up short at the end of a week.
+    """
+
+    delivered_today: int
+    delivered_month: int
+    delivered_total: int
+
+    fee_per_delivery: int
+    earned_today: int
+    earned_month: int
+    earned_total: int
+
+    # Cash collected at doors and not yet handed in. Ours to reconcile, and
+    # shown because the person holding it should know the figure.
+    cash_on_hand: int
+
+    # How many doors were knocked on for nothing. Not a score — a courier who
+    # takes the hard addresses should not read this as a mark against them —
+    # but a figure they can point at when an operator asks.
+    failed_attempts: int
+
+
 class CourierOrderOut(BaseModel):
     """One stop on a round.
 
@@ -1877,17 +1911,6 @@ class CourierOrderOut(BaseModel):
     # How this door has gone so far, so a courier knows before they knock.
     attempts: int
     last_failure: str
-
-
-class CourierAssignIn(BaseModel):
-    """An operator putting an order on somebody's round."""
-
-    courier_id: int
-    # The stop number. Zero means unplaced, and the list falls back to the
-    # delivery window and then the code, so an unsequenced round is still in
-    # a sensible order rather than an arbitrary one.
-    sequence: int = Field(0, ge=0, le=999)
-    note: str = Field("", max_length=200)
 
 
 class DeliverIn(BaseModel):

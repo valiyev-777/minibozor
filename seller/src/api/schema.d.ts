@@ -1298,35 +1298,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/staff/orders/{order_id}/courier": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Put an order on somebody's round
-         * @description The operator plans the round; the courier drives it.
-         *
-         *     Allowed while the order has not finished — a round is usually planned
-         *     before anything is packed, and reassigning a stop mid-afternoon is
-         *     ordinary work rather than an exception. Refused once the order is
-         *     delivered, cancelled or returned: there is nothing left to carry, and
-         *     changing the name on a finished delivery would rewrite who did it.
-         *
-         *     Logged, because "who was carrying it" is the first question asked about a
-         *     delivery that went wrong.
-         */
-        post: operations["assign_courier_api_v1_staff_orders__order_id__courier_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/staff/pickups": {
         parameters: {
             query?: never;
@@ -2480,15 +2451,105 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * My deliveries, in the order somebody planned
+         * The ones I took, oldest promise first
          * @description Mine and nobody else's — not a filter the caller chose but the only
          *     rows that exist for them.
          *
-         *     Sorted by the sequence an operator set, then the delivery window, then the
-         *     code. An unsequenced round still comes back in a sensible order rather
-         *     than in whatever order the ids happen to fall.
+         *     Ordered by when the customer was promised it, then by code. Nobody plans
+         *     this round: a courier builds it themselves off the board, so the only
+         *     honest order is the one the promises are in. ``courier_sequence`` is still
+         *     read first and is nought on everything now that no operator sets it — the
+         *     column stays because dropping it is a migration for nothing, and a stop
+         *     somebody does want moved has a place to say so.
          */
         get: operations["my_orders_api_v1_courier_orders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier/orders/available": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Packed and waiting — anybody's to take
+         * @description Every order the warehouse has packed and nobody has taken.
+         *
+         *     Nobody hands these out. An operator choosing who carries what meant a
+         *     packed order sat until somebody remembered to assign it, and a courier
+         *     standing in the warehouse could not pick up the parcel in front of them.
+         *     So the board is open: the warehouse says a parcel is ready, every courier
+         *     sees it, and the one who wants it takes it.
+         *
+         *     Oldest first, and that is the only order there is. A board sorted by value
+         *     would have couriers skimming the expensive stops and leaving the rest,
+         *     which is the incentive a flat delivery fee exists to avoid.
+         */
+        get: operations["available_orders_api_v1_courier_orders_available_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier/orders/{order_id}/take": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * I am carrying this one
+         * @description Claim a packed order and walk out with it.
+         *
+         *     This is the handover, and it is one act rather than two: the courier
+         *     picking the parcel up off the warehouse shelf is what puts the order on
+         *     the road, so taking it moves ``packing → shipped``. There is no separate
+         *     "handed over" for somebody else to remember to press.
+         *
+         *     **Two couriers reaching for the same parcel is the case this has to get
+         *     right.** The claim writes ``courier_id`` only while it is still null and
+         *     checks that the write took, so the second one is told the parcel is gone
+         *     rather than quietly overwriting the first. That is also why the same
+         *     courier repeating the call is not an error — a queued retry from a phone
+         *     in a lift is the ordinary case, and it replays through the key.
+         */
+        post: operations["take_order_api_v1_courier_orders__order_id__take_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/courier/earnings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What I have delivered and what it came to
+         * @description Counted off the attempts, not off the orders.
+         *
+         *     A delivery is an event with a time on it, and pay is a question about a
+         *     period — "what did I earn today" cannot be answered by an order's status,
+         *     which only says where the order ended up. The attempt rows are the day's
+         *     work, in order, with the cash on them.
+         */
+        get: operations["earnings_api_v1_courier_earnings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3358,22 +3419,39 @@ export interface components {
             totals: components["schemas"]["CartTotalsOut"];
         };
         /**
-         * CourierAssignIn
-         * @description An operator putting an order on somebody's round.
+         * CourierEarningsOut
+         * @description What a courier has done and what it came to.
+         *
+         *     Theirs alone, and it is the reason a courier opens the app when they are
+         *     not at a door: nobody works a round they cannot count. Three windows
+         *     rather than one running total — today is what they are doing now, the
+         *     month is what their rent is measured against, and the lifetime figure is
+         *     the one that makes a long day feel like it added up to something.
+         *
+         *     ``cash_on_hand`` is not earnings and is deliberately next to them: money
+         *     taken at doors belongs to the office and a courier carrying it needs to
+         *     see how much of it they are carrying. Confusing the two is how a courier
+         *     ends up short at the end of a week.
          */
-        CourierAssignIn: {
-            /** Courier Id */
-            courier_id: number;
-            /**
-             * Sequence
-             * @default 0
-             */
-            sequence: number;
-            /**
-             * Note
-             * @default
-             */
-            note: string;
+        CourierEarningsOut: {
+            /** Delivered Today */
+            delivered_today: number;
+            /** Delivered Month */
+            delivered_month: number;
+            /** Delivered Total */
+            delivered_total: number;
+            /** Fee Per Delivery */
+            fee_per_delivery: number;
+            /** Earned Today */
+            earned_today: number;
+            /** Earned Month */
+            earned_month: number;
+            /** Earned Total */
+            earned_total: number;
+            /** Cash On Hand */
+            cash_on_hand: number;
+            /** Failed Attempts */
+            failed_attempts: number;
         };
         /**
          * CourierOrderOut
@@ -8689,43 +8767,6 @@ export interface operations {
             };
         };
     };
-    assign_courier_api_v1_staff_orders__order_id__courier_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                order_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CourierAssignIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_pickups_api_v1_staff_pickups_get: {
         parameters: {
             query?: {
@@ -11028,6 +11069,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourierOrderOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    available_orders_api_v1_courier_orders_available_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourierOrderOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    take_order_api_v1_courier_orders__order_id__take_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A uuid per queued action */
+                "Idempotency-Key": string;
+                authorization?: string | null;
+            };
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourierOrderOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    earnings_api_v1_courier_earnings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourierEarningsOut"];
                 };
             };
             /** @description Validation Error */

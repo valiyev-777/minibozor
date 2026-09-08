@@ -11,7 +11,35 @@
  */
 export const t = {
   app: "Kuryer",
-  today: "Bugun",
+  today: "Mening ishim",
+
+  // where to go
+  board: "Bo'sh zakaslar",
+  myWork: "Mening ishim",
+  profile: "Profil",
+
+  // the board
+  boardEmpty: "Bo'sh zakas yo'q",
+  boardEmptyHint: "Ombor zakasni tayyorlaganda shu yerda paydo bo'ladi — istaganini olasiz.",
+  take: "Olaman",
+  taking: "Olinmoqda…",
+  taken: "Zakas sizniki — ombordan olib keting",
+  takenByOther: "Bu zakasni boshqa kuryer olib ketdi",
+  readyAt: "Ombordan olinadi",
+  waiting: "kutmoqda",
+
+  // the profile
+  deliveredToday: "Bugun yetkazdim",
+  deliveredMonth: "Shu oyda",
+  deliveredTotal: "Jami yetkazdim",
+  earnedToday: "Bugun ishladim",
+  earnedMonth: "Shu oyda",
+  earnedTotal: "Jami ishlagan",
+  perDelivery: "Bitta yetkazish uchun",
+  cashOnHand: "Qo'limdagi naqd",
+  cashOnHandHint: "Bu pul ofisga topshiriladi — ishlagan pulingiz emas.",
+  failedAttempts: "Yetkazilmagan urinish",
+  earningsHint: "Har yetkazilgan zakas uchun belgilangan haq. Naqd pul alohida hisoblanadi.",
   signOut: "Chiqish",
   install: "Ilovani o'rnatish",
 
@@ -28,7 +56,7 @@ export const t = {
   deliveries: "Yetkazish",
   pickups: "Olib kelish",
   nothingToday: "Bugun vazifa yo'q",
-  nothingTodayHint: "Operator vazifa berganda shu yerda ko'rinadi.",
+  nothingTodayHint: "\"Bo'sh zakaslar\" bo'limiga o'tib, o'zingizga zakas olasiz.",
   cashDue: "Naqd olinadi",
   paidAlready: "To'langan",
   items: "dona",

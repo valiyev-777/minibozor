@@ -1,12 +1,12 @@
 import * as React from "react"
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeft, Ban, Truck } from "lucide-react"
+import { ArrowLeft, Ban } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/api/client"
-import type { Courier, DeliveryAttempt, Order, OrderDetail } from "@/api/types"
+import type { DeliveryAttempt, Order, OrderDetail } from "@/api/types"
 import { Badge } from "@/ui/badge"
 import { Button } from "@/ui/button"
-import { Input, Label, Select, Textarea } from "@/ui/field"
+import { Label, Textarea } from "@/ui/field"
 import { Async } from "@/ui/states"
 import { Detail, Panel, Row } from "@/components/Panel"
 import { Thumb } from "@/components/Thumb"
@@ -24,13 +24,17 @@ import { t } from "@/lib/labels"
  * is looking at, and a second rendering of the same order is a second thing to
  * keep in step.
  *
- * Assigning a courier and calling the order off are both here rather than on
- * the queue, because both need something typed: a courier and a position in
- * their round, or a reason the customer will be told. A one-click cancel on a
+ * Calling the order off is here rather than on the queue, because it needs
+ * something typed: a reason the customer is told. A one-click cancel on a
  * list row is a cancel somebody makes by accident.
  *
- * The warehouse reads this screen and gets neither action: picking is theirs,
- * routing and refusing are not.
+ * Assigning a courier used to be the other action here and is gone — couriers
+ * take their own work off a board now, so there is nobody to hand an order
+ * to. Which of them has it is a fact on the summary above rather than a field
+ * anybody fills in.
+ *
+ * The warehouse reads this screen and gets no action at all: picking is
+ * theirs, refusing a sale is not.
  */
 export function OrderPage() {
   const { id } = useParams()
@@ -189,6 +193,14 @@ function Attempts({ rows }: { rows: DeliveryAttempt[] }) {
   )
 }
 
+/**
+ * The operator's one decision: call it off.
+ *
+ * Assigning a courier used to be the other one, and it is gone — couriers
+ * take their own work off a board now, so there is nobody to hand an order
+ * to. Which of them has it is on the summary above; that is a fact to read,
+ * not a field to fill in.
+ */
 function Operator({
   orderId,
   canCancel,
@@ -196,27 +208,7 @@ function Operator({
   orderId: number
   canCancel: boolean
 }) {
-  const couriers = useQuery({
-    queryKey: ["couriers"],
-    queryFn: () => api<Courier[]>("/staff/couriers"),
-    staleTime: 5 * 60_000,
-  })
-  const [courierId, setCourierId] = React.useState("")
-  const [sequence, setSequence] = React.useState("")
   const [reason, setReason] = React.useState("")
-
-  const assign = useAction<void, unknown>({
-    run: () =>
-      api(`/staff/orders/${orderId}/courier`, {
-        method: "POST",
-        json: {
-          courier_id: Number(courierId),
-          ...(sequence ? { sequence: Number(sequence) } : {}),
-        },
-      }),
-    invalidate: [["order-row", String(orderId)], ["orders"]],
-    success: t.courierAssigned,
-  })
 
   const cancel = useAction<void, unknown>({
     run: () =>
@@ -228,49 +220,10 @@ function Operator({
     success: t.statusMoved,
   })
 
-  return (
-    <div className="grid gap-[var(--gap-page)] lg:grid-cols-2">
-      <Panel title={t.assignCourier}>
-        <form
-          className="flex flex-wrap items-end gap-3 border-t border-line-soft px-5 py-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            assign.mutate()
-          }}
-        >
-          <div className="min-w-40 flex-1 space-y-1.5">
-            <Label htmlFor="courier">{t.courier}</Label>
-            <Select
-              id="courier"
-              required
-              value={courierId}
-              onChange={(event) => setCourierId(event.target.value)}
-            >
-              <option value="">—</option>
-              {(couriers.data ?? []).map((courier) => (
-                <option key={courier.id} value={courier.id}>
-                  {courier.full_name || courier.phone}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="w-24 space-y-1.5">
-            <Label htmlFor="sequence">{t.sequence}</Label>
-            <Input
-              id="sequence"
-              inputMode="numeric"
-              value={sequence}
-              onChange={(event) => setSequence(event.target.value.replace(/\D/g, ""))}
-              placeholder="1"
-            />
-          </div>
-          <Button type="submit" variant="primary" disabled={!courierId || assign.isPending}>
-            <Truck />
-            {t.assignCourier}
-          </Button>
-        </form>
-      </Panel>
+  if (!canCancel) return null
 
+  return (
+    <div className="grid gap-[var(--gap-page)]">
       {canCancel ? (
         <Panel title={t.cancelOrder}>
           <form

@@ -49,32 +49,58 @@ API = "/api/v1"
 
 
 
-def _hand_to_a_courier(
-    client: TestClient, staff_headers: dict[str, str], order_id: int
-) -> int:
-    """Name somebody before the order goes out, and say who.
+def _courier_headers(client: TestClient) -> dict[str, str]:
+    """The suite's own courier, signed in the ordinary way.
 
-    ``POST /staff/orders/{id}/status`` refuses ``shipped`` on an order with no
-    courier: `GET /courier/orders` is filtered by courier, so one that goes
-    out with none is on nobody's round while reading as "on its way" to
-    everybody. Every path below that ships an order walks through here, which
-    is the point — the tests take the road a person takes.
-
-    The suite's own courier (``conftest.COURIER_PHONE``) and not simply the
-    first one listed: a test that made a courier of its own and is asserting
-    what is on *their* round must not have this steal the order.
+    Signed in here rather than taken as a fixture so that the eight setup
+    paths below did not each have to grow a parameter to reach one.
     """
-    rows = client.get(f"{API}/staff/couriers", headers=staff_headers).json()
-    assert isinstance(rows, list) and rows, rows
-    ours = next((row for row in rows if row["phone"] == COURIER_PHONE), None)
-    assert ours is not None, f"the suite's courier is missing from {rows}"
-    assigned = client.post(
-        f"{API}/staff/orders/{order_id}/courier",
-        json={"courier_id": ours["id"]},
+    asked = client.post(f"{API}/auth/otp/request", json={"phone": COURIER_PHONE}).json()
+    tokens = client.post(
+        f"{API}/auth/otp/verify", json={"phone": COURIER_PHONE, "code": asked["dev_code"]}
+    ).json()
+    return {"Authorization": f"Bearer {tokens['access_token']}"}
+
+
+def _to_the_door(
+    client: TestClient,
+    staff_headers: dict[str, str],
+    order_id: int,
+    *,
+    delivered: bool = True,
+) -> dict[str, str]:
+    """Packed by the bench, taken off the board by a courier, delivered.
+
+    ``shipped`` is not a move staff can make. The handover is the courier
+    picking the parcel up — ``POST /courier/orders/{id}/take`` — so every path
+    to a delivered order goes through a courier choosing it, which is the
+    road a person walks. Returns the courier's headers, for the tests that
+    then want to knock at the door as them.
+    """
+    packed = client.post(
+        f"{API}/staff/orders/{order_id}/status",
+        json={"status": "packing"},
         headers=staff_headers,
     )
-    assert assigned.status_code == 200, assigned.text
-    return ours["id"]
+    assert packed.status_code == 200, packed.text
+
+    courier = _courier_headers(client)
+    took = client.post(
+        f"{API}/courier/orders/{order_id}/take",
+        headers={**courier, "Idempotency-Key": f"test-take-{order_id}"},
+    )
+    assert took.status_code == 200, took.text
+    assert took.json()["status"] == "shipped", took.text
+
+    if delivered:
+        done = client.post(
+            f"{API}/staff/orders/{order_id}/status",
+            json={"status": "delivered"},
+            headers=staff_headers,
+        )
+        assert done.status_code == 200, done.text
+    return courier
+
 
 
 def test_health(client: TestClient) -> None:
@@ -911,11 +937,28 @@ def test_an_order_walks_its_flow_and_will_not_walk_back(
     # Skipping a step is not a step.
     assert client.post(url, json={"status": "delivered"}, headers=operator).status_code == 409
 
-    _hand_to_a_courier(client, operator, order["id"])
-    for target in ("packing", "shipped", "delivered"):
+    # The bench packs it and the bench stops there: shipping is the courier
+    # taking the parcel off the shelf, and staff asking for it is refused.
+    for target in ("packing",):
         moved = client.post(url, json={"status": target}, headers=operator)
         assert moved.status_code == 200, (target, moved.text)
         assert moved.json()["status"] == target
+
+    refused = client.post(url, json={"status": "shipped"}, headers=operator)
+    assert refused.status_code == 409, refused.text
+    assert "kuryer" in refused.json()["detail"].lower()
+
+    courier = _courier_headers(client)
+    took = client.post(
+        f"{API}/courier/orders/{order['id']}/take",
+        headers={**courier, "Idempotency-Key": f"queue-take-{order['id']}"},
+    )
+    assert took.status_code == 200, took.text
+    assert took.json()["status"] == "shipped"
+
+    moved = client.post(url, json={"status": "delivered"}, headers=operator)
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["status"] == "delivered"
 
     # The one the brief names: a delivered order does not go back to packing.
     back = client.post(url, json={"status": "packing"}, headers=operator)
@@ -999,7 +1042,7 @@ def test_moving_an_order_tells_the_customer_and_the_audit_log(
 
     groups = client.get(f"{API}/notifications", headers=auth).json()
     titles = [n["title"] for g in groups for n in g["items"]]
-    assert "Omborda yig'ildi" in titles
+    assert "Yig'ildi — kuryer kutilmoqda" in titles
 
     rows = _audit_rows("order.status", order["id"])
     assert len(rows) == 1
@@ -1493,9 +1536,7 @@ def _refundable_return(
     """An approved return on a delivered order, ready to be paid back."""
     order, before, variant_ids, slot_id = _order_with_a_variant_and_a_slot(client, auth)
     url = f"{API}/staff/orders/{order['id']}/status"
-    _hand_to_a_courier(client, operator, order["id"])
-    for target in ("packing", "shipped", "delivered"):
-        assert client.post(url, json={"status": target}, headers=operator).status_code == 200
+    _to_the_door(client, operator, order["id"])
 
     request = client.post(
         f"{API}/orders/{order['id']}/return",
@@ -1650,9 +1691,7 @@ def test_only_the_named_line_comes_back_on_a_partial_return(
     assert len(order["items"]) == 2
 
     url = f"{API}/staff/orders/{order['id']}/status"
-    _hand_to_a_courier(client, operator, order["id"])
-    for target in ("packing", "shipped", "delivered"):
-        client.post(url, json={"status": target}, headers=operator)
+    _to_the_door(client, operator, order["id"])
 
     line = next(i for i in order["items"] if i["product_id"] == cheap["id"])
     other = next(i for i in order["items"] if i["product_id"] == dear["id"])
@@ -3094,13 +3133,7 @@ def test_an_unpaid_order_holds_the_goods_until_the_courier_is_paid(
     assert client.get(f"{API}/products/{product['id']}").json()["stock_left"] == 3
     assert not _stock_is_consistent()
 
-    _hand_to_a_courier(client, operator, order_id)
-    for target in ("packing", "shipped", "delivered"):
-        moved = client.post(
-            f"{API}/staff/orders/{order_id}/status", json={"status": target}, headers=operator
-        )
-        assert moved.status_code == 200, moved.text
-
+    _to_the_door(client, operator, order_id)
     # Paid at the door: now the goods leave, and the ledger says why.
     with Session(engine) as session:
         assert session.get(Offer, offer["id"]).stock_left == 3
@@ -4990,14 +5023,7 @@ def _sell_and_deliver(
     )
     assert order.status_code == 201, order.text
     order = order.json()
-    _hand_to_a_courier(client, operator, order["id"])
-    for target in ("packing", "shipped", "delivered"):
-        moved = client.post(
-            f"{API}/staff/orders/{order['id']}/status",
-            json={"status": target},
-            headers=operator,
-        )
-        assert moved.status_code == 200, moved.text
+    _to_the_door(client, operator, order["id"])
     return order
 
 
@@ -5663,12 +5689,15 @@ def _on_a_round(
     client: TestClient,
     auth: dict[str, str],
     operator: dict[str, str],
-    courier_id: int,
+    courier: dict[str, str],
     *,
     cash: bool,
-    sequence: int = 1,
 ) -> dict:
-    """An order shipped and assigned, ready to be knocked on.
+    """An order packed and taken, ready to be knocked on.
+
+    Taken rather than assigned: nobody hands work out any more, so the way an
+    order gets onto a round is the courier choosing it off the board — which
+    means ``courier`` here is their headers, not their id.
 
     The shelf is topped up first. Every round here spends one unit of the
     cheapest card and none of them put it back, so without a baseline the
@@ -5702,32 +5731,41 @@ def _on_a_round(
     assert created.status_code == 201, created.text
     order = created.json()
 
-    assigned = client.post(
-        f"{API}/staff/orders/{order['id']}/courier",
-        json={"courier_id": courier_id, "sequence": sequence},
+    packed = client.post(
+        f"{API}/staff/orders/{order['id']}/status",
+        json={"status": "packing"},
         headers=operator,
     )
-    assert assigned.status_code == 200, assigned.text
-    for target in ("packing", "shipped"):
-        moved = client.post(
-            f"{API}/staff/orders/{order['id']}/status",
-            json={"status": target},
-            headers=operator,
-        )
-        assert moved.status_code == 200, moved.text
+    assert packed.status_code == 200, packed.text
+
+    board = client.get(f"{API}/courier/orders/available", headers=courier)
+    assert board.status_code == 200, board.text
+    assert any(row["id"] == order["id"] for row in board.json()), board.text
+
+    took = client.post(
+        f"{API}/courier/orders/{order['id']}/take",
+        headers={**courier, "Idempotency-Key": f"round-take-{order['id']}"},
+    )
+    assert took.status_code == 200, took.text
+    assert took.json()["status"] == "shipped", took.text
     return order
 
 
-def test_an_operator_plans_the_round_and_a_courier_reads_only_their_own(
+def test_a_courier_takes_their_own_work_and_reads_only_their_own(
     client: TestClient,
     auth: dict[str, str],
     operator: dict[str, str],
     admin: dict[str, str],
     staff: Callable[[UserRole, str], dict[str, str]],
 ) -> None:
-    """`UserRole.COURIER` existed from the first stage and no router ever asked
-    about it — so an order did not record who was carrying it and a courier had
-    no list of their own. The two gaps were the same gap."""
+    """Nobody hands work out. A packed order goes on a board every courier can
+    see, the one who wants it takes it, and from that moment it is on their
+    round and on nobody else's.
+
+    Assignment used to be an operator's job and it was the step that made a
+    packed parcel wait: a courier standing in the warehouse could see the box
+    in front of them and not the order, and nothing moved until somebody in an
+    office remembered to name them."""
     mine_id, mine = _courier(staff, "+998900090001")
     other_id, other = _courier(staff, "+998900090002")
 
@@ -5736,31 +5774,23 @@ def test_an_operator_plans_the_round_and_a_courier_reads_only_their_own(
     assert {row["id"] for row in listed.json()} >= {mine_id, other_id}
     assert all(row["role"] == "courier" for row in listed.json())
 
-    order = _on_a_round(client, auth, operator, mine_id, cash=False, sequence=3)
+    order = _on_a_round(client, auth, operator, mine, cash=False)
 
     round_ = client.get(f"{API}/courier/orders", headers=mine)
     assert round_.status_code == 200, round_.text
     stop = next(row for row in round_.json() if row["id"] == order["id"])
     # What somebody at a door needs, and not the catalogue detail the
     # customer's own shape carries.
-    assert stop["sequence"] == 3
     assert stop["recipient_phone"] and stop["address_line"]
     assert stop["attempts"] == 0 and stop["last_failure"] == ""
 
-    # And the operator's own queue says who is carrying it.
-    #
-    # `Order.courier_id` was readable only through the courier's endpoints, so
-    # the panel whose job is planning the round could not see the round: an
-    # unassigned order looked no different from an assigned one, and the
-    # backoffice had no way to show either. Which is why nothing in it called
-    # `POST /staff/orders/{id}/courier` at all, and orders reached `shipped`
-    # belonging to nobody — the courier's list came back empty and their
-    # delivery was refused as not theirs.
+    # And the operator's own queue says who took it. They do not choose who
+    # carries what any more, but "who has it" is still the first question
+    # asked about a delivery that went wrong.
     queue = client.get(f"{API}/staff/orders", headers=operator, params={"page_size": 100})
     assert queue.status_code == 200, queue.text
     rows = {row["id"]: row for row in queue.json()["items"]}
     assert rows[order["id"]]["courier_id"] == mine_id
-    assert rows[order["id"]]["courier_sequence"] == 3
     # The name, because a row is read by a person and an id is not a person.
     listed_names = {
         row["id"]: row["full_name"]
@@ -5793,29 +5823,25 @@ def test_an_operator_plans_the_round_and_a_courier_reads_only_their_own(
     assert client.get(f"{API}/courier/orders").status_code == 401
 
     # A courier is not somebody an operator can invent.
-    assert client.post(
-        f"{API}/staff/orders/{order['id']}/courier",
-        json={"courier_id": 999_999},
-        headers=operator,
-    ).status_code == 404
-    with Session(engine) as session:
-        not_a_courier = session.exec(
-            select(User).where(User.phone == "+998901234567")
-        ).one().id
-    assert client.post(
-        f"{API}/staff/orders/{order['id']}/courier",
-        json={"courier_id": not_a_courier},
-        headers=operator,
-    ).status_code == 404
-
-    # And a courier does not assign themselves.
+    # The door an operator used to hand work out through is gone. Nobody
+    # assigns a courier now — not an operator, and not a courier naming
+    # themselves — so the path itself answers 404 rather than a role check
+    # answering 403.
     assert client.post(
         f"{API}/staff/orders/{order['id']}/courier",
         json={"courier_id": other_id},
-        headers=mine,
-    ).status_code == 403
+        headers=operator,
+    ).status_code == 404
 
-    rows = _audit_rows("order.courier", order["id"])
+    # A parcel already taken is not there to take twice, and the courier who
+    # missed it is told so rather than handed a second copy.
+    late = client.post(
+        f"{API}/courier/orders/{order['id']}/take",
+        headers={**other, "Idempotency-Key": f"late-take-{order['id']}"},
+    )
+    assert late.status_code == 409, late.text
+
+    rows = _audit_rows("order.taken", order["id"])
     assert rows and str(rows[-1].new_value) == str(mine_id)
 
 
@@ -5833,7 +5859,7 @@ def test_a_retried_delivery_is_not_a_second_sale(
     short.
     """
     courier_id, courier = _courier(staff, "+998900090011")
-    order = _on_a_round(client, auth, operator, courier_id, cash=True)
+    order = _on_a_round(client, auth, operator, courier, cash=True)
 
     stop = next(
         row
@@ -5903,7 +5929,7 @@ def test_a_key_may_not_be_reused_for_a_different_request(
     retry. Replaying the first answer would hide it and lose the second
     request entirely."""
     courier_id, courier = _courier(staff, "+998900090031")
-    order = _on_a_round(client, auth, operator, courier_id, cash=False)
+    order = _on_a_round(client, auth, operator, courier, cash=False)
     door = f"{API}/courier/orders/{order['id']}/failed"
 
     assert client.post(
@@ -5922,7 +5948,7 @@ def test_a_key_may_not_be_reused_for_a_different_request(
 
     # Two couriers may use the same key without colliding.
     other_id, other = _courier(staff, "+998900090032")
-    theirs = _on_a_round(client, auth, operator, other_id, cash=False)
+    theirs = _on_a_round(client, auth, operator, other, cash=False)
     assert client.post(
         f"{API}/courier/orders/{theirs['id']}/failed",
         json={"reason": "manzil topilmadi"},
@@ -5945,7 +5971,7 @@ def test_a_delivery_needs_a_name_and_the_photo_is_optional(
     have already made — which is the exact situation the offline design is for.
     """
     courier_id, courier = _courier(staff, "+998900090041")
-    order = _on_a_round(client, auth, operator, courier_id, cash=False)
+    order = _on_a_round(client, auth, operator, courier, cash=False)
     door = f"{API}/courier/orders/{order['id']}/deliver"
 
     nameless = client.post(
@@ -5979,7 +6005,7 @@ def test_a_delivery_needs_a_name_and_the_photo_is_optional(
     assert kept.photo_url, "the evidence is stored"
 
     # And without one it still goes through, noted as such in the log.
-    second = _on_a_round(client, auth, operator, courier_id, cash=False, sequence=2)
+    second = _on_a_round(client, auth, operator, courier, cash=False)
     plain = client.post(
         f"{API}/courier/orders/{second['id']}/deliver",
         json={"recipient_name": "Mijozning o'zi"},
@@ -6000,7 +6026,7 @@ def test_a_cash_figure_that_does_not_match_is_refused(
     to point at, and a mismatch is far likelier to be a typo than a part
     payment worth recording."""
     courier_id, courier = _courier(staff, "+998900090051")
-    order = _on_a_round(client, auth, operator, courier_id, cash=True)
+    order = _on_a_round(client, auth, operator, courier, cash=True)
     door = f"{API}/courier/orders/{order['id']}/deliver"
     owed = order["total"]
 
@@ -6016,7 +6042,7 @@ def test_a_cash_figure_that_does_not_match_is_refused(
     # to open first any more: a courier's day is a list of doors, and the cash
     # is recorded where it was taken.
     lone_id, lone = _courier(staff, "+998900090052")
-    theirs = _on_a_round(client, auth, operator, lone_id, cash=True)
+    theirs = _on_a_round(client, auth, operator, lone, cash=True)
     straight = client.post(
         f"{API}/courier/orders/{theirs['id']}/deliver",
         json={
@@ -6050,7 +6076,7 @@ def test_a_failed_attempt_keeps_the_order_and_the_courier(
     is somebody else.
     """
     courier_id, courier = _courier(staff, "+998900090061")
-    order = _on_a_round(client, auth, operator, courier_id, cash=False)
+    order = _on_a_round(client, auth, operator, courier, cash=False)
     door = f"{API}/courier/orders/{order['id']}/failed"
 
     for index, reason in enumerate(
@@ -7490,15 +7516,7 @@ def _sold_and_returned(
     assert order.status_code == 201, order.text
     order_id = order.json()["id"]
 
-    _hand_to_a_courier(client, operator, order_id)
-    for target in ("packing", "shipped", "delivered"):
-        moved = client.post(
-            f"{API}/staff/orders/{order_id}/status",
-            json={"status": target},
-            headers=operator,
-        )
-        assert moved.status_code == 200, moved.text
-
+    _to_the_door(client, operator, order_id)
     request = client.post(
         f"{API}/orders/{order_id}/return",
         json={"reason": "O'lchami kelmadi"},
@@ -8022,13 +8040,7 @@ def test_nothing_is_inspected_before_it_could_have_arrived(
         json={"address_id": address["id"], "slot_id": slot["id"]},
         headers=auth,
     ).json()["id"]
-    _hand_to_a_courier(client, operator, order_id)
-    for target in ("packing", "shipped", "delivered"):
-        client.post(
-            f"{API}/staff/orders/{order_id}/status",
-            json={"status": target},
-            headers=operator,
-        )
+    _to_the_door(client, operator, order_id)
     request = client.post(
         f"{API}/orders/{order_id}/return",
         json={"reason": "Kerak emas"},
@@ -8123,15 +8135,7 @@ def test_the_order_queue_is_read_by_four_roles_and_a_seller_sees_only_their_own(
 
     # The warehouse picks it and hands it over, because that is what a person
     # at a bench does — once the operator has said who is carrying it.
-    _hand_to_a_courier(client, operator, order_id)
-    for target in ("packing", "shipped"):
-        moved = client.post(
-            f"{API}/staff/orders/{order_id}/status",
-            json={"status": target},
-            headers=warehouse,
-        )
-        assert moved.status_code == 200, moved.text
-
+    _to_the_door(client, operator, order_id, delivered=False)
     # And does not call off a sale from the packing bench. That decision needs
     # somebody who can phone the customer.
     refused = client.post(

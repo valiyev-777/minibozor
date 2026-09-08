@@ -265,13 +265,23 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "Cancelling is the operator's — the warehouse picks and hands "
               "over, and nothing else",
     },
-    "no_courier_yet": {
-        "uz": "Avval kuryer biriktiring — kuryersiz buyurtma hech kimning "
-              "ro'yxatiga tushmaydi",
-        "ru": "Сначала назначьте курьера — без него заказ не попадёт ни в "
-              "один маршрут",
-        "en": "Assign a courier first — without one the order is on nobody's "
-              "round",
+    "order_taken": {
+        "uz": "Bu zakasni boshqa kuryer olib ketdi",
+        "ru": "Этот заказ уже забрал другой курьер",
+        "en": "Another courier has taken this one",
+    },
+    "order_not_ready": {
+        "uz": "Zakas hali tayyor emas — ombor yig'ishini kutmoqda",
+        "ru": "Заказ ещё не готов — склад его собирает",
+        "en": "Not ready yet — the warehouse is still picking it",
+    },
+    "shipping_is_couriers": {
+        "uz": "Zakasni yo'lga chiqarish kuryer ishi — u ombordan o'zi olib "
+              "ketadi. Ombor faqat 'Tayyor' deb belgilaydi",
+        "ru": "Заказ отправляет курьер — он сам забирает его со склада. "
+              "Склад только помечает «Готов»",
+        "en": "Shipping is the courier's — they take it off the shelf "
+              "themselves. The warehouse only marks it ready",
     },
     "reason_required": {
         "uz": "Rad etish sababini yozing",
@@ -853,14 +863,14 @@ LABELS: dict[str, dict[str, str]] = {
     },
     # order status pills and timeline
     "status_placed": {"uz": "QABUL QILINDI", "ru": "ПРИНЯТ", "en": "PLACED"},
-    "status_packing": {"uz": "YIG'ILMOQDA", "ru": "СОБИРАЕТСЯ", "en": "PACKING"},
+    "status_packing": {"uz": "TAYYOR", "ru": "ГОТОВ", "en": "READY"},
     "status_shipped": {"uz": "YO'LDA", "ru": "В ПУТИ", "en": "ON THE WAY"},
     "status_delivered": {"uz": "YETKAZILDI", "ru": "ДОСТАВЛЕН", "en": "DELIVERED"},
     "status_cancelled": {"uz": "BEKOR QILINDI", "ru": "ОТМЕНЁН", "en": "CANCELLED"},
     "status_returned": {"uz": "QAYTARILDI", "ru": "ВОЗВРАЩЁН", "en": "RETURNED"},
     "event_placed": {"uz": "Buyurtma qabul qilindi", "ru": "Заказ принят",
                      "en": "Order placed"},
-    "event_packing": {"uz": "Omborda yig'ildi", "ru": "Собран на складе",
+    "event_packing": {"uz": "Yig'ildi — kuryer kutilmoqda", "ru": "Собран — ждёт курьера",
                       "en": "Picked at the warehouse"},
     "event_shipped": {"uz": "Kuryerga topshirildi", "ru": "Передан курьеру",
                       "en": "Handed to the courier"},

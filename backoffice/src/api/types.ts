@@ -56,7 +56,6 @@ export type DeliveryAttempt = S["DeliveryAttemptOut"]
 export type OrderStatus = S["OrderStatus"]
 export type OrderStatusIn = S["OrderStatusIn"]
 export type Courier = S["StaffUserOut"]
-export type AssignCourierIn = S["CourierAssignIn"]
 
 // ------------------------------------------------------------ goods that came back
 //

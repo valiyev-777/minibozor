@@ -317,38 +317,51 @@ def main() -> int:
         row = api.ok("GET", f"/staff/catalog/listings/{state['product']}", who="seller")
         walk.expect("the sold one is no longer sellable",
                     row["sellable_total"] == 28, row["sellable_total"])
-        orders = api.ok("GET", "/staff/orders", who="seller")
+        # By status, not page one: the queue is oldest-first and a shop with
+        # a history has pages of it.
+        orders = api.ok("GET", "/staff/orders", who="seller",
+                        query={"status": "placed", "page_size": 100})
         rows = orders if isinstance(orders, list) else orders.get("items", [])
         walk.expect("the seller can see the order against their goods",
-                    any(o["id"] == state["order"] for o in rows), rows[:1])
+                    any(o["id"] == state["order"] for o in rows),
+                    [o["id"] for o in rows])
         return "sotuvga tayyor 28"
 
     # ---------------------------------------------------------------- 9
-    @walk("Ombor yig'adi, operator kuryerga biriktiradi")
+    @walk("Ombor 'Tayyor' deydi; kuryer bo'sh ro'yxatdan o'zi oladi")
     def _():
         api.ok("POST", f"/staff/orders/{state['order']}/status", who="warehouse",
                json_body={"status": "packing"})
 
-        # Handed to whom? `GET /courier/orders` is filtered by courier, so an
-        # order shipped with none is on nobody's round while reading as "on
-        # its way" to everybody. It must be refused rather than accepted.
-        early, why = api.call("POST", f"/staff/orders/{state['order']}/status",
-                              who="warehouse", json_body={"status": "shipped"})
-        walk.expect("an order cannot be shipped before a courier is named",
-                    early == 409, (early, why))
+        # Nobody in an office puts it on a round. The bench marks it ready and
+        # it appears on a board every courier can see.
+        board = api.ok("GET", "/courier/orders/available", who="courier")
+        rows = board if isinstance(board, list) else board.get("items", [])
+        walk.expect("a packed order is on the free board",
+                    any(o["id"] == state["order"] for o in rows), rows[:2])
 
-        couriers = api.ok("GET", "/staff/couriers", who="operator")
-        rows = couriers if isinstance(couriers, list) else couriers.get("items", [])
-        walk.expect("there is a courier to give it to", bool(rows), couriers)
-        api.ok("POST", f"/staff/orders/{state['order']}/courier", who="operator",
-               json_body={"courier_id": rows[0]["id"]})
-        api.ok("POST", f"/staff/orders/{state['order']}/status", who="operator",
-               json_body={"status": "shipped"})
+        # And shipping is not staff's to do — the handover is the courier
+        # picking the parcel up.
+        refused, why = api.call("POST", f"/staff/orders/{state['order']}/status",
+                                who="warehouse", json_body={"status": "shipped"})
+        walk.expect("the warehouse cannot send it out itself", refused == 409,
+                    (refused, why))
+
+        took = api.ok("POST", f"/courier/orders/{state['order']}/take", who="courier",
+                      key=f"walk-take-{state['order']}")
+        walk.expect("taking it puts it on the road", took["status"] == "shipped",
+                    took["status"])
+
+        gone = api.ok("GET", "/courier/orders/available", who="courier")
+        left = gone if isinstance(gone, list) else gone.get("items", [])
+        walk.expect("and takes it off the board",
+                    all(o["id"] != state["order"] for o in left), left[:2])
+
         mine = api.ok("GET", "/courier/orders", who="courier")
         rows = mine if isinstance(mine, list) else mine.get("items", [])
-        walk.expect("it is on the courier's round now",
+        walk.expect("it is on my round now",
                     any(o["id"] == state["order"] for o in rows), rows[:1])
-        return "kuryerda"
+        return "kuryer o'zi oldi"
 
     # ---------------------------------------------------------------- 10
     @walk("Kuryer yetkazadi")
@@ -467,12 +480,8 @@ def main() -> int:
         oid = order["id"]
         api.ok("POST", f"/staff/orders/{oid}/status", who="warehouse",
                json_body={"status": "packing"})
-        couriers = api.ok("GET", "/staff/couriers", who="operator")
-        crows = couriers if isinstance(couriers, list) else couriers.get("items", [])
-        api.ok("POST", f"/staff/orders/{oid}/courier", who="operator",
-               json_body={"courier_id": crows[0]["id"]})
-        api.ok("POST", f"/staff/orders/{oid}/status", who="operator",
-               json_body={"status": "shipped"})
+        api.ok("POST", f"/courier/orders/{oid}/take", who="courier",
+               key=f"walk-take-damaged-{oid}")
         api.ok("POST", f"/courier/orders/{oid}/deliver", who="courier",
                json_body={"recipient_name": "Muhammadsodiq", "cash_collected": 89000},
                key=f"walk-deliver-damaged-{oid}")
@@ -484,6 +493,11 @@ def main() -> int:
                       json_body={"order_item_id": full["items"][0]["id"],
                                  "reason_id": rrows[0]["id"], "comment": "Yirilgan"})
         api.ok("POST", f"/staff/returns/{back['id']}/approve", who="operator", json_body={})
+        # A collection run is still somebody's errand — the operator sends a
+        # van for approved returns, which is not the same act as a courier
+        # choosing a delivery off the board.
+        couriers = api.ok("GET", "/staff/couriers", who="operator")
+        crows = couriers if isinstance(couriers, list) else couriers.get("items", [])
         run = api.ok("POST", "/staff/pickups", who="operator",
                      json_body={"courier_id": crows[0]["id"],
                                 "return_request_ids": [back["id"]]})
@@ -522,12 +536,8 @@ def main() -> int:
         oid = order["id"]
         api.ok("POST", f"/staff/orders/{oid}/status", who="warehouse",
                json_body={"status": "packing"})
-        couriers = api.ok("GET", "/staff/couriers", who="operator")
-        crows = couriers if isinstance(couriers, list) else couriers.get("items", [])
-        api.ok("POST", f"/staff/orders/{oid}/courier", who="operator",
-               json_body={"courier_id": crows[0]["id"]})
-        api.ok("POST", f"/staff/orders/{oid}/status", who="operator",
-               json_body={"status": "shipped"})
+        api.ok("POST", f"/courier/orders/{oid}/take", who="courier",
+               key=f"walk-take-failed-{oid}")
         out = api.ok("POST", f"/courier/orders/{oid}/failed", who="courier",
                      json_body={"reason": "Xaridor javob bermadi"},
                      key=f"walk-failed-{oid}")
@@ -543,6 +553,95 @@ def main() -> int:
                     row["sellable_total"] == row["on_hand_total"],
                     (row["sellable_total"], row["on_hand_total"]))
         return "urinish yozildi · bekor qilinganda qoldiq qaytdi"
+
+    # ------------------------------------------------------------ 16
+    @walk("Ikki kuryer bitta zakasni olsa — biri oladi, ikkinchisi xabar oladi")
+    def _():
+        # A second courier, because the race needs two hands.
+        second = "+998900000014"
+        api.sign_in(second, "courier2")
+        # Signing a fresh number in makes a customer, as it should; an admin
+        # is what turns somebody into staff.
+        people = api.ok("GET", "/staff/users", who="admin",
+                        query={"search": second, "page_size": 5})
+        rows = people if isinstance(people, list) else people.get("items", [])
+        them = next((row for row in rows if row["phone"] == second), None)
+        walk.expect("the new account is there to promote", them is not None, rows[:2])
+        made = api.ok("PATCH", f"/staff/users/{them['id']}/role", who="admin",
+                      json_body={"role": "courier"})
+        walk.expect("the second courier is a courier", made["role"] == "courier", made)
+
+        page = api.ok("GET", f"/products/{state['product']}")
+        size = next(v for v in page["variants"] if v["kind"] == "size" and v["in_stock"])
+        api.ok("DELETE", "/cart", who="customer", expect=(200, 204))
+        api.ok("POST", "/cart/items", who="customer",
+               json_body={"product_id": state["product"], "variant_id": size["id"],
+                          "quantity": 1})
+        points = api.ok("GET", "/delivery/pickup-points", who="customer")
+        pts = points if isinstance(points, list) else points.get("items", [])
+        order = api.ok("POST", "/orders", who="customer",
+                       json_body={"pickup_point_id": pts[0]["id"], "payment_method": "cash",
+                                  "recipient_name": "Muhammadsodiq",
+                                  "recipient_phone": "+998901234567"})
+        oid = order["id"]
+        api.ok("POST", f"/staff/orders/{oid}/status", who="warehouse",
+               json_body={"status": "packing"})
+
+        # Both see it on the board.
+        for who in ("courier", "courier2"):
+            board = api.ok("GET", "/courier/orders/available", who=who)
+            rows = board if isinstance(board, list) else board.get("items", [])
+            walk.expect(f"{who} can see it on the board",
+                        any(o["id"] == oid for o in rows), rows[:2])
+
+        first = api.ok("POST", f"/courier/orders/{oid}/take", who="courier",
+                       key=f"walk-race-a-{oid}")
+        walk.expect("the first one gets it", first["status"] == "shipped", first)
+        late, why = api.call("POST", f"/courier/orders/{oid}/take", who="courier2",
+                             key=f"walk-race-b-{oid}")
+        walk.expect("the second is told it is gone, not given it too",
+                    late == 409, (late, why))
+
+        theirs = api.ok("GET", "/courier/orders", who="courier2")
+        rows = theirs if isinstance(theirs, list) else theirs.get("items", [])
+        walk.expect("and it is not on their round",
+                    all(o["id"] != oid for o in rows), rows[:2])
+        state["taken_order"] = oid
+        return "409 · birinchisi oldi"
+
+    # ------------------------------------------------------------ 17
+    @walk("Kuryer profili — nechta yetkazgani va qancha ishlagani")
+    def _():
+        before = api.ok("GET", "/courier/earnings", who="courier")
+        walk.expect("a fee per delivery is published",
+                    before["fee_per_delivery"] > 0, before)
+        walk.expect("earnings are the count times the fee",
+                    before["earned_total"]
+                    == before["delivered_total"] * before["fee_per_delivery"],
+                    before)
+
+        api.ok("POST", f"/courier/orders/{state['taken_order']}/deliver", who="courier",
+               json_body={"recipient_name": "Muhammadsodiq", "cash_collected": 89000},
+               key=f"walk-earn-{state['taken_order']}")
+
+        after = api.ok("GET", "/courier/earnings", who="courier")
+        walk.expect("one more delivery counted",
+                    after["delivered_total"] == before["delivered_total"] + 1,
+                    (before["delivered_total"], after["delivered_total"]))
+        walk.expect("and one more fee earned",
+                    after["earned_total"]
+                    == before["earned_total"] + before["fee_per_delivery"],
+                    (before["earned_total"], after["earned_total"]))
+        walk.expect("the cash taken at the door is counted apart from the pay",
+                    after["cash_on_hand"] >= before["cash_on_hand"] + 89000,
+                    (before["cash_on_hand"], after["cash_on_hand"]))
+
+        # A courier reads their own and nobody else's.
+        theirs = api.ok("GET", "/courier/earnings", who="courier2")
+        walk.expect("the other courier's figures are their own",
+                    theirs["delivered_total"] == 0, theirs)
+        return (f"{after['delivered_today']} bugun · "
+                f"{after['earned_total']:,} so'm jami".replace(",", " "))
 
     print()
     if walk.failures:

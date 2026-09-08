@@ -9,13 +9,17 @@ import { num, som } from "@/lib/format"
 import { t } from "@/lib/labels"
 
 /**
- * Today's work, in one list.
+ * The work I took, in one list.
  *
  * Deliveries and collections together, because they are the same thing to the
  * person doing them: a place to go. Two lists would mean deciding which one to
  * look at first, and the answer is "whichever is nearer", which neither list
  * knows. So they are one column, deliveries first because there are more of
  * them, each row a full-width tap target.
+ *
+ * Nothing arrives here on its own any more. A stop is on this screen because
+ * the courier took it off the board, which is why the empty state points at
+ * the board rather than at an operator who has not got round to them.
  *
  * The cash due is the loudest thing on a row that has any, because it is the
  * one number the courier has to get exactly right at the door — the server
@@ -65,7 +69,6 @@ export function RoundPage() {
                   <span className="min-w-0 flex-1 space-y-0.5">
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="tabular font-semibold text-ink">
-                        {stop.sequence ? `${stop.sequence}. ` : ""}
                         {stop.code}
                       </span>
                       {stop.cash_due > 0 ? (
@@ -81,7 +84,7 @@ export function RoundPage() {
                         </Badge>
                       ) : null}
                     </span>
-                    <span className="block truncate text-ink">{stop.address_line}</span>
+                    <span className="line-clamp-2 block text-ink">{stop.address_line}</span>
                     <span className="block truncate text-[length:var(--text-small)] text-ink-soft">
                       {stop.recipient_name} · {num(stop.items_count)} {t.items}
                       {stop.delivery_window ? ` · ${stop.delivery_window}` : ""}

@@ -578,8 +578,8 @@ def set_order_status(
     # 409 rather than 400: the request is well formed and the move is legal —
     # what is wrong is that this order is not ready to make it, which is what
     # a conflict is.
-    if payload.status is OrderStatus.SHIPPED and order.courier_id is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("no_courier_yet"))
+    if payload.status is OrderStatus.SHIPPED:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("shipping_is_couriers"))
     was = order.status
 
     audit.record(
@@ -674,60 +674,14 @@ def list_couriers(user: OperatorUser, session: SessionDep) -> list[s.StaffUserOu
     ]
 
 
-@router.post(
-    "/orders/{order_id}/courier",
-    response_model=s.OrderOut,
-    summary="Put an order on somebody's round",
-)
-def assign_courier(
-    order_id: int,
-    payload: s.CourierAssignIn,
-    user: OperatorUser,
-    session: SessionDep,
-) -> s.OrderOut:
-    """The operator plans the round; the courier drives it.
-
-    Allowed while the order has not finished — a round is usually planned
-    before anything is packed, and reassigning a stop mid-afternoon is
-    ordinary work rather than an exception. Refused once the order is
-    delivered, cancelled or returned: there is nothing left to carry, and
-    changing the name on a finished delivery would rewrite who did it.
-
-    Logged, because "who was carrying it" is the first question asked about a
-    delivery that went wrong.
-    """
-    order = _order(session, order_id)
-    if order.status in (
-        OrderStatus.DELIVERED,
-        OrderStatus.CANCELLED,
-        OrderStatus.RETURNED,
-    ):
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("order_finished"))
-
-    courier = session.get(User, payload.courier_id)
-    if courier is None or courier.role is not UserRole.COURIER:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("courier_not_found"))
-    if not courier.is_active:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("courier_inactive"))
-
-    audit.record(
-        session,
-        actor=user,
-        action="order.courier",
-        entity="order",
-        entity_id=order.id,
-        field="courier_id",
-        old=order.courier_id,
-        new=courier.id,
-        note=payload.note or (courier.full_name or courier.phone),
-    )
-    order.courier_id = courier.id
-    order.courier_sequence = payload.sequence
-    order.updated_at = sv.utcnow()
-    session.add(order)
-    session.commit()
-    session.refresh(order)
-    return sv.order_out(session, order)
+# The operator used to put orders on rounds here, and does not any more.
+#
+# Assignment was the step that made a packed parcel wait: a courier standing
+# in the warehouse could see the box in front of them and not the order, and
+# nothing moved until somebody in an office remembered to name them. Couriers
+# take their own work now — `POST /courier/orders/{id}/take` — so the handover
+# is the person picking the parcel up rather than a plan somebody made about
+# them. `GET /courier/orders/available` is the board they take it from.
 
 
 # --------------------------------------------------------------------- collection runs
@@ -1138,15 +1092,15 @@ def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:
         items_count=sum(i.quantity for i in items),
         total=o.total,
         paid=o.paid,
-        # The moves the rules allow, minus the one this order is not ready
-        # for. The panel builds its buttons from this list, so a bench with
-        # nobody named on the order is not offered "Kuryerga berildi" at all
-        # — which is better than a button that answers 409. The endpoint
-        # still refuses it; this is the same rule said early.
+        # The moves the rules allow, minus the one that is not staff's to
+        # make. `shipped` happens when a courier takes the parcel off the
+        # shelf, so the bench is never offered it — the panel builds its
+        # buttons from this list, and a button for somebody else's act is a
+        # button that either lies or ships to nobody.
         next_statuses=[
             move
             for move in tr.next_states(tr.ORDER_TRANSITIONS, o.status)
-            if not (move is OrderStatus.SHIPPED and o.courier_id is None)
+            if move is not OrderStatus.SHIPPED
         ],
         courier_id=o.courier_id,
         courier_name=courier.full_name if courier else "",

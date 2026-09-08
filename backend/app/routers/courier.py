@@ -32,6 +32,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
+from sqlalchemy import update
 from sqlmodel import col, func, select
 
 from app import audit, i18n, inventory
@@ -39,6 +40,7 @@ from app import idempotency as idem
 from app import schemas as s
 from app import services as sv
 from app import transitions as tr
+from app.core.config import settings
 from app.deps import CourierUser, SessionDep
 from app.models import (
     AttemptResult,
@@ -73,7 +75,7 @@ IdempotencyKey = Annotated[
 @router.get(
     "/orders",
     response_model=list[s.CourierOrderOut],
-    summary="My deliveries, in the order somebody planned",
+    summary="The ones I took, oldest promise first",
 )
 def my_orders(
     user: CourierUser,
@@ -84,9 +86,12 @@ def my_orders(
     """Mine and nobody else's — not a filter the caller chose but the only
     rows that exist for them.
 
-    Sorted by the sequence an operator set, then the delivery window, then the
-    code. An unsequenced round still comes back in a sensible order rather
-    than in whatever order the ids happen to fall.
+    Ordered by when the customer was promised it, then by code. Nobody plans
+    this round: a courier builds it themselves off the board, so the only
+    honest order is the one the promises are in. ``courier_sequence`` is still
+    read first and is nought on everything now that no operator sets it — the
+    column stays because dropping it is a migration for nothing, and a stop
+    somebody does want moved has a place to say so.
     """
     stmt = select(Order).where(Order.courier_id == user.id)
     if day is not None:
@@ -104,6 +109,164 @@ def my_orders(
         )
     ).all()
     return [_order_out(session, order) for order in rows]
+
+
+# ------------------------------------------------------------------ the free board
+
+
+@router.get(
+    "/orders/available",
+    response_model=list[s.CourierOrderOut],
+    summary="Packed and waiting — anybody's to take",
+)
+def available_orders(user: CourierUser, session: SessionDep) -> list[s.CourierOrderOut]:
+    """Every order the warehouse has packed and nobody has taken.
+
+    Nobody hands these out. An operator choosing who carries what meant a
+    packed order sat until somebody remembered to assign it, and a courier
+    standing in the warehouse could not pick up the parcel in front of them.
+    So the board is open: the warehouse says a parcel is ready, every courier
+    sees it, and the one who wants it takes it.
+
+    Oldest first, and that is the only order there is. A board sorted by value
+    would have couriers skimming the expensive stops and leaving the rest,
+    which is the incentive a flat delivery fee exists to avoid.
+    """
+    rows = session.exec(
+        select(Order)
+        .where(Order.status == OrderStatus.PACKING)
+        .where(col(Order.courier_id).is_(None))
+        .order_by(col(Order.delivery_day), col(Order.delivery_start), col(Order.created_at))
+    ).all()
+    return [_order_out(session, order) for order in rows]
+
+
+@router.post(
+    "/orders/{order_id}/take",
+    response_model=s.CourierOrderOut,
+    summary="I am carrying this one",
+)
+def take_order(
+    order_id: int,
+    user: CourierUser,
+    session: SessionDep,
+    idempotency_key: IdempotencyKey,
+) -> s.CourierOrderOut:
+    """Claim a packed order and walk out with it.
+
+    This is the handover, and it is one act rather than two: the courier
+    picking the parcel up off the warehouse shelf is what puts the order on
+    the road, so taking it moves ``packing → shipped``. There is no separate
+    "handed over" for somebody else to remember to press.
+
+    **Two couriers reaching for the same parcel is the case this has to get
+    right.** The claim writes ``courier_id`` only while it is still null and
+    checks that the write took, so the second one is told the parcel is gone
+    rather than quietly overwriting the first. That is also why the same
+    courier repeating the call is not an error — a queued retry from a phone
+    in a lift is the ordinary case, and it replays through the key.
+    """
+    done = idem.replay(session, user, idempotency_key, "order.take", None)
+    if done is not None:
+        return s.CourierOrderOut(**done)
+
+    order = session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("order_not_found"))
+    if order.courier_id == user.id:
+        # Already mine. Not an error and not a second claim: the app queues
+        # and retries, and "I have it" is still true.
+        return _order_out(session, order)
+    if order.courier_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("order_taken"))
+    if order.status is not OrderStatus.PACKING:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("order_not_ready"))
+
+    # Claim it where it is still unclaimed, and read back how many rows that
+    # touched. Nought means somebody else got there between the check above
+    # and this line, which is a race a check alone cannot close.
+    taken = session.exec(
+        update(Order)
+        .where(col(Order.id) == order.id)
+        .where(col(Order.courier_id).is_(None))
+        .values(courier_id=user.id, status=OrderStatus.SHIPPED, updated_at=sv.utcnow())
+    )
+    if taken.rowcount == 0:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("order_taken"))
+
+    session.refresh(order)
+    audit.record(
+        session,
+        actor=user,
+        action="order.taken",
+        entity="order",
+        entity_id=order.id,
+        field="courier_id",
+        old=None,
+        new=user.id,
+    )
+    sv.stamp_order_event(session, order)
+    session.add(
+        Notification(
+            user_id=order.user_id,
+            kind=NotificationKind.ORDER,
+            icon="truck",
+            title=i18n.label("event_shipped"),
+            text=i18n.label("order_shipped_note", code=order.code),
+            deep_link=f"minibozor://orders/{order.id}",
+        )
+    )
+    out = _order_out(session, order)
+    idem.keep(session, user, idempotency_key, "order.take", None, out)
+    replayed = idem.commit(session, user, idempotency_key, "order.take")
+    if replayed:
+        return s.CourierOrderOut(**replayed)
+    session.refresh(order)
+    return _order_out(session, order)
+
+
+# --------------------------------------------------------------------------- my worth
+
+
+@router.get(
+    "/earnings",
+    response_model=s.CourierEarningsOut,
+    summary="What I have delivered and what it came to",
+)
+def earnings(user: CourierUser, session: SessionDep) -> s.CourierEarningsOut:
+    """Counted off the attempts, not off the orders.
+
+    A delivery is an event with a time on it, and pay is a question about a
+    period — "what did I earn today" cannot be answered by an order's status,
+    which only says where the order ended up. The attempt rows are the day's
+    work, in order, with the cash on them.
+    """
+    fee = settings.courier_fee_per_delivery
+    mine = select(DeliveryAttempt).where(DeliveryAttempt.courier_id == user.id)
+
+    done = session.exec(mine.where(DeliveryAttempt.result == AttemptResult.DELIVERED)).all()
+    failed = session.exec(mine.where(DeliveryAttempt.result == AttemptResult.FAILED)).all()
+
+    today = utcnow().date()
+    day = [row for row in done if row.happened_at.date() == today]
+    month = [
+        row
+        for row in done
+        if (row.happened_at.year, row.happened_at.month) == (today.year, today.month)
+    ]
+
+    return s.CourierEarningsOut(
+        delivered_today=len(day),
+        delivered_month=len(month),
+        delivered_total=len(done),
+        fee_per_delivery=fee,
+        earned_today=len(day) * fee,
+        earned_month=len(month) * fee,
+        earned_total=len(done) * fee,
+        cash_on_hand=sum(row.cash_collected for row in done),
+        failed_attempts=len(failed),
+    )
 
 
 # --------------------------------------------------------------------------- the door
