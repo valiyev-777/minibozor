@@ -8109,3 +8109,72 @@ def test_the_order_queue_is_read_by_four_roles_and_a_seller_sees_only_their_own(
 
     # A customer is not staff, whatever they can see of their own order.
     assert client.get(f"{API}/staff/orders", headers=auth).status_code == 403
+
+
+def test_a_batch_line_names_the_cell_and_not_only_the_size(
+    client: TestClient, staff: Callable[[UserRole, str], dict[str, str]]
+) -> None:
+    """Two colours of one shirt must not read the same on the receive screen.
+
+    A size's own label is "S", so a two-colour, three-size batch produced six
+    lines reading S, M, L, S, M, L — with somebody at the warehouse typing a
+    count against each. Two identical rows on the screen where the counting
+    happens is the shape of a miscount.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, "+998900150001")
+    _, mine = _linked_seller(staff, "Yorliq Do'kon", "+998900150002")
+
+    made = client.post(
+        f"{API}/staff/catalog/listings",
+        json=_listing_body(client, mine, "Yorliqli futbolka"),
+        headers=mine,
+    )
+    assert made.status_code == 201, made.text
+    batch = next(
+        row
+        for row in client.get(
+            f"{API}/staff/supplies", params={"status": "declared"}, headers=warehouse
+        ).json()
+        if row["code"] == made.json()["supply_code"]
+    )
+
+    labels = [line["variant_label"] for line in batch["lines"]]
+    assert len(labels) == len(set(labels)), labels
+    assert "Oq · S" in labels and "Qora · S" in labels
+
+
+def test_a_seller_reads_the_categories_they_have_to_file_a_product_under(
+    client: TestClient,
+    admin: dict[str, str],
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """The product form cannot exist without this list.
+
+    A seller opening their own product picks a category and, optionally, a
+    brand. Both lists were admin-only, so the field on their form had nothing
+    in it — and an empty select that looks filled in is worse than a refusal.
+
+    Reading, not writing. Somebody else's vocabulary is not theirs to edit.
+    """
+    _, mine = _linked_seller(staff, "Turkum Do'kon", "+998900160001")
+
+    for path in ("/staff/catalog/categories", "/staff/catalog/brands"):
+        got = client.get(f"{API}{path}", headers=mine)
+        assert got.status_code == 200, got.text
+        assert got.json(), path
+        assert client.get(f"{API}{path}", headers=admin).status_code == 200
+        # Not staff who have no product to file, and not a customer.
+        assert client.get(f"{API}{path}", headers=operator).status_code == 403
+        assert client.get(f"{API}{path}", headers=auth).status_code == 403
+        assert client.get(f"{API}{path}").status_code == 401
+
+    # And writing one stays the admin's.
+    body = {"slug": "sotuvchi-yozdi", "name": "Sotuvchi yozdi"}
+    assert client.post(
+        f"{API}/staff/catalog/categories", json=body, headers=mine
+    ).status_code == 403
+    assert client.delete(
+        f"{API}/staff/catalog/brands/sinov-brend", headers=mine
+    ).status_code == 403

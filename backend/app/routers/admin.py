@@ -37,7 +37,7 @@ from app import offers as of
 from app import schemas as s
 from app import services as sv
 from app import transitions as tr
-from app.deps import AdminUser, SellerUser, SessionDep
+from app.deps import AdminUser, CatalogReader, SellerUser, SessionDep
 from app.models import (
     Brand,
     Category,
@@ -510,7 +510,7 @@ def update_product(
     response_model=list[s.AdminCategoryOut],
     summary="Every category, flat, in the words the rows hold",
 )
-def list_categories(user: AdminUser, session: SessionDep) -> list[s.AdminCategoryOut]:
+def list_categories(user: CatalogReader, session: SessionDep) -> list[s.AdminCategoryOut]:
     """The whole tree at once, and the Uzbek that is on the row.
 
     Flat rather than nested: an editor picking a parent wants one list to
@@ -630,7 +630,7 @@ def delete_category(slug: str, user: AdminUser, session: SessionDep) -> s.Messag
     response_model=list[s.AdminBrandOut],
     summary="Every brand, with how many cards carry it",
 )
-def list_brands(user: AdminUser, session: SessionDep) -> list[s.AdminBrandOut]:
+def list_brands(user: CatalogReader, session: SessionDep) -> list[s.AdminBrandOut]:
     counts = dict(
         session.exec(
             select(Product.brand_id, func.count()).group_by(col(Product.brand_id))

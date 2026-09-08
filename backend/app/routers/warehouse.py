@@ -732,12 +732,30 @@ def _seller_out(session: SessionDep, seller_id: int) -> s.SellerOut:
 def _names(
     session: SessionDep, offer_id: int, variant_id: int | None
 ) -> tuple[str, str, str]:
-    """The label, the title and the code — what a person and a scanner read."""
+    """The label, the title and the code — what a person and a scanner read.
+
+    **The label names the cell, not the leaf.** A size's own label is "S", and
+    a batch of a two-colour shirt then produced six lines reading "S", "M",
+    "L", "S", "M", "L" — with somebody at the warehouse typing a count against
+    each one. Two rows that read identically on the screen where the counting
+    happens is the shape of a miscount, so a size is prefixed with the colour
+    it is a size of: "Oq · S".
+
+    A colour with no sizes is already the cell and keeps its own label; a line
+    with no variant at all is a product counted whole, and answers "—".
+    """
     offer = session.get(Offer, offer_id)
     product = session.get(Product, offer.product_id) if offer else None
     variant = session.get(ProductVariant, variant_id) if variant_id else None
+    if variant is None:
+        label = "—"
+    elif variant.parent_id is not None:
+        parent = session.get(ProductVariant, variant.parent_id)
+        label = f"{parent.label} · {variant.label}" if parent else variant.label
+    else:
+        label = variant.label
     return (
-        (variant.label if variant else "—"),
+        label,
         (product.title if product else ""),
         (product.sku if product else ""),
     )

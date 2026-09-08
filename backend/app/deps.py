@@ -189,6 +189,16 @@ OrderViewer = Annotated[
     ),
 ]
 
+# Reading the catalogue's own vocabulary — the categories and brands a card
+# can be filed under. A seller picks from both when they open a product, so
+# reading is theirs; *writing* one is not, and stays `AdminUser` on the same
+# paths. Every customer path already answers with these, translated, without
+# any token at all: what a seller needs is the editorial list, in the words
+# the rows hold, which is what these two answer.
+CatalogReader = Annotated[
+    User, Depends(require_role(UserRole.SELLER, UserRole.ADMIN))
+]
+
 # Moving an order along. The warehouse joins the operator here because two of
 # the three moves are theirs: a picker marks an order picked and marks it
 # handed to the courier. Which moves each of them may make is decided inside

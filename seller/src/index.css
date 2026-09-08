@@ -1,0 +1,10 @@
+@import "tailwindcss";
+/* The one design system, shared with the back office and the courier's app.
+ * Tokens, density and the three meanings live in ../../shared/theme.css.
+ *
+ * This file used to hold a palette of its own — a green accent and a warm
+ * canvas, chosen so the cabinet would feel unlike the back office. That is
+ * exactly the difference the owner asked to remove: the green then collided
+ * with green-means-succeeded on every status badge, and two panels a click
+ * apart looked like two products. Nothing panel-specific belongs here now. */
+@import "../../shared/theme.css";
