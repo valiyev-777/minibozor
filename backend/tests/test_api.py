@@ -8003,3 +8003,109 @@ def test_nothing_is_inspected_before_it_could_have_arrived(
         headers=warehouse,
     )
     assert too_early.status_code == 409, too_early.text
+
+
+def test_the_order_queue_is_read_by_four_roles_and_a_seller_sees_only_their_own(
+    client: TestClient,
+    auth: dict[str, str],
+    operator: dict[str, str],
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> None:
+    """One queue, four jobs.
+
+    The operator runs it, the warehouse picks from it, the admin does either,
+    and the seller watches their own goods go out. It used to be the
+    operator's alone, which left the warehouse with no list to pick from and a
+    seller unable to see that anything had sold.
+
+    A seller's narrowing is not a filter they chose — it is the only set of
+    orders that exists for them — and an order that is not theirs is a 404
+    rather than an empty page, because "there is one, and it is somebody
+    else's" is a fact about a competitor's sales.
+    """
+    warehouse = staff(UserRole.WAREHOUSE, "+998900140001")
+    product_id, mine, _wh, _ = _received_listing(
+        client,
+        staff,
+        title="Navbatdagi futbolka",
+        seller_name="Navbat Do'kon",
+        seller_phone="+998900140002",
+        warehouse_phone="+998900140003",
+    )
+
+    client.delete(f"{API}/cart", headers=auth)
+    product = client.get(f"{API}/products/{product_id}").json()
+    colour = next(v for v in product["variants"] if v["kind"] == "color")
+    size = next(
+        v
+        for v in product["variants"]
+        if v["kind"] == "size" and v["parent_id"] == colour["id"]
+    )
+    added = client.post(
+        f"{API}/cart/items",
+        json={
+            "product_id": product_id,
+            "color_variant_id": colour["id"],
+            "variant_id": size["id"],
+            "quantity": 1,
+        },
+        headers=auth,
+    )
+    assert added.status_code in (200, 201), added.text
+    address = client.get(f"{API}/addresses", headers=auth).json()[0]
+    order_id = client.post(
+        f"{API}/orders", json={"address_id": address["id"]}, headers=auth
+    ).json()["id"]
+
+    # Everyone who works the queue can read it.
+    for headers in (operator, warehouse, mine):
+        got = client.get(f"{API}/staff/orders", headers=headers)
+        assert got.status_code == 200, got.text
+
+    # The seller's own is the only one on their list.
+    theirs = client.get(f"{API}/staff/orders", headers=mine).json()
+    assert [row["id"] for row in theirs["items"]] == [order_id]
+    assert theirs["total"] == 1
+    assert client.get(f"{API}/staff/orders/{order_id}", headers=mine).status_code == 200
+
+    # Another seller's list does not have it, and neither does their detail.
+    _, theirs_headers = _linked_seller(staff, "Chetdagi Do'kon", "+998900140004")
+    other = client.get(f"{API}/staff/orders", headers=theirs_headers).json()
+    assert other["items"] == [] and other["total"] == 0
+    assert client.get(
+        f"{API}/staff/orders/{order_id}", headers=theirs_headers
+    ).status_code == 404
+
+    # A seller may not move one along. Reading a queue is not working it.
+    assert client.post(
+        f"{API}/staff/orders/{order_id}/status",
+        json={"status": "packing"},
+        headers=mine,
+    ).status_code == 403
+
+    # The warehouse picks it and hands it over, because that is what a person
+    # at a bench does.
+    for target in ("packing", "shipped"):
+        moved = client.post(
+            f"{API}/staff/orders/{order_id}/status",
+            json={"status": target},
+            headers=warehouse,
+        )
+        assert moved.status_code == 200, moved.text
+
+    # And does not call off a sale from the packing bench. That decision needs
+    # somebody who can phone the customer.
+    refused = client.post(
+        f"{API}/staff/orders/{order_id}/status",
+        json={"status": "cancelled", "note": "shunchaki"},
+        headers=warehouse,
+    )
+    assert refused.status_code == 403, refused.text
+    assert client.post(
+        f"{API}/staff/orders/{order_id}/status",
+        json={"status": "cancelled", "note": "mijoz javob bermadi"},
+        headers=operator,
+    ).status_code == 200
+
+    # A customer is not staff, whatever they can see of their own order.
+    assert client.get(f"{API}/staff/orders", headers=auth).status_code == 403

@@ -257,6 +257,14 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Переход из «{from_}» в «{to}» невозможен",
         "en": "{from_} cannot become {to}",
     },
+    "cancel_is_operators": {
+        "uz": "Buyurtmani bekor qilish operator ishi — ombor faqat yig'adi "
+              "va kuryerga topshiradi",
+        "ru": "Отменяет заказ оператор — склад только собирает и передаёт "
+              "курьеру",
+        "en": "Cancelling is the operator's — the warehouse picks and hands "
+              "over, and nothing else",
+    },
     "reason_required": {
         "uz": "Rad etish sababini yozing",
         "ru": "Укажите причину отказа",

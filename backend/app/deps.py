@@ -172,6 +172,34 @@ ReturnViewer = Annotated[
     ),
 ]
 
+# Reading the order queue. An operator runs it, the warehouse picks from it,
+# and a seller watches their own goods go out — three jobs on one list, which
+# is why it is one endpoint with an `awaiting`-style scope rather than three
+# renderings of `orders`.
+#
+# A seller sees only orders carrying their own offers, scoped in the endpoint.
+# They may not *move* one: `POST /staff/orders/{id}/status` stays the
+# operator's and the warehouse's.
+OrderViewer = Annotated[
+    User,
+    Depends(
+        require_role(
+            UserRole.SELLER, UserRole.WAREHOUSE, UserRole.OPERATOR, UserRole.ADMIN
+        )
+    ),
+]
+
+# Moving an order along. The warehouse joins the operator here because two of
+# the three moves are theirs: a picker marks an order picked and marks it
+# handed to the courier. Which moves each of them may make is decided inside
+# the endpoint, because it is a rule per transition and not per door —
+# cancelling is the operator's, and a picker should not be able to call off a
+# sale from the packing bench.
+OrderMover = Annotated[
+    User,
+    Depends(require_role(UserRole.WAREHOUSE, UserRole.OPERATOR, UserRole.ADMIN)),
+]
+
 # Handling the goods once they are back: a courier brings a collection in and
 # the warehouse books it, so both need to read a run.
 PickupHandler = Annotated[

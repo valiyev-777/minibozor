@@ -40,6 +40,8 @@ from app import transitions as tr
 from app.core.config import settings
 from app.deps import (
     OperatorUser,
+    OrderMover,
+    OrderViewer,
     PickupHandler,
     ReturnViewer,
     SellerUser,
@@ -466,7 +468,7 @@ def _refund_amount(
     summary="The order queue",
 )
 def order_queue(
-    user: OperatorUser,
+    user: OrderViewer,
     session: SessionDep,
     status_filter: OrderStatus | None = Query(
         None, alias="status", description="default: everything, oldest first"
@@ -474,9 +476,23 @@ def order_queue(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> s.Page[s.StaffOrderOut]:
+    """One queue, read by four roles.
+
+    An operator runs it, the warehouse picks from it, an admin does either —
+    and a seller watches their own goods go out. Read-only for the seller:
+    ``POST /staff/orders/{id}/status`` is somebody else's door, and they get a
+    404 rather than an empty page for an order that is not theirs, because
+    "there is one and it is not yours" is a fact about a competitor's sales.
+
+    The seller's narrowing is not a filter they chose. It is the only set of
+    orders that exists for them, so it is applied here rather than offered as
+    a parameter that could be left off.
+    """
     stmt = select(Order)
     if status_filter is not None:
         stmt = stmt.where(Order.status == status_filter)
+    if user.role is UserRole.SELLER:
+        stmt = stmt.where(col(Order.id).in_(_my_order_ids(session, user)))
     total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
     # Oldest first: a queue is worked from the front, which is the opposite of
     # how the customer's own list is sorted.
@@ -499,11 +515,32 @@ def order_queue(
     response_model=s.OrderOut,
     summary="One order in full — the customer's own view of it",
 )
-def get_order(order_id: int, user: OperatorUser, session: SessionDep) -> s.OrderOut:
+def get_order(
+    order_id: int, user: OrderViewer, session: SessionDep
+) -> s.OrderOut:
     # Deliberately the customer's shape: an operator on the phone is being
     # asked about what the customer is looking at, and a second rendering of
     # the same order is a second thing to keep in step.
-    return sv.order_out(session, _order(session, order_id))
+    order = _order(session, order_id)
+    if user.role is UserRole.SELLER and order.id not in _my_order_ids(session, user):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("order_not_found"))
+    return sv.order_out(session, order)
+
+
+def _my_order_ids(session: SessionDep, user: User) -> list[int]:
+    """Every order carrying one of this seller's offers.
+
+    Off ``order_items.seller_id``, which is stamped when the order is placed
+    rather than read back through the offer — a seller whose offer was later
+    withdrawn still sold the thing, and their own list should still say so.
+    """
+    seller = session.exec(select(Seller).where(Seller.user_id == user.id)).first()
+    if seller is None:
+        return [-1]
+    rows = session.exec(
+        select(OrderItem.order_id).where(OrderItem.seller_id == seller.id)
+    ).all()
+    return list(rows) or [-1]
 
 
 @router.post(
@@ -512,9 +549,22 @@ def get_order(order_id: int, user: OperatorUser, session: SessionDep) -> s.Order
     summary="Move an order along",
 )
 def set_order_status(
-    order_id: int, payload: s.OrderStatusIn, user: OperatorUser, session: SessionDep
+    order_id: int, payload: s.OrderStatusIn, user: OrderMover, session: SessionDep
 ) -> s.OrderOut:
+    """The queue's one write, and not every role may make every move.
+
+    Picking is the warehouse's — ``placed → packing → shipped`` is what a
+    person at a bench does — and cancelling is not. A picker who could call
+    off a sale would be deciding, from the packing bench, that a customer is
+    not getting their order; the person who can phone them and see how many
+    times a courier has tried is the operator. So the *door* admits both and
+    the *move* is checked here, which is the same shape as
+    ``transitions.ensure`` immediately below: a rule per transition rather
+    than a rule per endpoint.
+    """
     order = _order(session, order_id)
+    if user.role is UserRole.WAREHOUSE and payload.status is OrderStatus.CANCELLED:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("cancel_is_operators"))
     tr.ensure(tr.ORDER_TRANSITIONS, order.status, payload.status)
     was = order.status
 
