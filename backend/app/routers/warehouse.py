@@ -42,9 +42,6 @@ from app.models import (
     RemovalOrder,
     RemovalStatus,
     Seller,
-    StockCount,
-    StockCountLine,
-    StockCountStatus,
     StockMovement,
     StockMovementKind,
     Supply,
@@ -392,160 +389,6 @@ def _reject_on_refusal(
     of.refresh(session, product.id)
 
 
-# --------------------------------------------------------------------------- stocktakes
-
-
-@router.post(
-    "/stock-counts",
-    response_model=s.StockCountOut,
-    status_code=status.HTTP_201_CREATED,
-    summary="Open a stocktake, snapshotting what is expected",
-)
-def open_count(
-    payload: s.StockCountCreateIn, user: WarehouseUser, session: SessionDep
-) -> s.StockCountOut:
-    """The expected figures are frozen now, not read at the end.
-
-    A sale during the count would otherwise look like a discrepancy, and
-    somebody would go looking for goods that were bought while they counted.
-    """
-    offer = session.get(Offer, payload.offer_id)
-    if offer is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("offer_not_found"))
-
-    open_already = session.exec(
-        select(StockCount).where(
-            StockCount.offer_id == offer.id, StockCount.status == StockCountStatus.OPEN
-        )
-    ).first()
-    if open_already is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("count_already_open"))
-
-    count = StockCount(
-        code=_next_code(session, StockCount, "CNT"),
-        offer_id=offer.id,
-        note=payload.note,
-        opened_by_id=user.id,
-    )
-    session.add(count)
-    session.commit()
-    session.refresh(count)
-
-    leaves = of.leaf_variants(session, offer.product_id)
-    if leaves:
-        for leaf in leaves:
-            session.add(
-                StockCountLine(
-                    count_id=count.id,
-                    variant_id=leaf.id,
-                    expected=of.variant_stock(session, offer.id, leaf.id) or 0,
-                )
-            )
-    else:
-        session.add(StockCountLine(count_id=count.id, expected=offer.stock_left))
-    session.commit()
-    return _count_out(session, count)
-
-
-@router.get("/stock-counts", response_model=list[s.StockCountOut])
-def list_counts(
-    user: WarehouseUser,
-    session: SessionDep,
-    status_filter: StockCountStatus | None = Query(None, alias="status"),
-) -> list[s.StockCountOut]:
-    stmt = select(StockCount)
-    if status_filter is not None:
-        stmt = stmt.where(StockCount.status == status_filter)
-    rows = session.exec(stmt.order_by(col(StockCount.opened_at).desc())).all()
-    return [_count_out(session, row) for row in rows]
-
-
-@router.get("/stock-counts/{count_id}", response_model=s.StockCountOut)
-def get_count(count_id: int, user: WarehouseUser, session: SessionDep) -> s.StockCountOut:
-    return _count_out(session, _count(session, count_id))
-
-
-@router.post(
-    "/stock-counts/{count_id}/close",
-    response_model=s.StockCountOut,
-    summary="Record what was found, and correct the difference",
-)
-def close_count(
-    count_id: int,
-    payload: s.StockCountCloseIn,
-    user: WarehouseUser,
-    session: SessionDep,
-) -> s.StockCountOut:
-    """The difference becomes a movement, so the correction has a reason.
-
-    Against the *expected* figure frozen when the count opened, not against
-    the shelf as it stands now — anything sold in between is already in the
-    ledger and is not a discrepancy.
-    """
-    count = _count(session, count_id)
-    if count.status is not StockCountStatus.OPEN:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            i18n.label("bad_transition", from_=count.status.value, to="closed"),
-        )
-    offer = session.get(Offer, count.offer_id)
-    if offer is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("offer_not_found"))
-
-    lines = session.exec(
-        select(StockCountLine).where(StockCountLine.count_id == count.id)
-    ).all()
-    by_variant = {line.variant_id: line for line in lines}
-    for entry in payload.lines:
-        line = by_variant.get(entry.variant_id)
-        if line is None:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, i18n.label("variant_not_of_product")
-            )
-        line.counted = entry.counted
-        session.add(line)
-
-    for line in lines:
-        if line.counted is None or line.difference == 0:
-            continue
-        st.move(
-            session,
-            offer=offer,
-            kind=StockMovementKind.COUNT_ADJUSTMENT,
-            quantity=line.difference,
-            variant_id=line.variant_id,
-            actor=user,
-            reason=payload.note or f"{count.code} sanoq farqi",
-            count_id=count.id,
-        )
-
-    count.status = StockCountStatus.CLOSED
-    count.closed_at = utcnow()
-    count.closed_by_id = user.id
-    if payload.note:
-        count.note = payload.note
-    session.add(count)
-
-    audit.record(
-        session,
-        actor=user,
-        action="stock_count.close",
-        entity="stock_count",
-        entity_id=count.id,
-        field="difference",
-        old=None,
-        new=sum(line.difference or 0 for line in lines),
-        note=payload.note or count.code,
-    )
-    of.refresh(session, offer.product_id)
-    session.commit()
-    session.refresh(count)
-    return _count_out(session, count)
-
-
-# --------------------------------------------------------------------------- removals
-
-
 @router.post(
     "/removals",
     response_model=s.RemovalOut,
@@ -755,28 +598,6 @@ def write_off(
 
 
 @router.get(
-    "/offers/{offer_id}/shelf",
-    response_model=list[s.ShelfOut],
-    summary="On hand, promised, and left to sell",
-)
-def read_shelf(
-    offer_id: int, user: StockViewer, session: SessionDep
-) -> list[s.ShelfOut]:
-    offer = session.get(Offer, offer_id)
-    if offer is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("offer_not_found"))
-    if user.role is UserRole.SELLER and offer.seller_id != _own_seller(session, user).id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("not_your_offer"))
-
-    rows = [_shelf_out(session, offer, None)]
-    rows.extend(
-        _shelf_out(session, offer, leaf.id)
-        for leaf in of.leaf_variants(session, offer.product_id)
-    )
-    return rows
-
-
-@router.get(
     "/stock/movements",
     response_model=s.Page[s.MovementOut],
     summary="The ledger — every reason a count changed",
@@ -899,13 +720,6 @@ def _visible_removal(session: SessionDep, user: User, removal_id: int) -> Remova
     return removal
 
 
-def _count(session: SessionDep, count_id: int) -> StockCount:
-    count = session.get(StockCount, count_id)
-    if count is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("count_not_found"))
-    return count
-
-
 def _seller_out(session: SessionDep, seller_id: int) -> s.SellerOut:
     seller = session.get(Seller, seller_id)
     return (
@@ -958,39 +772,6 @@ def _supply_out(session: SessionDep, supply: Supply) -> s.SupplyOut:
         lines=out,
         declared_at=supply.declared_at,
         received_at=supply.received_at,
-    )
-
-
-def _count_out(session: SessionDep, count: StockCount) -> s.StockCountOut:
-    offer = session.get(Offer, count.offer_id)
-    product = session.get(Product, offer.product_id) if offer else None
-    lines = session.exec(
-        select(StockCountLine)
-        .where(StockCountLine.count_id == count.id)
-        .order_by(col(StockCountLine.id))
-    ).all()
-    return s.StockCountOut(
-        id=count.id,
-        code=count.code,
-        offer_id=count.offer_id,
-        product_title=product.title if product else "",
-        seller=_seller_out(session, offer.seller_id) if offer else s.SellerOut(id=0, name=""),
-        status=count.status,
-        note=count.note,
-        lines=[
-            s.StockCountLineOut(
-                id=line.id,
-                variant_id=line.variant_id,
-                sku=_names(session, count.offer_id, line.variant_id)[2],
-                variant_label=_names(session, count.offer_id, line.variant_id)[0],
-                expected=line.expected,
-                counted=line.counted,
-                difference=line.difference,
-            )
-            for line in lines
-        ],
-        opened_at=count.opened_at,
-        closed_at=count.closed_at,
     )
 
 
@@ -1058,7 +839,6 @@ def _movement_out(session: SessionDep, movement: StockMovement) -> s.MovementOut
         supply_id=movement.supply_id,
         order_id=movement.order_id,
         return_request_id=movement.return_request_id,
-        count_id=movement.count_id,
         removal_id=movement.removal_id,
         created_at=movement.created_at,
     )

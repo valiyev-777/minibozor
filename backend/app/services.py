@@ -29,10 +29,6 @@ from app.models import (
     ProductSpec,
     ProductStatus,
     ProductVariant,
-    PromoCode,
-    Review,
-    ReviewLike,
-    ReviewStatus,
     User,
 )
 
@@ -312,94 +308,6 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
     )
 
 
-# --------------------------------------------------------------------------- reviews
-
-
-def review_out(
-    session: Session,
-    r: Review,
-    *,
-    viewer: User | None = None,
-    with_product: bool = False,
-) -> s.ReviewOut:
-    author = session.get(User, r.user_id)
-    name = short_name(author.full_name) if author and author.full_name else "Mijoz"
-    liked = False
-    if viewer:
-        liked = session.exec(
-            select(ReviewLike).where(
-                ReviewLike.review_id == r.id, ReviewLike.user_id == viewer.id
-            )
-        ).first() is not None
-
-    product = None
-    if with_product:
-        p = session.get(Product, r.product_id)
-        if p:
-            product = product_card(session, p, favorite_ids(session, viewer))
-
-    return s.ReviewOut(
-        id=r.id,
-        author_name=name,
-        author_initials=initials(author.full_name if author else ""),
-        rating=r.rating,
-        text=r.text,
-        variant_label=r.variant_label,
-        tags=list(r.tags or []),
-        photos=[media_url(p) for p in (r.photos or [])],
-        likes=r.likes,
-        liked_by_me=liked,
-        status=r.status,
-        created_at=r.created_at,
-        product=product,
-    )
-
-
-def review_summary(session: Session, product_id: int) -> s.ReviewSummaryOut:
-    reviews = session.exec(
-        select(Review).where(
-            Review.product_id == product_id, Review.status == ReviewStatus.PUBLISHED
-        )
-    ).all()
-    total = len(reviews)
-    counts = {n: 0 for n in range(1, 6)}
-    for r in reviews:
-        counts[r.rating] = counts.get(r.rating, 0) + 1
-    avg = sum(r.rating for r in reviews) / total if total else 0.0
-    distribution = [
-        s.RatingBucket(
-            stars=n,
-            count=counts[n],
-            percent=round(counts[n] / total * 100) if total else 0,
-        )
-        for n in range(5, 0, -1)
-    ]
-    # Every published photograph, newest first, capped at what a strip can show.
-    # The count is of photographs rather than of reviews carrying them: the tile
-    # says "+60", and 60 pictures across 20 reviews is still 60 pictures.
-    photos = [
-        media_url(url)
-        for r in sorted(reviews, key=lambda r: r.created_at, reverse=True)
-        for url in r.photos
-    ]
-    return s.ReviewSummaryOut(
-        rating=round(avg, 1),
-        total=total,
-        distribution=distribution,
-        photos=[u for u in photos[:9] if u],
-        photos_total=len([u for u in photos if u]),
-    )
-
-
-def recalc_product_rating(session: Session, product_id: int) -> None:
-    summary = review_summary(session, product_id)
-    product = session.get(Product, product_id)
-    if product:
-        product.rating = summary.rating
-        product.reviews_count = summary.total
-        session.add(product)
-
-
 # --------------------------------------------------------------------------- cart
 
 
@@ -505,15 +413,19 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
 
 
 def promo_discount(session: Session, code: str | None, subtotal: int) -> tuple[int, str | None]:
-    if not code:
-        return 0, None
-    promo = session.exec(
-        select(PromoCode).where(PromoCode.code == code.upper(), PromoCode.active.is_(True))
-    ).first()
-    if promo is None or subtotal < promo.min_total:
-        return 0, None
-    discount = promo.amount_off + round(subtotal * promo.percent_off / 100)
-    return min(discount, subtotal), promo.code
+    """No code is valid, because there are no codes.
+
+    ``PromoCode`` went with the panels rebuild — there was no screen that
+    wrote one and none is planned in this pass — but the *shape* stays: the
+    cart still accepts a ``promo_code`` and still answers with a discount and
+    a code, because the shipped apps send and read both. So every code is
+    simply unrecognised, which is a thing the cart screen already knew how to
+    say, and nothing above this function had to change.
+
+    Bringing discounts back means giving this function a table to look in
+    again, and nothing else.
+    """
+    return 0, None
 
 
 def cart_totals(

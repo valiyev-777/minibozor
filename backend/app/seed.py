@@ -51,11 +51,7 @@ from app.models import (
     ProductSpec,
     ProductStatus,
     ProductVariant,
-    PromoCode,
     ReturnReason,
-    Review,
-    ReviewStatus,
-    ReviewTag,
     Seller,
     User,
     UserRole,
@@ -571,10 +567,6 @@ RETURN_REASONS = [
     ("Boshqa tovar keldi", True),
 ]
 
-REVIEW_TAGS = [
-    "O'lcham mos", "Sifatli", "Tez yetkazildi", "Rasmga mos", "Narxi arzon", "Qadoq yaxshi",
-]
-
 POPULAR_QUERIES = [
     "iPhone 15", "robot changyutgich", "yozgi ko'ylak", "airfryer", "maktab sumkasi", "smart soat",
 ]
@@ -659,7 +651,6 @@ def seed(session: Session) -> None:
     _seed_content(session)
     _seed_delivery(session)
     users = _seed_users(session)
-    _seed_reviews(session, products, users)
     _seed_user_data(session, users["demo"], products)
     session.commit()
     translated = seed_translations(session)
@@ -1001,8 +992,6 @@ def _seed_home(session: Session) -> None:
                 category_slug=category, layout=layout, sort=sort,
             )
         )
-    session.add(PromoCode(code="MINI10", percent_off=10, min_total=200_000))
-    session.add(PromoCode(code="YETKAZISH", amount_off=19_000, min_total=100_000))
     session.commit()
 
 
@@ -1020,8 +1009,6 @@ def _seed_content(session: Session) -> None:
         session.add(CancelReason(label=label, sort=sort, requires_comment=needs_comment))
     for sort, (label, needs_comment) in enumerate(RETURN_REASONS):
         session.add(ReturnReason(label=label, sort=sort, requires_comment=needs_comment))
-    for sort, label in enumerate(REVIEW_TAGS):
-        session.add(ReviewTag(label=label, sort=sort))
     for sort, query in enumerate(POPULAR_QUERIES):
         session.add(PopularQuery(query=query, hits=500 - sort * 40, sort=sort))
     session.commit()
@@ -1090,43 +1077,6 @@ def _seed_users(session: Session) -> dict[str, User]:
     for user in people:
         session.refresh(user)
     return {"demo": demo, "madina": madina, "bekzod": bekzod, "admin": admin}
-
-
-def _seed_reviews(
-    session: Session, products: dict[str, Product], users: dict[str, User]
-) -> None:
-    entries = [
-        ("MB-1002", "madina", 5, "Oq · 38",
-         "Juda yengil va qulay. O'lcham aynan mos keldi, qadoq butun holda yetib keldi. "
-         "Rasmdagidek — rangi ham xuddi shunday.",
-         ["O'lcham mos", "Qadoq yaxshi"], ["products/af1.png"], 12, -6),
-        ("MB-1001", "bekzod", 4, "Qora · 43",
-         "Sifati yaxshi, lekin yetkazish bir kun kechikdi. Taglik mustahkam, "
-         "kun bo'yi yurdim — oyoq charchamadi.",
-         ["Sifatli"], ["products/gazelle.png", "products/af1-black.png"], 5, -10),
-        ("MB-1001", "demo", 5, "Ko'k · 42",
-         "O'lcham aynan mos keldi, zamsh sifatli. Kuniga 8 soat kiyaman — oyoq charchamaydi.",
-         ["O'lcham mos", "Sifatli"], ["products/gazelle.png"], 14, -12),
-        ("MB-2001", "demo", 4, "Oq",
-         "Original, shovqin bostirish zo'r. Faqat quti chizilib kelgan edi.",
-         ["Tez yetkazildi"], [], 6, -20),
-    ]
-    for sku, who, rating, variant, text, tags, photos, likes, day_offset in entries:
-        session.add(
-            Review(
-                user_id=users[who].id,
-                product_id=products[sku].id,
-                rating=rating,
-                variant_label=variant,
-                text=text,
-                tags=tags,
-                photos=photos,
-                likes=likes,
-                status=ReviewStatus.PUBLISHED,
-                created_at=_at(day_offset, 12, 0),
-            )
-        )
-    session.commit()
 
 
 def _seed_user_data(session: Session, user: User, products: dict[str, Product]) -> None:

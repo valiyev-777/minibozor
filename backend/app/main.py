@@ -31,9 +31,7 @@ from app.routers import (
     orders,
     payouts,
     profile,
-    reviews,
     search,
-    showcase,
     staff,
     warehouse,
 )
@@ -115,7 +113,6 @@ for router in (
     delivery.router,
     cards.router,
     orders.router,
-    reviews.router,
     notifications.router,
     profile.router,
     content.router,
@@ -127,7 +124,6 @@ for router in (
     warehouse.router,
     admin.router,
     payouts.router,
-    showcase.router,
     courier.router,
 ):
     app.include_router(router, prefix=API)

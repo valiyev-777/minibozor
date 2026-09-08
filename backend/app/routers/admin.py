@@ -320,19 +320,6 @@ def get_product(
     )
 
 
-@router.post(
-    "/catalog/products",
-    response_model=s.AdminProductOut,
-    status_code=status.HTTP_201_CREATED,
-    summary="Write a new card",
-)
-def create_product(
-    payload: s.ProductCreateIn, user: AdminUser, session: SessionDep
-) -> s.AdminProductOut:
-    """Created as a draft. Publishing it is a separate act with its own door."""
-    return _create_card(session, user, payload, ProductStatus.DRAFT, proposed_by=None)
-
-
 @router.get(
     "/catalog/proposals",
     response_model=s.Page[s.AdminProductOut],
@@ -510,54 +497,6 @@ def update_product(
 
     i18n.write(session, "product", product.id, _texts(payload.translations))
     session.add(product)
-    session.commit()
-    session.refresh(product)
-    return _product_out(session, product)
-
-
-@router.post(
-    "/catalog/products/{product_id}/status",
-    response_model=s.AdminProductOut,
-    summary="Publish, refuse, or withdraw a card",
-)
-def set_product_status(
-    product_id: int, payload: s.ProductStatusIn, user: AdminUser, session: SessionDep
-) -> s.AdminProductOut:
-    """The moderation decision, and the only way a card's state moves.
-
-    A refusal needs a reason because the seller who proposed it reads it and
-    has to know what to fix. Which moves are legal is in
-    ``app.transitions.PRODUCT_TRANSITIONS`` and nowhere else.
-    """
-    product = _product(session, product_id)
-    tr.ensure(tr.PRODUCT_TRANSITIONS, product.status, payload.status)
-
-    if payload.status is ProductStatus.REJECTED and not payload.reason.strip():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("reason_required"))
-
-    audit.record(
-        session,
-        actor=user,
-        action="product.status",
-        entity="product",
-        entity_id=product.id,
-        field="status",
-        old=product.status,
-        new=payload.status,
-        note=payload.reason or product.sku,
-    )
-    product.status = payload.status
-    if payload.status is ProductStatus.REJECTED:
-        product.moderation_note = payload.reason.strip()
-    elif payload.status is ProductStatus.PUBLISHED:
-        product.moderation_note = ""
-    session.add(product)
-    session.commit()
-
-    # A card leaving or entering the shop changes what its offers can do, so
-    # the cached figures are recomputed rather than left describing the old
-    # answer.
-    of.refresh(session, product.id)
     session.commit()
     session.refresh(product)
     return _product_out(session, product)

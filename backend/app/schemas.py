@@ -26,12 +26,9 @@ from app.models import (
     RemovalStatus,
     ReturnInspection,
     ReturnStatus,
-    ReviewStatus,
     SellerReturnDecision,
     SettlementStatus,
-    ShiftStatus,
     StatementLineKind,
-    StockCountStatus,
     StockMovementKind,
     SupplyStatus,
     UserRole,
@@ -316,47 +313,6 @@ class ProductOut(ProductCardOut):
     sold_count: int = 0
 
 
-class RatingBucket(BaseModel):
-    stars: int
-    count: int
-    percent: int
-
-
-class ReviewSummaryOut(BaseModel):
-    rating: float
-    total: int
-    distribution: list[RatingBucket]
-    # A handful of customer photographs for the strip beside the rating, and the
-    # full count so the last tile can say how many more there are.
-    photos: list[str] = []
-    photos_total: int = 0
-
-
-class ReviewOut(BaseModel):
-    id: int
-    author_name: str
-    author_initials: str
-    rating: int
-    text: str
-    variant_label: str
-    tags: list[str]
-    photos: list[str]
-    likes: int
-    liked_by_me: bool = False
-    status: ReviewStatus
-    created_at: datetime
-    product: ProductCardOut | None = None
-
-
-class ReviewCreateIn(BaseModel):
-    rating: int = Field(ge=1, le=5)
-    text: str = ""
-    tags: list[str] = []
-    photos: list[str] = []
-    variant_label: str = ""
-    order_item_id: int | None = None
-
-
 class BannerOut(BaseModel):
     id: int
     kicker: str
@@ -468,10 +424,6 @@ class CartAddIn(BaseModel):
 class CartUpdateIn(BaseModel):
     quantity: int | None = Field(default=None, ge=0, le=99)
     selected: bool | None = None
-
-
-class PromoIn(BaseModel):
-    code: str
 
 
 # --------------------------------------------------------------------------- delivery
@@ -764,24 +716,6 @@ class OfferVariantStockIn(BaseModel):
     stock_left: int = Field(ge=0)
 
 
-class OfferStockIn(BaseModel):
-    """A stocktake correction: the counts found, and why they differ.
-
-    Only the leaves are given — the sizes of a product that has sizes, its
-    colours otherwise. Colour totals follow from the sizes, so a shelf cannot
-    be left disagreeing with itself. ``stock_left`` is for a product with no
-    variants at all, where the offer *is* the leaf.
-
-    ``reason`` is required. A count that changed for no stated reason is
-    exactly what the movement ledger exists to make impossible, and this is
-    the one endpoint that could still write one.
-    """
-
-    reason: str = Field(min_length=1, max_length=200)
-    stock_left: int | None = Field(None, ge=0)
-    variants: list[OfferVariantStockIn] = Field(default_factory=list, max_length=200)
-
-
 # --------------------------------------------------------------------------- warehouse
 
 
@@ -810,7 +744,6 @@ class MovementOut(StockLineOut):
     supply_id: int | None
     order_id: int | None
     return_request_id: int | None
-    count_id: int | None
     removal_id: int | None
     created_at: datetime
 
@@ -883,44 +816,6 @@ class SupplyOut(BaseModel):
     lines: list[SupplyLineOut]
     declared_at: datetime
     received_at: datetime | None
-
-
-class StockCountCreateIn(BaseModel):
-    offer_id: int
-    note: str = ""
-
-
-class StockCountLineIn(BaseModel):
-    variant_id: int | None = None
-    counted: int = Field(ge=0)
-
-
-class StockCountCloseIn(BaseModel):
-    lines: list[StockCountLineIn] = Field(min_length=1, max_length=500)
-    note: str = ""
-
-
-class StockCountLineOut(BaseModel):
-    id: int
-    variant_id: int | None
-    sku: str
-    variant_label: str
-    expected: int
-    counted: int | None
-    difference: int | None
-
-
-class StockCountOut(BaseModel):
-    id: int
-    code: str
-    offer_id: int
-    product_title: str
-    seller: SellerOut
-    status: StockCountStatus
-    note: str
-    lines: list[StockCountLineOut]
-    opened_at: datetime
-    closed_at: datetime | None
 
 
 class RemovalLineIn(BaseModel):
@@ -1240,11 +1135,6 @@ class ProductProposeIn(ProductCreateIn):
     """
 
 
-class ProductStatusIn(BaseModel):
-    status: ProductStatus
-    reason: str = ""
-
-
 class CategoryWriteIn(BaseModel):
     slug: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9-]+$")
     name: str = Field(min_length=1, max_length=120)
@@ -1307,21 +1197,6 @@ class SpecsReplaceIn(BaseModel):
 # --------------------------------------------------------------------------- showcase
 
 
-class AdminBannerOut(BaseModel):
-    id: int
-    kicker: str
-    title: str
-    subtitle: str
-    cta: str
-    image_url: str
-    gradient_from: str
-    gradient_to: str
-    target_type: str
-    target_value: str
-    sort: int
-    active: bool
-
-
 class BannerWriteIn(BaseModel):
     kicker: str = ""
     title: str = Field(min_length=1, max_length=200)
@@ -1346,17 +1221,6 @@ class BannerUpdateIn(BaseModel):
     target_type: Literal["category", "product", "url"] | None = None
     target_value: str | None = None
     active: bool | None = None
-
-
-class AdminSectionOut(BaseModel):
-    id: int
-    key: str
-    title: str
-    subtitle: str
-    category_slug: str | None
-    layout: str
-    sort: int
-    active: bool
 
 
 class SectionWriteIn(BaseModel):
@@ -1385,15 +1249,6 @@ class ReorderIn(BaseModel):
     """
 
     ids: list[int] = Field(min_length=1, max_length=200)
-
-
-class AdminPromoOut(BaseModel):
-    id: int
-    code: str
-    percent_off: int
-    amount_off: int
-    min_total: int
-    active: bool
 
 
 class PromoWriteIn(BaseModel):
@@ -1568,25 +1423,6 @@ class SellerMeOut(BaseModel):
     offer_count: int
 
 
-class SellerVariantOut(BaseModel):
-    """A colour or a size, and whether an offer must name it.
-
-    ``is_leaf`` is the whole point. An offer has to name every leaf — the
-    sizes of a product that has sizes, its colours otherwise — and naming
-    some of them is refused, because an offer covering half a card leaves the
-    rest of it without figures. The rule was already enforced with a 422 and
-    there was no way for a seller to find out what the leaves were.
-    """
-
-    id: int
-    kind: VariantKind
-    label: str
-    value: str
-    image_url: str | None
-    parent_id: int | None
-    is_leaf: bool
-
-
 # ------------------------------------------------ a seller's own listing, whole
 
 # The catalogue is not the platform's alone. A seller opens their own product,
@@ -1724,60 +1560,6 @@ class SellerListingOut(BaseModel):
     on_hand_total: int
     sellable_total: int
     created_at: datetime
-
-
-class SellerCatalogOut(BaseModel):
-    """A card as somebody deciding whether to stock it sees it.
-
-    Not the admin's shape. That one answers with the Uzbek on the row because
-    an editor is about to write it back; this one is read to *recognise* a
-    product, so it is translated and carries the photograph.
-
-    **The shop price is here on purpose.** Every seller's name, price and
-    stock is already returned by ``GET /products/{id}/offers``, which needs no
-    token at all — so withholding it would protect nothing and only make a
-    seller price blind or price by opening the shop in another tab. What it
-    tells them is the thing they actually need: what this goes for, and how
-    many people are already selling it.
-    """
-
-    id: int
-    sku: str
-    title: str
-    subtitle: str
-    image_url: str | None
-    category_slug: str
-    category_name: str
-    brand_name: str | None
-
-    # The winning offer's figures, which is what a shopper is shown.
-    price: int
-    old_price: int | None
-    in_stock: bool
-    offer_count: int
-    variant_count: int
-
-    # Whether this is already mine, so a list can say "you sell this" instead
-    # of offering a button that answers 409.
-    mine: bool
-    my_offer_id: int | None
-    my_price: int | None
-
-
-class SellerCatalogDetailOut(SellerCatalogOut):
-    """One card with everything the offer form needs in one request.
-
-    ``leaf_ids`` is the answer to the rule above, in the shape the write
-    endpoint takes: read it, send it as ``variant_ids``, and the offer covers
-    the whole card. Deriving it from ``variants`` is possible and inviting a
-    client to re-derive a backend rule is how the two drift.
-    """
-
-    description: str
-    variants: list[SellerVariantOut]
-    leaf_ids: list[int]
-    # Everyone selling it, cheapest first — the same list the shop shows.
-    offers: list[OfferOut]
 
 
 # ------------------------------------------------------------------ payouts
@@ -2117,60 +1899,6 @@ class DeliveryAttemptOut(BaseModel):
     happened_at: datetime
 
 
-class ShiftOut(BaseModel):
-    """A round, and the money that came back from it.
-
-    Three cash figures because they are three separate claims and the whole
-    value is in where they differ. ``cash_expected`` is the sum of the
-    deliveries and is ours; ``cash_declared`` is the courier's word;
-    ``cash_counted`` is what the office found. ``difference`` is the counted
-    figure against the expected one, and it is null until somebody has
-    counted — a nought would be a claim nobody has made.
-    """
-
-    id: int
-    courier_id: int
-    courier_name: str
-    status: ShiftStatus
-    opened_at: datetime
-    closed_at: datetime | None
-
-    cash_expected: int
-    cash_declared: int | None
-    cash_counted: int | None
-    difference: int | None
-    counted_at: datetime | None
-
-    orders_delivered: int
-    orders_failed: int
-    note: str
-
-
-class ShiftDetailOut(ShiftOut):
-    """The same round with every door on it, so the total is followable."""
-
-    attempts: list[DeliveryAttemptOut]
-
-
-class ShiftCloseIn(BaseModel):
-    """Handing the cash over.
-
-    The declared figure is required even when it matches: a courier saying
-    "this is what I have" is the claim the reconciliation is against, and
-    inferring it from our own total would leave nothing to reconcile.
-    """
-
-    cash_declared: int = Field(ge=0)
-    note: str = Field("", max_length=200)
-
-
-class ShiftCountIn(BaseModel):
-    """What the office actually counted."""
-
-    cash_counted: int = Field(ge=0)
-    note: str = Field("", max_length=200)
-
-
 class PickupLineOut(BaseModel):
     id: int
     return_request_id: int
@@ -2298,20 +2026,6 @@ class SellerDecisionIn(BaseModel):
     """The seller's answer: sell it again, or come and get it."""
 
     decision: SellerReturnDecision
-
-
-class StaffReviewOut(BaseModel):
-    id: int
-    product_id: int
-    product_title: str
-    author_name: str
-    author_phone: str
-    rating: int
-    text: str
-    photos: list[str]
-    status: ReviewStatus
-    next_statuses: list[ReviewStatus]
-    created_at: datetime
 
 
 class DecisionIn(BaseModel):

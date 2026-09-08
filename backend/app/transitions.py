@@ -1,11 +1,11 @@
 """What may follow what.
 
-Three of the tables carry a status that the data model always allowed to move
-and that nothing in the API could actually move: a return request stuck at
-``submitted``, a review stuck at ``moderating``, an order stuck at ``placed``.
-The endpoints that move them are in ``app.routers.operations``; the rules they
-enforce are here, as maps, so that "can a delivered order go back to packing"
-is answered by reading a table rather than by reading a chain of ifs.
+Several tables carry a status that the data model always allowed to move and
+that nothing in the API could actually move: a return request stuck at
+``submitted``, an order stuck at ``placed``. The endpoints that move them are
+in ``app.routers.operations``; the rules they enforce are here, as maps, so
+that "can a delivered order go back to packing" is answered by reading a table
+rather than by reading a chain of ifs.
 
 Every map is exhaustive over its enum. A status that appears as a key with an
 empty set is a deliberate dead end, and a status missing from the keys is a
@@ -24,7 +24,6 @@ from app.models import (
     PickupRunStatus,
     ProductStatus,
     ReturnStatus,
-    ReviewStatus,
 )
 
 # An order goes forward, and may be called off while it has not been handed
@@ -62,18 +61,6 @@ RETURN_TRANSITIONS: dict[ReturnStatus, frozenset[ReturnStatus]] = {
     ReturnStatus.REJECTED: frozenset(),
     ReturnStatus.REFUNDED: frozenset(),
 }
-
-# Moderation is not one-way: a published review can be taken down when
-# somebody complains about it, and a refusal can be reversed on appeal. What
-# is not allowed is a move to the state it is already in — that is somebody
-# double-clicking, and it should be told so rather than silently rewriting the
-# row and logging a change from a value to itself.
-REVIEW_TRANSITIONS: dict[ReviewStatus, frozenset[ReviewStatus]] = {
-    ReviewStatus.MODERATING: frozenset({ReviewStatus.PUBLISHED, ReviewStatus.REJECTED}),
-    ReviewStatus.PUBLISHED: frozenset({ReviewStatus.REJECTED}),
-    ReviewStatus.REJECTED: frozenset({ReviewStatus.PUBLISHED}),
-}
-
 
 # A card's way into the shop, and out again.
 #

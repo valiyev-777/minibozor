@@ -115,20 +115,10 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Уведомление не найдено",
         "en": "Notification not found",
     },
-    "review_already_left": {
-        "uz": "Siz bu mahsulotga sharh qoldirgansiz",
-        "ru": "Вы уже оставили отзыв на этот товар",
-        "en": "You've already reviewed this product",
-    },
     "address_required": {
         "uz": "Yetkazish manzilini tanlang",
         "ru": "Выберите адрес доставки",
         "en": "Choose a delivery address",
-    },
-    "promo_invalid": {
-        "uz": "Promokod yaroqsiz",
-        "ru": "Промокод недействителен",
-        "en": "That promo code isn't valid",
     },
     "otp_expired": {
         "uz": "Kod eskirgan — qaytadan so'rang",
@@ -251,12 +241,6 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "Order not found",
     },
     "account_deleted": {"uz": "Hisob o'chirildi", "ru": "Аккаунт удалён", "en": "Account deleted"},
-    "review_not_found": {
-        "uz": "Sharh topilmadi",
-        "ru": "Отзыв не найден",
-        "en": "Review not found",
-    },
-    "review_removed": {"uz": "Sharh o'chirildi", "ru": "Отзыв удалён", "en": "Review removed"},
     "order_placed_note": {
         "uz": "{code} qabul qilindi — tez orada yig'amiz",
         "ru": "{code} принят — скоро начнём сборку",
@@ -292,33 +276,6 @@ LABELS: dict[str, dict[str, str]] = {
         "uz": "Oynaning tugash vaqti boshlanishidan keyin bo'lishi kerak",
         "ru": "Конец интервала должен быть позже начала",
         "en": "A window has to end after it starts",
-    },
-    # offers
-    "banner_not_found": {
-        "uz": "Banner topilmadi", "ru": "Баннер не найден", "en": "Banner not found",
-    },
-    "section_not_found": {
-        "uz": "Blok topilmadi", "ru": "Блок не найден", "en": "Section not found",
-    },
-    "promo_not_found": {
-        "uz": "Promokod topilmadi",
-        "ru": "Промокод не найден",
-        "en": "Promo code not found",
-    },
-    "promo_exists": {
-        "uz": "Bu promokod allaqachon bor",
-        "ru": "Такой промокод уже есть",
-        "en": "That promo code already exists",
-    },
-    "promo_empty": {
-        "uz": "Chegirma foizi yoki summasini ko'rsating",
-        "ru": "Укажите процент или сумму скидки",
-        "en": "Give a percentage or an amount off",
-    },
-    "promo_in_use": {
-        "uz": "Ishlatilgan promokodni o'chirib bo'lmaydi — faolsizlantiring",
-        "ru": "Использованный промокод удалить нельзя — отключите его",
-        "en": "A promo code that has been used cannot be deleted — switch it off",
     },
     "order_repeats": {
         "uz": "Tartibda takrorlangan qator bor",
@@ -542,36 +499,6 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "That key was used for a different request — one key belongs to "
               "one request",
     },
-    "shift_required": {
-        "uz": "Avval smenani boshlang — naqd pul smenaga yig'iladi",
-        "ru": "Сначала откройте смену — наличные учитываются по смене",
-        "en": "Start a shift first — cash is counted against one",
-    },
-    "shift_closed": {
-        "uz": "Bu smena allaqachon yopilgan",
-        "ru": "Эта смена уже закрыта",
-        "en": "That shift is already closed",
-    },
-    "shift_open": {
-        "uz": "Smena hali yopilmagan — pul topshirilmagan",
-        "ru": "Смена ещё не закрыта — деньги не сданы",
-        "en": "That shift is not closed yet — the cash has not been handed in",
-    },
-    "shift_counted": {
-        "uz": "Bu smena allaqachon sanalgan",
-        "ru": "Эта смена уже пересчитана",
-        "en": "That shift has already been counted",
-    },
-    "shift_not_found": {
-        "uz": "Smena topilmadi",
-        "ru": "Смена не найдена",
-        "en": "Shift not found",
-    },
-    "not_your_shift": {
-        "uz": "Bu sizning smenangiz emas",
-        "ru": "Это не ваша смена",
-        "en": "That is not your shift",
-    },
     "not_your_delivery": {
         "uz": "Bu buyurtma sizga biriktirilmagan",
         "ru": "Этот заказ не назначен вам",
@@ -754,16 +681,6 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "В заявке нет такой строки",
         "en": "No such line in that order",
     },
-    "count_not_found": {
-        "uz": "Sanoq topilmadi",
-        "ru": "Инвентаризация не найдена",
-        "en": "Stocktake not found",
-    },
-    "count_already_open": {
-        "uz": "Bu taklif bo'yicha sanoq allaqachon ochiq",
-        "ru": "По этому предложению инвентаризация уже открыта",
-        "en": "A stocktake is already open on this offer",
-    },
     # what the customer is told when somebody finally answers
     "order_packing_note": {
         "uz": "{code} omborda yig'ilmoqda",
@@ -917,26 +834,6 @@ LABELS: dict[str, dict[str, str]] = {
         "uz": "{code} qabul qilinmadi: {reason}",
         "ru": "{code} не принята: {reason}",
         "en": "{code} was refused: {reason}",
-    },
-    "review_published": {
-        "uz": "Sharhingiz e'lon qilindi",
-        "ru": "Ваш отзыв опубликован",
-        "en": "Your review is published",
-    },
-    "review_published_note": {
-        "uz": "{product} bo'yicha sharhingiz endi hammaga ko'rinadi",
-        "ru": "Ваш отзыв о «{product}» теперь виден всем",
-        "en": "Your review of {product} is now visible to everyone",
-    },
-    "review_rejected": {
-        "uz": "Sharhingiz e'lon qilinmadi",
-        "ru": "Отзыв не опубликован",
-        "en": "Your review wasn't published",
-    },
-    "review_rejected_note": {
-        "uz": "{product} bo'yicha sharhingiz e'lon qilinmadi: {reason}",
-        "ru": "Отзыв о «{product}» не опубликован: {reason}",
-        "en": "Your review of {product} wasn't published: {reason}",
     },
     # order status pills and timeline
     "status_placed": {"uz": "QABUL QILINDI", "ru": "ПРИНЯТ", "en": "PLACED"},

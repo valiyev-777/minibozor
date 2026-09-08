@@ -10,7 +10,7 @@ from app import offers as of
 from app import schemas as s
 from app import services as sv
 from app.deps import OptionalUser, SessionDep
-from app.models import Brand, Category, Product, ProductVariant, Review, ReviewStatus, VariantKind
+from app.models import Brand, Category, Product, ProductVariant, VariantKind
 
 router = APIRouter(tags=["catalog"])
 
@@ -255,51 +255,6 @@ def similar_products(
         .limit(limit)
     ).all()
     return sv.product_cards(session, rows, sv.favorite_ids(session, user))
-
-
-@router.get(
-    "/products/{product_id}/reviews/summary",
-    response_model=s.ReviewSummaryOut,
-    summary="Screen 15 — rating breakdown",
-)
-def product_review_summary(product_id: int, session: SessionDep) -> s.ReviewSummaryOut:
-    return sv.review_summary(session, product_id)
-
-
-@router.get(
-    "/products/{product_id}/reviews",
-    response_model=s.Page[s.ReviewOut],
-    summary="Screen 15 — reviews",
-)
-def product_reviews(
-    product_id: int,
-    session: SessionDep,
-    user: OptionalUser,
-    stars: int | None = Query(None, ge=1, le=5),
-    with_photos: bool = False,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=50),
-) -> s.Page[s.ReviewOut]:
-    stmt = select(Review).where(
-        Review.product_id == product_id, Review.status == ReviewStatus.PUBLISHED
-    )
-    if stars:
-        stmt = stmt.where(Review.rating == stars)
-    total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
-    rows = session.exec(
-        stmt.order_by(col(Review.likes).desc(), col(Review.created_at).desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    ).all()
-    if with_photos:
-        rows = [r for r in rows if r.photos]
-    return s.Page[s.ReviewOut](
-        items=[sv.review_out(session, r, viewer=user) for r in rows],
-        page=page,
-        page_size=page_size,
-        total=total,
-        has_more=page * page_size < total,
-    )
 
 
 @router.get("/brands", response_model=list[s.BrandOut])

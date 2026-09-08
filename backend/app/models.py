@@ -70,12 +70,6 @@ class DeliveryKind(StrEnum):
     PICKUP = "pickup"
 
 
-class ReviewStatus(StrEnum):
-    MODERATING = "moderating"  # Tekshirilmoqda
-    PUBLISHED = "published"    # E'lon qilindi
-    REJECTED = "rejected"
-
-
 class CardStatus(StrEnum):
     ACTIVE = "active"
     EXPIRED = "expired"
@@ -171,12 +165,6 @@ class StockMovementKind(StrEnum):
 class SupplyStatus(StrEnum):
     DECLARED = "declared"    # the seller says it is coming
     RECEIVED = "received"    # the warehouse counted it in
-    CANCELLED = "cancelled"
-
-
-class StockCountStatus(StrEnum):
-    OPEN = "open"
-    CLOSED = "closed"
     CANCELLED = "cancelled"
 
 
@@ -549,17 +537,6 @@ class CartItem(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
-class PromoCode(SQLModel, table=True):
-    __tablename__ = "promo_codes"
-
-    id: int | None = Field(default=None, primary_key=True)
-    code: str = Field(index=True, unique=True)
-    percent_off: int = 0
-    amount_off: int = 0
-    min_total: int = 0
-    active: bool = True
-
-
 # --------------------------------------------------------------------------- delivery
 
 
@@ -838,47 +815,6 @@ class ReturnRequest(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
-# --------------------------------------------------------------------------- reviews
-
-
-class Review(SQLModel, table=True):
-    __tablename__ = "reviews"
-
-    id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id", index=True)
-    product_id: int = Field(foreign_key="products.id", index=True)
-    order_item_id: int | None = Field(default=None, foreign_key="order_items.id")
-
-    rating: int = 5
-    text: str = ""
-    variant_label: str = ""
-    tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    photos: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-
-    likes: int = 0
-    status: ReviewStatus = Field(default=ReviewStatus.MODERATING)
-    created_at: datetime = Field(default_factory=utcnow)
-
-
-class ReviewLike(SQLModel, table=True):
-    __tablename__ = "review_likes"
-    __table_args__ = (UniqueConstraint("user_id", "review_id", name="uq_review_like"),)
-
-    id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id", index=True)
-    review_id: int = Field(foreign_key="reviews.id", index=True)
-
-
-class ReviewTag(SQLModel, table=True):
-    """The suggested chips on the "write a review" screen."""
-
-    __tablename__ = "review_tags"
-
-    id: int | None = Field(default=None, primary_key=True)
-    label: str
-    sort: int = 0
-
-
 # --------------------------------------------------------------------------- misc
 
 
@@ -1042,7 +978,6 @@ class StockMovement(SQLModel, table=True):
     return_request_id: int | None = Field(
         default=None, foreign_key="return_requests.id", index=True
     )
-    count_id: int | None = Field(default=None, foreign_key="stock_counts.id", index=True)
     removal_id: int | None = Field(
         default=None, foreign_key="removal_orders.id", index=True
     )
@@ -1095,46 +1030,6 @@ class SupplyLine(SQLModel, table=True):
         if self.received_quantity is None:
             return None
         return self.received_quantity - self.declared_quantity
-
-
-class StockCount(SQLModel, table=True):
-    """A stocktake of one offer: what we think is there, then what is.
-
-    Opened against an offer rather than a place, because a place is not
-    modelled yet and the offer is what a figure belongs to. The expected
-    numbers are snapshotted when it opens, so a sale during the count does not
-    silently become a discrepancy.
-    """
-
-    __tablename__ = "stock_counts"
-
-    id: int | None = Field(default=None, primary_key=True)
-    code: str = Field(index=True, unique=True)       # "CNT-000042"
-    offer_id: int = Field(foreign_key="offers.id", index=True)
-    status: StockCountStatus = Field(default=StockCountStatus.OPEN, index=True)
-    note: str = ""
-
-    opened_by_id: int | None = Field(default=None, foreign_key="users.id")
-    opened_at: datetime = Field(default_factory=utcnow)
-    closed_by_id: int | None = Field(default=None, foreign_key="users.id")
-    closed_at: datetime | None = None
-
-
-class StockCountLine(SQLModel, table=True):
-    __tablename__ = "stock_count_lines"
-
-    id: int | None = Field(default=None, primary_key=True)
-    count_id: int = Field(foreign_key="stock_counts.id", index=True)
-    variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
-
-    expected: int = 0                  # as at the moment the count opened
-    counted: int | None = None         # what was on the shelf
-
-    @property
-    def difference(self) -> int | None:
-        if self.counted is None:
-            return None
-        return self.counted - self.expected
 
 
 class RemovalOrder(SQLModel, table=True):
@@ -1372,18 +1267,23 @@ class StatementLine(SQLModel, table=True):
 # The courier was a role and nothing else.
 #
 # ``UserRole.COURIER`` was added in the first stage and no router ever asked
-# about it. An order did not record who was carrying it, there was no shift, a
-# delivery left no evidence beyond a status, and cash — which a courier
-# physically holds — was counted nowhere. So the last mile was the one part of
-# the business the system could not describe.
+# about it. An order did not record who was carrying it, and a delivery left
+# no evidence beyond a status. So the last mile was the one part of the
+# business the system could not describe.
+#
+# There was a ``CourierShift`` here too, with a cash total to open and close
+# and count against. It went with the panels rebuild: a shift is a
+# reconciliation container, reconciliation is not in this shop's flow, and
+# what a courier took at a door is on the attempt where it happened. Bringing
+# it back wants a screen before it wants a table.
 #
 # Two facts about the work decide the shape of everything below.
 #
 # **The phone has no signal.** A courier works in lifts, basements and
 # stairwells. The app queues what it cannot send and sends it later, possibly
 # twice, possibly much later. So every write here is keyed: a repeat of a
-# request replays the first answer instead of doing the thing again. Counting
-# the same cash twice is the most expensive mistake available in this module,
+# request replays the first answer instead of doing the thing again. Selling
+# the same shirt twice is the most expensive mistake available in this module,
 # and it is the one the design is built to make impossible.
 #
 # **A knock at a door is an event, not a state.** An order being refused at
@@ -1391,11 +1291,6 @@ class StatementLine(SQLModel, table=True):
 # What matters is how many times somebody tried and why it failed, and that is
 # a list. So attempts accumulate as rows and the order stays ``shipped``; the
 # decision to give up belongs to an operator, not to the courier at the door.
-
-
-class ShiftStatus(StrEnum):
-    OPEN = "open"        # out on the round
-    CLOSED = "closed"    # back, cash handed over
 
 
 class AttemptResult(StrEnum):
@@ -1447,48 +1342,6 @@ class IdempotencyRecord(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow, index=True)
 
 
-class CourierShift(SQLModel, table=True):
-    """One courier's round, and the cash that came back from it.
-
-    Cash is why a shift exists at all. A courier collects money at doors all
-    day and hands it over at the end; without a container for that stretch of
-    time there is nothing to reconcile against and "did the money arrive"
-    has no answer.
-
-    Three figures rather than one, because they are three different claims.
-    ``cash_expected`` is what the deliveries add up to — ours, computed, not
-    editable. ``cash_declared`` is what the courier says they are handing
-    over. ``cash_counted`` is what the office found when it counted. Where
-    they disagree the difference is the point, so nothing here is rounded into
-    agreement.
-    """
-
-    __tablename__ = "courier_shifts"
-
-    id: int | None = Field(default=None, primary_key=True)
-    courier_id: int = Field(foreign_key="users.id", index=True)
-    status: ShiftStatus = Field(default=ShiftStatus.OPEN, index=True)
-
-    opened_at: datetime = Field(default_factory=utcnow)
-    closed_at: datetime | None = None
-
-    # The sum of the cash taken at the doors on this shift. A running total
-    # kept as a column for the same reason a shelf figure is: it is read on
-    # every screen, and the invariant the tests hold us to is that it equals
-    # the sum of the attempts.
-    cash_expected: int = 0
-    # What the courier says they handed over, and what the office counted.
-    # Null until each of those has happened — a nought would be a claim.
-    cash_declared: int | None = None
-    cash_counted: int | None = None
-    counted_by_id: int | None = Field(default=None, foreign_key="users.id")
-    counted_at: datetime | None = None
-
-    orders_delivered: int = 0
-    orders_failed: int = 0
-    note: str = ""
-
-
 class DeliveryAttempt(SQLModel, table=True):
     """One knock at one door.
 
@@ -1510,12 +1363,6 @@ class DeliveryAttempt(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="orders.id", index=True)
     courier_id: int = Field(foreign_key="users.id", index=True)
-    # Null for an attempt made outside a shift, which the endpoints refuse —
-    # kept nullable so a deleted shift cannot orphan the record of a delivery.
-    shift_id: int | None = Field(
-        default=None, foreign_key="courier_shifts.id", index=True
-    )
-
     result: AttemptResult = Field(index=True)
     # Why it failed. Required on a failure: "not delivered" with no reason is
     # the row nobody can act on, and an operator deciding what to do next has

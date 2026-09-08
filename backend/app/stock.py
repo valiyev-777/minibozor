@@ -86,7 +86,6 @@ def move(
     supply_id: int | None = None,
     order_id: int | None = None,
     return_request_id: int | None = None,
-    count_id: int | None = None,
     removal_id: int | None = None,
 ) -> StockMovement | None:
     """Write one movement and carry the running totals with it.
@@ -118,7 +117,6 @@ def move(
         supply_id=supply_id,
         order_id=order_id,
         return_request_id=return_request_id,
-        count_id=count_id,
         removal_id=removal_id,
     )
     session.add(movement)

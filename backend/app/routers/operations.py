@@ -1,10 +1,14 @@
 """Running the shop: the endpoints that move a status along.
 
-Four flows had a status column the data model was happy to move and no way to
-move it. A return request was submitted and never answered; a review sat in
-moderation for ever; an order was placed and stayed placed however long ago
-that was; a delivery window's capacity only ever went down. Each of those is
-one operator decision away from working, and this is where the decisions live.
+Several flows had a status column the data model was happy to move and no way
+to move it. A return request was submitted and never answered; an order was
+placed and stayed placed however long ago that was; a delivery window's
+capacity only ever went down. Each of those is one operator decision away from
+working, and this is where the decisions live.
+
+The returns half of the file is now read by four roles rather than one: an
+operator decides the money, the warehouse says what arrived in the parcel, and
+the seller says what to do about it. See ``app.returns``.
 
 Two rules hold throughout:
 
@@ -43,7 +47,6 @@ from app.deps import (
     WarehouseUser,
 )
 from app.models import (
-    CourierShift,
     DeliverySlot,
     Notification,
     NotificationKind,
@@ -57,18 +60,16 @@ from app.models import (
     ReturnInspection,
     ReturnRequest,
     ReturnStatus,
-    Review,
-    ReviewStatus,
     Seller,
     SellerReturnDecision,
-    ShiftStatus,
     User,
     UserRole,
 )
 
 # The courier's own shapes are rendered by the courier router. Imported rather
-# than duplicated: two renderings of one shift would be two things to keep in
-# step, and the operator is looking at exactly what the courier reported.
+# than duplicated: two renderings of one collection run would be two things to
+# keep in step, and the operator is looking at exactly what the courier
+# reported.
 from app.routers import courier as courier_router
 
 router = APIRouter(prefix="/staff", tags=["staff"])
@@ -456,105 +457,6 @@ def _refund_amount(
     return order.total if order else 0
 
 
-# --------------------------------------------------------------------------- reviews
-
-
-@router.get(
-    "/reviews",
-    response_model=list[s.StaffReviewOut],
-    summary="The moderation queue",
-)
-def list_reviews_for_moderation(
-    user: OperatorUser,
-    session: SessionDep,
-    status_filter: ReviewStatus | None = Query(
-        ReviewStatus.MODERATING, alias="status", description="default: awaiting moderation"
-    ),
-) -> list[s.StaffReviewOut]:
-    stmt = select(Review)
-    if status_filter is not None:
-        stmt = stmt.where(Review.status == status_filter)
-    rows = session.exec(stmt.order_by(col(Review.created_at))).all()
-    return [_review_out(session, r) for r in rows]
-
-
-@router.post("/reviews/{review_id}/publish", response_model=s.StaffReviewOut)
-def publish_review(
-    review_id: int, payload: s.DecisionIn, user: OperatorUser, session: SessionDep
-) -> s.StaffReviewOut:
-    return _moderate(session, user, review_id, ReviewStatus.PUBLISHED, payload)
-
-
-@router.post(
-    "/reviews/{review_id}/reject",
-    response_model=s.StaffReviewOut,
-    summary="Keep a review off the product page, with a reason",
-)
-def reject_review(
-    review_id: int, payload: s.DecisionIn, user: OperatorUser, session: SessionDep
-) -> s.StaffReviewOut:
-    if not payload.reason.strip():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("reason_required"))
-    return _moderate(session, user, review_id, ReviewStatus.REJECTED, payload)
-
-
-def _moderate(
-    session: SessionDep,
-    actor: User,
-    review_id: int,
-    target: ReviewStatus,
-    payload: s.DecisionIn,
-) -> s.StaffReviewOut:
-    review = session.get(Review, review_id)
-    if review is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("review_not_found"))
-    tr.ensure(tr.REVIEW_TRANSITIONS, review.status, target)
-
-    audit.record(
-        session,
-        actor=actor,
-        action="review.status",
-        entity="review",
-        entity_id=review.id,
-        field="status",
-        old=review.status,
-        new=target,
-        note=payload.note or payload.reason,
-    )
-    review.status = target
-    session.add(review)
-    session.commit()
-
-    # The product's rating counts published reviews only, so moderating one is
-    # what makes it count — or stop counting.
-    sv.recalc_product_rating(session, review.product_id)
-
-    product = session.get(Product, review.product_id)
-    title = "review_published" if target is ReviewStatus.PUBLISHED else "review_rejected"
-    text = (
-        i18n.label("review_published_note", product=product.title if product else "")
-        if target is ReviewStatus.PUBLISHED
-        else i18n.label(
-            "review_rejected_note",
-            product=product.title if product else "",
-            reason=payload.reason.strip(),
-        )
-    )
-    session.add(
-        Notification(
-            user_id=review.user_id,
-            kind=NotificationKind.REVIEW,
-            icon="star",
-            title=i18n.label(title),
-            text=text,
-            deep_link=f"minibozor://products/{review.product_id}",
-        )
-    )
-    session.commit()
-    session.refresh(review)
-    return _review_out(session, review)
-
-
 # --------------------------------------------------------------------------- orders
 
 
@@ -762,96 +664,6 @@ def assign_courier(
     session.commit()
     session.refresh(order)
     return sv.order_out(session, order)
-
-
-@router.get(
-    "/shifts",
-    response_model=list[s.ShiftOut],
-    summary="Rounds, and whether the cash added up",
-)
-def list_shifts(
-    user: OperatorUser,
-    session: SessionDep,
-    courier_id: int | None = Query(None),
-    status_filter: ShiftStatus | None = Query(None, alias="status"),
-) -> list[s.ShiftOut]:
-    stmt = select(CourierShift)
-    if courier_id is not None:
-        stmt = stmt.where(CourierShift.courier_id == courier_id)
-    if status_filter is not None:
-        stmt = stmt.where(CourierShift.status == status_filter)
-    rows = session.exec(stmt.order_by(col(CourierShift.id).desc())).all()
-    return [courier_router._shift_out(session, row) for row in rows]
-
-
-@router.get(
-    "/shifts/{shift_id}",
-    response_model=s.ShiftDetailOut,
-    summary="One round, door by door",
-)
-def get_shift(
-    shift_id: int, user: OperatorUser, session: SessionDep
-) -> s.ShiftDetailOut:
-    """Every attempt on the shift, so the cash total is followable.
-
-    The same reason a statement carries its lines: a courier told they are
-    30 000 short has a number to argue with, and a list of doors with a figure
-    against each one is something to check.
-    """
-    shift = session.get(CourierShift, shift_id)
-    if shift is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("shift_not_found"))
-    return courier_router._shift_detail(session, shift)
-
-
-@router.post(
-    "/shifts/{shift_id}/count",
-    response_model=s.ShiftDetailOut,
-    summary="What the office counted",
-)
-def count_shift(
-    shift_id: int,
-    payload: s.ShiftCountIn,
-    user: OperatorUser,
-    session: SessionDep,
-) -> s.ShiftDetailOut:
-    """The third figure, and the only one that settles anything.
-
-    Counted against ``cash_expected`` rather than against what the courier
-    declared: the declaration is one of the claims being checked, so checking
-    it against itself would always agree. A difference is recorded as it is
-    and never reconciled away — an unexplained shortfall is a fact about a
-    day, and the audit row is what makes it findable a month later.
-    """
-    shift = session.get(CourierShift, shift_id)
-    if shift is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("shift_not_found"))
-    if shift.status is not ShiftStatus.CLOSED:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("shift_open"))
-    if shift.cash_counted is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("shift_counted"))
-
-    gap = payload.cash_counted - shift.cash_expected
-    audit.record(
-        session,
-        actor=user,
-        action="shift.count",
-        entity="courier_shift",
-        entity_id=shift.id,
-        field="cash_counted",
-        old=shift.cash_expected,
-        new=payload.cash_counted,
-        note=payload.note or (f"farq {gap}" if gap else "farq yo'q"),
-    )
-    shift.cash_counted = payload.cash_counted
-    shift.counted_by_id = user.id
-    shift.counted_at = sv.utcnow()
-    if payload.note:
-        shift.note = payload.note.strip()
-    session.add(shift)
-    session.commit()
-    session.refresh(shift)
-    return courier_router._shift_detail(session, shift)
 
 
 # --------------------------------------------------------------------- collection runs
@@ -1239,26 +1051,6 @@ def _must_be_mine(session: SessionDep, user: User, request: ReturnRequest) -> No
     """
     if not _mine(session, user, [request]):
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("return_not_found"))
-
-
-def _review_out(session: SessionDep, r: Review) -> s.StaffReviewOut:
-    product = session.get(Product, r.product_id)
-    author = session.get(User, r.user_id)
-    return s.StaffReviewOut(
-        id=r.id,
-        product_id=r.product_id,
-        product_title=product.title if product else "",
-        # The full name, not the initial the product page shows: moderation is
-        # about the person as much as the words.
-        author_name=author.full_name if author else "",
-        author_phone=author.phone if author else "",
-        rating=r.rating,
-        text=r.text,
-        photos=[u for u in (sv.media_url(p) for p in (r.photos or [])) if u],
-        status=r.status,
-        next_statuses=tr.next_states(tr.REVIEW_TRANSITIONS, r.status),
-        created_at=r.created_at,
-    )
 
 
 def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:

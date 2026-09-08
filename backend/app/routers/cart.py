@@ -282,10 +282,3 @@ def clear_cart(user: CurrentUser, session: SessionDep) -> s.CartOut:
         _release(session, product_id)
     return sv.build_cart(session, user)
 
-
-@router.post("/promo", response_model=s.CartOut, summary="Apply a promo code")
-def apply_promo(payload: s.PromoIn, user: CurrentUser, session: SessionDep) -> s.CartOut:
-    cart = sv.build_cart(session, user, payload.code)
-    if cart.totals.promo_code is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("promo_invalid"))
-    return cart
