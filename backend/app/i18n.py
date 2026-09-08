@@ -265,6 +265,14 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "Cancelling is the operator's — the warehouse picks and hands "
               "over, and nothing else",
     },
+    "no_courier_yet": {
+        "uz": "Avval kuryer biriktiring — kuryersiz buyurtma hech kimning "
+              "ro'yxatiga tushmaydi",
+        "ru": "Сначала назначьте курьера — без него заказ не попадёт ни в "
+              "один маршрут",
+        "en": "Assign a courier first — without one the order is on nobody's "
+              "round",
+    },
     "reason_required": {
         "uz": "Rad etish sababini yozing",
         "ru": "Укажите причину отказа",

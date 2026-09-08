@@ -43,6 +43,32 @@ def database() -> None:
         seed(session)
 
 
+COURIER_PHONE = "+998900009009"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def a_courier(database: None) -> None:
+    """One courier the whole suite can hand an order to.
+
+    An order may not be shipped with nobody named on it — a shipped order with
+    no courier is on nobody's round, reads as "on its way" to the customer and
+    the office, and is invisible to every courier. That rule means every test
+    that ships something needs a courier to exist, and creating one per test
+    would be a fixture in fifty signatures.
+
+    Its own number, not one a test might also pick: `_hand_to_a_courier` looks
+    this phone up by name so assigning it can never collide with a courier a
+    test made for itself and is asserting the round of.
+    """
+    with Session(engine) as session:
+        if session.exec(select(User).where(User.phone == COURIER_PHONE)).first():
+            return
+        session.add(
+            User(phone=COURIER_PHONE, full_name="Kuryer (test)", role=UserRole.COURIER)
+        )
+        session.commit()
+
+
 @pytest.fixture
 def client() -> TestClient:
     with TestClient(app) as c:

@@ -328,6 +328,15 @@ def main() -> int:
     def _():
         api.ok("POST", f"/staff/orders/{state['order']}/status", who="warehouse",
                json_body={"status": "packing"})
+
+        # Handed to whom? `GET /courier/orders` is filtered by courier, so an
+        # order shipped with none is on nobody's round while reading as "on
+        # its way" to everybody. It must be refused rather than accepted.
+        early, why = api.call("POST", f"/staff/orders/{state['order']}/status",
+                              who="warehouse", json_body={"status": "shipped"})
+        walk.expect("an order cannot be shipped before a courier is named",
+                    early == 409, (early, why))
+
         couriers = api.ok("GET", "/staff/couriers", who="operator")
         rows = couriers if isinstance(couriers, list) else couriers.get("items", [])
         walk.expect("there is a courier to give it to", bool(rows), couriers)

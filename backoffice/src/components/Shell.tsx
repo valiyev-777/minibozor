@@ -6,6 +6,7 @@ import { cn } from "@/ui/cn"
 import { useSession, useStaff } from "@/auth/session"
 import { Bell } from "./Bell"
 import { menuFor } from "@/lib/nav"
+import { useQueueCounts } from "@/lib/queues"
 import { roleName, t } from "@/lib/labels"
 
 /**
@@ -26,6 +27,10 @@ export function Shell() {
   const session = useSession()
   const staff = useStaff()
   const rows = menuFor(staff.role)
+  // What is waiting, per row. The warehouse lands on Qabul qilish; an order
+  // placed a minute ago is on another screen, and until these numbers existed
+  // nothing said so.
+  const waiting = useQueueCounts(staff.role)
 
   return (
     <div className="flex min-h-full flex-col lg:flex-row">
@@ -65,7 +70,20 @@ export function Shell() {
                     )
                   }
                 >
-                  {row.label}
+                  <span className="flex items-center gap-2">
+                    <span className="flex-1">{row.label}</span>
+                    {/* Nought is absent, not a zero. A badge on every row is
+                        a badge nobody reads. */}
+                    {waiting[row.path] ? (
+                      <span
+                        className="inline-flex min-w-5 justify-center rounded-full bg-brand px-1.5
+                                   text-[length:var(--text-micro)] font-semibold text-brand-ink
+                                   tabular-nums"
+                      >
+                        {waiting[row.path]}
+                      </span>
+                    ) : null}
+                  </span>
                 </NavLink>
               </li>
             ))}

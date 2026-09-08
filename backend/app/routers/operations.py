@@ -569,6 +569,17 @@ def set_order_status(
     if user.role is UserRole.WAREHOUSE and payload.status is OrderStatus.CANCELLED:
         raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("cancel_is_operators"))
     tr.ensure(tr.ORDER_TRANSITIONS, order.status, payload.status)
+    # Shipped to whom? `GET /courier/orders` is filtered by `courier_id`, so
+    # an order that goes out with none is on nobody's round: it reads as "on
+    # its way" to the customer and to the office, and no courier can see it.
+    # Four orders in the development database left that way before this
+    # existed, which is exactly how far a bench can get without being told.
+    #
+    # 409 rather than 400: the request is well formed and the move is legal —
+    # what is wrong is that this order is not ready to make it, which is what
+    # a conflict is.
+    if payload.status is OrderStatus.SHIPPED and order.courier_id is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("no_courier_yet"))
     was = order.status
 
     audit.record(
@@ -1127,7 +1138,16 @@ def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:
         items_count=sum(i.quantity for i in items),
         total=o.total,
         paid=o.paid,
-        next_statuses=tr.next_states(tr.ORDER_TRANSITIONS, o.status),
+        # The moves the rules allow, minus the one this order is not ready
+        # for. The panel builds its buttons from this list, so a bench with
+        # nobody named on the order is not offered "Kuryerga berildi" at all
+        # — which is better than a button that answers 409. The endpoint
+        # still refuses it; this is the same rule said early.
+        next_statuses=[
+            move
+            for move in tr.next_states(tr.ORDER_TRANSITIONS, o.status)
+            if not (move is OrderStatus.SHIPPED and o.courier_id is None)
+        ],
         courier_id=o.courier_id,
         courier_name=courier.full_name if courier else "",
         courier_sequence=o.courier_sequence,

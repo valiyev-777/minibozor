@@ -43,7 +43,38 @@ from app.models import (
 )
 from app.seed import ADMIN_PHONE
 
+from tests.conftest import COURIER_PHONE
+
 API = "/api/v1"
+
+
+
+def _hand_to_a_courier(
+    client: TestClient, staff_headers: dict[str, str], order_id: int
+) -> int:
+    """Name somebody before the order goes out, and say who.
+
+    ``POST /staff/orders/{id}/status`` refuses ``shipped`` on an order with no
+    courier: `GET /courier/orders` is filtered by courier, so one that goes
+    out with none is on nobody's round while reading as "on its way" to
+    everybody. Every path below that ships an order walks through here, which
+    is the point — the tests take the road a person takes.
+
+    The suite's own courier (``conftest.COURIER_PHONE``) and not simply the
+    first one listed: a test that made a courier of its own and is asserting
+    what is on *their* round must not have this steal the order.
+    """
+    rows = client.get(f"{API}/staff/couriers", headers=staff_headers).json()
+    assert isinstance(rows, list) and rows, rows
+    ours = next((row for row in rows if row["phone"] == COURIER_PHONE), None)
+    assert ours is not None, f"the suite's courier is missing from {rows}"
+    assigned = client.post(
+        f"{API}/staff/orders/{order_id}/courier",
+        json={"courier_id": ours["id"]},
+        headers=staff_headers,
+    )
+    assert assigned.status_code == 200, assigned.text
+    return ours["id"]
 
 
 def test_health(client: TestClient) -> None:
@@ -880,6 +911,7 @@ def test_an_order_walks_its_flow_and_will_not_walk_back(
     # Skipping a step is not a step.
     assert client.post(url, json={"status": "delivered"}, headers=operator).status_code == 409
 
+    _hand_to_a_courier(client, operator, order["id"])
     for target in ("packing", "shipped", "delivered"):
         moved = client.post(url, json={"status": target}, headers=operator)
         assert moved.status_code == 200, (target, moved.text)
@@ -1461,6 +1493,7 @@ def _refundable_return(
     """An approved return on a delivered order, ready to be paid back."""
     order, before, variant_ids, slot_id = _order_with_a_variant_and_a_slot(client, auth)
     url = f"{API}/staff/orders/{order['id']}/status"
+    _hand_to_a_courier(client, operator, order["id"])
     for target in ("packing", "shipped", "delivered"):
         assert client.post(url, json={"status": target}, headers=operator).status_code == 200
 
@@ -1617,6 +1650,7 @@ def test_only_the_named_line_comes_back_on_a_partial_return(
     assert len(order["items"]) == 2
 
     url = f"{API}/staff/orders/{order['id']}/status"
+    _hand_to_a_courier(client, operator, order["id"])
     for target in ("packing", "shipped", "delivered"):
         client.post(url, json={"status": target}, headers=operator)
 
@@ -3060,6 +3094,7 @@ def test_an_unpaid_order_holds_the_goods_until_the_courier_is_paid(
     assert client.get(f"{API}/products/{product['id']}").json()["stock_left"] == 3
     assert not _stock_is_consistent()
 
+    _hand_to_a_courier(client, operator, order_id)
     for target in ("packing", "shipped", "delivered"):
         moved = client.post(
             f"{API}/staff/orders/{order_id}/status", json={"status": target}, headers=operator
@@ -4955,6 +4990,7 @@ def _sell_and_deliver(
     )
     assert order.status_code == 201, order.text
     order = order.json()
+    _hand_to_a_courier(client, operator, order["id"])
     for target in ("packing", "shipped", "delivered"):
         moved = client.post(
             f"{API}/staff/orders/{order['id']}/status",
@@ -7454,6 +7490,7 @@ def _sold_and_returned(
     assert order.status_code == 201, order.text
     order_id = order.json()["id"]
 
+    _hand_to_a_courier(client, operator, order_id)
     for target in ("packing", "shipped", "delivered"):
         moved = client.post(
             f"{API}/staff/orders/{order_id}/status",
@@ -7985,6 +8022,7 @@ def test_nothing_is_inspected_before_it_could_have_arrived(
         json={"address_id": address["id"], "slot_id": slot["id"]},
         headers=auth,
     ).json()["id"]
+    _hand_to_a_courier(client, operator, order_id)
     for target in ("packing", "shipped", "delivered"):
         client.post(
             f"{API}/staff/orders/{order_id}/status",
@@ -8084,7 +8122,8 @@ def test_the_order_queue_is_read_by_four_roles_and_a_seller_sees_only_their_own(
     ).status_code == 403
 
     # The warehouse picks it and hands it over, because that is what a person
-    # at a bench does.
+    # at a bench does — once the operator has said who is carrying it.
+    _hand_to_a_courier(client, operator, order_id)
     for target in ("packing", "shipped"):
         moved = client.post(
             f"{API}/staff/orders/{order_id}/status",
