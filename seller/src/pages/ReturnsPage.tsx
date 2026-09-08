@@ -101,14 +101,16 @@ function ReturnCard({ row }: { row: Return }) {
       }
       action={
         <span className="text-[length:var(--text-small)] text-ink-soft">
-          {som(row.refund_amount)}
+          {/* Nought until somebody refunds, so "0 so'm" here would read as
+              "the customer got nothing" rather than "not yet decided". */}
+          {row.status === "refunded" ? som(row.refund_amount) : "—"}
         </span>
       }
     >
       <div className="grid gap-4 border-t border-line-soft px-5 py-4 sm:grid-cols-3">
         <Detail label={t.title}>{row.product_title || "—"}</Detail>
         <Detail label={t.customer}>{row.customer_name || row.customer_phone}</Detail>
-        <Detail label={t.refusalReason}>{row.reason || "—"}</Detail>
+        <Detail label={t.returnReason}>{row.reason || "—"}</Detail>
         {row.inspection ? (
           <Detail label={t.inspection} className="sm:col-span-2">
             {row.inspection_label}

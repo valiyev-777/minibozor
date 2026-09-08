@@ -44,6 +44,8 @@ export const t = {
   declared: "E'lon qilingan",
   price: "Narx",
   refusalReason: "Rad etish sababi",
+  /** Why the *customer* sent it back — not why anybody refused anything. */
+  returnReason: "Qaytarish sababi",
 
   // the form
   title: "Nomi",
