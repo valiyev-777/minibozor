@@ -139,7 +139,55 @@ Sen `minibozor` monorepo'sida ishlaysan. `backend/` — FastAPI, ishlab turadi, 
 
 ## 6. Keyingi qadam
 
-1. Backend B1–B3 (bir agent sessiyasi, `backend/tests` yashil bo'lishi shart).
-2. §3 DELETE ro'yxatini backenddan o'chirish (alohida sessiya, alohida commit — qaytarish oson bo'lsin).
-3. seller → backoffice → courier qayta qurish (§4 prompt).
-4. Mobil ilova (android/ios) — alohida bosqich, hozir tegilmaydi.
+1. ~~Backend B1–B3~~ — **bajarildi** (`545bdea`). B1 allaqachon bor edi; B2'ning
+   "qabul → publish" qismi ham. Qo'shildi: B2 rad etish (sabab bilan, tovar
+   `REJECTED` + sotuvchiga xabar) va B3 to'liq (`inspect`, `decide`,
+   `app/returns.py`, 7 kunlik muddat).
+2. ~~§3 DELETE ro'yxati~~ — **bajarildi** (`1dda166`). 190 → 153 endpoint,
+   7 jadval. Uch qarorni reja aytmagan edi, pastda.
+3. ~~seller → backoffice → courier~~ — **bajarildi** (`83a9ba2`, `957e5f9`,
+   `932effe`). Uchala panel §5 ekranlari bo'yicha, `shared/ui` va
+   `shared/theme.css` ustida. `docs/walkthrough.md` yangi oqim bo'yicha
+   qaytadan yozildi va brauzerda yurib chiqildi.
+4. Mobil ilova (android/ios) — alohida bosqich, hali tegilmadi.
+
+### Rejadan chetga chiqilgan uch joy
+
+**`Banner` va `HomeSection` jadvallari qoldi.** §3 ularni o'chirishni aytadi,
+lekin `GET /home` — mobil ilovaning bosh ekrani — ikkisini ham o'qiydi, va
+reja mobil ilovaga tegilmasin deydi. Jadval ketsa bosh ekran jimgina bo'shab
+qolardi, bu sharh ekranining 404'idan yomon. Shuning uchun 14 ta admin
+endpointi o'chdi, jadvallar va seed qoldi; panellarda ular uchun ekran yo'q,
+ya'ni §5 buzilmadi. `PromoCode` esa ketdi — uni boshqa hech kim o'qimaydi —
+va `services.promo_discount` endi hech qanday kodni tanimaydigan stub, lekin
+savat shakli o'zgarmadi (ilova `promo_code` yuboradi va `discount` o'qiydi).
+
+**`GET`/`POST /staff/catalog/proposals` qoldi.** §3'da ular yo'q. O'chirilmadi,
+chunki ular hali ishlaydi: taklifga `POST /staff/offers` va
+`POST /staff/supplies` orqali offer va partiya biriktirilsa, ombor qabul
+qilganda tovar sotuvga chiqadi. Lekin bu — eski umumiy katalog shakli va
+`/staff/catalog/listings` uning o'rnini bosadi.
+
+**Qoldiqni yuqoriga tuzatadigan eshik qolmadi.** `PUT /offers/{id}/stock` ham,
+`stock-counts` ham §3 bo'yicha o'chdi, `write-off` esa faqat kamaytiradi. Ya'ni
+javonda kitobdagidan **ko'p** tovar chiqsa, API orqali tuzatib bo'lmaydi. Reja
+shunday deydi va shunday qilindi, lekin bu ombor uchun keyin ekran va eshik
+talab qiladi.
+
+### §3'da yo'q, lekin §5 uchun kerak bo'lgan to'rt eshik
+
+Panellarni qurish paytida to'rtta endpoint rol chegarasi §5 ekranlariga to'g'ri
+kelmasligi aniqlandi. Hammasi test bilan (`07154a0`, `83a9ba2`):
+
+| Eshik | Nima o'zgardi | Nega |
+|---|---|---|
+| `GET /staff/orders`, `GET …/{id}` | `OrderViewer`: sotuvchi + ombor ham o'qiydi; sotuvchi faqat o'z tovarlarini | §5: ombor `/orders?status=placed` dan yig'adi, sotuvchi `/orders` ni ko'radi. Ikkisi ham operator-only edi |
+| `POST /staff/orders/{id}/status` | `OrderMover`: ombor ham yuritadi, lekin `cancelled` faqat operatorda | §5: ombor [Yig'ildi] [Kuryerga berildi] bosadi. Bekor qilish — operatorning ishi |
+| `GET /staff/catalog/categories`, `/brands` | `CatalogReader`: sotuvchi o'qiydi, yozish admin'da qoladi | §5: `/products/new` formasida kategoriya tanlanadi. Admin-only edi, forma bo'sh chiqardi |
+| `_names` (warehouse) | Yorliq **katakni** nomlaydi: `"S"` emas, `"Oq · S"` | Ikki rangli, uch o'lchamli partiya S, M, L, S, M, L bo'lib chiqardi — ombor har biriga son yozadigan ekranda ikki bir xil qator xato sanoqning shakli |
+
+Bulardan tashqari: `_names` bilan bir qatorda topilgan mayda-chuydalar
+(pul/sana formati brauzer ICU'siga bog'liq bo'lmasligi, manfiy `payable`
+yashil bo'lmasligi, qaytarilmagan pul `0 so'm` emas `—` bo'lishi, rasm yo'li
+nisbiy bo'lgani uchun panel o'z bazasini qo'shishi) — panellarning o'z
+commitlarida.

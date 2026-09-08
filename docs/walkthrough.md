@@ -1,14 +1,18 @@
 # Walking the whole thing by hand
 
-One sale, from a seller who does not yet have the product to a seller reading
-what they are owed for it, through every interface that exists.
+One shirt, from a seller who has not sent it yet to that same shirt back on
+the shelf after a customer changed their mind — through every interface that
+exists.
 
-Every step below was run against a live stack before it was written down —
-first through the API, then again by `curl` against `./dev.sh` — so the
-endpoints, the payloads and the numbers are what actually happens, not what
-ought to. **Three steps cannot be done by clicking**, and those are marked
-`GAP` with the reason and the one command that gets you past them. They are
-not fixed here; this document is about walking the system, not changing it.
+Every step below was **walked in a browser** against a live stack before it
+was written down, driving the three panels the way a person does: typing in
+the form, pressing the button, reading what came back. So the screen names,
+the button words and the numbers are what actually happens rather than what
+ought to.
+
+**Two steps cannot be done by clicking**, and both are the customer's: there
+is no shopper's app in a browser. Those are marked `APP` with the API call
+that stands in for the phone. Everything else is somebody on a screen.
 
 ---
 
@@ -21,11 +25,11 @@ cd backend && .venv/bin/python -m tools.dev_accounts --apply
 
 The second command is not optional. The seed writes a customer and an admin;
 the operator, warehouse, courier and seller accounts do not exist until you
-make them, so three of the five interfaces have nobody to let in.
+make them, so four of the six interfaces have nobody to let in.
 
-**This walk writes to your database** — a card, an offer, a batch, an order, a
-statement. If that is your real development data, take a backup first; it is
-one command and there is a restore beside it:
+**This walk writes to your database** — a product, a batch, an order, a
+return, a settlement line. If that is your real development data, take a
+backup first; it is one command and there is a restore beside it:
 
 ```bash
 cd backend && tools/backup.sh                 # → backups/sqlite-<stamp>.db
@@ -33,7 +37,7 @@ cd backend && tools/backup.sh                 # → backups/sqlite-<stamp>.db
 tools/restore.sh ../backups/sqlite-<stamp>.db
 ```
 
-Or walk against a scratch database instead and leave your own alone:
+Or walk against a scratch database and leave your own alone:
 
 ```bash
 export MB_DATABASE_URL="sqlite:///$PWD/backend/walk.db"
@@ -45,311 +49,293 @@ cd backend && .venv/bin/alembic upgrade head && .venv/bin/python -m app.seed \
 ## The cast
 
 Every interface uses the same login: type the phone number, then the SMS code
-**123456**. There is no password. Dev builds return the code in the response,
-so no gateway is involved.
+**123456**. There is no password. Dev builds answer with the code and the
+login screen shows it, so no gateway is involved.
 
 | Role | Phone | Interface | Address |
 |---|---|---|---|
-| admin | `+998900000001` | backoffice | <http://localhost:5173> |
-| operator | `+998900000002` | backoffice | <http://localhost:5173> |
-| warehouse | `+998900000003` | backoffice | <http://localhost:5173> |
 | seller | `+998900000005` | seller cabinet | <http://localhost:5174> |
+| warehouse | `+998900000003` | backoffice | <http://localhost:5173> |
+| operator | `+998900000002` | backoffice | <http://localhost:5173> |
+| admin | `+998900000001` | backoffice | <http://localhost:5173> |
 | courier | `+998900000004` | courier PWA | <http://localhost:5175> |
 | customer | `+998901234567` | Android / iOS app | — (PIN `1234`) |
 
-The backoffice shows a different sidebar to each of its three roles, so
-"backoffice" below always says which of them you should be signed in as. If
-you are on the wrong one the row simply is not in the menu.
+The backoffice shows a different menu to each of its three roles — one table,
+`backoffice/src/lib/nav.ts`, draws the menu *and* guards the routes — so
+"backoffice" below always says which of them you should be signed in as. A
+role that types the path of a screen that is not theirs is sent to their own
+landing screen rather than to an error.
+
+Use separate browser windows or profiles. Each panel keeps its own session but
+they share `localhost`, so signing into two of them as different roles in one
+window will confuse you rather than the software.
 
 ---
 
-## 0. Sign in to all three panels
+## 0. Sign in to all three
 
-Use three browser windows, or three profiles — each panel keeps its own
-session, but they share `localhost`, so signing into one as a different role in
-the same window will confuse you rather than the software.
-
-**What you should see.** The backoffice lands the admin on **Moderatsiya** and
-the warehouse on **Javon**; the seller cabinet lands on **Boshqaruv**; the
-courier PWA lands on **Reys**. A role that reaches a screen that is not theirs
-is a bug — the sidebar only lists what the role may open.
+**What you should see.** The seller lands on **Tovarlarim**, the warehouse on
+**Topshiruvlar**, the operator on **Buyurtmalar**, the admin on
+**Boshqaruv** — whatever each of them does first. The courier lands on
+**Bugun**.
 
 ---
 
-## 1. The seller proposes a product · seller cabinet
+## 1. The seller adds a product · seller cabinet `:5174`
 
-The catalogue belongs to the platform: a seller attaches a price to a card that
-already exists and cannot open their own copy of one. What they *can* do is
-propose a card, which lands in moderation.
+**Tovarlarim → Yangi tovar.** One form, and it is the whole submission: the
+name, the category, the description, the photographs, the price, and a colour
+with the sizes under it — each size with how many are coming.
 
-1. Sign in at <http://localhost:5174> as `+998900000005`.
-2. Go to **Katalog**.
-3. Top right: **Yo'q tovarni taklif qilish**.
-4. Fill in **Nomi** (`Choynak 1.7 L`), pick a **Turkum**, put something in
-   **Taxminiy narx** (`189000`). A SKU is required and must be unique.
-5. **Moderatsiyaga yuborish**.
+Fill it in, add a picture, put one colour (`Oq`) with one size (`M`, quantity
+`3`), and press **Topshirish**.
 
-**What you should see.** A dialog headed **Moderatsiyaga yuborildi** with the
-badge **Moderatsiyada**. `POST /staff/catalog/proposals` → `201`, and the card
-comes back with `status: "moderating"`.
+**What you should see.** A green toast naming the product and a batch code —
+`SUP-000013` — and the screen you land on is the product, reading **Omborga
+kutilmoqda**. The grid shows `E'lon qilingan 3`, `Omborda 0`, `Sotuvga tayyor
+0`.
 
-It is *not* in the shop: `GET /api/v1/products/{id}` answers `404` for it,
-because every customer path is narrowed to published cards.
+That nought is the point. Nothing you typed reached a stock figure: the
+quantities became `declared_quantity` on a supply line, and the shelf does not
+move until somebody counts the box. The product is not in the shop either —
+`GET /products/{id}` is a 404 for it.
 
-> **GAP — a seller cannot see what became of their proposal.**
-> The dialog says so itself, and it is now out of date: the endpoint it says
-> does not exist was added later. `GET /staff/catalog/proposals` returns this
-> seller's proposals with `status` and `moderation_note` — the refusal reason —
-> and nothing in `seller/src` calls it. So an approved card turns up in the
-> catalogue and can be found there, and **a refused one is invisible from the
-> cabinet**. Until a screen is added, the seller reads it with:
-> ```bash
-> curl -s localhost:8000/api/v1/staff/catalog/proposals \
->   -H "Authorization: Bearer $SELLER_TOKEN" | python3 -m json.tool
-> ```
+## 2. The warehouse counts it in · backoffice `:5173`, warehouse
 
----
+**Topshiruvlar** opens on `status=declared`, which is the day's work. The
+batch from step 1 is at the top; open it.
 
-## 2. The admin publishes it · backoffice
+The receive screen shows the promise and an empty box beside it. **The boxes
+start empty on purpose** — a pre-filled form is a form somebody accepts
+without counting. Press **Hammasini to'liq** for the common case, or type what
+you actually found; the difference column updates as you type. Write a note
+(`Qadoq butun`) and press **Qabul qilish**.
 
-1. Sign in at <http://localhost:5173> as `+998900000001`.
-2. **Moderatsiya** — it is the admin's landing screen, and the sidebar row
-   carries a count.
-3. Find the row. Press **E'lon qilish**.
+**What you should see.** Back on the list, and the batch is gone from the
+`Kutilmoqda` filter.
 
-**What you should see.** The count on the sidebar drops by one and the row
-leaves the queue. `POST /staff/catalog/products/{id}/status` → `200` with
-`status: "published"`, and the card is now `200` on the customer endpoint.
+**And this is the step that publishes the product.** Go back to the seller's
+product screen: it now reads **Sotuvda**, with `Omborda 3` and `Sotuvga tayyor
+3`, and a per-cell **Olib ketaman** button that was not there before. There is
+no approve button anywhere in the backoffice, because "approval" in this shop
+is somebody confirming the goods turned up.
 
-**Refusing instead** is the other half: **Rad etish** asks for a **Sabab** and
-will not proceed without one — *"Sababsiz rad etib bo'lmaydi"*. The reason is
-what the seller is supposed to act on, which is what makes the gap in step 1
-worth knowing about.
+> **Try the other half.** Submit a second product and press **Rad etish**
+> instead, with a reason. The batch is refused *and* the product goes down
+> with it — the seller's screen reads **Rad etildi** with your sentence on it,
+> in red, under the title. It is the only answer they get about why their
+> product is not in the shop, which is why the reason is required.
 
----
+## 3. The customer buys it
 
-## 3. The seller puts a price on it · seller cabinet
-
-Publishing gave the card a place in the catalogue. It still has no price and
-nothing on the shelf, so nobody can buy it.
-
-1. Back to the seller cabinet, **Katalog**.
-2. Search its name or SKU. The filter **Hali menda yo'q** is the useful one —
-   cards this seller does not yet offer.
-3. Press the row's action to open **Taklif qo'yish**.
-4. Enter **Narxim (so'm)** — `189000`. **Chizilgan narx** is the struck-through
-   one and is optional.
-5. Save.
-
-**What you should see.** A dialog **Taklif qo'yildi** showing **Narxingiz** and
-**Javonda** — and Javonda reads **0**, which is correct and is the point of the
-next step. `POST /staff/offers` → `201`.
-
-The offer now appears under **Takliflarim**.
-
----
-
-## 4. The goods arrive · seller declares, warehouse counts
-
-Under this model the goods sit in *our* warehouse and the seller owns them. So
-the two sides of the shelf answer to different people: **the seller sets the
-price, the warehouse sets the count.** A seller cannot write a stock figure —
-they would be promising goods nobody has received.
-
-**Seller** — cabinet, **Partiyalar**:
-
-1. Create a batch and add a line: the offer from step 3, quantity `5`.
-2. Send it.
-
-**What you should see.** A batch code the *platform* issued — `SUP-000001` —
-not the seller's own reference. Status **declared**. `POST /staff/supplies` →
-`201`.
-
-**Warehouse** — backoffice as `+998900000003`, **Partiyalar**:
-
-3. Open `SUP-000001`. Enter the received quantity per line — `5` — and book it
-   in.
-
-**What you should see.** Status **received**. Then on **Javon**, the offer reads
-`on_hand 5`, `reserved 0`, `sellable 5`. `POST /staff/supplies/{id}/receive`
-→ `200`; `GET /staff/offers/{id}/shelf` → one cell per countable place.
-
-**Harakatlar** (movements) now has `intake` rows against it: the shelf figure
-is the running sum of that ledger, not a number anybody typed.
-
----
-
-## 5. The customer buys it
-
-> **GAP — there is no customer app in a browser.**
-> The shopper's 47 screens are the Android and iOS clients, built in Android
-> Studio and Xcode. There is no web build, so this step cannot be clicked from
-> the desktop at all.
->
-> **On a device or emulator:** both debug builds point at this same API —
-> `http://10.0.2.2:8000` from an Android emulator, `http://localhost:8000` from
-> an iOS simulator. `./dev.sh` starts the backend on `0.0.0.0`, and
-> `backend/run.sh` opens the `adb reverse` tunnel for a physical phone. Sign in
-> as `+998901234567`, code `123456`, PIN `1234`.
->
-> **From the desktop**, by API — this is the exact sequence, verified:
-> ```bash
-> A=http://localhost:8000/api/v1
-> CODE=$(curl -s -X POST $A/auth/otp/request -H 'content-type: application/json' \
->   -d '{"phone":"+998901234567"}' | python3 -c 'import json,sys;print(json.load(sys.stdin)["dev_code"])')
-> CUST=$(curl -s -X POST $A/auth/otp/verify -H 'content-type: application/json' \
->   -d "{\"phone\":\"+998901234567\",\"code\":\"$CODE\"}" \
->   | python3 -c 'import json,sys;print(json.load(sys.stdin)["access_token"])')
-> H="Authorization: Bearer $CUST"
->
-> curl -s -X DELETE $A/cart -H "$H" -o /dev/null
-> curl -s -X POST $A/cart/items -H "$H" -H 'content-type: application/json' \
->   -d '{"product_id":PUT_THE_ID_HERE,"quantity":2}'
-> ADDR=$(curl -s $A/addresses -H "$H" | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["id"])')
-> curl -s -X POST $A/orders -H "$H" -H 'content-type: application/json' \
->   -d "{\"address_id\":$ADDR}"
-> ```
-
-**What you should see.** An order code like `#A-104730`, `status: "placed"`,
-and a total of `397000` — two at 189 000 plus 19 000 delivery, because free
-delivery starts at 250 000 and this basket is under it.
-
-**A card with sizes or colours needs one named.** `{"product_id": N}` alone is
-a `422` for such a product: a sale that names no leaf comes off the offer's
-total and off no colour at all, and there is no working out afterwards which
-one it was. Add `"variant_id"` (and `"color_variant_id"` where the colours have
-sizes). The card you proposed in step 1 has no variants, which is why the
-plain form works for it.
-
-Watch **Javon** in the warehouse panel while you do this: `sellable` drops and
-`reserved` rises. The goods are held, not sold — holding is derived from the
-basket and the unpaid order, never stored, so it cannot be leaked or released
-twice.
-
----
-
-## 6. The operator moves it along · backoffice
-
-1. Sign in as `+998900000002`, **Buyurtmalar**.
-2. Find the order. Press **Yig'ishga berish** → status **YIG'ILMOQDA**.
-3. Press **Kuryerga topshirish** → status **YO'LDA**.
-
-**What you should see.** The status label changes on each press, and the order
-will not skip a step — `placed → shipped` is refused, because the legal moves
-live in one table and nowhere else.
-
-> **GAP — no panel can hand the order to a named courier.**
-> `POST /staff/orders/{id}/courier` exists and works, and **nothing in
-> `backoffice/src` calls it** — there is no courier picker on the orders screen.
-> Without it the round is empty: `GET /courier/orders` answers `[]`, so the
-> courier PWA shows no stops, and trying to deliver anyway is a `403`
-> — *"Bu buyurtma sizga biriktirilmagan"*.
->
-> So step 7 needs this one call first:
-> ```bash
-> A=http://localhost:8000/api/v1
-> OPER=<operator token>       # same OTP flow as above, phone +998900000002
-> CID=$(curl -s $A/staff/couriers -H "Authorization: Bearer $OPER" \
->   | python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["id"])')
-> curl -s -X POST $A/staff/orders/<ORDER_ID>/courier \
->   -H "Authorization: Bearer $OPER" -H 'content-type: application/json' \
->   -d "{\"courier_id\":$CID}"
-> ```
-> It answers `200` and the round has one stop.
-
----
-
-## 7. The courier delivers · courier PWA
-
-1. Open <http://localhost:5175> on a phone-shaped window and sign in as
-   `+998900000004`.
-2. **Smena** — open a shift. A courier collects cash at doors all day and hands
-   it over at the end; without a shift there is nothing to reconcile against.
-3. **Reys** — the round. The order from step 6 is the stop.
-4. Open the stop, then deliver it. **Recipient name is required**; the photo is
-   optional.
-
-**What you should see.** The stop reads **delivered**, and the customer's own
-order now says `delivered` too. `POST /courier/orders/{id}/deliver` → `200`.
-
-**Every write from this app carries an `Idempotency-Key`** and it is required,
-not optional — the app queues actions offline and will send one twice. Sending
-the same key again replays the first answer instead of delivering twice.
-**Outbox** is where a queued action waits; turn the network off in dev tools
-and deliver, and it lands there.
-
-The sale is only now a sale: not when the order was placed — it may be called
-off — and not when it was paid, because cash orders are paid at the door.
-
----
-
-## 8. The seller reads what they are owed · seller cabinet
-
-**Right away**, before any admin does anything:
-
-> **GAP — the running total is not on any screen.**
-> `GET /staff/payouts/current` answers "how is this month going so far" with
-> the same arithmetic a real statement uses, marked `is_final: false`, and
-> nothing in `seller/src` calls it. Until it is on the dashboard:
-> ```bash
-> curl -s localhost:8000/api/v1/staff/payouts/current \
->   -H "Authorization: Bearer $SELLER_TOKEN" | python3 -m json.tool
-> ```
-> For this walk it answers `gross_sales: 378000` — the two units at 189 000 —
-> with `is_final: false`, because goods keep arriving and the figure will move.
-
-**Then the closed statement**, which is the number that gets paid. An admin
-does the closing, in the backoffice under **Moliya**: open a period, generate,
-close. Or by API:
+> **APP — there is no shopper's app in a browser.** Android and iOS are the
+> fifth and sixth interfaces and they talk to this same API. The two customer
+> steps in this walk go through it directly.
 
 ```bash
-A=http://localhost:8000/api/v1
-ADMIN=<admin token>
-H="Authorization: Bearer $ADMIN"
-PER=$(curl -s -X POST $A/staff/payouts/periods -H "$H" -H 'content-type: application/json' \
-  -d '{"starts_on":"2051-01-01","ends_on":"2051-12-31","label":"Sinov"}' \
-  | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')
-curl -s -X POST $A/staff/payouts/periods/$PER/generate -H "$H" -o /dev/null
-curl -s -X POST $A/staff/payouts/periods/$PER/close -H "$H" -o /dev/null
+cd backend && .venv/bin/python - <<'PY'
+import json, urllib.request
+BASE = "http://localhost:8000/api/v1"
+
+def call(path, token=None, body=None, method=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(
+        BASE + path, data=data,
+        method=method or ("POST" if data is not None else "GET"),
+        headers={"Content-Type": "application/json",
+                 **({"Authorization": f"Bearer {token}"} if token else {})})
+    with urllib.request.urlopen(req) as res:
+        raw = res.read()
+        return json.loads(raw) if raw else None
+
+call("/auth/otp/request", body={"phone": "+998901234567"})
+me = call("/auth/otp/verify", body={"phone": "+998901234567", "code": "123456"})
+token = me["access_token"]
+
+product = int(input("product id from the seller's URL: "))
+page = call(f"/products/{product}")
+colour = next(v for v in page["variants"] if v["kind"] == "color")
+size = next(v for v in page["variants"]
+            if v["kind"] == "size" and v["parent_id"] == colour["id"])
+call("/cart", token, method="DELETE")
+call("/cart/items", token, body={"product_id": product,
+                                 "color_variant_id": colour["id"],
+                                 "variant_id": size["id"], "quantity": 1})
+address = call("/addresses", token)[0]
+order = call("/orders", token, body={"address_id": address["id"]})
+print("order", order["code"], "id", order["id"])
+PY
 ```
 
-Now, in the seller cabinet: **Hisobotlar**, and open the row.
+Keep the code and the id; the rest of the walk needs them.
 
-**What you should see.** For this walk: **payable 134 000** made of **4 lines** —
-the sale at 378 000, the commission taken off it, the handling fee, and storage.
-Not one netted number: a seller looking at one line of one order wants the
-price they set, the cut we took and the handling we charged as three figures.
+## 4. The warehouse picks it · backoffice, warehouse
 
-`payable` equals the sum of the lines exactly. That is an invariant with a test
-behind it — a total that can drift from its own composition is a total nobody
-can defend in an argument.
+**Buyurtmalar** opens on `Yangi` for the warehouse — the orders with something
+to do at a bench. Find the code and press **Yig'ildi**.
 
-Two things about it are deliberate and worth checking:
+**What you should see.** The row moves to `Yig'ilmoqda`, and the button on it
+becomes **Kuryerga berildi**. The buttons come from the order's own
+`next_statuses`, so a delivered order offers neither.
 
-* **The commission is the rate it sold at**, not today's. Change the seller's
-  `commission_percent` in the backoffice under **Sotuvchilar** and reopen the
-  statement: the figure does not move. The rate was captured onto the order
-  line the day it sold.
-* **A closed statement is finished.** Change a weight band under **Moliya** and
-  the closed statement does not move either, while the next open period is
-  worked out at the new rate.
+There is no **Bekor qilish** on this screen and none on the row. A picker who
+could call off a sale from the packing bench would be deciding that a customer
+is not getting their order; the person who can telephone them is the operator,
+and the server refuses a cancel from a warehouse account.
+
+## 5. The operator sends a courier · backoffice, operator
+
+**Buyurtmalar → the order's code.** The detail screen is the customer's own
+view of the order — the same rendering the app shows, because an operator on
+the telephone is being asked about what the customer is looking at.
+
+Under it, **Kuryer biriktirish**: pick the courier, give them a position in
+the round (`1`), press the button.
+
+**What you should see.** A toast, and the courier's name on the order row back
+on the queue.
+
+Then, as the **warehouse** again, press **Kuryerga berildi**. The order is
+`shipped` and on somebody's round.
+
+## 6. The courier delivers · courier PWA `:5175`
+
+Open it on a phone if you can — `npm run dev -- --host` in `courier/` puts it
+on the LAN — or narrow a browser window. **Bugun** is the round: deliveries
+and collections in one list, because they are the same thing to the person
+doing them.
+
+Tap the order. The address is the largest thing on the screen and the
+telephone number is a `tel:` link, because those are what the screen is for
+while walking up to the building.
+
+Type who took it and press **Yetkazdim**.
+
+**What you should see.** A toast, and the stop is gone from the round.
+
+> **Try the cash guard.** On a cash order the box is pre-filled with what is
+> owed. Change it to something else and press the button: the server refuses
+> it and the toast is its own sentence — *"Naqd 148 000 so'm olinishi kerak,
+> 100 000 ko'rsatilgan"*. Correct it and press again; it goes through. That
+> second press working is not free — every write carries an
+> `Idempotency-Key`, and `courier/src/api/keys.ts` bumps an attempt counter on
+> a refusal precisely so a corrected figure is a new request rather than a
+> replay of the refusal.
+
+> **Try the other button.** **Yetkaza olmadim** needs a reason and does *not*
+> change the order's status: an attempt is a row, not a state, and the order
+> is still on its way. Press it three times and the operator can see three
+> failures and decide to call the order off — which is the only place that
+> decision lives.
+
+## 7. The customer asks it back
+
+> **APP** again — the second and last of the two.
+
+```bash
+cd backend && .venv/bin/python - <<'PY'
+# ... the same `call` and sign-in as step 3 ...
+order_id = int(input("order id: "))
+request = call(f"/orders/{order_id}/return", token,
+               body={"reason": "Rangi rasmdagidek emas"})
+print("return request", request["id"])
+PY
+```
+
+## 8. The operator decides the money · backoffice, operator
+
+**Qaytarishlar → the order's code.** Two panels: the request, and what the
+operator may do with it. Press **Tasdiqlash**.
+
+**What you should see.** The status pill becomes `Tasdiqlangan`, and the
+buttons change to the two refund ones — **Pulni qaytarish · Ha — javonga** and
+**· Yo'q — hisobdan**. `restock` has no default on the server and none here:
+what came back whole belongs on the shelf and what came back damaged belongs
+on nobody's count, and a default would be a count moving, or failing to move,
+by omission.
+
+Leave the money for now, or pay it back — the goods are a separate question
+and the rest of the walk is about them.
+
+> **Optional: send a van.** **Yig'uv reyslari → Yangi reys** builds a
+> collection run from the approved requests, and the courier's round grows a
+> row for it. On the phone, mark each door **Oldim** or **Olmadim** with a
+> reason and press **Reysni yopish** — one write for the whole run, because a
+> half-sent run is one the warehouse cannot book in. Then, as the warehouse,
+> **Omborga qabul qilish**.
+>
+> `collected` and `received` are two different people's claims and are kept
+> apart on purpose: collapsing them would make "the courier collected it and
+> it never reached us" unsayable.
+
+## 9. The warehouse says what arrived · backoffice, warehouse
+
+The same screen, `/returns/{id}`, shows the warehouse a different panel:
+**Tekshirish**, with a note field and two buttons.
+
+Write `Yorliqlari joyida` and press **Buzilmagan**.
+
+**What you should see.** The verdict as a green pill, and the panel gone —
+there is no second verdict, because the first one is what the seller was told
+and what their deadline runs from.
+
+## 10. The seller decides · seller cabinet
+
+**Qaytarishlar.** The request is there with the warehouse's verdict on it, the
+deadline in days — *"15 sen 2026 · 7 kun"* — and two buttons: **Sotuvga
+qaytarildi** and **Olib ketaman**.
+
+Press **Sotuvga qaytarildi**.
+
+**What you should see.** A toast, a `Qayta sotuvga` pill, the decision's date,
+and the buttons gone.
+
+> **The buttons came from the server.** `seller_decisions` on the row is the
+> list of moves still open, and a *damaged* parcel carries only
+> `take_back` — damaged goods do not go back on sale, and that rule is
+> enforced in `POST /staff/returns/{id}/decide` rather than copied into three
+> clients. Inspect one as `Buzilgan` and the relist button is simply not
+> there.
+
+> **And nobody has to press anything.** If the seller says nothing for seven
+> days, `app.returns.sweep_overdue` relists it for them — silence expires into
+> the answer that costs them least. The sweep runs off the side of any returns
+> list rather than from a scheduler this system does not have.
+
+## 11. And the shelf tells the whole story
+
+**Backoffice → Qoldiq harakati**, as the warehouse. Filter by nothing and find
+the product's rows:
+
+```
+intake            +3   Qadoq butun
+sale              -1   Yakuniy ko'ylak × 1
+customer_return   +1   Qayta sotuvga
+```
+
+Three in, one sold, one back. The seller's product screen reads `Omborda 3`
+again, and that figure is not stored anywhere — it is the sum of those three
+rows. A disputed count is not an opinion; it is this list, and every row on it
+names a person and a reason.
+
+**Seller cabinet → Hisob** closes the loop: sold, returned, and what is
+payable, with the lines they add up from and a warning that the period is not
+final.
 
 ---
 
-## The three gaps, together
+## What is still not clickable
 
-None of these is a backend gap — every endpoint exists, works, and is
-exercised by the test suite. They are screens that were not built, or were
-built before the endpoint existed.
+Two steps, and they are the same one: **the customer**. Steps 3 and 7 go
+through the API because the shopper's interface is the Android and iOS apps,
+which are a separate stage of work and were deliberately not touched by the
+panels rebuild.
 
-| What | Where it should live | Endpoint that exists | Effect |
-|---|---|---|---|
-| A seller cannot see a refused proposal or its reason | seller cabinet, near **Katalog** / a "Takliflarim" tab | `GET /staff/catalog/proposals` | a seller is asked to fix something without being told what was wrong |
-| No panel can assign an order to a courier | backoffice **Buyurtmalar** | `POST /staff/orders/{id}/courier`, `GET /staff/couriers` | the courier's round is always empty; delivery is a 403 |
-| The seller's running total is on no screen | seller cabinet **Boshqaruv** | `GET /staff/payouts/current` | "how is this month going" has no answer between payouts |
-
-The `Propose.tsx` dialog also carries a comment saying the proposals endpoint
-does not exist. It does now; the comment is stale.
+Everything else in the flow is a screen. The three gaps this document used to
+list — a seller who could not read why their product was refused, a panel that
+could not hand an order to a courier, a running total on no screen — are all
+closed, and each of them is a step above.
 
 ## When something does not work
 
@@ -359,8 +345,21 @@ tail -f .dev-logs/backend.log
 tail -f .dev-logs/seller.log
 ```
 
-A `401` everywhere in a panel means the token expired — sign in again; access
-tokens last 30 minutes. A request that never leaves the browser, with a CORS
-complaint in the console, means the panel's origin is not named in
-`MB_CORS_ORIGINS`; all three dev ports are in the default, on both `localhost`
-and `127.0.0.1`, because those are different origins to a browser.
+A `401` everywhere in a panel means the access token expired — they last 30
+minutes, and the panel recovers silently from the refresh cookie, so a `401`
+that survives a reload means the cookie is gone too. Sign in again.
+
+A request that never leaves the browser, with a CORS complaint in the console,
+means the panel's origin is not named in `MB_CORS_ORIGINS`; all three dev
+ports are in the default, on both `localhost` and `127.0.0.1`, because those
+are different origins to a browser.
+
+A photograph that shows a grey square rather than a picture is a media path
+whose file is missing — the panels resolve relative paths against
+`VITE_API_URL` and fall back to the grey square rather than showing the
+browser's broken-image glyph. `backend/media/` is where they live.
+
+Every button that refuses shows the *server's* sentence, not ours. If a toast
+says something surprising, it is worth reading: "placed holatidan shipped
+holatiga o'tib bo'lmaydi" and "Bu ariza allaqachon tekshirilgan" are both the
+system telling you something true about the state of a row.
