@@ -466,7 +466,7 @@ def set_grid(
     existing = {(row.colour, row.size): row for row in pr.variants(session, product.id)}
 
     colours = payload.colours or [s.ColourIn(colour="", hex="")]
-    sizes = payload.sizes or [""]
+    sizes = [pr.tidy_size(one) for one in payload.sizes] or [""]
     price = payload.price or product.price
     sort = max((row.sort for row in existing.values()), default=-1) + 1
 

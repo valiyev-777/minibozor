@@ -120,3 +120,42 @@ function asLocal(value: string): string {
 function pad(value: number): string {
   return value.toString().padStart(2, "0")
 }
+
+const WORN = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "3XL", "4XL"]
+
+/**
+ * One spelling for a size.
+ *
+ * A letter size is a letter size however it reaches the keyboard: `xl` and
+ * `XL` are the same shirt, and left alone they become two chips, two variants
+ * and two barcodes. Numbers keep their own shape, because 41,5 is a number.
+ */
+export function tidySize(size: string): string {
+  const clean = size.trim().replace(/\s+/g, " ")
+  return /[a-z]/i.test(clean) ? clean.toUpperCase() : clean
+}
+
+/**
+ * 41 before 42 before 100, and S before M before L.
+ *
+ * The same order as the server's, so the row of chips and the row of labels
+ * that comes back from it read alike.
+ */
+export function sizeOrder(size: string): [number, number, string] {
+  const clean = size.trim()
+  const asNumber = Number(clean.replace(",", "."))
+  if (clean !== "" && !Number.isNaN(asNumber)) return [0, asNumber, ""]
+  const worn = WORN.indexOf(clean.toUpperCase())
+  return worn >= 0 ? [1, worn, ""] : [2, 0, clean.toUpperCase()]
+}
+
+/** Sorted the way sizes are worn, for a list of size names. */
+export function bySize(one: string, two: string): number {
+  const left = sizeOrder(one)
+  const right = sizeOrder(two)
+  for (let at = 0; at < 3; at += 1) {
+    if (left[at] < right[at]) return -1
+    if (left[at] > right[at]) return 1
+  }
+  return 0
+}

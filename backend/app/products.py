@@ -53,6 +53,18 @@ def size_order(size: str) -> tuple[int, float, str]:
     return (2, 0.0, upper)
 
 
+def tidy_size(size: str) -> str:
+    """One spelling per size.
+
+    A letter size is the same size however it reaches the keyboard: `xl` typed
+    in a hurry and `XL` are one shirt, and left alone they become two chips,
+    two variants and two barcodes for one thing on the shelf. Numbers keep
+    their own shape, because 41,5 is a number and not a word.
+    """
+    clean = " ".join(size.split())
+    return clean.upper() if any(ch.isalpha() for ch in clean) else clean
+
+
 def variants(session: Session, product_id: int) -> list[ProductVariant]:
     """Every cell of the colour × size grid, in the order a person reads them.
 

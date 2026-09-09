@@ -225,7 +225,7 @@ def book_in_pile(
         product,
         colour=colour,
         colour_hex=payload.colour_hex,
-        sizes=[line.size.strip() for line in payload.sizes],
+        sizes=[pr.tidy_size(line.size) for line in payload.sizes],
         price=product.price,
     )
     where = _pile_cell(session, payload.location_code)

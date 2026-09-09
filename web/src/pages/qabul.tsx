@@ -46,7 +46,7 @@ import { Capture, mediaUrl } from "@/components/photo-step"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/cn"
-import { age, money, units } from "@/lib/format"
+import { age, bySize, money, tidySize, units } from "@/lib/format"
 import {
   useBookInPile,
   useLocation,
@@ -744,6 +744,7 @@ function Counts({
   const vocab = useVocab()
   const grid = useVariants(product?.id ?? null)
   const [adding, setAdding] = useState("")
+  const [typing, setTyping] = useState(false)
   const [naming, setNaming] = useState(false)
   const [sizeless, setSizeless] = useState(false)
 
@@ -769,23 +770,38 @@ function Counts({
     return map
   }, [grid.data])
 
-  const offered = useMemo(() => {
+  // Sizes to offer as a *suggestion*, which is not the same as sizes that
+  // arrived. The card's own sizes and the ones this kind was last received in,
+  // minus whatever is already on the list below, so a chip that is still on
+  // screen is always a chip worth tapping.
+  const suggested = useMemo(() => {
     const mine = (grid.data ?? [])
       .filter((cell) => !colour || cell.colour === colour)
       .map((cell) => cell.size)
-    const seen = new Set([
-      ...mine,
-      ...(vocab.data?.sizes[kind] ?? []),
-      ...Object.keys(sizes),
-    ])
+    const seen = new Set([...mine, ...(vocab.data?.sizes[kind] ?? [])].map(tidySize))
     seen.delete("")
-    return [...seen]
+    for (const size of Object.keys(sizes)) seen.delete(size)
+    return [...seen].sort(bySize)
   }, [grid.data, colour, kind, vocab.data, sizes])
 
+  const chosen = useMemo(() => Object.keys(sizes).sort(bySize), [sizes])
+  const total = useMemo(
+    () => Object.values(sizes).reduce((sum, one) => sum + (Number(one) || 0), 0),
+    [sizes],
+  )
+
+  // One spelling, so `xl` typed in a hurry does not stand beside `XL` as a
+  // second size, a second variant and a second barcode.
   function add(size: string) {
-    const wanted = size.trim()
-    if (wanted) onSet({ ...sizes, [wanted]: sizes[wanted] ?? "" })
+    const wanted = tidySize(size)
+    if (wanted) onSet({ ...sizes, [wanted]: sizes[wanted] || "1" })
     setAdding("")
+  }
+
+  function drop(size: string) {
+    const rest = { ...sizes }
+    delete rest[size]
+    onSet(rest)
   }
 
   return (
@@ -857,47 +873,88 @@ function Counts({
       ) : null}
 
       {sizeless ? (
-        <Input
-          value={sizes[""] ?? ""}
-          onChange={(event) => onSet({ "": event.target.value.replace(/\D/g, "") })}
-          inputMode="numeric"
-          placeholder="12"
-          aria-label="Nechta"
-          className="h-control-lg w-28 tabular text-body"
-        />
+        <label className="flex items-center gap-2">
+          <Input
+            value={sizes[""] ?? ""}
+            onChange={(event) => onSet({ "": event.target.value.replace(/\D/g, "") })}
+            inputMode="numeric"
+            placeholder="12"
+            aria-label="Nechta"
+            className="h-control-lg w-28 tabular text-body"
+          />
+          <span className="text-small text-ink-soft">dona keldi</span>
+        </label>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          {offered.map((size) => (
-            <SizeBox
-              key={size}
-              size={size}
-              value={sizes[size] ?? ""}
-              already={already.get(`${colour} ${size}`) ?? 0}
-              onChange={(value) => onSet({ ...sizes, [size]: value })}
-            />
-          ))}
-          {/* Dashed, and it says what it is. It used to be a bare box the
-              same size and shape as the quantity boxes beside it, sitting
-              under the word "o'lcham" — so a count typed into the wrong one
-              became a *size* called "5", and the row grew nonsense. */}
-          <label className="w-24 rounded-control border border-dashed border-brand/50 p-1">
-            <span className="mb-0.5 block text-center text-micro text-brand-deep">
-              + o'lcham
+        <div className="space-y-2">
+          {/* What arrived, one row per size — the size named on the left, the
+              count in the middle, "dona" after it, and a way off the list.
+              This used to be a grid of chips with a bare box under each, so
+              nothing on screen said which half was a size and which was a
+              count, every offered size took up a box whether or not it came,
+              and a size typed by mistake could not be taken off again. */}
+          {chosen.length ? (
+            <ul className="divide-y rounded-control border">
+              {chosen.map((size) => (
+                <SizeRow
+                  key={size}
+                  size={size}
+                  value={sizes[size] ?? ""}
+                  already={already.get(`${colour} ${size}`) ?? 0}
+                  onChange={(value) => onSet({ ...sizes, [size]: value })}
+                  onDrop={() => drop(size)}
+                />
+              ))}
+            </ul>
+          ) : null}
+
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="mr-1 text-micro text-ink-soft">
+              {chosen.length ? "Yana o'lcham:" : "Qanday o'lchamlar keldi?"}
             </span>
-            <Input
-              value={adding}
-              onChange={(event) => setAdding(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") return
-                event.preventDefault()
-                add(adding)
-              }}
-              onBlur={() => add(adding)}
-              placeholder="XL"
-              aria-label="Yangi o'lcham"
-              className="h-control text-center"
-            />
-          </label>
+            {suggested.map((size) => (
+              <button
+                key={size}
+                type="button"
+                onClick={() => add(size)}
+                className="h-control rounded-control border px-3 text-small"
+              >
+                {size}
+              </button>
+            ))}
+            {typing ? (
+              <Input
+                autoFocus
+                value={adding}
+                onChange={(event) => setAdding(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return
+                  event.preventDefault()
+                  add(adding)
+                }}
+                onBlur={() => {
+                  add(adding)
+                  setTyping(false)
+                }}
+                placeholder="XL"
+                aria-label="Yangi o'lcham"
+                className="h-control w-24 text-center"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setTyping(true)}
+                className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep"
+              >
+                + boshqa
+              </button>
+            )}
+          </div>
+
+          {total > 0 ? (
+            <p className="text-small text-ink-soft">
+              Jami <b className="tabular text-ink">{total}</b> dona
+            </p>
+          ) : null}
         </div>
       )}
     </section>
@@ -905,36 +962,37 @@ function Counts({
 }
 
 /**
- * One size and its count.
+ * One size, and how many of it arrived.
  *
- * Tapping the size adds one, which covers most of what comes off a van — two
- * of a size, three of the next — and typing is there for the rest. No mode to
- * choose between them.
+ * A row rather than a column, because a row can be read: the size, the count,
+ * the word dona. Minus and plus are for counting a sack out by hand, the box
+ * for when the number is already known, and the cross is for the size that
+ * should never have been on the list.
  */
-function SizeBox({
+function SizeRow({
   size,
   value,
   already,
   onChange,
+  onDrop,
 }: {
   size: string
   value: string
   already: number
   onChange: (value: string) => void
+  onDrop: () => void
 }) {
   const count = Number(value) || 0
   return (
-    <div className="w-20">
+    <li className="flex items-center gap-2 p-2">
+      <span className="w-14 shrink-0 text-body font-medium">{size}</span>
       <button
         type="button"
-        onClick={() => onChange(String(count + 1))}
-        aria-label={`${size} — bittasini qo'shish`}
-        className={cn(
-          "mb-0.5 block w-full rounded-control border py-0.5 text-center text-small font-medium",
-          count > 0 ? "border-brand bg-brand-soft text-brand-deep" : "text-ink-soft",
-        )}
+        onClick={() => onChange(count > 1 ? String(count - 1) : "")}
+        aria-label={`${size} — bittasini ayirish`}
+        className="h-control w-11 shrink-0 rounded-control border text-body"
       >
-        {size}
+        −
       </button>
       <Input
         value={value}
@@ -942,16 +1000,33 @@ function SizeBox({
         inputMode="numeric"
         aria-label={`${size} — nechta`}
         className={cn(
-          "h-control-lg text-center tabular text-body",
+          "h-control-lg w-20 text-center tabular text-body",
           count > 0 && "border-brand",
         )}
       />
+      <button
+        type="button"
+        onClick={() => onChange(String(count + 1))}
+        aria-label={`${size} — bittasini qo'shish`}
+        className="h-control w-11 shrink-0 rounded-control border text-body"
+      >
+        +
+      </button>
+      <span className="text-small text-ink-soft">dona</span>
       {already > 0 && count > 0 ? (
-        <span className="mt-0.5 block text-center text-micro text-ink-faint">
-          {already} + {count} = {already + count}
+        <span className="text-micro text-ink-faint">
+          omborda {already} → {already + count}
         </span>
       ) : null}
-    </div>
+      <button
+        type="button"
+        onClick={onDrop}
+        aria-label={`${size} — ro'yxatdan olib tashlash`}
+        className="ml-auto h-control w-11 shrink-0 rounded-control text-small text-ink-faint"
+      >
+        ✕
+      </button>
+    </li>
   )
 }
 
