@@ -1,0 +1,83 @@
+@import "tailwindcss";
+@import "../../shared/theme.css";
+
+/* --------------------------------------------------------------- two vocabularies
+ *
+ * `shared/theme.css` is the design system: `ink`, `line`, `surface`, `brand`,
+ * `good`, `warn`, `danger`, and a radius named for what it wraps. Everything
+ * written here uses those names, and no screen invents a colour.
+ *
+ * shadcn's components arrive speaking a different vocabulary — `background`,
+ * `foreground`, `primary`, `muted`, `destructive` — because they are written
+ * to be dropped into any project. Rather than rewrite each one by hand (which
+ * is how a component drifts from the next copy somebody pastes in), the two
+ * vocabularies are bound together **here, once**. These are aliases, not a
+ * second palette: every value on the right is a token from the file above.
+ */
+@theme inline {
+  --color-background: var(--color-canvas);
+  --color-foreground: var(--color-ink);
+
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-ink);
+
+  --color-primary: var(--color-brand);
+  --color-primary-foreground: var(--color-brand-ink);
+  --color-secondary: var(--color-line-soft);
+  --color-secondary-foreground: var(--color-ink);
+
+  --color-muted: var(--color-line-soft);
+  --color-muted-foreground: var(--color-ink-soft);
+  --color-accent: var(--color-brand-soft);
+  --color-accent-foreground: var(--color-brand-deep);
+
+  --color-destructive: var(--color-danger);
+  --color-destructive-foreground: var(--color-danger-ink);
+
+  --color-border: var(--color-line);
+  --color-input: var(--color-line);
+  --color-ring: var(--color-brand);
+
+  --radius-sm: var(--radius-control);
+  --radius-md: var(--radius-control);
+  --radius-lg: var(--radius-panel);
+  --radius-xl: var(--radius-panel);
+}
+
+/* The one thing the app adds on its own: a control height that follows the
+ * density class rather than a fixed number, so the same button is a desk
+ * button in the office and a glove-sized one in the warehouse. */
+@utility h-control {
+  height: var(--control-md);
+}
+
+@utility h-control-lg {
+  height: var(--control-lg);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  /* Uzbek reads perfectly well in the system stack, and a webfont is a
+   * download a warehouse phone on a bad connection pays for before it can
+   * show a pick list. */
+  html {
+    font-family: var(--font-sans);
+  }
+
+  /* Printing is a real output here — label sheets and cell labels — so the
+   * page furniture gets out of the way rather than being screenshotted. */
+  @media print {
+    .no-print {
+      display: none !important;
+    }
+
+    body {
+      background: white;
+    }
+  }
+}

@@ -54,9 +54,9 @@ API_HOST="${MB_API_HOST:-127.0.0.1}"
 API_PORT="${MB_API_PORT:-8000}"
 API_URL="${MB_API_URL:-http://localhost:${API_PORT}}"
 
-BACKOFFICE_PORT="${MB_BACKOFFICE_PORT:-5173}"
-SELLER_PORT="${MB_SELLER_PORT:-5174}"
-COURIER_PORT="${MB_COURIER_PORT:-5175}"
+# One web app where there were three. The port is the one the back office
+# used, because it is the one everybody has bookmarked.
+WEB_PORT="${MB_WEB_PORT:-5173}"
 
 # The database compose reads. Kept in step with backend/docker-compose.yml.
 DB_PORT="${MB_POSTGRES_PORT:-5434}"
@@ -171,7 +171,7 @@ cleanup() {
 
   # Anything still on one of our ports, whoever it belongs to now.
   local port holder
-  for port in "$API_PORT" "$BACKOFFICE_PORT" "$SELLER_PORT" "$COURIER_PORT"; do
+  for port in "$API_PORT" "$WEB_PORT"; do
     holder="$(port_holder "$port")"
     if [ -n "$holder" ]; then
       kill -KILL "$holder" 2>/dev/null && warn "killed leftover on :$port ($holder)"
@@ -212,39 +212,35 @@ preflight() {
 
   command -v curl >/dev/null 2>&1 || die "curl is needed for the health checks."
 
-  # Node, only if a web app is going to be started.
+  # Node, only if the web app is going to be started.
   if ! command -v npm >/dev/null 2>&1; then
-    die "npm is not on PATH, and three of the five interfaces are web apps."
+    die "npm is not on PATH, and one of the four interfaces is a web app."
   fi
   ok "node $(node --version 2>/dev/null), npm $(npm --version 2>/dev/null)"
 
   # Dependencies. Installing is the friendly default; MB_NO_INSTALL=1 turns it
   # into a refusal for anybody who would rather nothing touched their tree.
-  local app
-  for app in backoffice seller courier; do
-    [ -d "$ROOT/$app" ] || { warn "$app/ not present yet — skipping"; continue; }
-    if [ ! -d "$ROOT/$app/node_modules" ]; then
+  if [ -d "$ROOT/web" ]; then
+    if [ ! -d "$ROOT/web/node_modules" ]; then
       if [ -n "${MB_NO_INSTALL:-}" ]; then
-        die "$app/node_modules is missing. Run:  cd $app && npm install"
+        die "web/node_modules is missing. Run:  cd web && npm install"
       fi
-      warn "$app/node_modules missing — installing (once, this will take a minute)"
-      if ! ( cd "$ROOT/$app" && npm install --no-audit --no-fund ); then
-        die "npm install failed in $app/. Run it by hand to see why."
+      warn "web/node_modules missing — installing (once, this will take a minute)"
+      if ! ( cd "$ROOT/web" && npm install --no-audit --no-fund ); then
+        die "npm install failed in web/. Run it by hand to see why."
       fi
     fi
-  done
-  for app in backoffice seller courier; do
-    [ -d "$ROOT/$app" ] || continue
-    [ -x "$ROOT/$app/node_modules/.bin/vite" ] || die \
-      "$app/node_modules exists but has no vite binary. Try:  cd $app && npm install"
-  done
-  ok "node_modules and vite present in backoffice, seller, courier"
+    [ -x "$ROOT/web/node_modules/.bin/vite" ] || die \
+      "web/node_modules exists but has no vite binary. Try:  cd web && npm install"
+    ok "node_modules and vite present in web"
+  else
+    warn "web/ not present yet — skipping"
+  fi
 
-  # Ports. Named individually, because "address already in use" from four
+  # Ports. Named individually, because "address already in use" from two
   # services at once tells you nothing about which one lost.
   local busy=0 port name
-  for pair in "$API_PORT:backend" "$BACKOFFICE_PORT:backoffice" \
-              "$SELLER_PORT:seller" "$COURIER_PORT:courier"; do
+  for pair in "$API_PORT:backend" "$WEB_PORT:web"; do
     port="${pair%%:*}"; name="${pair##*:}"
     [ "$name" = backend ] || [ -d "$ROOT/$name" ] || continue
     if port_busy "$port"; then
@@ -254,9 +250,9 @@ preflight() {
   done
   if [ "$busy" -eq 1 ]; then
     die "Ports above are in use. Stop them, or './dev.sh down' to clear ours,
-    or move this run:  MB_API_PORT=8100 MB_BACKOFFICE_PORT=5273 ./dev.sh"
+    or move this run:  MB_API_PORT=8100 MB_WEB_PORT=5273 ./dev.sh"
   fi
-  ok "ports :$API_PORT :$BACKOFFICE_PORT :$SELLER_PORT :$COURIER_PORT are free"
+  ok "ports :$API_PORT :$WEB_PORT are free"
 }
 
 # ------------------------------------------------------------------- database
@@ -384,73 +380,60 @@ bring_up() {
     fi
   fi
 
-  # The three panels. Every one is handed the API address, so none of them has
-  # to have guessed right in its own .env — and the courier's default used to
-  # guess 8001.
+  # The web app, handed the API address so it does not have to have guessed
+  # right in its own .env.
   export VITE_API_URL="$API_URL"
   # Vite's own binary, not `npm run dev`. Through npm the process this script
   # tracks is npm, which forks a shell which forks node: the pid we watch is
   # two removes from the thing that holds the port, so "did it die" was being
   # asked about the wrong process — a vite that crashed left npm alive and this
   # script none the wiser. Running the binary makes the tracked pid the server.
-  local app port
-  for pair in "backoffice:$BACKOFFICE_PORT" "seller:$SELLER_PORT" "courier:$COURIER_PORT"; do
-    app="${pair%%:*}"; port="${pair##*:}"
-    [ -d "$ROOT/$app" ] || continue
-    start_service "$app" "$port" "$ROOT/$app" \
-      "$ROOT/$app/node_modules/.bin/vite" --port "$port" --strictPort
-  done
-
-  local name
-  for pair in "backoffice:$BACKOFFICE_PORT" "seller:$SELLER_PORT" "courier:$COURIER_PORT"; do
-    name="${pair%%:*}"; port="${pair##*:}"
-    [ -d "$ROOT/$name" ] || continue
-    if code="$(wait_for_http "http://localhost:$port/")"; then
-      ok "$name answering on :$port"
+  if [ -d "$ROOT/web" ]; then
+    start_service web "$WEB_PORT" "$ROOT/web" \
+      "$ROOT/web/node_modules/.bin/vite" --port "$WEB_PORT" --strictPort
+    if code="$(wait_for_http "http://localhost:$WEB_PORT/")"; then
+      ok "web answering on :$WEB_PORT"
     else
-      bad "$name did not answer on :$port — see $LOG_DIR/$name.log"
+      bad "web did not answer on :$WEB_PORT — see $LOG_DIR/web.log"
     fi
-  done
+  fi
 }
 
 # ---------------------------------------------------------------- the summary
 
 summary() {
-  local admin demo
-  admin="$( cd "$ROOT/backend" && "$PY" -c \
-    'from app.seed import ADMIN_PHONE; print(ADMIN_PHONE)' 2>/dev/null || echo '+998900000001' )"
-  demo="$( cd "$ROOT/backend" && "$PY" -c \
-    'from app.seed import DEMO_PHONE; print(DEMO_PHONE)' 2>/dev/null || echo '+998901234567' )"
+  local admin warehouse courier demo
+  read -r admin warehouse courier demo <<<"$( cd "$ROOT/backend" && "$PY" -c \
+    'from app import seed; print(seed.ADMIN_PHONE, seed.WAREHOUSE_PHONE, seed.COURIER_PHONE, seed.DEMO_PHONE)' \
+    2>/dev/null || echo '+998900000001 +998900000002 +998900000003 +998901234567' )"
 
   cat <<EOF
 
 ${B}Everything is up.${N}
 
   ${B}Interface${N}       ${B}Address${N}                        ${B}Sign in as${N}
-  backoffice      http://localhost:$BACKOFFICE_PORT           admin      $admin
-  seller          http://localhost:$SELLER_PORT           seller     see dev accounts below
-  courier         http://localhost:$COURIER_PORT           courier    see dev accounts below
+  web             http://localhost:$WEB_PORT           admin      $admin
+                                                    ombor      $warehouse
+                                                    kuryer     $courier
   API + /docs     $API_URL/docs      —
   API health      $API_URL/health    —
   Postgres        localhost:$DB_PORT                  (docker: $DB_CONTAINER)
 
-  The Android and iOS clients are the fifth and sixth interfaces; they are
-  built in Android Studio and Xcode and talk to this same API. From an
-  emulator that is http://10.0.2.2:$API_PORT, from a simulator http://localhost:$API_PORT.
+  One web app, not three panels: the same bundle is the office, the bench and
+  the van, and the role on the account decides which. The Android and iOS
+  clients are the shopping app and talk to this same API. From an emulator
+  that is http://10.0.2.2:$API_PORT, from a simulator http://localhost:$API_PORT.
 
   ${B}Signing in${N} — every interface uses the same OTP flow. Enter the phone
   number, then the SMS code ${B}123456${N} (dev builds return it in the response).
   The shopper's PIN is 1234. Customer demo account: $demo
 
-  Staff accounts for the panels:
-      cd backend && .venv/bin/python -m tools.dev_accounts --apply
-  prints a phone number per role. Without them the panels have nobody to let in.
+  More staff, if you need them:
+      cd backend && .venv/bin/python -m tools.make_staff +998900000009 warehouse "Ismi"
 
-  Logs      $LOG_DIR/{backend,backoffice,seller,courier}.log
+  Logs      $LOG_DIR/{backend,web}.log
   Status    ./dev.sh status
   Stop      Ctrl+C   (Postgres keeps running; './dev.sh down' stops the rest)
-
-  Walk the whole flow end to end: ${B}docs/walkthrough.md${N}
 
 EOF
 }
@@ -511,7 +494,7 @@ print("database {} (want {}, have {})".format(why, d["expected"], d["revision"])
   # the honest check is that it serves its index and that the index is an HTML
   # document — which is what a browser is about to ask for.
   local name port
-  for pair in "backoffice:$BACKOFFICE_PORT" "seller:$SELLER_PORT" "courier:$COURIER_PORT"; do
+  for pair in "web:$WEB_PORT"; do
     name="${pair%%:*}"; port="${pair##*:}"
     [ -d "$ROOT/$name" ] || continue
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 "http://localhost:$port/" 2>/dev/null)"
@@ -536,8 +519,7 @@ print("database {} (want {}, have {})".format(why, d["expected"], d["revision"])
 
 cmd_down() {
   local port holder stopped=0
-  for pair in "$API_PORT:backend" "$BACKOFFICE_PORT:backoffice" \
-              "$SELLER_PORT:seller" "$COURIER_PORT:courier"; do
+  for pair in "$API_PORT:backend" "$WEB_PORT:web"; do
     port="${pair%%:*}"
     holder="$(port_holder "$port")"
     if [ -n "$holder" ]; then
@@ -549,7 +531,7 @@ cmd_down() {
     fi
   done
   [ "$stopped" -eq 1 ] && sleep 2
-  for pair in "$API_PORT:x" "$BACKOFFICE_PORT:x" "$SELLER_PORT:x" "$COURIER_PORT:x"; do
+  for pair in "$API_PORT:x" "$WEB_PORT:x"; do
     port="${pair%%:*}"
     holder="$(port_holder "$port")"
     [ -n "$holder" ] && kill -KILL "$holder" 2>/dev/null
@@ -617,7 +599,7 @@ case "${1:-up}" in
     sed -n '2,8p' "$BASH_SOURCE"| sed 's/^#\s\?//'
     say ""
     say "Ports, and how to move them:"
-    say "  MB_API_PORT=$API_PORT  MB_BACKOFFICE_PORT=$BACKOFFICE_PORT  MB_SELLER_PORT=$SELLER_PORT  MB_COURIER_PORT=$COURIER_PORT"
+    say "  MB_API_PORT=$API_PORT  MB_WEB_PORT=$WEB_PORT"
     say "  MB_NO_INSTALL=1   refuse to run npm install, just say what is missing"
     say "  MB_LOG_DIR=...    where the four logs go (default .dev-logs/)"
     ;;
