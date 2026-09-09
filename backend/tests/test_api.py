@@ -22,6 +22,7 @@ sum of its placements.
 from __future__ import annotations
 
 from collections.abc import Callable
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, col, func, select
@@ -2265,3 +2266,265 @@ def test_an_address_is_written_and_read_back(
 def test_the_languages_the_apps_may_ask_for(client: TestClient) -> None:
     langs = {row["code"] for row in client.get(f"{API}/languages").json()}
     assert langs == {"uz", "ru", "en"}
+
+
+# ------------------------------------------------- a pile, booked in and shelved
+
+
+def _pile(
+    client: TestClient,
+    warehouse: dict[str, str],
+    *,
+    kind: str = "Krossovka",
+    brand: str = "",
+    colour: str = "Qora",
+    sizes: tuple[tuple[str, int], ...] = (("42", 4),),
+    unit_cost: int = 200_000,
+    code: str = "",
+    product_id: int | None = None,
+    snapshot: str = "",
+    key: str | None = None,
+):
+    """One pile off the van, the way the receiving desk books one in."""
+    body: dict = {
+        "kind": kind,
+        "brand": brand,
+        "colour": colour,
+        "sizes": [{"size": size, "quantity": qty} for size, qty in sizes],
+        "unit_cost": unit_cost,
+        "location_code": code,
+        "place": "Chorsu",
+    }
+    if product_id is not None:
+        body["product_id"] = product_id
+    if snapshot:
+        body["snapshot_url"] = snapshot
+    return client.post(
+        f"{API}/warehouse/piles",
+        json=body,
+        headers={**warehouse, "Idempotency-Key": key or f"pile-{uuid4()}"},
+    )
+
+
+def test_a_pile_goes_straight_to_the_cell_that_was_typed(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """Receipt and putaway in one action, and one leg in the ledger.
+
+    The person who opened the sack is standing at the shelf holding the goods.
+    Booking them into the receiving area and then carrying them out of it again
+    would put a journey in the ledger that nobody made.
+    """
+    made = _pile(client, warehouse, colour="Qora", sizes=(("42", 4),), code="A-01-01")
+    assert made.status_code == 201, made.text
+    pile = made.json()
+    assert pile["location_code"] == "A-01-01"
+    assert pile["quantity"] == 4
+
+    cell = client.get(f"{API}/warehouse/locations/A-01-01", headers=warehouse)
+    assert cell.status_code == 200, cell.text
+    assert sum(row["qty"] for row in cell.json()["contents"]) >= 4
+
+    variant_id = pile["labels"][0]["variant_id"]
+    moves = client.get(
+        f"{API}/warehouse/stock/movements",
+        params={"variant_id": variant_id},
+        headers=warehouse,
+    )
+    kinds = [row["kind"] for row in moves.json()["items"]]
+    assert kinds == ["receipt"], kinds
+
+
+def test_a_pile_with_no_cell_waits_in_the_receiving_area(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """An empty cell code is not an error — the physical work never waits.
+
+    Whoever tipped the sack out may not be the person who shelves it, and the
+    goods are in the building either way. QABUL is a place, not a state of not
+    being anywhere, so they are countable and they are on the putaway queue.
+    """
+    made = _pile(client, warehouse, colour="Oq", sizes=(("41", 3),), code="")
+    assert made.status_code == 201, made.text
+    assert made.json()["location_code"] == loc.QABUL
+
+    queue = client.get(f"{API}/warehouse/putaway", headers=warehouse)
+    variant_id = made.json()["labels"][0]["variant_id"]
+    assert variant_id in [row["variant_id"] for row in queue.json()]
+
+
+def test_a_pile_is_a_stub_and_the_shop_cannot_see_it(
+    client: TestClient, warehouse: dict[str, str], admin: dict[str, str]
+) -> None:
+    """Three gaps, all named, and no way past them.
+
+    A card written with the sack open has a name, a colour and a count. It has
+    no category, so nobody browsing would find it; no price, so there is
+    nothing to charge; and no catalogue photograph, so it would show as a grey
+    square. Being invisible for another hour is the better of the two.
+    """
+    made = _pile(client, warehouse, kind="Futbolka", colour="Oq", code="A-01-02")
+    card = made.json()["product"]
+    assert card["status"] == "draft"
+    assert card["category_slug"] is None
+    assert card["price"] == 0
+    assert {gap["key"] for gap in card["unready"]} == {
+        "needs_category",
+        "needs_price",
+        "needs_photo",
+    }
+
+    refused = client.post(
+        f"{API}/admin/products/{card['id']}/status",
+        json={"status": "active"},
+        headers=admin,
+    )
+    assert refused.status_code == 409, refused.text
+
+
+def test_a_stub_reaches_the_shop_once_all_three_gaps_are_filled(
+    client: TestClient, warehouse: dict[str, str], admin: dict[str, str]
+) -> None:
+    """The publishing queue's whole job, in order."""
+    made = _pile(client, warehouse, kind="Shim", colour="Ko'k", code="A-01-03")
+    card = made.json()["product"]
+
+    _category(client, admin, "shimlar")
+    filed = client.patch(
+        f"{API}/admin/products/{card['id']}",
+        json={"category_slug": "shimlar"},
+        headers=admin,
+    )
+    assert filed.status_code == 200, filed.text
+
+    priced = client.post(
+        f"{API}/admin/products/{card['id']}/price",
+        json={"price": 149_000},
+        headers=warehouse,
+    )
+    assert priced.status_code == 200, priced.text
+    assert all(row["price"] == 149_000 for row in priced.json())
+
+    _photograph(client, admin, card["id"], "Ko'k")
+
+    live = client.post(
+        f"{API}/admin/products/{card['id']}/status",
+        json={"status": "active"},
+        headers=admin,
+    )
+    assert live.status_code == 200, live.text
+    assert live.json()["unready"] == []
+    assert live.json()["price"] == 149_000
+
+
+def test_a_second_pile_of_the_same_size_adds_to_the_first(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """Four found, then two more found — six, not two.
+
+    The screen this replaced overwrote the earlier line instead of adding to
+    it, silently, so a size counted twice ended up holding whatever was
+    counted last. Every count here is a difference written to the ledger, which
+    is the only shape that cannot lose the first one.
+    """
+    first = _pile(
+        client, warehouse, kind="Kepka", colour="Qora", sizes=(("L", 4),), code="A-02-01"
+    )
+    assert first.status_code == 201, first.text
+    card = first.json()["product"]
+
+    again = _pile(
+        client,
+        warehouse,
+        product_id=card["id"],
+        colour="Qora",
+        sizes=(("L", 2),),
+        code="A-02-01",
+    )
+    assert again.status_code == 201, again.text
+
+    variant_id = first.json()["labels"][0]["variant_id"]
+    assert again.json()["labels"][0]["variant_id"] == variant_id
+
+    cell = client.get(f"{API}/warehouse/locations/A-02-01", headers=warehouse)
+    held = {row["variant_id"]: row["qty"] for row in cell.json()["contents"]}
+    assert held[variant_id] == 6
+
+
+def test_a_mistyped_cell_is_refused_rather_than_invented(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """``A-03-11`` is one keystroke from ``A-03-01`` and there is no scanner yet."""
+    refused = _pile(client, warehouse, colour="Qora", code="A-03-11")
+    assert refused.status_code == 404, refused.text
+
+    not_a_cell = _pile(client, warehouse, colour="Qora", code=loc.QABUL)
+    assert not_a_cell.status_code == 409, not_a_cell.text
+
+
+def test_one_pile_key_books_it_in_once(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """A second tap on a slow connection is not a second sack."""
+    key = f"pile-{uuid4()}"
+    sack = {"kind": "Sumka", "colour": "Qora", "sizes": (("", 7),), "code": "A-02-02"}
+    first = _pile(client, warehouse, key=key, **sack)
+    assert first.status_code == 201, first.text
+    again = _pile(client, warehouse, key=key, **sack)
+    assert again.status_code in (200, 201), again.text
+    assert again.json()["run_id"] == first.json()["run_id"]
+
+    variant_id = first.json()["labels"][0]["variant_id"]
+    cell = client.get(f"{API}/warehouse/locations/A-02-02", headers=warehouse)
+    held = {row["variant_id"]: row["qty"] for row in cell.json()["contents"]}
+    assert held[variant_id] == 7
+
+
+def test_the_desk_vocabulary_is_learned_from_what_came_through_the_door(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """No vocabulary screen: a brand typed once is a chip from then on.
+
+    Nobody sets up a list of goods before receiving any, and a market brings
+    whatever it brings — so "On Cloud" is written on the form that needed it
+    and the chips are the answer to what things have been called.
+    """
+    made = _pile(
+        client,
+        warehouse,
+        kind="Krossovka",
+        brand="On Cloud",
+        colour="Oq",
+        sizes=(("41", 4), ("42", 6)),
+        code="A-04-01",
+        snapshot="uploads/oncloud.webp",
+    )
+    assert made.status_code == 201, made.text
+    assert made.json()["product"]["brand_slug"] == "on-cloud"
+    assert made.json()["product"]["snapshot_url"] == "uploads/oncloud.webp"
+
+    words = client.get(f"{API}/warehouse/vocab", headers=warehouse).json()
+    assert "Krossovka" in words["kinds"]
+    assert "On Cloud" in words["brands"]
+    assert "Oq" in words["colours"]
+    # 41 before 42, and offering the right row is three taps instead of twelve.
+    assert words["sizes"]["Krossovka"][:2] == ["41", "42"]
+
+
+def test_two_black_trainers_of_different_makes_are_two_cards(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """The make is part of the goods' identity, not a detail.
+
+    A picker sent to a cell of black trainers has to be able to tell which pair
+    the order named, and "qora krossovka" twice cannot tell them.
+    """
+    shoe = {"kind": "Krossovka", "colour": "Qora"}
+    nike = _pile(client, warehouse, brand="Nike", code="B-01-01", **shoe)
+    adidas = _pile(client, warehouse, brand="Adidas", code="B-01-02", **shoe)
+    assert nike.status_code == 201 and adidas.status_code == 201
+
+    assert nike.json()["product"]["id"] != adidas.json()["product"]["id"]
+    assert nike.json()["product"]["sku"] != adidas.json()["product"]["sku"]
+    assert "Nike" in nike.json()["product"]["title"]
+    assert "Adidas" in adidas.json()["product"]["title"]

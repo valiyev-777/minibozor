@@ -946,6 +946,110 @@ class CountSubmitIn(BaseModel):
     note: str = ""
 
 
+class CardPriceIn(BaseModel):
+    """One selling price for the whole card.
+
+    The money lives on the variants, because a 43 can cost more than a 41 — but
+    nothing off a market run is priced by size, and pricing twelve cells one at
+    a time to publish one card is the sort of arithmetic that leaves cards
+    unpublished. So this writes them all, and repricing a single cell
+    afterwards still goes through its own door.
+    """
+
+    price: int = Field(gt=0)
+    old_price: int | None = Field(None, gt=0)
+    # Only this colour, when a colour costs more than the others.
+    colour: str | None = None
+
+
+class PileSizeIn(BaseModel):
+    """One size of one pile. An empty size is goods that have none."""
+
+    size: str = Field(default="", max_length=40)
+    quantity: int = Field(gt=0)
+
+
+class PileIn(BaseModel):
+    """A pile off the van, booked in and shelved in one action.
+
+    This is the receiving desk's whole vocabulary. A sack from the market is
+    usually one thing — only black trainers, only white shirts — so the form
+    is one row and not a matrix, and it does receipt *and* putaway together
+    because the person is standing at the shelf holding the goods. Splitting
+    those into two screens was making somebody walk the room twice.
+
+    Either ``product_id`` names a card that already exists, or ``kind`` /
+    ``brand`` / ``colour`` write a new one. Two black trainers of different
+    makes are two cards, which is why the brand is part of the identity and
+    why the identification photograph matters more than the spelling.
+
+    ``location_code`` empty is not an error: it means the goods are going no
+    further than the receiving area for now, and somebody will shelve them
+    from the putaway queue. The physical work never waits for the paperwork.
+    """
+
+    product_id: int | None = None
+
+    kind: str = Field(default="", max_length=60)
+    brand: str = Field(default="", max_length=80)
+    colour: str = Field(default="", max_length=60)
+    colour_hex: str = Field(default="", max_length=9)
+    # Composed from kind/brand/colour when absent. A card written at the desk
+    # is renamed at publishing time by somebody writing for customers.
+    title: str = Field(default="", max_length=200)
+    snapshot_url: str = Field(default="", max_length=300)
+
+    sizes: list[PileSizeIn] = Field(min_length=1, max_length=60)
+
+    # What one of these cost at the market. Required, and required *here*:
+    # this is the only moment anybody knows it. By the evening it is a guess,
+    # and a guessed cost is worse than an empty one because it reaches the
+    # profit report looking like a fact.
+    unit_cost: int = Field(gt=0)
+
+    location_code: str = Field(default="", max_length=20)
+
+    # This pile's own receipt. Where it was bought and what the van cost, both
+    # optional — and its own row rather than a line on a shared daily run,
+    # because a ``draft`` supply means "a sack nobody has opened" and goods
+    # that are already on a shelf cannot be sitting in one.
+    place: str = Field(default="", max_length=120)
+    transport_cost: int = Field(default=0, ge=0)
+
+
+class PileOut(BaseModel):
+    """What was booked in, and what to write on the box."""
+
+    product: AdminProductOut
+    run_id: int
+    run_code: str
+    location_code: str
+    quantity: int
+    total_cost: int
+    # For the box: the codes we generated. Printed when there is a printer,
+    # written with a marker when there is not — either way the goods carry
+    # something that tells them apart from the next sack.
+    labels: list[ProductLabelOut] = []
+
+
+class VocabOut(BaseModel):
+    """The receiving desk's chips, learned rather than configured.
+
+    Nobody sets up a list of goods before they have received any, and a market
+    brings whatever it brings. So the chips are what has come through the door
+    before, most-used first, and "+ yangi" is always there.
+
+    ``sizes`` is keyed by kind: trainers were last received in 40-45 and shirts
+    in S-XXL, and offering the right row is the difference between three taps
+    and twelve.
+    """
+
+    kinds: list[str] = []
+    brands: list[str] = []
+    colours: list[str] = []
+    sizes: dict[str, list[str]] = {}
+
+
 class ProductLabelOut(BaseModel):
     """One printable label: what we generate, because nothing else has a code."""
 
@@ -1029,6 +1133,20 @@ class WriteOffIn(BaseModel):
 # --------------------------------------------------------------------------- admin
 
 
+class GapOut(BaseModel):
+    """One reason a card is not in the shop: the key and the words.
+
+    Both, because the two readers want different things. The publishing screen
+    branches on ``key`` to decide which control to put in front of somebody —
+    a category picker, a price field, a camera — and shows ``label``, which is
+    the server's wording in the reader's language, so that the browser is not
+    keeping its own copy of a rule or a translation.
+    """
+
+    key: str
+    label: str
+
+
 class AdminProductOut(BaseModel):
     """A card as the person who owns the catalogue sees it."""
 
@@ -1036,10 +1154,16 @@ class AdminProductOut(BaseModel):
     sku: str
     title: str
     subtitle: str
+    kind: str
     status: ProductStatus
     next_statuses: list[ProductStatus]
-    category_slug: str
+    # Absent on a card still waiting to be filed and priced.
+    category_slug: str | None
     brand_slug: str | None
+    snapshot_url: str
+    # Why this card is not in the shop. Empty means it is ready, whether or
+    # not anybody has published it yet.
+    unready: list[GapOut] = []
     price: int
     old_price: int | None
     stock_left: int
@@ -1214,14 +1338,27 @@ class ProductCreateIn(BaseModel):
     warehouse's to move.
     """
 
-    sku: str = Field(min_length=1, max_length=40)
+    # Generated when absent. Market goods arrive with no usable code and
+    # nobody at a receiving desk should be inventing one: a person asked to
+    # think of "KRS-01" is a person who stops writing cards.
+    sku: str = Field(default="", max_length=40)
     title: str = Field(min_length=1, max_length=200)
     subtitle: str = ""
     description: str = ""
-    category_slug: str
+    # The receiving desk's word for the goods — "Krossovka". Free text on
+    # purpose: the vocabulary is learned from what has been received.
+    kind: str = Field(default="", max_length=60)
+    # Both optional, because a card written with the sack open has neither yet
+    # and the goods still have to reach the shelf. ``app.products.unready``
+    # names the gaps and ``status`` keeps the card out of the shop until they
+    # are filled.
+    category_slug: str | None = None
     brand_slug: str | None = None
-    price: int = Field(gt=0)
+    price: int = Field(default=0, ge=0)
     old_price: int | None = Field(None, gt=0)
+    # The identification photograph, over the open sack. Not a catalogue
+    # picture; see ``Product.snapshot_url``.
+    snapshot_url: str = Field(default="", max_length=300)
     badge: str | None = None
     warranty: str | None = None
     is_original: bool = True

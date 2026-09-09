@@ -268,6 +268,39 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "У каждого цвета должно быть своё фото. Без фото: {colours}",
         "en": "Every colour needs its own photograph. Without one: {colours}",
     },
+    # The three gates between a pile on the shelf and a card in the shop. Each
+    # is named on its own so a queue can say what is missing without anybody
+    # opening the card to find out.
+    "needs_category": {
+        "uz": "kategoriya",
+        "ru": "категория",
+        "en": "a category",
+    },
+    "needs_price": {
+        "uz": "sotuv narxi",
+        "ru": "цена продажи",
+        "en": "a selling price",
+    },
+    "needs_photo": {
+        "uz": "rasm",
+        "ru": "фото",
+        "en": "a photograph",
+    },
+    "card_not_ready": {
+        "uz": "Sotuvga chiqarish uchun yetishmaydi: {gaps}",
+        "ru": "Для продажи не хватает: {gaps}",
+        "en": "Not ready for sale — missing: {gaps}",
+    },
+    "no_such_cell": {
+        "uz": "Bunday yacheyka yo'q: {code}",
+        "ru": "Такой ячейки нет: {code}",
+        "en": "No such cell: {code}",
+    },
+    "pile_needs_a_name": {
+        "uz": "Tavar nomi yoki turi kerak",
+        "ru": "Нужно название или тип товара",
+        "en": "The goods need a name or a kind",
+    },
     "order_taken": {
         "uz": "Bu zakasni boshqa kuryer olib ketdi",
         "ru": "Этот заказ уже забрал другой курьер",

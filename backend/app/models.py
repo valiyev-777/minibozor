@@ -275,15 +275,40 @@ class Product(SQLModel, table=True):
     title: str
     subtitle: str = ""
     description: str = ""
-    category_id: int = Field(foreign_key="categories.id", index=True)
+
+    # The word the receiving desk used — "Krossovka", "Futbolka". Not the
+    # category: a category is where the card is filed in the shop, and it is
+    # chosen later at a desk by somebody deciding how customers should browse.
+    # This is what the goods were called with the sack open, and it is where
+    # the receiving form's chips come from: the vocabulary is learned from what
+    # has been received rather than configured before anybody has received
+    # anything.
+    kind: str = Field(default="", index=True, max_length=60)
+
+    # **Both absent while the card is a stub.** A pile off the van has a name,
+    # a colour and a count, and nothing else that is true yet: no category, no
+    # selling price, no photograph. Making either of these required is what
+    # stops the goods reaching the shelf, and the shelf is the urgent half.
+    # ``status`` is what keeps such a card out of the shop, and
+    # ``app.products.unready`` is what names the gaps.
+    category_id: int | None = Field(
+        default=None, foreign_key="categories.id", index=True
+    )
     brand_id: int | None = Field(default=None, foreign_key="brands.id", index=True)
+
+    # The identification photograph, taken over the open sack in two seconds.
+    # It is not a catalogue picture and is never shown to a customer: its job
+    # is to tell two black trainers apart in a search result and in the
+    # publishing queue, which no amount of naming discipline does reliably.
+    # A good one can be promoted to a catalogue image at publishing time.
+    snapshot_url: str = Field(default="", max_length=300)
 
     # The price the card is advertised at, and the one the listings sort and
     # filter on in SQL. The money itself is on the variant — a 43 may cost
     # more than a 41 — and this is the cheapest of them, recomputed by
     # ``app.products.refresh`` whenever a variant's price moves. It is a
     # display figure and nothing is ever charged from it.
-    price: int                       # so'm, integer
+    price: int = 0                   # so'm, integer; 0 until somebody prices it
     old_price: int | None = None
     rating: float = 0.0
     reviews_count: int = 0

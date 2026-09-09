@@ -90,7 +90,7 @@ def list_products(
         stmt.order_by(order).offset((page - 1) * page_size).limit(page_size)
     ).all()
     return s.Page[s.AdminProductOut](
-        items=[_product_out(session, row) for row in rows],
+        items=[sv.admin_product_out(session, row) for row in rows],
         page=page,
         page_size=page_size,
         total=total,
@@ -131,7 +131,7 @@ def get_product(
     """
     product = _product(session, product_id)
     return s.AdminProductDetailOut(
-        **_product_out(session, product).model_dump(),
+        **sv.admin_product_out(session, product).model_dump(),
         description=product.description,
         badge=product.badge,
         warranty=product.warranty,
@@ -169,17 +169,20 @@ def _create_card(
     payload: s.ProductCreateIn,
     state: ProductStatus,
 ) -> s.AdminProductOut:
-    if session.exec(select(Product).where(Product.sku == payload.sku)).first():
+    sku = payload.sku.strip().upper() or pr.next_sku(session)
+    if session.exec(select(Product).where(Product.sku == sku)).first():
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("sku_exists"))
-    category = _category(session, payload.category_slug)
+    category = _category(session, payload.category_slug) if payload.category_slug else None
     brand = _brand(session, payload.brand_slug) if payload.brand_slug else None
 
     product = Product(
-        sku=payload.sku,
+        sku=sku,
         title=payload.title,
         subtitle=payload.subtitle,
         description=payload.description,
-        category_id=category.id,
+        kind=payload.kind.strip(),
+        snapshot_url=payload.snapshot_url,
+        category_id=category.id if category else None,
         brand_id=brand.id if brand else None,
         # What the card is advertised at until it has priced variants, which
         # `products.refresh` takes over from. The money a shopper pays is on
@@ -214,7 +217,7 @@ def _create_card(
     )
     session.commit()
     session.refresh(product)
-    return _product_out(session, product)
+    return sv.admin_product_out(session, product)
 
 
 @router.patch(
@@ -282,12 +285,28 @@ def set_product_status(
     tr.ensure(tr.PRODUCT_TRANSITIONS, product.status, payload.status)
 
     if payload.status is ProductStatus.ACTIVE:
-        missing = pr.colours_without_a_photograph(session, product.id)
-        if missing:
-            named = ", ".join(colour or product.title for colour in missing)
+        # The photograph was the first gate and turned out to be the easy one.
+        # A card written at the desk with the sack open has no category and no
+        # selling price either, and either of those reaching a customer is
+        # worse than the card being invisible for another hour: without a
+        # category nobody browsing finds it, and without a price there is
+        # nothing to charge.
+        gaps = pr.unready(session, product.id)
+        if gaps:
+            # Each gap says what to go and do, and the photograph one still
+            # names the colours: "a photograph is missing" leaves somebody
+            # opening all six to find out which.
+            parts = []
+            for gap in gaps:
+                if gap != "needs_photo":
+                    parts.append(i18n.label(gap))
+                    continue
+                missing = pr.colours_without_a_photograph(session, product.id)
+                named = ", ".join(colour or product.title for colour in missing)
+                parts.append(f"{i18n.label(gap)} ({named})")
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                i18n.label("colour_needs_photo", colours=named),
+                i18n.label("card_not_ready", gaps=", ".join(parts)),
             )
 
     audit.record(
@@ -310,7 +329,7 @@ def set_product_status(
     pr.refresh(session, product.id)
     session.commit()
     session.refresh(product)
-    return _product_out(session, product)
+    return sv.admin_product_out(session, product)
 
 
 # ------------------------------------------------------------------ the grid
@@ -390,9 +409,9 @@ def set_grid(
     # The codes are ours, and they are only knowable once the row has an id.
     for row in pr.variants(session, product.id):
         if not row.sku:
-            row.sku = _variant_sku(product, row)
+            row.sku = pr.variant_sku(product, row)
         if not row.barcode:
-            row.barcode = _barcode(row.id)
+            row.barcode = pr.barcode(row.id)
         session.add(row)
     pr.refresh(session, product.id)
     session.commit()
@@ -464,6 +483,60 @@ def delete_variant(
     pr.refresh(session, product.id)
     session.commit()
     return s.Message(message=i18n.label("deleted"))
+
+
+@router.post(
+    "/products/{product_id}/price",
+    response_model=list[s.AdminVariantOut],
+    summary="Price the whole card at once",
+)
+def price_card(
+    product_id: int,
+    payload: s.CardPriceIn,
+    # The receiving desk's, because the person who paid for the goods is the
+    # person who knows what they should sell for, and they are standing at the
+    # bench with the sack.
+    user: CatalogReader,
+    session: SessionDep,
+) -> list[s.AdminVariantOut]:
+    """Every cell, or every cell of one colour.
+
+    A pile off the van is one price. Publishing a card meant pricing twelve
+    cells through twelve requests, which is how a card stays in the queue for a
+    week — so this is the door the publishing screen uses, and the per-cell
+    door stays for the 43 that really does cost more.
+    """
+    product = _product(session, product_id)
+    rows = pr.variants(session, product.id)
+    if payload.colour is not None:
+        rows = [row for row in rows if row.colour == payload.colour]
+
+    for row in rows:
+        row.price = payload.price
+        session.add(row)
+
+    # The struck-through "was" belongs to the card: it is a display figure and
+    # a variant has none. ``products.refresh`` takes the price itself from the
+    # cheapest cell a moment later and leaves this alone.
+    if payload.old_price is not None:
+        product.old_price = payload.old_price
+        session.add(product)
+
+    audit.record(
+        session,
+        actor=user,
+        action="product.price",
+        entity="product",
+        entity_id=product.id,
+        field="price",
+        old=product.price,
+        new=payload.price,
+        note=payload.colour or "",
+    )
+    session.commit()
+    pr.refresh(session, product.id)
+    session.commit()
+    return [_variant_out(session, row) for row in pr.variants(session, product.id)]
 
 
 # ------------------------------------------------------------------ photographs
@@ -800,28 +873,6 @@ def _variant(
     return row
 
 
-def _variant_sku(product: Product, variant: ProductVariant) -> str:
-    """The card's code with the cell's on the end: ``KRS-01-QORA-42``.
-
-    Readable on purpose. A picker reading a label wants to recognise the thing
-    without decoding it, and a random string is a string somebody transcribes
-    wrong when the printer is out of toner.
-    """
-    parts = [product.sku, variant.colour, variant.size]
-    return "-".join(part.upper().replace(" ", "") for part in parts if part)
-
-
-def _barcode(variant_id: int) -> str:
-    """Ours, printed by us, and permanent.
-
-    Market goods arrive with no usable code of their own — no label, and two
-    sacks of the same shoe from two traders would collide if there were — so
-    the code is generated from the row's own id and never regenerated. ``200``
-    is the prefix reserved for in-store use, which is exactly what this is.
-    """
-    return f"200{variant_id:09d}"
-
-
 def _why_not_deletable(session: SessionDep, variant: ProductVariant) -> str:
     from app.models import OrderItem, StockMovement
 
@@ -864,33 +915,3 @@ def _image_rows(session: SessionDep, product_id: int) -> list[ProductImage]:
         ).all()
     )
 
-
-def _product_out(session: SessionDep, product: Product) -> s.AdminProductOut:
-    category = session.get(Category, product.category_id)
-    brand = session.get(Brand, product.brand_id) if product.brand_id else None
-    images = session.exec(
-        select(func.count())
-        .select_from(ProductImage)
-        .where(ProductImage.product_id == product.id)
-    ).one()
-    variants = session.exec(
-        select(func.count())
-        .select_from(ProductVariant)
-        .where(ProductVariant.product_id == product.id)
-    ).one()
-    return s.AdminProductOut(
-        id=product.id,
-        sku=product.sku,
-        title=product.title,
-        subtitle=product.subtitle,
-        status=product.status,
-        next_statuses=tr.next_states(tr.PRODUCT_TRANSITIONS, product.status),
-        category_slug=category.slug if category else "",
-        brand_slug=brand.slug if brand else None,
-        price=product.price,
-        old_price=product.old_price,
-        stock_left=pr.on_shelf(session, product.id),
-        image_count=int(images),
-        variant_count=int(variants),
-        created_at=product.created_at,
-    )

@@ -11,6 +11,7 @@ from app import i18n
 from app import products as pr
 from app import schemas as s
 from app import stock as st
+from app import transitions as tr
 from app.models import (
     Address,
     Brand,
@@ -275,6 +276,52 @@ def brand_out(session: Session, b: Brand, product_count: int = 0) -> s.BrandOut:
         slug=b.slug,
         name=i18n.t(session, "brand", b.id, "name", b.name),
         product_count=product_count,
+    )
+
+
+def admin_product_out(session: Session, product: Product) -> s.AdminProductOut:
+    """A card as the people who own the catalogue see it.
+
+    Here rather than in the admin router because the receiving desk answers
+    with one too: booking a pile in returns the card it went on, and that is
+    the same card in the same shape.
+    """
+    # Both absent on a card the receiving desk wrote and nobody has filed yet.
+    category = (
+        session.get(Category, product.category_id) if product.category_id else None
+    )
+    brand = session.get(Brand, product.brand_id) if product.brand_id else None
+    images = session.exec(
+        select(func.count())
+        .select_from(ProductImage)
+        .where(ProductImage.product_id == product.id)
+    ).one()
+    variants = session.exec(
+        select(func.count())
+        .select_from(ProductVariant)
+        .where(ProductVariant.product_id == product.id)
+    ).one()
+    return s.AdminProductOut(
+        id=product.id,
+        sku=product.sku,
+        title=product.title,
+        subtitle=product.subtitle,
+        kind=product.kind,
+        status=product.status,
+        next_statuses=tr.next_states(tr.PRODUCT_TRANSITIONS, product.status),
+        category_slug=category.slug if category else None,
+        brand_slug=brand.slug if brand else None,
+        snapshot_url=product.snapshot_url,
+        unready=[
+            s.GapOut(key=gap, label=i18n.label(gap))
+            for gap in pr.unready(session, product.id)
+        ],
+        price=product.price,
+        old_price=product.old_price,
+        stock_left=pr.on_shelf(session, product.id),
+        image_count=int(images),
+        variant_count=int(variants),
+        created_at=product.created_at,
     )
 
 

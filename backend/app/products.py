@@ -71,6 +71,131 @@ def colours_without_a_photograph(session: Session, product_id: int) -> list[str]
     return [colour for colour in wanted if colour not in photographed]
 
 
+def ensure_cells(
+    session: Session,
+    product: Product,
+    *,
+    colour: str,
+    colour_hex: str = "",
+    sizes: list[str],
+    price: int = 0,
+) -> list[ProductVariant]:
+    """The cells for one colour in the sizes that arrived, made if absent.
+
+    **Adds; never renumbers and never deletes.** A pile of 44s turning up for
+    a card that only had 41-43 writes one new cell and leaves the others
+    exactly as they are — their prices, their counts, and above all their
+    barcodes. A regenerated code would leave the shelf holding one thing under
+    two of them.
+
+    Returns the cells for the sizes asked about, in the order asked, so the
+    caller can put a count against each without matching them up again.
+    """
+    existing = {(row.colour, row.size): row for row in variants(session, product.id)}
+    sort = max((row.sort for row in existing.values()), default=-1) + 1
+
+    made = False
+    for size in sizes:
+        if (colour, size) in existing:
+            continue
+        row = ProductVariant(
+            product_id=product.id,
+            colour=colour,
+            colour_hex=colour_hex,
+            size=size,
+            price=price or product.price,
+            sort=sort,
+        )
+        session.add(row)
+        existing[(colour, size)] = row
+        sort += 1
+        made = True
+
+    if made:
+        session.commit()
+        # The codes are ours and are only knowable once the row has an id.
+        for row in variants(session, product.id):
+            if not row.sku:
+                row.sku = variant_sku(product, row)
+            if not row.barcode:
+                row.barcode = barcode(row.id)
+            session.add(row)
+        session.commit()
+        existing = {
+            (row.colour, row.size): row for row in variants(session, product.id)
+        }
+
+    return [existing[(colour, size)] for size in sizes]
+
+
+# --------------------------------------------------------------------------- our codes
+
+
+def next_sku(session: Session) -> str:
+    """The next card code, ours because nothing else has one.
+
+    Market goods arrive with no usable code — no label, no barcode — and two
+    sacks of the same shoe from two traders would collide if they did. Nobody
+    at a receiving desk should be inventing one either: a person asked to think
+    up "KRS-01" with a sack open in front of them is a person who stops writing
+    cards, which is how the flow stalled before.
+    """
+    used = session.exec(select(func.count()).select_from(Product)).one()
+    return f"MB-{int(used) + 1:06d}"
+
+
+def variant_sku(product: Product, variant: ProductVariant) -> str:
+    """The card's code with the cell's on the end: ``MB-000124-QORA-42``.
+
+    Readable on purpose. A picker reading a label wants to recognise the thing
+    without decoding it, and a random string is a string somebody transcribes
+    wrong when the printer is out of toner — or writes on the box with a
+    marker, which is what happens here until there is a printer at all.
+    """
+    parts = [product.sku, variant.colour, variant.size]
+    return "-".join(part.upper().replace(" ", "") for part in parts if part)
+
+
+def barcode(variant_id: int) -> str:
+    """Ours, and permanent.
+
+    Generated from the row's own id and never regenerated: when the same goods
+    arrive again the label is reprinted, or the shelf ends up holding one thing
+    under two codes. ``200`` is the prefix reserved for in-store use, which is
+    exactly what this is.
+    """
+    return f"200{variant_id:09d}"
+
+
+def unready(session: Session, product_id: int) -> list[str]:
+    """Everything that keeps this card out of the shop, named.
+
+    Three gates, not one. A photograph was the first, and it turned out to be
+    the easy one: a card written at the receiving desk with the sack open also
+    has no category and no selling price, and either of those reaching a
+    customer is worse than the card being invisible for another hour. Without
+    a category nobody browsing can find it; without a price there is nothing
+    to charge.
+
+    Named rather than counted, for the same reason the colours are: a queue
+    that says "3 cards are not ready" leaves somebody opening all three to
+    find out what for. The strings are i18n labels, resolved by the caller.
+    """
+    product = session.get(Product, product_id)
+    if product is None:
+        return []
+
+    gaps: list[str] = []
+    if product.category_id is None:
+        gaps.append("needs_category")
+    if product.price <= 0:
+        gaps.append("needs_price")
+    missing = colours_without_a_photograph(session, product_id)
+    if missing:
+        gaps.append("needs_photo")
+    return gaps
+
+
 # --------------------------------------------------------------------------- the shelf
 
 

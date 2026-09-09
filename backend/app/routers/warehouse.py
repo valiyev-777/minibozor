@@ -25,10 +25,14 @@ the first rather than erasing it.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
+import re
+from typing import Annotated
+
+from fastapi import APIRouter, Header, HTTPException, Query, status
 from sqlmodel import col, func, select
 
 from app import audit, i18n
+from app import idempotency as idem
 from app import locations as loc
 from app import products as pr
 from app import schemas as s
@@ -36,8 +40,11 @@ from app import services as sv
 from app import stock as st
 from app.deps import SessionDep, StockViewer, WarehouseUser
 from app.models import (
+    Brand,
     Location,
+    LocationKind,
     Product,
+    ProductStatus,
     ProductVariant,
     StockMovement,
     StockMovementKind,
@@ -50,11 +57,215 @@ from app.models import (
 
 router = APIRouter(prefix="/warehouse", tags=["warehouse"])
 
+IdempotencyKey = Annotated[
+    str, Header(alias="Idempotency-Key", description="A uuid per queued action")
+]
+
 
 def _next_code(session: SessionDep, model, prefix: str) -> str:
     """The next code in a series, ours rather than anybody else's."""
     used = session.exec(select(func.count()).select_from(model)).one()
     return f"{prefix}-{int(used) + 1:06d}"
+
+
+# --------------------------------------------------------------------------- a pile
+
+
+@router.get(
+    "/vocab",
+    response_model=s.VocabOut,
+    summary="The receiving desk's chips — learned, not configured",
+)
+def vocab(user: StockViewer, session: SessionDep) -> s.VocabOut:
+    """What has come through the door before, most-used first.
+
+    Nobody sets up a list of goods before they have received any, and a market
+    brings whatever it brings — so there is no vocabulary screen and nothing to
+    maintain. The chips are the answer to "what have we called things", which
+    means the list is short and right on day thirty and empty on day one, when
+    typing is the only thing that could have worked anyway.
+    """
+    kinds = [
+        row[0]
+        for row in session.exec(
+            select(Product.kind, func.count())
+            .where(col(Product.kind) != "")
+            .group_by(col(Product.kind))
+            .order_by(func.count().desc())
+            .limit(40)
+        ).all()
+    ]
+    brands = [
+        row[0]
+        for row in session.exec(
+            select(Brand.name, func.count())
+            .join(Product, col(Product.brand_id) == col(Brand.id))
+            .group_by(col(Brand.name))
+            .order_by(func.count().desc())
+            .limit(40)
+        ).all()
+    ]
+    colours = [
+        row[0]
+        for row in session.exec(
+            select(ProductVariant.colour, func.count())
+            .where(col(ProductVariant.colour) != "")
+            .group_by(col(ProductVariant.colour))
+            .order_by(func.count().desc())
+            .limit(40)
+        ).all()
+    ]
+
+    # Sizes by kind: trainers were last received in 40-45 and shirts in S-XXL,
+    # and offering the right row is the difference between three taps and
+    # twelve.
+    sizes: dict[str, list[str]] = {}
+    for kind, size in session.exec(
+        select(Product.kind, ProductVariant.size)
+        .join(ProductVariant, col(ProductVariant.product_id) == col(Product.id))
+        .where(col(Product.kind) != "", col(ProductVariant.size) != "")
+        .distinct()
+    ).all():
+        sizes.setdefault(kind, []).append(size)
+    for row in sizes.values():
+        row.sort(key=_size_order)
+
+    return s.VocabOut(kinds=kinds, brands=brands, colours=colours, sizes=sizes)
+
+
+@router.post(
+    "/piles",
+    response_model=s.PileOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="A pile off the van — booked in and shelved in one action",
+)
+def book_in_pile(
+    payload: s.PileIn,
+    user: WarehouseUser,
+    session: SessionDep,
+    idempotency_key: IdempotencyKey,
+) -> s.PileOut:
+    """Receipt and putaway together, because the person is holding the goods.
+
+    A sack from the market is usually one thing — only black trainers, only
+    white shirts — and whoever opened it is standing at the shelf with it. The
+    two-stage flow below made them walk the room twice: once to tip the sack
+    out and once to carry what they had already counted. So this books the
+    goods in *and* shelves them, in one submit, with the cell typed on the same
+    form.
+
+    ``location_code`` empty is not an error. It means the goods are going no
+    further than the receiving area for now, and the putaway queue will offer
+    them to whoever has time — the physical work never waits for the
+    paperwork, and QABUL is a place rather than a state of not being anywhere.
+
+    The card this writes is a **stub**: a name, a colour, sizes and counts. It
+    has no category, no selling price and no catalogue photograph, so it stays
+    in ``draft`` and the apps cannot see it. Somebody fills those in at a desk
+    afterwards, in the light, which is the only place that work was ever going
+    to get done properly.
+    """
+    done = idem.replay(session, user, idempotency_key, "pile", payload)
+    if done is not None:
+        return s.PileOut(**done)
+
+    product = _pile_card(session, user, payload)
+    colour = payload.colour.strip()
+    cells = pr.ensure_cells(
+        session,
+        product,
+        colour=colour,
+        colour_hex=payload.colour_hex,
+        sizes=[line.size.strip() for line in payload.sizes],
+        price=product.price,
+    )
+    where = _pile_cell(session, payload.location_code)
+
+    run = Supply(
+        code=_next_code(session, Supply, "SUP"),
+        place=payload.place.strip(),
+        transport_cost=payload.transport_cost,
+        buyer_id=user.id,
+        status=SupplyStatus.RECEIVED,
+        received_at=utcnow(),
+        received_by_id=user.id,
+        note=product.title,
+    )
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+
+    quantity = 0
+    for line, variant in zip(payload.sizes, cells, strict=True):
+        session.add(
+            SupplyLine(
+                supply_id=run.id,
+                variant_id=variant.id,
+                quantity=line.quantity,
+                unit_cost=payload.unit_cost,
+            )
+        )
+        # One movement, from the outside world straight to where the goods
+        # actually are. Not two — a receipt into QABUL followed by a putaway
+        # out of it would put a leg in the ledger for a journey nobody made.
+        st.move(
+            session,
+            variant=variant,
+            qty=line.quantity,
+            kind=StockMovementKind.RECEIPT,
+            frm=None,
+            to=where,
+            actor=user,
+            reason=f"{run.code} · {where.code}",
+            supply_id=run.id,
+        )
+        quantity += line.quantity
+
+    # The identification photograph belongs to the card, and the first one
+    # wins: a second pile of the same goods should not quietly replace the
+    # picture somebody is recognising them by.
+    if payload.snapshot_url and not product.snapshot_url:
+        product.snapshot_url = payload.snapshot_url
+        session.add(product)
+
+    audit.record(
+        session,
+        actor=user,
+        action="pile.receive",
+        entity="product",
+        entity_id=product.id,
+        field="location",
+        old=None,
+        new=where.code,
+        note=f"{run.code} · {quantity} dona · {product.title}",
+    )
+    session.commit()
+    pr.refresh(session, product.id)
+    session.commit()
+    session.refresh(product)
+
+    out = s.PileOut(
+        product=sv.admin_product_out(session, product),
+        run_id=run.id,
+        run_code=run.code,
+        location_code=where.code,
+        quantity=quantity,
+        total_cost=quantity * payload.unit_cost + run.transport_cost,
+        labels=[
+            s.ProductLabelOut(
+                variant_id=variant.id,
+                product_title=product.title,
+                variant_label=_label(variant),
+                sku=variant.sku,
+                barcode=variant.barcode,
+                price=variant.price,
+            )
+            for variant in cells
+        ],
+    )
+    idem.keep(session, user, idempotency_key, "pile", payload, out)
+    replayed = idem.commit(session, user, idempotency_key, "pile")
+    return s.PileOut(**replayed) if replayed else out
 
 
 # --------------------------------------------------------------------------- market runs
@@ -380,6 +591,141 @@ def list_movements(
 
 
 # --------------------------------------------------------------------------- helpers
+
+
+def _size_order(size: str) -> tuple[int, float, str]:
+    """41 before 42 before 100, and S before M before L.
+
+    Sizes are strings because "42" and "XL" are both sizes, so sorting them
+    lexically puts 100 before 41 and XL before S. Numbers sort as numbers,
+    clothing sizes in the order they are worn, and anything else alphabetically
+    after both.
+    """
+    try:
+        return (0, float(size.replace(",", ".")), "")
+    except ValueError:
+        pass
+    known = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "3XL", "4XL"]
+    upper = size.strip().upper()
+    if upper in known:
+        return (1, known.index(upper), "")
+    return (2, 0.0, upper)
+
+
+def _label(variant: ProductVariant) -> str:
+    return " / ".join(part for part in (variant.colour, variant.size) if part)
+
+
+def _brand_named(session: SessionDep, name: str) -> Brand:
+    """The brand by the name somebody typed, made if it is new.
+
+    Two black trainers of different makes are two cards, so the make is part of
+    the goods' identity and not a detail — which means the receiving desk has
+    to be able to name one that has never been seen before, without leaving the
+    form. "On Cloud" is typed once and is a chip from then on.
+    """
+    wanted = name.strip()
+    found = session.exec(
+        select(Brand).where(func.lower(col(Brand.name)) == wanted.lower())
+    ).first()
+    if found is not None:
+        return found
+
+    stem = re.sub(r"[^a-z0-9]+", "-", wanted.lower()).strip("-") or "brend"
+    slug = stem
+    n = 2
+    while session.exec(select(Brand).where(Brand.slug == slug)).first() is not None:
+        slug = f"{stem}-{n}"
+        n += 1
+    row = Brand(slug=slug, name=wanted)
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+def _pile_cell(session: SessionDep, code: str) -> Location:
+    """Where the pile is going: a cell, or the receiving area by default.
+
+    A typed cell code is checked against the cells that exist rather than
+    trusted, because there is no scanner yet and ``A-03-11`` is one keystroke
+    away from ``A-03-01``. A code for a cell that is not there is refused; a
+    code for the wrong *cell* is caught by the form showing what is in it.
+    """
+    wanted = code.strip().upper()
+    if not wanted:
+        return loc.staging(session, loc.QABUL)
+
+    cell = loc.by_code(session, wanted)
+    if cell is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, i18n.label("no_such_cell", code=wanted)
+        )
+    if cell.kind is not LocationKind.BIN:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("putaway_needs_a_cell")
+        )
+    return cell
+
+
+def _pile_card(session: SessionDep, user: User, payload: s.PileIn) -> Product:
+    """The card this pile goes on: one that exists, or a stub written now.
+
+    Written here rather than through the catalogue's own door because what the
+    desk knows is not what that door asks for. It has a name, a colour and
+    sizes; it has no category, no price and no catalogue picture, and requiring
+    any of them is what stopped the goods reaching the shelf.
+    """
+    if payload.product_id is not None:
+        product = session.get(Product, payload.product_id)
+        if product is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, i18n.label("product_not_found")
+            )
+        return product
+
+    kind = payload.kind.strip()
+    brand = _brand_named(session, payload.brand) if payload.brand.strip() else None
+    title = payload.title.strip() or " · ".join(
+        part
+        for part in (kind, brand.name if brand else "", payload.colour.strip())
+        if part
+    )
+    if not title:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, i18n.label("pile_needs_a_name")
+        )
+
+    product = Product(
+        sku=pr.next_sku(session),
+        title=title,
+        kind=kind,
+        brand_id=brand.id if brand else None,
+        snapshot_url=payload.snapshot_url,
+        # Nothing yet: the shop cannot show this and is not meant to.
+        category_id=None,
+        price=0,
+        in_stock=False,
+        status=ProductStatus.DRAFT,
+    )
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    audit.record(
+        session,
+        actor=user,
+        action="product.create",
+        entity="product",
+        entity_id=product.id,
+        field="status",
+        old=None,
+        new=ProductStatus.DRAFT,
+        note=f"{product.sku} · {product.title}",
+    )
+    session.commit()
+    session.refresh(product)
+    return product
 
 
 def _supply(session: SessionDep, supply_id: int) -> Supply:
