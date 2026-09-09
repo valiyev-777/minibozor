@@ -2766,3 +2766,114 @@ def test_the_card_search_matches_every_word_in_any_order(
         assert found.status_code == 200, found.text
         titles = [row["title"] for row in found.json()["items"]]
         assert "Botinka · Nike · Qora" in titles, f"{query!r} found {titles}"
+
+
+def test_a_colour_with_no_photograph_is_not_in_the_shop(
+    client: TestClient,
+    warehouse: dict[str, str],
+    seller: dict[str, str],
+    admin: dict[str, str],
+) -> None:
+    """Goods keep arriving after a card has gone on sale.
+
+    A pile of red shirts booked in against a live card adds a colour nobody has
+    photographed. Taking the whole card down for it would hide the black ones,
+    which are perfectly sellable; leaving the colour in the shop puts a grey
+    square with a hex swatch behind it in front of a customer. So the colour
+    waits and the card does not.
+    """
+    made = _pile(client, warehouse, kind="Ko'ylak", colour="Qora", sizes=(("M", 4),), code="C-04-01")
+    card = made.json()["product"]
+
+    _category(client, seller, "koylaklar")
+    client.patch(
+        f"{API}/admin/products/{card['id']}",
+        json={"category_slug": "koylaklar"},
+        headers=seller,
+    )
+    client.post(
+        f"{API}/admin/products/{card['id']}/price", json={"price": 99_000}, headers=seller
+    )
+    _photograph(client, seller, card["id"], "Qora")
+    live = client.post(
+        f"{API}/admin/products/{card['id']}/status",
+        json={"status": "active"},
+        headers=seller,
+    )
+    assert live.status_code == 200, live.text
+
+    # The red ones turn up a week later.
+    again = _pile(
+        client,
+        warehouse,
+        product_id=card["id"],
+        colour="Qizil",
+        sizes=(("M", 3),),
+        code="C-04-02",
+    )
+    assert again.status_code == 201, again.text
+
+    shown = client.get(f"{API}/products/{card['id']}").json()
+    assert [c["colour"] for c in shown["colours"]] == ["Qora"]
+    assert {v["colour"] for v in shown["variants"]} == {"Qora"}
+
+    # And the card is still on sale, with the queue asking for the picture.
+    held = client.get(f"{API}/admin/products/{card['id']}", headers=seller).json()
+    assert held["status"] == "active"
+    assert "needs_photo" in {gap["key"] for gap in held["unready"]}
+
+    # Photograph it and the red ones appear.
+    _photograph(client, seller, card["id"], "Qizil")
+    both = client.get(f"{API}/products/{card['id']}").json()
+    assert {c["colour"] for c in both["colours"]} == {"Qora", "Qizil"}
+
+
+def test_a_basket_line_never_shows_another_colour(
+    client: TestClient,
+    auth: dict[str, str],
+    warehouse: dict[str, str],
+    seller: dict[str, str],
+) -> None:
+    """An empty tile is a shrug; the wrong colour is a dispute.
+
+    The line used to fall back to the card's cover, which is a *different*
+    colour's photograph — so a black shirt could sit in the basket showing the
+    white one, and the customer notices in the order, which is the worst place
+    to be surprised.
+    """
+    made = _pile(client, warehouse, kind="Sviter", colour="Qora", sizes=(("L", 5),), code="C-04-03")
+    card = made.json()["product"]
+    _photograph(client, seller, card["id"], "Qora")
+    variant = made.json()["labels"][0]["variant_id"]
+
+    added = client.post(
+        f"{API}/cart/items",
+        json={"product_id": card["id"], "variant_id": variant, "quantity": 1},
+        headers=auth,
+    )
+    assert added.status_code in (200, 201), added.text
+    line = next(row for row in added.json()["items"] if row["variant_id"] == variant)
+    assert line["colour"] == "Qora"
+    assert line["size"] == "L"
+    assert line["image_url"], "the colour was photographed, so the line has its picture"
+
+    # A colour with no photograph of its own shows nothing rather than the
+    # cover, which belongs to another colour.
+    grey = _pile(
+        client,
+        warehouse,
+        product_id=card["id"],
+        colour="Kulrang",
+        sizes=(("L", 2),),
+        code="C-04-04",
+    )
+    assert grey.status_code == 201, grey.text
+    other = grey.json()["labels"][0]["variant_id"]
+    added = client.post(
+        f"{API}/cart/items",
+        json={"product_id": card["id"], "variant_id": other, "quantity": 1},
+        headers=auth,
+    )
+    line = next(row for row in added.json()["items"] if row["variant_id"] == other)
+    assert line["colour"] == "Kulrang"
+    assert not line["image_url"]

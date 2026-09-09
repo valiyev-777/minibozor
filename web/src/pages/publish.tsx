@@ -76,8 +76,17 @@ export function PublishPage() {
         .sort((a, b) => a.created_at.localeCompare(b.created_at)),
     [drafts.data],
   )
+  // Anything on sale with a gap of either kind. A card that was published and
+  // then had a pile of red shirts booked in against it has an unphotographed
+  // colour — a hard gap on a card that is already live — and it belonged to
+  // neither list while this only looked at the soft ones. The colour itself is
+  // held back from the shop until it is photographed; this is what gets it
+  // photographed.
   const thin = useMemo(
-    () => (live.data?.items ?? []).filter((card) => card.listing_gaps.length > 0),
+    () =>
+      (live.data?.items ?? []).filter(
+        (card) => card.unready.length > 0 || card.listing_gaps.length > 0,
+      ),
     [live.data],
   )
 
@@ -122,12 +131,13 @@ export function PublishPage() {
 
       <section className="space-y-2">
         <h2 className="text-small font-semibold">
-          Sotuvda, lekin yupqa ko'rinadi
+          Sotuvda, lekin to'liq emas
           {thin.length ? <span className="tabular"> · {thin.length}</span> : null}
         </h2>
         <p className="text-micro text-ink-faint">
-          Ilova bo'sh maydonni yashiradi — sahifa buzilmaydi, faqat quruq
-          ko'rinadi. Shuning uchun bu ro'yxat bor.
+          Rasmsiz rang do'konda ko'rsatilmaydi — qolgan ranglar sotiladi.
+          Boshqalari esa sahifani quruq qiladi: ilova bo'sh maydonni yashiradi,
+          shuning uchun bu ro'yxat bor.
         </p>
 
         {!live.isLoading && thin.length === 0 ? (
@@ -139,7 +149,11 @@ export function PublishPage() {
             <li key={card.id}>
               <Row
                 card={card}
-                gaps={card.listing_gaps}
+                gaps={[...card.unready, ...card.listing_gaps]}
+                // A live card missing a photograph is a colour the shop
+                // cannot show, which is a different weight of problem from
+                // missing prose.
+                urgent={card.unready.length > 0}
                 open={open === card.id}
                 onOpen={() => setOpen(open === card.id ? null : card.id)}
               />
@@ -243,7 +257,9 @@ function Editor({ card }: { card: AdminProduct }) {
       {gate.size ? (
         <div className="space-y-4">
           <h3 className="text-micro font-semibold uppercase tracking-wide text-warn-ink">
-            Sotuvga chiqishi uchun
+            {card.status === "active"
+              ? "Do'konda ko'rinishi uchun"
+              : "Sotuvga chiqishi uchun"}
           </h3>
           {gate.has("needs_photo") ? <Photos card={card} /> : null}
           {gate.has("needs_category") ? <Filing card={card} /> : null}

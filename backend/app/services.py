@@ -351,6 +351,12 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
     category = session.get(Category, p.category_id)
     brand = session.get(Brand, p.brand_id) if p.brand_id else None
 
+    # The colours with a photograph, and only those. Goods keep arriving: a
+    # pile of red shirts against a card already on sale adds a colour nobody
+    # has photographed, and it would otherwise reach the shop as a grey square.
+    # A card with no colours at all — one default cell — shows everything.
+    shown = pr.photographed_colours(session, p.id)
+
     note = i18n.label("eta_next_day" if p.next_day_delivery else "eta_few_days")
     if p.free_delivery:
         note += i18n.label("eta_free_suffix")
@@ -377,7 +383,7 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
                     v.in_stock for v in variants if v.colour == colour
                 ),
             )
-            for colour in pr.colours(session, p.id)
+            for colour in shown
         ],
         variants=[
             s.VariantOut(
@@ -392,6 +398,7 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
                 stock_left=st.sellable(session, v),
             )
             for v in variants
+            if not shown or v.colour in shown
         ],
         specs=[
             s.SpecOut(
@@ -524,12 +531,17 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
         id=item.id,
         product_id=product.id,
         title=i18n.t(session, "product", product.id, "title", product.title),
-        # The colour's own photograph when the line has a colour, because that
-        # is the thing in the basket. The product's cover is the fallback.
+        # The colour's own photograph, because that is the thing in the
+        # basket. **No fallback to the cover when the line has a colour.** The
+        # cover is another colour's photograph, and a black shirt shown as the
+        # white one is the line somebody opens tomorrow saying they did not
+        # order this — which is a dispute, where a grey square is a shrug. The
+        # cover is right only where the card has no colours to confuse.
         image_url=(
-            colour_image(session, product.id, variant.colour) if variant else None
-        )
-        or primary_image(session, product.id),
+            colour_image(session, product.id, variant.colour)
+            if variant and variant.colour
+            else primary_image(session, product.id)
+        ),
         colour=variant.colour if variant else "",
         size=variant.size if variant else "",
         variant_label=label

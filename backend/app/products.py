@@ -59,6 +59,28 @@ def colours(session: Session, product_id: int) -> list[str]:
     return seen
 
 
+def photographed_colours(session: Session, product_id: int) -> list[str]:
+    """The colours a customer may be shown: the ones with a picture.
+
+    A card goes on sale when every colour it has is photographed — but goods
+    keep arriving, and a pile of red shirts booked in against a card already on
+    sale adds a colour nobody has photographed yet. Taking the whole card down
+    for it would hide the black ones that are perfectly sellable; leaving it
+    puts a colour in the shop as a grey square with a hex swatch behind it.
+
+    So the colour waits and the card does not. This is the filter the customer
+    endpoints read; ``colours_without_a_photograph`` is the same question asked
+    the other way round, for the queue that gets it fixed.
+    """
+    photographed = {
+        row.colour
+        for row in session.exec(
+            select(ProductImage).where(ProductImage.product_id == product_id)
+        ).all()
+    }
+    return [colour for colour in colours(session, product_id) if colour in photographed]
+
+
 def colours_without_a_photograph(session: Session, product_id: int) -> list[str]:
     """Which colours have no picture — the reason a card is held back.
 

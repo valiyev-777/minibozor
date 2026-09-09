@@ -394,7 +394,13 @@ def _resolve_address(session: SessionDep, user_id: int, address_id: int | None) 
 def _colour_or_cover(
     session: SessionDep, variant_id: int | None, product_id: int | None
 ) -> str:
-    """The photograph of the colour bought, if that colour has one.
+    """The photograph of the colour bought, and no other.
+
+    Where the line has a colour this answers that colour's picture or nothing.
+    It used to fall back to the card's cover, which is a *different* colour's
+    photograph — so an order for a black shirt could be remembered, for ever,
+    as a picture of the white one. That is the surprise nobody can argue with
+    six months later, and an empty tile is the honest version of it.
 
     Relative paths on both sides, because this is a snapshot and the media
     host is allowed to move.
@@ -409,8 +415,7 @@ def _colour_or_cover(
             )
             .order_by(col(ProductImage.sort), col(ProductImage.id))
         ).first()
-        if row is not None:
-            return row.url
+        return row.url if row is not None else ""
     return _raw_image(session, product_id)
 
 
