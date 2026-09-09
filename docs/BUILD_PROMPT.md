@@ -453,6 +453,32 @@ any further work must not undo:
 what happens. Every defect in the list above was found that way and none of
 them by the test suite, because each phase's tests passed in isolation.
 
+## 8c. The seller, and the shop window (2026-09-09)
+
+The brief says "no sellers". That still holds for the *marketplace* seller —
+`Seller`, offers, settlement, payouts and statements are gone, and a test
+proves no such endpoint exists. But there is now a `seller` **role**, and it is
+a shop assistant rather than an outside merchant.
+
+- **The bench's business with a card ends when the goods are on a shelf.** The
+  warehouse writes the stub through `POST /warehouse/piles` and may not price
+  goods or put them on sale: `deps.CatalogWriter` (seller + admin) guards the
+  price, the words, the specs and the status switch.
+- **`/sotuvga-chiqarish` is the seller's screen**, in the seller's menu and not
+  the office's. The route stays registered for an admin without the menu item,
+  because the dashboard tile links there and what is in the queue is money
+  standing still.
+- **Two lists.** `unready` is refused: a category, a price, a photograph per
+  colour. `listing_gaps` is not: a subtitle, a description, a specification
+  table, a second photograph. The apps hide a block whose field is empty — no
+  description means no description panel rather than an empty one — so a thin
+  card looks sparse rather than broken, and this second list is the only thing
+  that would ever make somebody finish one.
+- `GET`/`PUT .../products/{id}/specs` exist now. The schema was there and the
+  door was not: the cabinet that used to call it went with the sellers, and the
+  phone had been rendering an empty block ever since.
+- Dev accounts: admin `…001`, warehouse `…002`, courier `…003`, seller `…004`.
+
 ## 9. What to ask about
 
 Ask before: adding a dependency not named here, changing the cell code format,

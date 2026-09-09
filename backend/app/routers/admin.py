@@ -34,12 +34,13 @@ from app import schemas as s
 from app import services as sv
 from app import stock as st
 from app import transitions as tr
-from app.deps import AdminUser, CatalogReader, SessionDep
+from app.deps import AdminUser, CatalogReader, CatalogWriter, SessionDep
 from app.models import (
     Brand,
     Category,
     Product,
     ProductImage,
+    ProductSpec,
     ProductStatus,
     ProductVariant,
     User,
@@ -235,7 +236,9 @@ def _create_card(
 def update_product(
     product_id: int,
     payload: s.ProductUpdateIn,
-    user: AdminUser,
+    # The seller's: the words on a card are the shop window, and the person
+    # who photographs the goods is the person who writes them.
+    user: CatalogWriter,
     session: SessionDep,
 ) -> s.AdminProductDetailOut:
     """Everything about a card except its price, its stock and its status.
@@ -271,9 +274,10 @@ def update_product(
 def set_product_status(
     product_id: int,
     payload: s.ProductStatusIn,
-    # Photographing the last colour of a card is what puts it in the shop, and
-    # that happens at the receiving desk with the sack open.
-    user: CatalogReader,
+    # The seller's, and only theirs. Goods reaching a shelf and goods reaching
+    # the shop are two decisions, and the second one is somebody's job rather
+    # than a side effect of the first.
+    user: CatalogWriter,
     session: SessionDep,
 ) -> s.AdminProductOut:
     """The only door the shop's front window opens through.
@@ -500,10 +504,10 @@ def delete_variant(
 def price_card(
     product_id: int,
     payload: s.CardPriceIn,
-    # The receiving desk's, because the person who paid for the goods is the
-    # person who knows what they should sell for, and they are standing at the
-    # bench with the sack.
-    user: CatalogReader,
+    # The seller's. The cost is captured at the bench, where it is known; what
+    # to charge for it is a decision about the shop window, made by whoever
+    # is looking at the window.
+    user: CatalogWriter,
     session: SessionDep,
 ) -> list[s.AdminVariantOut]:
     """Every cell, or every cell of one colour.
@@ -546,6 +550,85 @@ def price_card(
     return [_variant_out(session, row) for row in pr.variants(session, product.id)]
 
 
+@router.get(
+    "/products/{product_id}/specs",
+    response_model=list[s.SpecOut],
+    summary="The specification table as it stands",
+)
+def list_specs(
+    product_id: int, user: CatalogReader, session: SessionDep
+) -> list[s.SpecOut]:
+    product = _product(session, product_id)
+    return [
+        s.SpecOut(key=row.key, value=row.value)
+        for row in session.exec(
+            select(ProductSpec)
+            .where(ProductSpec.product_id == product.id)
+            .order_by(col(ProductSpec.sort), col(ProductSpec.id))
+        ).all()
+    ]
+
+
+@router.put(
+    "/products/{product_id}/specs",
+    response_model=list[s.SpecOut],
+    summary="The specification table, replaced whole",
+)
+def replace_specs(
+    product_id: int,
+    payload: s.SpecsReplaceIn,
+    user: CatalogWriter,
+    session: SessionDep,
+) -> list[s.SpecOut]:
+    """Replaced rather than edited row by row.
+
+    The apps read this as a table and a person writes it as one: the order
+    matters, rows get reordered as often as they get changed, and a per-row
+    door would mean three requests to swap two lines. There was a schema for
+    this and no endpoint — the seller's cabinet that used to call it went with
+    the sellers, and the phone has been rendering an empty block ever since.
+    """
+    product = _product(session, product_id)
+
+    for old in session.exec(
+        select(ProductSpec).where(ProductSpec.product_id == product.id)
+    ).all():
+        session.delete(old)
+
+    for sort, row in enumerate(payload.specs):
+        spec = ProductSpec(
+            product_id=product.id,
+            key=row.key.strip(),
+            value=row.value.strip(),
+            sort=sort,
+        )
+        session.add(spec)
+        session.commit()
+        session.refresh(spec)
+        i18n.write(session, "spec", spec.id, _texts(row.translations))
+
+    audit.record(
+        session,
+        actor=user,
+        action="product.specs",
+        entity="product",
+        entity_id=product.id,
+        field="specs",
+        old=None,
+        new=len(payload.specs),
+        note=product.title,
+    )
+    session.commit()
+    return [
+        s.SpecOut(key=row.key, value=row.value)
+        for row in session.exec(
+            select(ProductSpec)
+            .where(ProductSpec.product_id == product.id)
+            .order_by(col(ProductSpec.sort), col(ProductSpec.id))
+        ).all()
+    ]
+
+
 # ------------------------------------------------------------------ photographs
 
 
@@ -573,6 +656,8 @@ def list_images(
 def add_image(
     product_id: int,
     payload: s.ImageWriteIn,
+    # Both: the receiving desk hangs the identification snapshot on a card it
+    # has just written, and the seller hangs the catalogue photographs.
     user: CatalogReader,
     session: SessionDep,
 ) -> list[s.AdminImageOut]:
@@ -691,7 +776,12 @@ def list_categories(user: CatalogReader, session: SessionDep) -> list[s.AdminCat
     status_code=status.HTTP_201_CREATED,
 )
 def create_category(
-    payload: s.CategoryWriteIn, user: AdminUser, session: SessionDep
+    payload: s.CategoryWriteIn,
+    # The seller's, because filing a card needs somewhere to file it and the
+    # first card ever written has nowhere. Renaming and deleting stay the
+    # office's: those move goods that customers are already browsing.
+    user: CatalogWriter,
+    session: SessionDep,
 ) -> s.CategoryOut:
     if session.exec(select(Category).where(Category.slug == payload.slug)).first():
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("slug_exists"))

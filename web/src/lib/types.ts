@@ -192,7 +192,14 @@ export type ProductStatus = "draft" | "active" | "archived"
 /** One reason a card is not in the shop. The key picks the control, the label
  *  is the server's wording — the browser keeps neither the rule nor the words. */
 export type Gap = {
-  key: "needs_category" | "needs_price" | "needs_photo"
+  key:
+    | "needs_category"
+    | "needs_price"
+    | "needs_photo"
+    | "needs_subtitle"
+    | "needs_description"
+    | "needs_specs"
+    | "needs_more_photos"
   label: string
 }
 
@@ -212,6 +219,8 @@ export type AdminProduct = {
    *  customer: it is what tells two black trainers apart in a search result. */
   snapshot_url: string
   unready: Gap[]
+  /** What it is missing to read like a shop rather than a stub. Not a gate. */
+  listing_gaps: Gap[]
   price: number
   old_price: number | null
   /** What these last cost at the market. 0 means nothing is booked in yet. */
@@ -223,6 +232,18 @@ export type AdminProduct = {
 }
 
 /** The receiving desk's chips, learned from what came through the door. */
+/** One card with everything the editor binds to. */
+export type AdminProductDetail = AdminProduct & {
+  description: string
+  badge: string | null
+  warranty: string | null
+  is_original: boolean
+  free_delivery: boolean
+  next_day_delivery: boolean
+}
+
+export type Spec = { key: string; value: string }
+
 export type Vocab = {
   kinds: string[]
   brands: string[]

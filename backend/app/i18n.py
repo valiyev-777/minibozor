@@ -296,6 +296,28 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Разобрано — товар оформлен партиями",
         "en": "Sorted — the goods went in as piles",
     },
+    # The soft list: what a card is missing to read like a shop. Not refused,
+    # so the wording is a thing to do rather than a thing that is wrong.
+    "needs_subtitle": {
+        "uz": "qisqa izoh",
+        "ru": "короткое описание",
+        "en": "a short line",
+    },
+    "needs_description": {
+        "uz": "tavsif",
+        "ru": "описание",
+        "en": "a description",
+    },
+    "needs_specs": {
+        "uz": "xususiyatlar",
+        "ru": "характеристики",
+        "en": "a specification table",
+    },
+    "needs_more_photos": {
+        "uz": "ko'proq rasm",
+        "ru": "больше фото",
+        "en": "more photographs",
+    },
     "card_not_ready": {
         "uz": "Sotuvga chiqarish uchun yetishmaydi: {gaps}",
         "ru": "Для продажи не хватает: {gaps}",

@@ -316,6 +316,10 @@ def admin_product_out(session: Session, product: Product) -> s.AdminProductOut:
             s.GapOut(key=gap, label=i18n.label(gap))
             for gap in pr.unready(session, product.id)
         ],
+        listing_gaps=[
+            s.GapOut(key=gap, label=i18n.label(gap))
+            for gap in pr.listing_gaps(session, product.id)
+        ],
         price=product.price,
         old_price=product.old_price,
         last_cost=pr.last_cost(session, product.id),

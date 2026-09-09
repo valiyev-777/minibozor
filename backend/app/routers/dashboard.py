@@ -26,7 +26,7 @@ from app import locations as loc
 from app import products as pr
 from app import schemas as s
 from app import services as sv
-from app.deps import OrderViewer, SessionDep
+from app.deps import DashboardViewer, SessionDep
 from app.models import (
     Location,
     LocationKind,
@@ -72,7 +72,7 @@ MOVERS = 8
     response_model=s.DashboardOut,
     summary="The figures, and where to act on each one",
 )
-def dashboard(user: OrderViewer, session: SessionDep) -> s.DashboardOut:
+def dashboard(user: DashboardViewer, session: SessionDep) -> s.DashboardOut:
     now = utcnow()
     today = now.date()
 

@@ -73,7 +73,12 @@ export function App() {
         {allowed.has("/mahsulotlar") ? (
           <Route path="/mahsulotlar" element={<ProductsPage />} />
         ) : null}
-        {allowed.has("/sotuvga-chiqarish") ? (
+        {/* The seller's job, and the seller's menu — but the office's
+            dashboard links here, because what is in this queue is money
+            standing still and the owner is the person who cares. So the route
+            exists for an admin without the menu item that says it is theirs
+            to do. */}
+        {allowed.has("/sotuvga-chiqarish") || staff.role === "admin" ? (
           <Route path="/sotuvga-chiqarish" element={<PublishPage />} />
         ) : null}
         {allowed.has("/kategoriyalar") ? (

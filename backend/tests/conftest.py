@@ -112,6 +112,14 @@ def warehouse(
 
 
 @pytest.fixture
+def seller(
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> dict[str, str]:
+    """The shop window: catalogue photographs, the words, the price, on sale."""
+    return staff(UserRole.SELLER, "+998900009004")
+
+
+@pytest.fixture
 def staff(
     sign_in: Callable[[str], dict[str, str]],
 ) -> Callable[[UserRole, str], dict[str, str]]:

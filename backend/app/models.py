@@ -35,16 +35,24 @@ class UserRole(StrEnum):
     use — the role is the only difference, so there is no second password
     store, no second login screen, and no way for the two to drift apart.
 
-    Four, since the shop became one company with one warehouse. ``seller``
-    went with the sellers. ``operator`` went because there is nobody to be an
-    operator: the owner takes the calls and cancels the orders, and a role
-    that only ever names one person who is already an admin is a second name
-    for admin.
+    ``operator`` went because there is nobody to be an operator: the owner
+    takes the calls and cancels the orders, and a role that only ever names one
+    person who is already an admin is a second name for admin.
+
+    ``seller`` is **not** the seller that went with the marketplace. That one
+    was an outside merchant with their own stock, their own prices and their
+    own payout. This one is somebody who works here, and their job is the shop
+    window: they take the catalogue photographs, write what the thing is,
+    price it and put it on sale. The warehouse gets goods onto a shelf, which
+    is a different job done at a different time by somebody with a sack in
+    front of them — and the two were one screen for a while, which is why
+    neither got done properly.
     """
 
     CUSTOMER = "customer"      # the app
     ADMIN = "admin"            # everything
     WAREHOUSE = "warehouse"    # receiving, putaway, picking, counts
+    SELLER = "seller"          # the shop window: photographs, prices, listings
     COURIER = "courier"        # a delivery round
 
 

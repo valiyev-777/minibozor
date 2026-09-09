@@ -173,6 +173,7 @@ function Who({
 function roleWord(role: string): string {
   if (role === "admin") return "Administrator"
   if (role === "warehouse") return "Ombor xodimi"
+  if (role === "seller") return "Sotuvchi"
   if (role === "courier") return "Kuryer"
   return role
 }

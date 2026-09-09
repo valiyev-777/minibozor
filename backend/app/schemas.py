@@ -1164,6 +1164,10 @@ class AdminProductOut(BaseModel):
     # Why this card is not in the shop. Empty means it is ready, whether or
     # not anybody has published it yet.
     unready: list[GapOut] = []
+    # What it is missing to read like a shop rather than a stub. Not a gate:
+    # a card with one photograph and no prose still sells, and holding it back
+    # until the writing is done is how nothing goes on sale.
+    listing_gaps: list[GapOut] = []
     price: int
     old_price: int | None
     # What these last cost at the market, from the most recent market run that

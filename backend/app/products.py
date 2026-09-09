@@ -23,7 +23,13 @@ from __future__ import annotations
 from sqlmodel import Session, col, func, select
 
 from app import stock as st
-from app.models import Product, ProductImage, ProductVariant, SupplyLine
+from app.models import (
+    Product,
+    ProductImage,
+    ProductSpec,
+    ProductVariant,
+    SupplyLine,
+)
 
 # --------------------------------------------------------------------------- variants
 
@@ -164,6 +170,53 @@ def last_cost(session: Session, product_id: int) -> int:
         .limit(1)
     ).first()
     return int(row) if row else 0
+
+
+def listing_gaps(session: Session, product_id: int) -> list[str]:
+    """What a card is missing to look like a shop and not like a stub.
+
+    Separate from ``unready`` on purpose. Those three — a category, a price, a
+    photograph per colour — are refused: without them a card either cannot be
+    found, cannot be charged for, or shows as a grey square. These are not
+    refused, because a card with one photograph and no prose is a card somebody
+    can still buy, and holding it back until the writing is done is how nothing
+    ever goes on sale.
+
+    So this is a to-do list rather than a gate. The apps hide a block whose
+    field is empty — no description means no description panel, not an empty one
+    — which is why a thin card looks sparse rather than broken, and why nobody
+    would ever notice it needed finishing. Hence the list.
+    """
+    product = session.get(Product, product_id)
+    if product is None:
+        return []
+
+    gaps: list[str] = []
+    if not product.subtitle.strip():
+        gaps.append("needs_subtitle")
+    if not product.description.strip():
+        gaps.append("needs_description")
+
+    specs = session.exec(
+        select(func.count())
+        .select_from(ProductSpec)
+        .where(ProductSpec.product_id == product_id)
+    ).one()
+    if not int(specs):
+        gaps.append("needs_specs")
+
+    # One photograph per colour publishes a card; a person deciding what to buy
+    # swipes. Two per colour is the difference between a listing and a receipt.
+    wanted = len(colours(session, product_id) or [""]) * 2
+    shots = session.exec(
+        select(func.count())
+        .select_from(ProductImage)
+        .where(ProductImage.product_id == product_id)
+    ).one()
+    if int(shots) < wanted:
+        gaps.append("needs_more_photos")
+
+    return gaps
 
 
 # --------------------------------------------------------------------------- our codes

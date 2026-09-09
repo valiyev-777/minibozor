@@ -114,7 +114,11 @@ OperatorUser = AdminUser
 # photos come in through the review endpoint, which knows what they are for.
 MediaUploader = Annotated[
     User,
-    Depends(require_role(UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.COURIER)),
+    Depends(
+        require_role(
+            UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.SELLER, UserRole.COURIER
+        )
+    ),
 ]
 
 # Counting the shelf. A stock figure changes when something is booked in or
@@ -150,7 +154,25 @@ OrderViewer = ReturnViewer
 # sack, so reading is theirs; *writing* one is not, and stays `AdminUser` on
 # the same paths.
 CatalogReader = Annotated[
-    User, Depends(require_role(UserRole.WAREHOUSE, UserRole.ADMIN))
+    User, Depends(require_role(UserRole.WAREHOUSE, UserRole.SELLER, UserRole.ADMIN))
+]
+
+# Writing the shop window: the photographs, the words, the price, and the
+# switch that puts a card on sale. The seller's whole job, and the admin
+# because they own the place — but not the warehouse, whose business with a
+# card ends when the goods are on a shelf.
+CatalogWriter = Annotated[
+    User, Depends(require_role(UserRole.SELLER, UserRole.ADMIN))
+]
+
+# The shop's own figures. Everybody who works here except the courier, whose
+# screens are their own round and nothing else: the seller's menu carries the
+# publishing queue's count, and that count comes from here — a badge that
+# 403s is a badge that never appears, on the one queue nothing else reminds
+# anybody about.
+DashboardViewer = Annotated[
+    User,
+    Depends(require_role(UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.SELLER)),
 ]
 
 # Moving an order along. The warehouse joins the office here because two of

@@ -44,11 +44,6 @@ export type NavItem = {
 const ADMIN: NavItem[] = [
   { to: "/", label: "Boshqaruv", icon: Home },
   { to: "/mahsulotlar", label: "Mahsulotlar", icon: Boxes },
-  // High in the list because what is in it is money standing still: goods on
-  // a shelf that no customer can buy. Admin only, and deliberately: filing a
-  // card needs a category, and writing a category is the office's. Putting it
-  // in the warehouse menu would be a screen whose first control refuses.
-  { to: "/sotuvga-chiqarish", label: "Sotuvga chiqarish", icon: Sparkles, badge: "held_back" },
   { to: "/kategoriyalar", label: "Kategoriyalar", icon: Tags },
   { to: "/buyurtmalar", label: "Buyurtmalar", icon: ListOrdered },
   { to: "/ombor", label: "Ombor", icon: Map },
@@ -66,6 +61,27 @@ const WAREHOUSE: NavItem[] = [
   { to: "/yorliqlar", label: "Yorliqlar", icon: ScanBarcode },
 ]
 
+/**
+ * The shop window, and it is the whole of this role's menu.
+ *
+ * Not in the office's menu and not in the bench's. Goods reaching a shelf and
+ * goods reaching the shop are two jobs done at different times by people
+ * looking at different things — a sack, and a photograph — and while they were
+ * one screen neither got done properly. The queue carries its own count,
+ * because what is in it is money standing still: goods on a shelf that no
+ * customer can buy, and nothing about that breaks or errors.
+ */
+const SELLER: NavItem[] = [
+  {
+    to: "/sotuvga-chiqarish",
+    label: "Sotuvga chiqarish",
+    icon: Sparkles,
+    badge: "held_back",
+  },
+  { to: "/mahsulotlar", label: "Mahsulotlar", icon: Boxes },
+  { to: "/kategoriyalar", label: "Kategoriyalar", icon: Tags },
+]
+
 const COURIER: NavItem[] = [
   { to: "/ishlarim", label: "Mening ishlarim", icon: Route },
   { to: "/tarix", label: "Tarix", icon: ClipboardList },
@@ -75,6 +91,7 @@ const COURIER: NavItem[] = [
 export function navFor(role: Role): NavItem[] {
   if (role === "admin") return ADMIN
   if (role === "warehouse") return WAREHOUSE
+  if (role === "seller") return SELLER
   if (role === "courier") return COURIER
   return []
 }
@@ -96,5 +113,6 @@ export function densityFor(role: Role): string {
 export function homeFor(role: Role): string {
   if (role === "admin") return "/"
   if (role === "warehouse") return "/ombor"
+  if (role === "seller") return "/sotuvga-chiqarish"
   return "/ishlarim"
 }

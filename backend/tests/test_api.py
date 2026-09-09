@@ -429,7 +429,12 @@ def test_the_seed_writes_one_account_per_role() -> None:
             for user in session.exec(select(User)).all()
             if user.phone.startswith("+9989000000")
         }
-    assert roles == {UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.COURIER}
+    assert roles == {
+        UserRole.ADMIN,
+        UserRole.WAREHOUSE,
+        UserRole.SELLER,
+        UserRole.COURIER,
+    }
 
 
 def test_the_reason_lists_are_seeded_and_translated(client: TestClient) -> None:
@@ -2235,12 +2240,36 @@ def test_the_last_admin_cannot_be_stood_down(
     assert refused.status_code == 409, refused.text
 
 
-def test_there_is_no_seller_role_left(client: TestClient, admin: dict[str, str]) -> None:
-    assert {r.value for r in UserRole} == {"customer", "admin", "warehouse", "courier"}
-    refused = client.patch(
+def test_the_seller_that_is_left_is_a_shop_assistant(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """There is a `seller` role again, and it is not the one that went away.
+
+    The one that went was an outside merchant: their own stock, their own
+    prices, their own payout, and a cabinet to run it from. What is here now is
+    somebody who works in this shop and whose job is the window — the catalogue
+    photographs, the words, the price, the switch that puts a card on sale.
+
+    The test that this file used to hold asserted the *word* was gone, which
+    was the wrong thing to hold: what must stay gone is the machinery.
+    """
+    assert {r.value for r in UserRole} == {
+        "customer",
+        "admin",
+        "warehouse",
+        "seller",
+        "courier",
+    }
+    # The role is assignable, unlike the marketplace one.
+    given = client.patch(
         f"{API}/admin/users/1/role", json={"role": "seller"}, headers=admin
     )
-    assert refused.status_code == 422
+    assert given.status_code in (200, 404), given.text
+
+    # And none of what the old one needed came back with it.
+    paths = client.get("/openapi.json").json()["paths"]
+    for gone in ("offer", "payout", "settlement", "statement", "tariff"):
+        assert not [path for path in paths if gone in path], gone
 
 
 # --------------------------------------------------------------------------- the customer
@@ -2386,39 +2415,104 @@ def test_a_pile_is_a_stub_and_the_shop_cannot_see_it(
     assert refused.status_code == 409, refused.text
 
 
-def test_a_stub_reaches_the_shop_once_all_three_gaps_are_filled(
-    client: TestClient, warehouse: dict[str, str], admin: dict[str, str]
+def test_the_bench_books_goods_in_and_the_seller_puts_them_on_sale(
+    client: TestClient, warehouse: dict[str, str], seller: dict[str, str]
 ) -> None:
-    """The publishing queue's whole job, in order."""
+    """Two jobs, two people, and the boundary is where it should be.
+
+    The bench's business with a card ends when the goods are on a shelf: it
+    writes the stub, and it may not price the goods or put them in the shop.
+    The window is the seller's — the category, the price, the photographs, and
+    the switch.
+    """
     made = _pile(client, warehouse, kind="Shim", colour="Ko'k", code="A-01-03")
     card = made.json()["product"]
 
-    _category(client, admin, "shimlar")
+    # Not the bench's to price.
+    refused = client.post(
+        f"{API}/admin/products/{card['id']}/price",
+        json={"price": 149_000},
+        headers=warehouse,
+    )
+    assert refused.status_code == 403, refused.text
+
+    # The seller files it — including writing the category, because the first
+    # card ever written has nowhere to go.
+    _category(client, seller, "shimlar")
     filed = client.patch(
         f"{API}/admin/products/{card['id']}",
         json={"category_slug": "shimlar"},
-        headers=admin,
+        headers=seller,
     )
     assert filed.status_code == 200, filed.text
 
     priced = client.post(
         f"{API}/admin/products/{card['id']}/price",
         json={"price": 149_000},
-        headers=warehouse,
+        headers=seller,
     )
     assert priced.status_code == 200, priced.text
     assert all(row["price"] == 149_000 for row in priced.json())
 
-    _photograph(client, admin, card["id"], "Ko'k")
+    _photograph(client, seller, card["id"], "Ko'k")
 
     live = client.post(
         f"{API}/admin/products/{card['id']}/status",
         json={"status": "active"},
-        headers=admin,
+        headers=seller,
     )
     assert live.status_code == 200, live.text
     assert live.json()["unready"] == []
     assert live.json()["price"] == 149_000
+
+
+def test_the_words_and_the_table_the_phone_renders(
+    client: TestClient, warehouse: dict[str, str], seller: dict[str, str]
+) -> None:
+    """A card that reads like a shop rather than like a receipt.
+
+    The apps hide a block whose field is empty, so a thin card looks sparse
+    rather than broken — which is exactly why nobody notices it needs
+    finishing. `listing_gaps` is the to-do list, and it is not a gate: none of
+    this stops the card going on sale.
+    """
+    made = _pile(client, warehouse, kind="Kostyum", colour="Kulrang", code="A-04-02")
+    card = made.json()["product"]
+    assert {gap["key"] for gap in card["listing_gaps"]} == {
+        "needs_subtitle",
+        "needs_description",
+        "needs_specs",
+        "needs_more_photos",
+    }
+
+    written = client.patch(
+        f"{API}/admin/products/{card['id']}",
+        json={
+            "title": "Erkaklar kostyumi Alfa",
+            "subtitle": "Kulrang, ikki qismli",
+            "description": "Yengil mato, kunlik kiyim uchun.",
+        },
+        headers=seller,
+    )
+    assert written.status_code == 200, written.text
+
+    # The specification table had a schema and no door: the cabinet that used
+    # to call it went with the sellers, and the phone has been rendering an
+    # empty block ever since.
+    specs = client.put(
+        f"{API}/admin/products/{card['id']}/specs",
+        json={"specs": [{"key": "Mato", "value": "Paxta"}, {"key": "Fason", "value": "Klassik"}]},
+        headers=seller,
+    )
+    assert specs.status_code == 200, specs.text
+    assert [row["key"] for row in specs.json()] == ["Mato", "Fason"]
+
+    _photograph(client, seller, card["id"], "Kulrang")
+    _photograph(client, seller, card["id"], "Kulrang")
+
+    left = client.get(f"{API}/admin/products/{card['id']}", headers=seller)
+    assert left.status_code == 200, left.text
+    assert left.json()["listing_gaps"] == []
 
 
 def test_a_second_pile_of_the_same_size_adds_to_the_first(

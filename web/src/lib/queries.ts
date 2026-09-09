@@ -40,8 +40,10 @@ import type {
   StaffUser,
   StockCount,
   Supply,
+  AdminProductDetail,
   Pile,
   PileSize,
+  Spec,
   Vocab,
   WhereIs,
 } from "@/lib/types"
@@ -69,6 +71,8 @@ export const keys = {
   earnings: ["earnings"] as const,
   whereIs: (q: string) => ["where-is", q] as const,
   vocab: ["vocab"] as const,
+  product: (id: number) => ["products", id, "detail"] as const,
+  specs: (id: number) => ["products", id, "specs"] as const,
 }
 
 // --------------------------------------------------------------------- reads
@@ -194,6 +198,22 @@ export function useVariants(productId: number | null) {
   return useQuery({
     queryKey: keys.variants(productId ?? 0),
     queryFn: () => api<AdminVariant[]>(`/admin/products/${productId}/variants`),
+    enabled: Boolean(productId),
+  })
+}
+
+export function useProduct(productId: number | null) {
+  return useQuery({
+    queryKey: keys.product(productId ?? 0),
+    queryFn: () => api<AdminProductDetail>(`/admin/products/${productId}`),
+    enabled: Boolean(productId),
+  })
+}
+
+export function useSpecs(productId: number | null) {
+  return useQuery({
+    queryKey: keys.specs(productId ?? 0),
+    queryFn: () => api<Spec[]>(`/admin/products/${productId}/specs`),
     enabled: Boolean(productId),
   })
 }
@@ -474,16 +494,42 @@ export function usePriceCard(productId: number) {
   })
 }
 
-/** Filing a card in the shop: the category it is browsed under. */
+/**
+ * The words on a card: where it is filed, what it is called, what it says.
+ *
+ * One door for all of them because they are one job — somebody looking at the
+ * goods writing the shop window — and splitting it per field would mean a
+ * request per keystroke or a form that saves in pieces.
+ */
 export function useFileCard(productId: number) {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (input: { category_slug?: string; title?: string }) =>
-      api<AdminProduct>(`/admin/products/${productId}`, {
+    mutationFn: (input: {
+      category_slug?: string
+      title?: string
+      subtitle?: string
+      description?: string
+      warranty?: string | null
+      badge?: string | null
+    }) =>
+      api<AdminProductDetail>(`/admin/products/${productId}`, {
         method: "PATCH",
         body: input,
       }),
     onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
+  })
+}
+
+/** The specification table, replaced whole — the apps read it as a table. */
+export function useWriteSpecs(productId: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (specs: Spec[]) =>
+      api<Spec[]>(`/admin/products/${productId}/specs`, {
+        method: "PUT",
+        body: { specs },
+      }),
+    onSuccess: () => invalidate(client, [["products"]]),
   })
 }
 
