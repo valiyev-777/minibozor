@@ -4,3 +4,6 @@ dist-ssr
 .env
 .env.local
 *.local
+
+# tsc -b writes these; they are a build cache, not source.
+*.tsbuildinfo
