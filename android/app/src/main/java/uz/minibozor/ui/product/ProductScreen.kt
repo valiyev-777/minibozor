@@ -106,7 +106,7 @@ private val SectionGap = Modifier.padding(top = 12.dp)
 private const val BlockHero = 0
 private const val BlockIdentity = 1
 private const val BlockOptions = 2
-private const val BlockOffers = 3
+private const val BlockRating = 3
 private const val BlockDescription = 4
 private const val BlockSmallPrint = 5
 private const val BlockReviews = 6
@@ -436,38 +436,15 @@ fun ProductScreen(
                                         oldPrice = product.oldPrice,
                                         discountPercent = product.discountPercent,
                                     )
-                                    // Where the description used to be. What a
-                                    // stranger's page owes a buyer at this point
-                                    // is other buyers, not the seller's own
-                                    // prose.
-                                    // The rating stays while reviews are off —
-                                    // it is a cached column on the product and
-                                    // a page that suddenly has no rating reads
-                                    // as a regression. What goes is the tap:
-                                    // without `Features.REVIEWS` there is
-                                    // nothing behind it. See Features.kt.
-                                    Spacer(Modifier.height(16.dp))
-                                    RatingPanel(
-                                        rating = state.summary?.rating ?: product.rating,
-                                        reviewsCount = if (Features.REVIEWS) {
-                                            state.summary?.total ?: product.reviewsCount
-                                        } else {
-                                            null
-                                        },
-                                        photos = state.summary?.photos.orEmpty(),
-                                        photosTotal = state.summary?.photosTotal ?: 0,
-                                        onClick = if (Features.REVIEWS) {
-                                            { onOpenReviews(product.id) }
-                                        } else {
-                                            null
-                                        },
-                                    )
-                                    // What is on the shelf, right under what
-                                    // other people made of it: the evidence
-                                    // someone weighs between the price above and
-                                    // the choice below. One line, because that
-                                    // is all it has to say.
-                                    Spacer(Modifier.height(10.dp))
+                                    // The rating used to sit here, between the
+                                    // price and the choice. On a square hero
+                                    // that put the size row off the bottom of
+                                    // the screen: a customer had to scroll to
+                                    // do the one thing the page is for. It is
+                                    // below the pickers now — choosing is the
+                                    // task and the rating is the context, and
+                                    // that is also the order of interest.
+                                    Spacer(Modifier.height(14.dp))
                                     // The count of what is actually chosen,
                                     // which is what the buy bar counts too.
                                     // These were two figures on one screen —
@@ -519,6 +496,36 @@ fun ProductScreen(
                                             )
                                         }
                                     }
+                                }
+                            }
+                        }
+
+                        // What other buyers made of it, after the choice
+                        // rather than before it.
+                        //
+                        // The rating stays while reviews are off — it is a
+                        // cached column on the product, and a page that
+                        // suddenly has no rating at all reads as a regression.
+                        // What goes is the tap: without `Features.REVIEWS`
+                        // there is nothing behind it. See Features.kt.
+                        item(key = "rating") {
+                            MbReveal(reveal, "rating", BlockRating, modifier = SectionGap) {
+                                MbCard(shape = RectangleShape) {
+                                    RatingPanel(
+                                        rating = state.summary?.rating ?: product.rating,
+                                        reviewsCount = if (Features.REVIEWS) {
+                                            state.summary?.total ?: product.reviewsCount
+                                        } else {
+                                            null
+                                        },
+                                        photos = state.summary?.photos.orEmpty(),
+                                        photosTotal = state.summary?.photosTotal ?: 0,
+                                        onClick = if (Features.REVIEWS) {
+                                            { onOpenReviews(product.id) }
+                                        } else {
+                                            null
+                                        },
+                                    )
                                 }
                             }
                         }
