@@ -75,6 +75,7 @@ type Draft = {
   sizes: Record<string, string>
   unitCost: string
   cell: string
+  place: string
 }
 
 const EMPTY: Draft = {
@@ -86,11 +87,20 @@ const EMPTY: Draft = {
   sizes: {},
   unitCost: "",
   cell: "",
+  place: "",
 }
 
 function PileForm() {
   const vocab = useVocab()
   const book = useBookInPile()
+  // Spelt the same way twice. A market is not an entity anybody maintains, so
+  // the list is simply the ones already written down.
+  const runs = useSupplies()
+  const places = useMemo(() => {
+    const seen = new Set<string>()
+    for (const run of runs.data ?? []) if (run.place) seen.add(run.place)
+    return [...seen].slice(0, 10)
+  }, [runs.data])
   const [draft, setDraft] = useState<Draft>(EMPTY)
   const [booked, setBooked] = useState<Pile | null>(null)
 
@@ -141,6 +151,7 @@ function PileForm() {
             sizes: lines,
             unit_cost: Number(draft.unitCost),
             location_code: draft.cell.trim().toUpperCase(),
+            place: draft.place.trim(),
           },
           { onSuccess: setBooked },
         )
@@ -188,6 +199,29 @@ function PileForm() {
         </label>
         <Cell code={draft.cell} onSet={(code) => set("cell", code)} />
       </div>
+
+      {/* Optional, and it stays filled between piles. Nobody delivers to us —
+          the owner buys at the market — so this is not a supplier, it is where
+          it was bought. Three months on it is the only thing that answers
+          "which stall does the damaged stock keep coming from". */}
+      <label className="block">
+        <span className="mb-1 block text-micro text-ink-soft">
+          Qayerdan — majburiy emas
+        </span>
+        <Input
+          value={draft.place}
+          onChange={(event) => set("place", event.target.value)}
+          placeholder="Chorsu"
+          aria-label="Qayerdan"
+          list="mb-places"
+          className="h-control"
+        />
+        <datalist id="mb-places">
+          {places.map((one) => (
+            <option key={one} value={one} />
+          ))}
+        </datalist>
+      </label>
 
       <Problem error={book.error} />
 
@@ -822,12 +856,20 @@ function Booked({
         </ul>
       </div>
 
-      <p className="text-micro text-ink-soft">
-        Do'konda hali yo'q — kategoriya, narx va rasm kerak.{" "}
-        <a href="/sotuvga-chiqarish" className="font-medium text-brand-deep underline">
-          Sotuvga chiqarish
-        </a>
-      </p>
+      {/* What is actually missing, from the card that came back — not a
+          sentence about the usual case. The second pile of goods that are
+          already on sale was being told the shop could not see them. */}
+      {pile.product.unready.length ? (
+        <p className="text-micro text-ink-soft">
+          Do'konda hali yo'q — kerak:{" "}
+          {pile.product.unready.map((gap) => gap.label).join(", ")}.{" "}
+          <a href="/sotuvga-chiqarish" className="font-medium text-brand-deep underline">
+            Sotuvga chiqarish
+          </a>
+        </p>
+      ) : (
+        <p className="text-micro text-good">Do'konda ham bor — sotuvda turibdi.</p>
+      )}
 
       <div className="flex gap-2">
         <Button className="h-control-lg flex-1 gap-2" onClick={onAgain}>
