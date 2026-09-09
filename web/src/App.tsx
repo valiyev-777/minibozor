@@ -11,6 +11,12 @@ import { Navigate, Route, Routes } from "react-router-dom"
 
 import { Shell } from "@/components/shell"
 import { LoginPage } from "@/pages/login"
+import { CountsPage } from "@/pages/counts"
+import { LabelsPage } from "@/pages/labels"
+import { PickingPage } from "@/pages/picking"
+import { PutawayPage } from "@/pages/putaway"
+import { QabulPage } from "@/pages/qabul"
+import { ShelfMapPage } from "@/pages/shelf-map"
 import { Soon } from "@/pages/soon"
 import { homeFor, navFor } from "@/lib/nav"
 import { useSession } from "@/lib/session"
@@ -41,12 +47,24 @@ export function App() {
         )}
 
         {/* ------------------------------------------------------------ ombor */}
-        {guard(allowed, "/ombor", "Ombor xaritasi", "Xona, uch javon va ish joylari — 5-bosqichda.")}
-        {guard(allowed, "/qabul", "Qabul", "Qoplar va saralash — 5-bosqichda.")}
-        {guard(allowed, "/joylashtirish", "Joylashtirish", "QABUL navbati va katak kodi — 5-bosqichda.")}
-        {guard(allowed, "/terish", "Terish", "Terish navbati va yurish tartibi — 5-bosqichda.")}
-        {guard(allowed, "/sanash", "Sanash", "Katakni qayta sanash — 5-bosqichda.")}
-        {guard(allowed, "/yorliqlar", "Yorliqlar", "A4 yorliq varag'i — 5-bosqichda.")}
+        {allowed.has("/ombor") ? (
+          <Route path="/ombor" element={<ShelfMapPage />} />
+        ) : null}
+        {allowed.has("/qabul") ? (
+          <Route path="/qabul" element={<QabulPage />} />
+        ) : null}
+        {allowed.has("/joylashtirish") ? (
+          <Route path="/joylashtirish" element={<PutawayPage />} />
+        ) : null}
+        {allowed.has("/terish") ? (
+          <Route path="/terish" element={<PickingPage />} />
+        ) : null}
+        {allowed.has("/sanash") ? (
+          <Route path="/sanash" element={<CountsPage />} />
+        ) : null}
+        {allowed.has("/yorliqlar") ? (
+          <Route path="/yorliqlar" element={<LabelsPage />} />
+        ) : null}
 
         {/* ------------------------------------------------------------ admin */}
         {guard(allowed, "/mahsulotlar", "Mahsulotlar", "Kartalar, rang × o'lcham to'ri va rasmlar — 6-bosqichda.")}

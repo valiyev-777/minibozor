@@ -57,7 +57,11 @@ router = APIRouter(prefix="/admin", tags=["admin"])
     summary="Every card, whatever its state",
 )
 def list_products(
-    user: AdminUser,
+    # The receiving desk reads this all evening: the product field on the
+    # sorting screen searches the existing cards first, and a bench that
+    # cannot search them writes a third new card for goods that already have
+    # one — which is how a catalogue rots.
+    user: CatalogReader,
     session: SessionDep,
     status_filter: ProductStatus | None = Query(
         None, alias="status", description="`draft` is what is held back from sale"
@@ -117,7 +121,7 @@ def catalog_summary(user: AdminUser, session: SessionDep) -> s.CatalogSummaryOut
 
 @router.get("/products/{product_id}", response_model=s.AdminProductDetailOut)
 def get_product(
-    product_id: int, user: AdminUser, session: SessionDep
+    product_id: int, user: CatalogReader, session: SessionDep
 ) -> s.AdminProductDetailOut:
     """One card, with the fields only the edit form needs.
 
@@ -145,7 +149,10 @@ def get_product(
     summary="Write a card",
 )
 def create_product(
-    payload: s.ProductCreateIn, user: AdminUser, session: SessionDep
+    # Written at the desk as often as at the office: a pile out of a sack that
+    # matches no existing card is a card somebody writes with the goods in
+    # front of them, which is the only moment anybody knows what they are.
+    payload: s.ProductCreateIn, user: CatalogReader, session: SessionDep
 ) -> s.AdminProductOut:
     """A new card, held back from sale until it has a photograph.
 
@@ -254,7 +261,9 @@ def update_product(
 def set_product_status(
     product_id: int,
     payload: s.ProductStatusIn,
-    user: AdminUser,
+    # Photographing the last colour of a card is what puts it in the shop, and
+    # that happens at the receiving desk with the sack open.
+    user: CatalogReader,
     session: SessionDep,
 ) -> s.AdminProductOut:
     """The only door the shop's front window opens through.

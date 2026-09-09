@@ -16,7 +16,7 @@ each of those is not a nicety.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 
 from app import i18n, images
 from app import schemas as s
@@ -35,14 +35,22 @@ router = APIRouter(tags=["media"])
 def upload(
     user: MediaUploader,
     file: UploadFile = File(description="A photograph. Any format Pillow reads."),
+    square: bool = Query(
+        False, description="Pad onto a white square — for product photographs"
+    ),
 ) -> s.MediaOut:
-    """Admins, sellers and couriers.
+    """The office, the receiving desk and a courier at a door.
 
-    A seller photographs the goods they propose, and a card with no picture is
-    a card nobody taps. A courier photographs a doorstep, which is the
-    evidence a delivery happened — the same pipeline, and there was no reason
-    to build a second one that decodes and shrinks pictures slightly
-    differently.
+    A pile sorted out of a sack is photographed where it is sorted, and a card
+    with no picture never reaches the apps. A courier photographs a doorstep,
+    which is the evidence a delivery happened — the same pipeline, and there
+    was no reason to build a second one that decodes and shrinks pictures
+    slightly differently.
+
+    ``square`` is what keeps a catalogue looking like a catalogue: phone
+    photographs arrive portrait and landscape and a grid where every tile
+    crops differently looks broken. It is off by default because a doorstep is
+    not a product.
 
     Declared ``def`` rather than ``async def`` on purpose: decoding and
     re-encoding a four-megapixel photograph is a second of CPU, and on the
@@ -51,7 +59,7 @@ def upload(
     """
     try:
         data = images.read_within_limit(file.file)
-        path, width, height, size = images.store(data)
+        path, width, height, size = images.store(data, square=square)
     except images.EmptyUpload:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, i18n.label("file_empty")

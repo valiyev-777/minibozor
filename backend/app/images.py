@@ -77,7 +77,7 @@ def read_within_limit(stream: BinaryIO, limit: int = MAX_BYTES) -> bytes:
     return b"".join(parts)
 
 
-def store(data: bytes) -> tuple[str, int, int, int]:
+def store(data: bytes, *, square: bool = False) -> tuple[str, int, int, int]:
     """Re-encode, shrink, and write. Returns ``(path, width, height, bytes)``.
 
     The path is relative — ``uploads/<uuid>.webp`` — which is the shape the
@@ -89,6 +89,13 @@ def store(data: bytes) -> tuple[str, int, int, int]:
     out again from pixels, so the file on disk is one this process produced:
     metadata, trailing bytes, and anything hidden behind a valid image header
     do not survive the round trip.
+
+    ``square`` pads the result onto a white square. Product photographs are
+    taken at a receiving desk on a phone, one-handed, against a sheet of
+    paper — they arrive portrait, landscape and everything between, and a grid
+    of cards where every tile crops differently looks broken in a way no
+    single photograph does. Padding rather than cropping, because the goods
+    are what was framed and a crop cuts the toe off a shoe.
     """
     try:
         with Image.open(BytesIO(data)) as opened:
@@ -100,6 +107,8 @@ def store(data: bytes) -> tuple[str, int, int, int]:
             # ``thumbnail`` is a no-op on a picture already inside the box, so
             # a 640px catalogue image is re-encoded but never enlarged.
             image.thumbnail((MAX_SIDE, MAX_SIDE), Image.Resampling.LANCZOS)
+            if square:
+                image = _pad_to_square(image)
             width, height = image.size
 
             directory = MEDIA_DIR / UPLOAD_SUBDIR
@@ -114,6 +123,21 @@ def store(data: bytes) -> tuple[str, int, int, int]:
         raise NotAnImage from None
 
     return f"{UPLOAD_SUBDIR}/{name}", width, height, path.stat().st_size
+
+
+def _pad_to_square(image: Image.Image) -> Image.Image:
+    """The picture centred on a white square of its own longest side.
+
+    White because that is what the goods are shot against: a sheet of paper on
+    the receiving desk, which is the decision this shop made instead of a
+    background-removal library and a 150MB model.
+    """
+    side = max(image.size)
+    if image.size == (side, side):
+        return image
+    canvas = Image.new("RGB", (side, side), (255, 255, 255))
+    canvas.paste(image, ((side - image.width) // 2, (side - image.height) // 2))
+    return canvas
 
 
 def _flatten(image: Image.Image) -> Image.Image:

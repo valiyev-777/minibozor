@@ -1587,6 +1587,82 @@ def test_the_dashboard_counts_what_left_rather_than_what_sold(
     assert mine["variant_label"] == "Qora · 42"
 
 
+def test_the_receiving_desk_can_read_and_write_cards(
+    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+) -> None:
+    """The sorting screen searches the existing cards first.
+
+    A bench that cannot search them writes a third new card for goods that
+    already have one, which is how a catalogue rots — so the catalogue's
+    reading doors, and writing one card with the goods in front of you, are
+    the desk's as well as the office's.
+    """
+    card = _card(client, admin, sku="ALFA-DESK")
+
+    found = client.get(
+        f"{API}/admin/products", params={"q": "ALFA-DESK"}, headers=warehouse
+    )
+    assert found.status_code == 200, found.text
+    assert [p["id"] for p in found.json()["items"]] == [card["id"]]
+
+    written = client.post(
+        f"{API}/admin/products",
+        json={
+            "sku": "ALFA-DESK-2",
+            "title": "Sochiq",
+            "category_slug": "krossovkalar",
+            "price": 40_000,
+        },
+        headers=warehouse,
+    )
+    assert written.status_code == 201, written.text
+
+    # Categories are read at the desk too — the new-card form picks from them.
+    assert client.get(f"{API}/admin/categories", headers=warehouse).status_code == 200
+    # But writing one is the office's.
+    refused = client.post(
+        f"{API}/admin/categories",
+        json={"slug": "yangi", "name": "Yangi"},
+        headers=warehouse,
+    )
+    assert refused.status_code == 403, refused.text
+
+
+def test_a_product_photograph_is_padded_onto_a_white_square(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """A grid of cards where every tile crops differently looks broken.
+
+    Padding rather than cropping, because the goods are what was framed and a
+    crop cuts the toe off a shoe.
+    """
+    from io import BytesIO
+
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", (800, 400), (12, 34, 56)).save(buffer, "PNG")
+
+    uploaded = client.post(
+        f"{API}/media",
+        params={"square": True},
+        files={"file": ("shoe.png", buffer.getvalue(), "image/png")},
+        headers=admin,
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    body = uploaded.json()
+    assert body["width"] == body["height"] == 800
+
+    # And off by default, because a doorstep is not a product.
+    buffer.seek(0)
+    plain = client.post(
+        f"{API}/media",
+        files={"file": ("door.png", buffer.getvalue(), "image/png")},
+        headers=admin,
+    )
+    assert plain.json()["width"] != plain.json()["height"]
+
+
 # --------------------------------------------------------------------------- the shop
 
 
