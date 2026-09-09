@@ -4,19 +4,18 @@ from fastapi import APIRouter, HTTPException, status
 from sqlmodel import Session, select
 
 from app import i18n
-from app import offers as of
+from app import products as pr
 from app import schemas as s
 from app import services as sv
 from app import stock as st
 from app.deps import CurrentUser, SessionDep
-from app.models import CartItem, Offer, Product, ProductVariant, VariantKind
+from app.models import CartItem, Product, ProductVariant, VariantKind
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
 
 def _cap(
     session: Session,
-    offer: Offer | None,
     product: Product,
     quantity: int,
     color: ProductVariant | None = None,
@@ -34,22 +33,17 @@ def _cap(
 
     The variants chosen are the shelf that counts: a basket holding six of a
     colour there are two of is the same shortfall one level down, and the same
-    goes for a size. And the shelf is the seller's, not the catalogue's —
-    holding three of something the chosen seller has one of is the same
-    shortfall again, a level sideways. And less whatever somebody else is
-    already holding — in their own basket, on an unpaid order, or picked for a
-    seller to collect — because those goods are promised, not available.
+    goes for a size. And less whatever somebody else is already holding — in
+    their own basket or on an unpaid order — because those goods are promised,
+    not available.
     """
-    if offer is not None:
-        left = of.shelf_left(
-            session,
-            offer,
-            color.id if color else None,
-            size.id if size else None,
-            for_user_id=user_id,
-        )
-    else:
-        left = sv.shelf_left(product, color, size)
+    left = pr.shelf_left(
+        session,
+        product,
+        color.id if color else None,
+        size.id if size else None,
+        for_user_id=user_id,
+    )
     return max(1, min(quantity, left)) if left else 1
 
 
@@ -66,7 +60,6 @@ def _chosen(
 def _require_a_leaf(
     session: SessionDep,
     product: Product,
-    offer: Offer,
     color: ProductVariant | None,
     size: ProductVariant | None,
     color_id: int | None,
@@ -75,9 +68,8 @@ def _require_a_leaf(
 
     The shelf of a product with variants is counted on its leaves — the sizes
     where there are sizes, the colours otherwise — and a sale that names none
-    of them takes the count off the offer's total and off no leaf at all. The
-    ledger still adds up, but the colour figures drift away from it by exactly
-    that much, permanently: there is no working out afterwards which colour
+    of them takes the count off nothing at all. The ledger still adds up, but
+    the shelf never moves for that sale: there is no working out which colour
     the shirt was. So the choice is required rather than defaulted, because
     guessing a colour on the customer's behalf is the same lie told earlier.
 
@@ -86,7 +78,7 @@ def _require_a_leaf(
     has gone — there the honest answer is that it is out of stock, which is
     also the answer they are written to expect.
     """
-    leaves = of.leaf_variants(session, product.id)
+    leaves = pr.leaves(session, product.id)
     if not leaves:
         return
 
@@ -100,7 +92,7 @@ def _require_a_leaf(
         for leaf in leaves
         if color is None or by_colour or leaf.parent_id == color.id
     ] or leaves
-    if not any(st.sellable(session, offer, leaf.id) > 0 for leaf in candidates):
+    if not any(st.sellable(session, leaf) > 0 for leaf in candidates):
         raise HTTPException(
             status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock")
         )
@@ -118,7 +110,7 @@ def _release(session: SessionDep, product_id: int | None) -> None:
     that had been reduced by it.
     """
     if product_id is not None:
-        of.refresh(session, product_id)
+        pr.refresh(session, product_id)
         session.commit()
 
 
@@ -164,13 +156,7 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
         elif size.parent_id != color.id:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("variant_invalid"))
 
-    # Whose offer this is. The cheapest with something left, which is the one
-    # the card was showing — the product's own price is a copy of it.
-    offer = of.winning_offer(session, product.id)
-    if offer is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("product_out_of_stock"))
-
-    _require_a_leaf(session, product, offer, color, size, color_id)
+    _require_a_leaf(session, product, color, size, color_id)
 
     existing = session.exec(
         select(CartItem).where(
@@ -182,14 +168,8 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
     ).first()
 
     if existing:
-        # The line keeps the offer it was opened with. Adding another of
-        # something already in the basket is not a fresh decision about who to
-        # buy it from, and re-pricing the line under the shopper would be.
-        held = session.get(Offer, existing.offer_id) if existing.offer_id else offer
-        existing.offer_id = existing.offer_id or offer.id
         existing.quantity = _cap(
             session,
-            held,
             product,
             existing.quantity + payload.quantity,
             color,
@@ -207,9 +187,8 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
                 product_id=payload.product_id,
                 variant_id=payload.variant_id,
                 color_variant_id=color_id,
-                offer_id=offer.id,
                 quantity=_cap(
-                    session, offer, product, payload.quantity, color, size,
+                    session, product, payload.quantity, color, size,
                     user_id=user.id,
                 ),
                 reserved_until=st.hold_until(),
@@ -218,7 +197,7 @@ def add_item(payload: s.CartAddIn, user: CurrentUser, session: SessionDep) -> s.
     session.commit()
     # What the card says is the shelf less what is held, and this just held
     # some, so the card has to be told.
-    of.refresh(session, product.id)
+    pr.refresh(session, product.id)
     session.commit()
     return sv.build_cart(session, user)
 
@@ -236,11 +215,9 @@ def update_item(
             session.delete(item)
         else:
             product = session.get(Product, item.product_id)
-            offer = session.get(Offer, item.offer_id) if item.offer_id else None
             item.quantity = (
                 _cap(
                     session,
-                    offer,
                     product,
                     payload.quantity,
                     *_chosen(session, item),

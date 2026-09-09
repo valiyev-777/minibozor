@@ -56,9 +56,8 @@ def a_courier(database: None) -> None:
     that ships something needs a courier to exist, and creating one per test
     would be a fixture in fifty signatures.
 
-    Its own number, not one a test might also pick: `_hand_to_a_courier` looks
-    this phone up by name so assigning it can never collide with a courier a
-    test made for itself and is asserting the round of.
+    Its own number, not one a test might also pick, so a test asserting one
+    courier's round cannot collide with this one.
     """
     with Session(engine) as session:
         if session.exec(select(User).where(User.phone == COURIER_PHONE)).first():
@@ -105,11 +104,11 @@ def admin(sign_in: Callable[[str], dict[str, str]]) -> dict[str, str]:
 
 
 @pytest.fixture
-def operator(
+def warehouse(
     staff: Callable[[UserRole, str], dict[str, str]],
 ) -> dict[str, str]:
-    """The role that answers returns, moderates reviews and moves orders."""
-    return staff(UserRole.OPERATOR, "+998900009001")
+    """The bench: receiving, putaway, picking, counts."""
+    return staff(UserRole.WAREHOUSE, "+998900009002")
 
 
 @pytest.fixture

@@ -11,7 +11,6 @@ from app.models import (
     Favorite,
     Notification,
     Order,
-    PaymentCard,
     User,
 )
 
@@ -62,7 +61,10 @@ def overview(user: CurrentUser, session: SessionDep) -> s.ProfileOverviewOut:
         # keeps its shape rather than losing a tile to a schema change.
         reviews_count=0,
         addresses_count=count(Address, Address.user_id == user.id),
-        cards_count=count(PaymentCard, PaymentCard.user_id == user.id),
+        # Saved cards went with the marketplace. The field stays at nought so
+        # the shipped apps' profile screen keeps its shape rather than losing
+        # a tile to a schema change.
+        cards_count=0,
         unread_notifications=count(
             Notification, Notification.user_id == user.id, col(Notification.read_at).is_(None)
         ),

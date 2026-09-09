@@ -12,16 +12,15 @@ So both halves live here, they read the same snapshot, and every count that
 moves writes an audit row in the caller's transaction. Two rules:
 
 * **The order line is the record.** ``take`` and the ``restore``/``restock``
-  pair work from ``OrderItem``, which carries the offer, the product and both
-  variant ids. The cart line it came from is deleted when the order is placed,
-  so anything not snapshotted there cannot be given back.
-* **The shelf belongs to an offer, and it is a ledger.** The counts that move
-  are the seller's, and they move by writing a row in ``stock_movements``
-  through ``app.stock.move`` — never by assignment. ``Offer.stock_left`` is a
-  running total of that ledger, and the figures on ``Product`` and
-  ``ProductVariant`` are a cache of whichever offer is winning, recomputed by
-  ``app.offers.refresh`` after every movement. What the advertised figures did
-  as a result is logged beside what the shelf did.
+  pair work from ``OrderItem``, which carries the product and both variant
+  ids. The cart line it came from is deleted when the order is placed, so
+  anything not snapshotted there cannot be given back.
+* **The shelf belongs to a variant, and it is a ledger.** Counts move by
+  writing a row in ``stock_movements`` through ``app.stock.move`` — never by
+  assignment. ``ProductVariant.stock_left`` is a running total of that ledger,
+  and the price and availability on the card follow from it, recomputed by
+  ``app.products.refresh`` after every movement. What the advertised figures
+  did as a result is logged beside what the shelf did.
 * **Nothing is restored twice.** Both entry points are guarded by a status
   that can only be reached once — cancelled from placed or packing, refunded
   from approved — so the counts move exactly as often as the decision is made.
@@ -32,12 +31,10 @@ from __future__ import annotations
 from sqlmodel import Session, select
 
 from app import audit
-from app import offers as of
+from app import products as pr
 from app import stock as st
 from app.models import (
     DeliverySlot,
-    Offer,
-    OfferVariant,
     Order,
     OrderItem,
     Product,
@@ -53,36 +50,31 @@ def order_items(session: Session, order: Order) -> list[OrderItem]:
     )
 
 
-def _leaves(session: Session, item: OrderItem) -> list[int]:
+def _leaf(session: Session, item: OrderItem) -> ProductVariant | None:
     """The one count this line sits on, if it sits on one.
 
-    The size where a size was chosen, the colour otherwise, and neither where
-    the customer named no variant at all — there the offer's own total is the
-    whole answer. One leaf, not both: a size and its colour are the same goods
-    counted at two depths, and moving both would take the same shirt off the
-    shelf twice.
+    The size where a size was chosen, the colour otherwise. One leaf, not
+    both: a size and its colour are the same goods counted at two depths, and
+    moving both would take the same shirt off the shelf twice.
+
+    ``None`` on a line the customer bought without naming a variant, which is
+    only possible on a card that has none — and every card gets at least one
+    default variant, so it means a line written before that rule existed.
     """
-    if item.offer_id is None:
-        return []
     for variant_id in (item.variant_id, item.color_variant_id):
         if variant_id is None:
             continue
-        row = session.exec(
-            select(OfferVariant).where(
-                OfferVariant.offer_id == item.offer_id,
-                OfferVariant.variant_id == variant_id,
-            )
-        ).first()
-        if row is not None:
-            return [variant_id]
-    return []
+        variant = session.get(ProductVariant, variant_id)
+        if variant is not None:
+            return variant
+    return None
 
 
 # --------------------------------------------------------------------------- taking
 
 
 def take(session: Session, item: OrderItem) -> None:
-    """One line of a new order: off the seller's shelf, onto the sold count.
+    """One line of a new order: off the shelf, onto the sold count.
 
     A colour and a size are each counted apart from the shelf they stand on,
     so buying two blue 42s comes off the blue and off the 42 as well as off
@@ -96,8 +88,8 @@ def take(session: Session, item: OrderItem) -> None:
     if product is None:
         return
 
-    # Sold is a fact about the thing, whoever sold it, so it stays on the
-    # product rather than on one seller's offer.
+    # Sold is a fact about the thing rather than about one size of it, so it
+    # is counted on the card.
     product.sold_count += item.quantity
     session.add(product)
     sell(session, item)
@@ -112,24 +104,21 @@ def sell(session: Session, item: OrderItem) -> None:
     held for it rather than gone from it.
     """
     product = session.get(Product, item.product_id) if item.product_id else None
-    offer = session.get(Offer, item.offer_id) if item.offer_id else None
     if product is None:
         return
-    if offer is not None:
-        for variant_id in _leaves(session, item) or [None]:
-            st.move(
-                session,
-                offer=offer,
-                kind=StockMovementKind.SALE,
-                quantity=item.quantity,
-                variant_id=variant_id,
-                order_id=item.order_id,
-                reason=f"{item.title} × {item.quantity}",
-            )
-    # The card's price and stock follow from whose offer is now winning, which
-    # this may just have changed — a seller selling out hands the card to the
-    # next cheapest.
-    of.refresh(session, product.id)
+    variant = _leaf(session, item)
+    if variant is not None:
+        st.move(
+            session,
+            variant=variant,
+            kind=StockMovementKind.SALE,
+            quantity=item.quantity,
+            order_id=item.order_id,
+            reason=f"{item.title} × {item.quantity}",
+        )
+    # The card's figures follow the shelf: selling the last of the cheapest
+    # size moves the price the listing shows.
+    pr.refresh(session, product.id)
 
 
 # --------------------------------------------------------------------------- giving back
@@ -213,28 +202,25 @@ def _give_back_line(
     if product is None:
         return
 
-    offer = session.get(Offer, item.offer_id) if item.offer_id else None
+    variant = _leaf(session, item)
     before = _cache_snapshot(session, product)
 
-    if offer is not None and shelf:
+    if variant is not None and shelf:
         # The ledger, not an audit row: the movement carries who did it and
         # why, which is what an audit row was standing in for while the shelf
         # was a number somebody assigned.
-        for variant_id in _leaves(session, item) or [None]:
-            st.move(
-                session,
-                offer=offer,
-                kind=kind,
-                quantity=item.quantity,
-                variant_id=variant_id,
-                actor=actor,
-                reason=note or item.title,
-                order_id=item.order_id,
-            )
-    # A line with no offer has no shelf to put anything back onto: the seller
-    # it was bought from cannot be named, so inventing a count for one of them
-    # would be worse than leaving it. Every line written since offers exist
-    # carries one, and the migration filled the older ones in.
+        st.move(
+            session,
+            variant=variant,
+            kind=kind,
+            quantity=item.quantity,
+            actor=actor,
+            reason=note or item.title,
+            order_id=item.order_id,
+        )
+    # A line that named no variant has no shelf to put anything back onto:
+    # there is no telling which colour or size came back, and inventing one
+    # would be worse than leaving it.
 
     if unsell:
         _log(
@@ -251,11 +237,9 @@ def _give_back_line(
         product.sold_count = max(0, product.sold_count - item.quantity)
         session.add(product)
 
-    # The advertised figures follow the shelf, and are logged as what they are:
-    # a consequence. With one seller they move by the same amount; with
-    # several, giving stock back to the dearer seller may not move the card at
-    # all, and that is worth being able to read afterwards.
-    of.refresh(session, product.id)
+    # The advertised figures follow the shelf, and are logged as what they
+    # are: a consequence.
+    pr.refresh(session, product.id)
     _log_cache_moves(
         session, product, before, actor=actor, action=action, note=note
     )
@@ -264,7 +248,7 @@ def _give_back_line(
 def _cache_snapshot(session: Session, product: Product) -> dict:
     """The figures the shop is advertising, before the shelf moves under them."""
     return {
-        "stock_left": product.stock_left,
+        "stock_left": pr.on_shelf(session, product.id),
         "price": product.price,
         "variants": {
             v.id: v.stock_left
@@ -284,8 +268,9 @@ def _log_cache_moves(
     action: str,
     note: str,
 ) -> None:
+    now_shelf = pr.on_shelf(session, product.id)
     for field in ("stock_left", "price"):
-        now = getattr(product, field)
+        now = now_shelf if field == "stock_left" else product.price
         if now != before[field]:
             _log(
                 session,

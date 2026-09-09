@@ -6,7 +6,6 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, or_, select
 
 from app import i18n
-from app import offers as of
 from app import schemas as s
 from app import services as sv
 from app.deps import OptionalUser, SessionDep
@@ -82,10 +81,9 @@ def list_products(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=60),
 ) -> s.Page[s.ProductCardOut]:
-    # Only what is in the shop. A draft, a proposal waiting on moderation, a
-    # refused card and a withdrawn one are all invisible here — the apps see
-    # exactly the catalogue they saw before, because everything in it is
-    # published.
+    # Only what is in the shop. A card still waiting on a photograph and a
+    # withdrawn one are both invisible here — the apps see exactly the
+    # catalogue they saw before, because everything in it is active.
     stmt = sv.in_the_shop(select(Product))
 
     # What cannot be bought is not on the shelf. A sold-out product used to sit
@@ -206,33 +204,12 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
 @router.get("/products/{product_id}", response_model=s.ProductOut, summary="Screen 14 — product")
 def get_product(product_id: int, session: SessionDep, user: OptionalUser) -> s.ProductOut:
     product = session.get(Product, product_id)
-    # Not in the shop is not found. A card in moderation has a real id, and
-    # answering with its contents would publish it by the back door.
+    # Not in the shop is not found. A card held back for want of a photograph
+    # has a real id, and answering with its contents would publish it by the
+    # back door.
     if not sv.is_in_the_shop(product):
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     return sv.product_out(session, product, sv.favorite_ids(session, user))
-
-
-@router.get(
-    "/products/{product_id}/offers",
-    response_model=list[s.OfferOut],
-    summary="Every seller offering this product, cheapest first",
-)
-def product_offers(product_id: int, session: SessionDep) -> list[s.OfferOut]:
-    """The list behind the one price on the card.
-
-    Sold-out offers are included and marked: a shopper comparing sellers is
-    entitled to see that the cheapest one has run out, which is why the price
-    on the card is the one it is. Withdrawn offers are not — an inactive offer
-    is not on sale, and listing it would invite a question nobody can answer.
-    """
-    if not sv.is_in_the_shop(session.get(Product, product_id)):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
-    winner = of.winning_offer(session, product_id)
-    return [
-        sv.offer_out(session, offer, winner_id=winner.id if winner else None)
-        for offer in of.offers_for(session, product_id)
-    ]
 
 
 @router.get("/products/{product_id}/similar", response_model=list[s.ProductCardOut])

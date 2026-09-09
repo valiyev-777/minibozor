@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import i18n, inventory, settlement
-from app import offers as of
+from app import i18n, inventory
+from app import products as pr
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
@@ -15,18 +15,15 @@ from app.models import (
     DeliverySlot,
     Notification,
     NotificationKind,
-    Offer,
     Order,
     OrderItem,
     OrderStatus,
-    PaymentCard,
     PaymentMethod,
     PickupPoint,
     Product,
     ProductVariant,
     ReturnReason,
     ReturnRequest,
-    Seller,
 )
 
 router = APIRouter(tags=["orders"])
@@ -51,7 +48,6 @@ def checkout_preview(
     address = _resolve_address(session, user.id, payload.address_id)
     pickup = session.get(PickupPoint, payload.pickup_point_id) if payload.pickup_point_id else None
     slot = session.get(DeliverySlot, payload.slot_id) if payload.slot_id else None
-    card = _resolve_card(session, user.id, payload.payment_card_id, payload.payment_method)
 
     # A slot's price is a surcharge — the picker shows it as "+9 000" — so it
     # adds to the standard fee rather than replacing it. Replacing it made every
@@ -69,7 +65,6 @@ def checkout_preview(
         address=sv.address_out(address) if address else None,
         pickup_point=sv.pickup_out(pickup) if pickup else None,
         slot=sv.slot_out(slot) if slot else None,
-        card=sv.card_out(card) if card else None,
         totals=totals,
     )
 
@@ -89,7 +84,6 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         )
 
     slot = session.get(DeliverySlot, payload.slot_id) if payload.slot_id else None
-    card = _resolve_card(session, user.id, payload.payment_card_id, payload.payment_method)
 
     if preview.address:
         address_line, address_meta = preview.address.line, preview.address.meta
@@ -111,7 +105,6 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         delivery_start=slot.start_time if slot else None,
         delivery_end=slot.end_time if slot else None,
         payment_method=payload.payment_method,
-        payment_card_id=card.id if card else None,
         paid=payload.payment_method == PaymentMethod.CARD,
         recipient_name=payload.recipient_name or user.full_name,
         recipient_phone=payload.recipient_phone or user.phone,
@@ -137,11 +130,6 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         # ``variant_label`` already reads well — but so that a cancellation
         # later knows which counts to put back.
         cart_item = session.get(CartItem, item.id)
-        offer = (
-            session.get(Offer, cart_item.offer_id)
-            if cart_item and cart_item.offer_id
-            else None
-        )
         order_item = OrderItem(
             order_id=order.id,
             product_id=item.product_id,
@@ -156,19 +144,6 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
             ),
             variant_id=cart_item.variant_id if cart_item else None,
             color_variant_id=cart_item.color_variant_id if cart_item else None,
-            # Who is owed for this line, snapshotted with everything else about
-            # it. The offer may be withdrawn or re-priced tomorrow; who sold it
-            # today does not change with it.
-            seller_id=offer.seller_id if offer else None,
-            offer_id=offer.id if offer else None,
-            commission_percent=_commission(session, offer),
-            # The second fee, captured for the same reason as the first: a
-            # tariff is renegotiated, and a payout worked out later against
-            # today's bands would restate what a seller was owed for a sale
-            # they made last year. See ``app.settlement``.
-            fulfilment_fee=settlement.fulfilment_fee(
-                session, session.get(Product, item.product_id)
-            ),
             variant_label=item.variant_label,
             unit_price=item.unit_price,
             quantity=item.quantity,
@@ -213,7 +188,7 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
     )
     session.commit()
     for product_id in touched:
-        of.refresh(session, product_id)
+        pr.refresh(session, product_id)
     if touched:
         session.commit()
     session.refresh(order)
@@ -424,35 +399,6 @@ def _resolve_address(session: SessionDep, user_id: int, address_id: int | None) 
         .where(Address.user_id == user_id)
         .order_by(col(Address.is_default).desc(), col(Address.created_at))
     ).first()
-
-
-def _resolve_card(
-    session: SessionDep, user_id: int, card_id: int | None, method: PaymentMethod
-) -> PaymentCard | None:
-    if method == PaymentMethod.CASH:
-        return None
-    if card_id is not None:
-        card = session.get(PaymentCard, card_id)
-        if card is None or card.user_id != user_id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("card_not_found"))
-        return card
-    return session.exec(
-        select(PaymentCard)
-        .where(PaymentCard.user_id == user_id)
-        .order_by(col(PaymentCard.is_default).desc())
-    ).first()
-
-
-def _commission(session: SessionDep, offer: Offer | None) -> int:
-    """The seller's rate as it stands right now, to be kept with the line.
-
-    Nought when there is no seller to owe — a line with no offer behind it is
-    not somebody's sale.
-    """
-    if offer is None:
-        return 0
-    seller = session.get(Seller, offer.seller_id)
-    return seller.commission_percent if seller else 0
 
 
 def _colour_or_cover(

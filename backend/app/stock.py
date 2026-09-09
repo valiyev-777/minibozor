@@ -6,18 +6,22 @@ counted them, or why the number changed — and two people saving at once meant
 the second one won and the first one's count vanished without trace.
 
 So the figure is now the sum of ``stock_movements``. Every change is a row with
-a kind, a reason, a person and a cause, and the columns on ``Offer`` and
-``OfferVariant`` are a running total kept for the same reason the price is:
-the listings filter and sort on them in SQL. The invariant the tests hold us
-to is that the column equals the sum of the ledger.
+a kind, a reason, a person and a cause, and ``ProductVariant.stock_left`` is a
+running total of it, kept as a column because every listing filters and sorts
+on it in SQL. The invariant the tests hold us to is that the column equals the
+sum of the ledger.
+
+**The count hangs off a variant.** It used to hang off an offer — whose shelf
+this was — and there is only one shelf now. "Krossovka — 50 dona" is a
+sentence this system cannot express; "qora / 42 — 3 dona" is what it stores.
 
 The second thing here is **holding**. Stock in somebody's basket, or on an
-unpaid order, or picked for a seller's collection, is not on the shelf and not
-anybody else's to buy — but neither has it left. That is not a movement, so it
-is not in the ledger: it is a question asked of the things that are holding it,
-which means a hold cannot be leaked, double-released, or left behind by a
-crash. An abandoned basket stops holding anything the moment its deadline
-passes, without a sweeper having to notice.
+unpaid order, is not on the shelf and not anybody else's to buy — but neither
+has it left. That is not a movement, so it is not in the ledger: it is a
+question asked of the things that are holding it, which means a hold cannot be
+leaked, double-released, or left behind by a crash. An abandoned basket stops
+holding anything the moment its deadline passes, without a sweeper having to
+notice.
 """
 
 from __future__ import annotations
@@ -28,15 +32,10 @@ from sqlmodel import Session, col, func, or_, select
 
 from app.models import (
     CartItem,
-    Offer,
-    OfferVariant,
     Order,
     OrderItem,
     OrderStatus,
     ProductVariant,
-    RemovalLine,
-    RemovalOrder,
-    RemovalStatus,
     StockMovement,
     StockMovementKind,
     User,
@@ -62,7 +61,6 @@ KIND_SIGN: dict[StockMovementKind, int | None] = {
     StockMovementKind.CUSTOMER_RETURN: 1,
     StockMovementKind.WRITE_OFF: -1,
     StockMovementKind.COUNT_ADJUSTMENT: None,
-    StockMovementKind.SELLER_RETURN: -1,
 }
 
 # The orders whose goods are promised but not yet paid for. A paid order has
@@ -77,18 +75,16 @@ LIVE_UNPAID = (OrderStatus.PLACED, OrderStatus.PACKING, OrderStatus.SHIPPED)
 def move(
     session: Session,
     *,
-    offer: Offer,
+    variant: ProductVariant,
     kind: StockMovementKind,
     quantity: int,
-    variant_id: int | None = None,
     actor: User | None = None,
     reason: str = "",
     supply_id: int | None = None,
     order_id: int | None = None,
     return_request_id: int | None = None,
-    removal_id: int | None = None,
 ) -> StockMovement | None:
-    """Write one movement and carry the running totals with it.
+    """Write one movement and carry the running total with it.
 
     ``quantity`` is given as a plain count and the sign comes from the kind, so
     a caller cannot get the direction wrong by typing a minus. The one kind
@@ -108,8 +104,7 @@ def move(
         return None
 
     movement = StockMovement(
-        offer_id=offer.id,
-        variant_id=variant_id,
+        variant_id=variant.id,
         kind=kind,
         quantity=amount,
         reason=reason,
@@ -117,78 +112,55 @@ def move(
         supply_id=supply_id,
         order_id=order_id,
         return_request_id=return_request_id,
-        removal_id=removal_id,
     )
     session.add(movement)
 
-    offer.stock_left = max(0, offer.stock_left + amount)
-    session.add(offer)
-
-    if variant_id is not None:
-        row = session.exec(
-            select(OfferVariant).where(
-                OfferVariant.offer_id == offer.id,
-                OfferVariant.variant_id == variant_id,
-            )
-        ).first()
-        if row is None:
-            row = OfferVariant(offer_id=offer.id, variant_id=variant_id, stock_left=0)
-        row.stock_left = max(0, row.stock_left + amount)
-        session.add(row)
-        _recount_colour(session, offer, variant_id)
+    variant.stock_left = max(0, variant.stock_left + amount)
+    variant.in_stock = variant.stock_left > 0
+    session.add(variant)
+    _recount_colour(session, variant)
 
     return movement
 
 
-def _recount_colour(session: Session, offer: Offer, variant_id: int) -> None:
+def _recount_colour(session: Session, variant: ProductVariant) -> None:
     """A colour is the sum of its sizes, so a size moving moves it.
 
     Recomputed rather than moved: a colour holding four when its sizes hold
     one, one and one is a shelf that lies about itself, and the sizes are
     where the counting happens. Nothing is written to the ledger for the
     colour — it is an aggregate, and a movement recorded twice would be a
-    shelf counted twice.
+    shelf counted twice. That is also why the ledger invariant is checked
+    against the leaves: a colour row has no movements of its own.
     """
-    variant = session.get(ProductVariant, variant_id)
-    if variant is None or variant.kind is not VariantKind.SIZE:
-        return
-    colour_id = variant.parent_id
-    if colour_id is None:
+    if variant.kind is not VariantKind.SIZE or variant.parent_id is None:
         return
 
-    siblings = session.exec(
-        select(ProductVariant.id).where(ProductVariant.parent_id == colour_id)
-    ).all()
-    total = 0
-    for sibling_id in siblings:
-        row = session.exec(
-            select(OfferVariant).where(
-                OfferVariant.offer_id == offer.id,
-                OfferVariant.variant_id == sibling_id,
-            )
-        ).first()
-        if row is not None:
-            total += row.stock_left
-
-    colour = session.exec(
-        select(OfferVariant).where(
-            OfferVariant.offer_id == offer.id, OfferVariant.variant_id == colour_id
-        )
-    ).first()
+    colour = session.get(ProductVariant, variant.parent_id)
     if colour is None:
-        colour = OfferVariant(offer_id=offer.id, variant_id=colour_id, stock_left=0)
+        return
+
+    total = int(
+        session.exec(
+            select(func.coalesce(func.sum(ProductVariant.stock_left), 0)).where(
+                ProductVariant.parent_id == colour.id
+            )
+        ).one()
+    )
     colour.stock_left = total
+    colour.in_stock = total > 0
     session.add(colour)
 
 
-def on_hand(session: Session, offer_id: int, variant_id: int | None = None) -> int:
+def on_hand(session: Session, variant_id: int) -> int:
     """The shelf according to the ledger, which is the only authority on it."""
-    stmt = select(func.coalesce(func.sum(StockMovement.quantity), 0)).where(
-        StockMovement.offer_id == offer_id
+    return int(
+        session.exec(
+            select(func.coalesce(func.sum(StockMovement.quantity), 0)).where(
+                StockMovement.variant_id == variant_id
+            )
+        ).one()
     )
-    if variant_id is not None:
-        stmt = stmt.where(StockMovement.variant_id == variant_id)
-    return int(session.exec(stmt).one())
 
 
 # --------------------------------------------------------------------------- holding
@@ -196,17 +168,16 @@ def on_hand(session: Session, offer_id: int, variant_id: int | None = None) -> i
 
 def reserved(
     session: Session,
-    offer_id: int,
-    variant_id: int | None = None,
+    variant_id: int,
     *,
     ignoring_user_id: int | None = None,
 ) -> int:
-    """How much of this offer is promised to somebody already.
+    """How much of this variant is promised to somebody already.
 
-    Asked of the baskets, orders and removals that are holding it rather than
-    read from a table of holds — a hold is not a fact of its own, it is a
-    consequence of something else existing, and deriving it means it cannot be
-    leaked or released twice.
+    Asked of the baskets and orders that are holding it rather than read from
+    a table of holds — a hold is not a fact of its own, it is a consequence of
+    something else existing, and deriving it means it cannot be leaked or
+    released twice.
 
     ``ignoring_user_id`` leaves out one shopper's own basket, because a
     stepper that stopped at what the shopper is already holding would refuse
@@ -214,20 +185,16 @@ def reserved(
     """
     now = utcnow()
 
-    def matches_variant(model) -> object:
-        if variant_id is None:
-            return True
+    def matches(model) -> object:
         return or_(model.variant_id == variant_id, model.color_variant_id == variant_id)
 
     baskets = select(func.coalesce(func.sum(CartItem.quantity), 0)).where(
-        CartItem.offer_id == offer_id,
+        matches(CartItem),
         # A line with no deadline predates holding and is treated as expired:
         # it would otherwise hold goods for ever with no way to say why.
         col(CartItem.reserved_until).is_not(None),
         CartItem.reserved_until > now,
     )
-    if variant_id is not None:
-        baskets = baskets.where(matches_variant(CartItem))
     if ignoring_user_id is not None:
         baskets = baskets.where(CartItem.user_id != ignoring_user_id)
 
@@ -235,51 +202,24 @@ def reserved(
         select(func.coalesce(func.sum(OrderItem.quantity), 0))
         .join(Order, col(Order.id) == col(OrderItem.order_id))
         .where(
-            OrderItem.offer_id == offer_id,
+            matches(OrderItem),
             Order.paid.is_(False),
             col(Order.status).in_(LIVE_UNPAID),
         )
     )
-    if variant_id is not None:
-        unpaid = unpaid.where(matches_variant(OrderItem))
 
-    # Picked and standing by the door. Requested is not enough — nobody has
-    # touched the shelf yet — but ready is.
-    picked = (
-        select(func.coalesce(func.sum(RemovalLine.prepared_quantity), 0))
-        .join(RemovalOrder, col(RemovalOrder.id) == col(RemovalLine.removal_id))
-        .where(
-            RemovalLine.offer_id == offer_id,
-            RemovalOrder.status == RemovalStatus.READY,
-        )
-    )
-    if variant_id is not None:
-        picked = picked.where(RemovalLine.variant_id == variant_id)
-
-    return sum(int(session.exec(stmt).one()) for stmt in (baskets, unpaid, picked))
+    return sum(int(session.exec(stmt).one()) for stmt in (baskets, unpaid))
 
 
 def sellable(
     session: Session,
-    offer: Offer,
-    variant_id: int | None = None,
+    variant: ProductVariant,
     *,
     for_user_id: int | None = None,
 ) -> int:
     """What can still be sold: the shelf less what is already promised."""
-    shelf = offer.stock_left
-    if variant_id is not None:
-        row = session.exec(
-            select(OfferVariant).where(
-                OfferVariant.offer_id == offer.id,
-                OfferVariant.variant_id == variant_id,
-            )
-        ).first()
-        if row is None:
-            return 0
-        shelf = row.stock_left
-    held = reserved(session, offer.id, variant_id, ignoring_user_id=for_user_id)
-    return max(0, shelf - held)
+    held = reserved(session, variant.id, ignoring_user_id=for_user_id)
+    return max(0, variant.stock_left - held)
 
 
 def hold_until() -> object:

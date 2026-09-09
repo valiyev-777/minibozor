@@ -8,6 +8,7 @@ from sqlalchemy import Integer
 from sqlmodel import Session, col, func, select
 
 from app import i18n
+from app import products as pr
 from app import schemas as s
 from app.models import (
     Address,
@@ -17,12 +18,10 @@ from app.models import (
     DeliveryAttempt,
     DeliverySlot,
     Favorite,
-    Offer,
     Order,
     OrderEvent,
     OrderItem,
     OrderStatus,
-    PaymentCard,
     PaymentMethod,
     PickupPoint,
     Product,
@@ -131,12 +130,12 @@ def in_the_shop(stmt):
     be written that forgets: there is a test that walks every product-returning
     endpoint and holds them all to it.
     """
-    return stmt.where(Product.status == ProductStatus.PUBLISHED)
+    return stmt.where(Product.status == ProductStatus.ACTIVE)
 
 
 def is_in_the_shop(product: Product | None) -> bool:
     """The same question about one row we already have in hand."""
-    return product is not None and product.status is ProductStatus.PUBLISHED
+    return product is not None and product.status is ProductStatus.ACTIVE
 
 
 def colour_image(session: Session, variant_id: int | None) -> str | None:
@@ -145,10 +144,9 @@ def colour_image(session: Session, variant_id: int | None) -> str | None:
     A colour is chosen by looking at the thing, so a basket line for a black
     shirt showing the white cover photograph is a line the shopper does not
     recognise as theirs — and the first place they notice is the order, which
-    is the worst place to be surprised. Every colour now has a photograph (the
-    seller cannot submit one without: see ``listings._colours_have_photographs``),
-    but older rows may not, so this answers ``None`` and the caller falls back
-    to the product's cover.
+    is the worst place to be surprised. A card cannot leave ``draft`` while a
+    colour of it is without a picture, but a draft's rows may not have one, so
+    this answers ``None`` and the caller falls back to the product's cover.
     """
     if variant_id is None:
         return None
@@ -193,7 +191,16 @@ def favorite_ids(session: Session, user: User | None) -> set[int]:
     return set(rows)
 
 
-def product_card(session: Session, p: Product, favs: set[int]) -> s.ProductCardOut:
+def product_card(
+    session: Session,
+    p: Product,
+    favs: set[int],
+    shelf: dict[int, int] | None = None,
+) -> s.ProductCardOut:
+    """One card. ``shelf`` is the page's stock figures, read once for all of
+    them — a card holds no stock of its own, and asking per card is a query per
+    row of every listing."""
+    left = shelf[p.id] if shelf is not None and p.id in shelf else pr.on_shelf(session, p.id)
     return s.ProductCardOut(
         id=p.id,
         title=i18n.t(session, "product", p.id, "title", p.title),
@@ -207,7 +214,7 @@ def product_card(session: Session, p: Product, favs: set[int]) -> s.ProductCardO
         badge=i18n.t(session, "product", p.id, "badge", p.badge) if p.badge else None,
         in_stock=p.in_stock,
         is_favorite=p.id in favs,
-        stock_left=p.stock_left,
+        stock_left=left,
         has_variants=has_variants(session, p.id),
     )
 
@@ -223,7 +230,8 @@ def has_variants(session: Session, product_id: int) -> bool:
 def product_cards(
     session: Session, products: list[Product], favs: set[int]
 ) -> list[s.ProductCardOut]:
-    return [product_card(session, p, favs) for p in products]
+    shelf = pr.shelf_map(session, [p.id for p in products])
+    return [product_card(session, p, favs, shelf) for p in products]
 
 
 def category_out(session: Session, c: Category) -> s.CategoryOut:
@@ -318,7 +326,6 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
             )
             for sp in specs
         ],
-        seller=p.seller,
         warranty=i18n.t(session, "product", p.id, "warranty", p.warranty) if p.warranty else None,
         is_original=p.is_original,
         free_delivery=p.free_delivery,
@@ -337,70 +344,40 @@ def cart_items(session: Session, user: User) -> list[CartItem]:
     ).all()
 
 
-def shelf_left(
-    product: Product,
-    color: ProductVariant | None,
-    size: ProductVariant | None = None,
-) -> int:
+def unit_price(product: Product, color: ProductVariant | None, size: ProductVariant | None):
+    """What one of the thing actually chosen costs.
+
+    The money is on the variant — a 43 can cost more than a 41 — and the
+    card's own price is the cheapest of them, which is what a shopper who has
+    chosen nothing yet is shown. So the size answers first, then the colour,
+    then the card.
     """
-    How many of the thing actually chosen are left.
-
-    A cart line is for one colour in one size, not for the product, so the
-    answer is the shelf the choice actually stands on.
-
-    A size row *is* that shelf: it is one cell of the colour × size grid and
-    knows which colour it belongs to, so where there is a size there is nothing
-    left to combine. Colours and sizes used to be two separate splits of one
-    total and the answer was whichever was scarcer — which meant the last black
-    41 could be sold twice over, once for every blue one still in the stockroom.
-
-    Falls back to the colour, and then to the whole shelf, for a choice nobody
-    counted apart.
-    """
-    if size is not None and size.stock_left is not None:
-        return size.stock_left
-    if color is not None and color.stock_left is not None:
-        return color.stock_left
-    return product.stock_left
+    for variant in (size, color):
+        if variant is not None and variant.price > 0:
+            return variant.price, product.old_price
+    return product.price, product.old_price
 
 
 def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
-    from app import offers as of
-
     product = session.get(Product, item.product_id)
     if product is None:
         return None
     color = session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None
     size = session.get(ProductVariant, item.variant_id) if item.variant_id else None
 
-    # The offer this line was added on, held rather than looked up again: a
-    # shopper is charged the price they were shown, even if a cheaper seller
-    # has since undercut it or the one they picked has since put theirs up.
-    # Its own shelf is what caps the quantity, too — the product's cached
-    # figure belongs to whichever offer is winning, which may not be this one.
-    offer = session.get(Offer, item.offer_id) if item.offer_id else None
-    if offer is not None:
-        unit_price, old_unit_price = offer.price, offer.old_price
-        # This shopper's own hold does not count against them: the line they
-        # are looking at is the reason the goods are held.
-        left = of.shelf_left(
-            session,
-            offer,
-            item.color_variant_id,
-            item.variant_id,
-            for_user_id=item.user_id,
-        )
-        available = offer.active and left > 0
-    else:
-        unit_price, old_unit_price = product.price, product.old_price
-        left = shelf_left(product, color, size)
-        available = (
-            product.in_stock
-            and (color is None or color.in_stock)
-            and (size is None or size.in_stock)
-        )
+    price, old_unit_price = unit_price(product, color, size)
+    # This shopper's own hold does not count against them: the line they are
+    # looking at is the reason the goods are held.
+    left = pr.shelf_left(
+        session,
+        product,
+        item.color_variant_id,
+        item.variant_id,
+        for_user_id=item.user_id,
+    )
+    available = left > 0
 
-    # A card withdrawn from the shop cannot be bought, whatever its offers say.
+    # A card withdrawn from the shop cannot be bought, whatever the shelf says.
     # The line stays in the basket and reads as unavailable rather than
     # disappearing: the shopper put it there, and a basket that quietly loses
     # a row is a basket nobody trusts.
@@ -425,13 +402,13 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
         else i18n.t(session, "product", product.id, "subtitle", product.subtitle),
         variant_id=item.variant_id,
         color_variant_id=item.color_variant_id,
-        unit_price=unit_price,
+        unit_price=price,
         old_unit_price=old_unit_price,
         quantity=item.quantity,
         selected=item.selected,
         in_stock=available,
         stock_left=left,
-        line_total=unit_price * item.quantity,
+        line_total=price * item.quantity,
     )
 
 
@@ -529,18 +506,6 @@ def slot_out(sl: DeliverySlot) -> s.SlotOut:
     )
 
 
-def card_out(c: PaymentCard) -> s.CardOut:
-    return s.CardOut(
-        id=c.id,
-        brand=c.brand,
-        last4=c.last4,
-        holder=c.holder,
-        expiry=f"{c.expiry_month:02d}/{str(c.expiry_year)[-2:]}",
-        status=c.status,
-        is_default=c.is_default,
-    )
-
-
 # --------------------------------------------------------------------------- orders
 
 
@@ -563,11 +528,6 @@ def order_eta_label(o: Order) -> str:
 def payment_label(session: Session, o: Order) -> str:
     if o.payment_method == PaymentMethod.CASH:
         return i18n.label("cash_courier")
-    if o.payment_card_id:
-        card = session.get(PaymentCard, o.payment_card_id)
-        if card:
-            state = i18n.label("paid" if o.paid else "unpaid")
-            return i18n.label("card_masked", last4=card.last4, state=state)
     return i18n.label("card")
 
 
@@ -755,25 +715,3 @@ def stamp_order_event(session: Session, order: Order, note: str = "") -> OrderEv
 
 def utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
-
-
-def offer_out(session: Session, o, *, winner_id: int | None) -> s.OfferOut:
-    from app.models import Seller
-
-    seller = session.get(Seller, o.seller_id)
-    discount = (
-        round((o.old_price - o.price) / o.old_price * 100)
-        if o.old_price and o.old_price > o.price
-        else None
-    )
-    return s.OfferOut(
-        id=o.id,
-        seller=s.SellerOut(id=seller.id, name=seller.name) if seller else
-        s.SellerOut(id=0, name=""),
-        price=o.price,
-        old_price=o.old_price,
-        discount_percent=discount,
-        stock_left=o.stock_left,
-        in_stock=o.stock_left > 0,
-        is_winner=o.id == winner_id,
-    )

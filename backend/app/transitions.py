@@ -64,22 +64,13 @@ RETURN_TRANSITIONS: dict[ReturnStatus, frozenset[ReturnStatus]] = {
 
 # A card's way into the shop, and out again.
 #
-# ``draft`` is ours and may go straight up; a seller's proposal lands in
-# ``moderating`` and waits. A refusal is not a dead end — the seller fixes what
-# was wrong and sends it back — but ``published`` never returns to a queue: a
-# card in the shop is taken out by archiving it, which is a different act with
-# a different consequence for the offers hanging off it.
+# There is no queue any longer — nobody outside the company writes a card — so
+# what a draft is waiting for is a photograph rather than a decision. A card
+# in the shop is taken out by archiving it, and an archived one comes back as
+# a draft so that whatever it is missing is checked again on the way in.
 PRODUCT_TRANSITIONS: dict[ProductStatus, frozenset[ProductStatus]] = {
-    ProductStatus.DRAFT: frozenset(
-        {ProductStatus.MODERATING, ProductStatus.PUBLISHED, ProductStatus.ARCHIVED}
-    ),
-    ProductStatus.MODERATING: frozenset(
-        {ProductStatus.PUBLISHED, ProductStatus.REJECTED}
-    ),
-    ProductStatus.REJECTED: frozenset(
-        {ProductStatus.MODERATING, ProductStatus.ARCHIVED}
-    ),
-    ProductStatus.PUBLISHED: frozenset({ProductStatus.ARCHIVED}),
+    ProductStatus.DRAFT: frozenset({ProductStatus.ACTIVE, ProductStatus.ARCHIVED}),
+    ProductStatus.ACTIVE: frozenset({ProductStatus.ARCHIVED, ProductStatus.DRAFT}),
     ProductStatus.ARCHIVED: frozenset({ProductStatus.DRAFT}),
 }
 

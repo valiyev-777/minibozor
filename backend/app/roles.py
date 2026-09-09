@@ -1,8 +1,7 @@
 """Changing what somebody is allowed to do.
 
-Two doors lead here. The admin panel has a role picker, and linking an account
-to a seller makes it a seller — and both have to honour the same rule, so the
-rule lives here rather than in whichever endpoint happened to need it first.
+The admin panel has a role picker, and it has to honour one rule, which lives
+here rather than in whichever endpoint happened to need it first.
 
 **The last admin cannot be stood down.** A role is granted by an admin, so an
 admin is the only person who can put one back; demote the last one and the

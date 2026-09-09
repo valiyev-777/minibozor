@@ -22,16 +22,6 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     otp_dev_code: str = "123456"
 
-    # How long a seller has to say what to do with goods that came back.
-    #
-    # The deadline exists because silence has a cost and somebody pays it
-    # either way: goods sitting undecided are goods nobody can sell and
-    # nobody has collected. So an unanswered question expires into the
-    # answer that costs the seller least — the shirt passed inspection, so it
-    # goes back on sale rather than sitting in a box. A seller who wanted it
-    # back can still ask for a removal.
-    return_decision_days: int = 7
-
     # What a courier earns for one delivery, in so'm.
     #
     # A flat rate rather than a share of the order: a courier carrying a
@@ -49,21 +39,13 @@ class Settings(BaseSettings):
     # backoffice's refresh cookie rides on them — and a browser refuses
     # ``Access-Control-Allow-Origin: *`` together with credentials outright.
     #
-    # All three staff applications, because there are three: the backoffice on
-    # 5173, the seller's cabinet on 5174, the courier's on 5175. Only the first
-    # was listed, so the seller and the courier could not reach this API at all
-    # — every request failed in the browser, before it arrived, and the server
-    # had nothing to say about it. Each is named on both hostnames because
-    # ``localhost`` and ``127.0.0.1`` are different origins to a browser and
-    # people type both.
+    # One staff application now, on 5173, where there were three. It is named
+    # on both hostnames because ``localhost`` and ``127.0.0.1`` are different
+    # origins to a browser and people type both.
     #
     # Comma-separated, and a deployment overrides the lot with MB_CORS_ORIGINS:
     # these are development ports and belong nowhere else.
-    cors_origins: str = (
-        "http://localhost:5173,http://127.0.0.1:5173,"
-        "http://localhost:5174,http://127.0.0.1:5174,"
-        "http://localhost:5175,http://127.0.0.1:5175"
-    )
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @property
     def is_dev(self) -> bool:

@@ -3,12 +3,11 @@
 Several flows had a status column the data model was happy to move and no way
 to move it. A return request was submitted and never answered; an order was
 placed and stayed placed however long ago that was; a delivery window's
-capacity only ever went down. Each of those is one operator decision away from
-working, and this is where the decisions live.
+capacity only ever went down. Each of those is one decision away from working,
+and this is where the decisions live.
 
-The returns half of the file is now read by four roles rather than one: an
-operator decides the money, the warehouse says what arrived in the parcel, and
-the seller says what to do about it. See ``app.returns``.
+The returns half of the file is read by two: the office decides the money and
+the warehouse says what arrived in the parcel. See ``app.returns``.
 
 Two rules hold throughout:
 
@@ -37,14 +36,12 @@ from app import returns as rt
 from app import schemas as s
 from app import services as sv
 from app import transitions as tr
-from app.core.config import settings
 from app.deps import (
     OperatorUser,
     OrderMover,
     OrderViewer,
     PickupHandler,
     ReturnViewer,
-    SellerUser,
     SessionDep,
     WarehouseUser,
 )
@@ -62,8 +59,6 @@ from app.models import (
     ReturnInspection,
     ReturnRequest,
     ReturnStatus,
-    Seller,
-    SellerReturnDecision,
     User,
     UserRole,
 )
@@ -92,22 +87,15 @@ def list_returns(
         None, alias="status", description="default: everything, oldest first"
     ),
     awaiting: str | None = Query(
-        None,
-        description="'inspection' — arrived, nobody has looked; "
-        "'decision' — inspected, the seller has not answered",
+        None, description="'inspection' — arrived, nobody has looked"
     ),
 ) -> list[s.StaffReturnOut]:
-    """One list, read by four roles, filtered by whose turn it is.
+    """One list, read by two roles, filtered by whose turn it is.
 
     ``awaiting`` rather than a screen per role, because the question every
     screen asks is the same one — what is waiting for me — and it is a
     property of the row, not of the reader.
     """
-    # A seller's deadline expires whether or not anybody is watching, so the
-    # overdue ones are settled before the list is read rather than when a
-    # scheduler we do not have gets round to it.
-    rt.sweep_overdue(session)
-
     stmt = select(ReturnRequest)
     if status_filter is not None:
         stmt = stmt.where(ReturnRequest.status == status_filter)
@@ -118,15 +106,10 @@ def list_returns(
             ),
             col(ReturnRequest.inspection).is_(None),
         )
-    elif awaiting == "decision":
-        stmt = stmt.where(
-            col(ReturnRequest.inspection).is_not(None),
-            col(ReturnRequest.seller_decision).is_(None),
-        )
     # The same rule as the order queue: the two states somebody is working
-    # oldest-first, everything else newest-first. `submitted` is an operator's
-    # decision waiting to be made and `approved` is a van waiting to be sent;
-    # a seller reading their returns wants the one that came back today.
+    # oldest-first, everything else newest-first. `submitted` is a decision
+    # waiting to be made and `approved` is a van waiting to be sent; anybody
+    # reading the rest wants the one that came back today.
     queue = status_filter in (ReturnStatus.SUBMITTED, ReturnStatus.APPROVED)
     rows = session.exec(
         stmt.order_by(
@@ -135,7 +118,7 @@ def list_returns(
             col(ReturnRequest.id) if queue else col(ReturnRequest.id).desc(),
         )
     ).all()
-    return [_return_out(session, r) for r in _mine(session, user, rows)]
+    return [_return_out(session, r) for r in rows]
 
 
 @router.get("/returns/{return_id}", response_model=s.StaffReturnOut)
@@ -143,7 +126,6 @@ def get_return(
     return_id: int, user: ReturnViewer, session: SessionDep
 ) -> s.StaffReturnOut:
     request = _return(session, return_id)
-    _must_be_mine(session, user, request)
     return _return_out(session, request)
 
 
@@ -158,16 +140,16 @@ def inspect_return(
     user: WarehouseUser,
     session: SessionDep,
 ) -> s.StaffReturnOut:
-    """Whole or damaged, and the seller is asked what to do next.
+    """Whole or damaged, and the shelf follows from it.
 
     Only once. A second verdict on the same parcel is two people disagreeing
     about a shirt one of them is holding, and the way to settle that is a
-    conversation rather than an overwrite — the first answer is the one the
-    seller was told and the one their deadline runs from.
+    conversation rather than an overwrite.
 
-    The deadline is set here and only for goods that came back whole, because
-    only those have an answer that can expire: ``sweep_overdue`` relists what
-    nobody decided, and nothing relists something damaged.
+    Whole goods go back on sale here, through ``app.returns.relist``, which is
+    guarded: a refund with ``restock: true`` may already have moved them, and
+    one shirt back is one shirt back. Damaged goods move nothing — they are
+    off the shelf and stay off it.
     """
     request = _return(session, return_id)
     if request.status not in (ReturnStatus.APPROVED, ReturnStatus.REFUNDED):
@@ -183,8 +165,6 @@ def inspect_return(
     request.inspection_note = payload.note.strip()
     request.inspected_at = sv.utcnow()
     request.inspected_by_id = user.id
-    if payload.result is ReturnInspection.OK:
-        request.decision_due_at = rt.deadline()
     session.add(request)
 
     audit.record(
@@ -199,93 +179,12 @@ def inspect_return(
         note=request.inspection_note,
     )
 
-    order = session.get(Order, request.order_id)
-    code = order.code if order else ""
     if payload.result is ReturnInspection.OK:
-        text = i18n.label(
-            "return_inspected_ok_note",
-            code=code,
-            days=settings.return_decision_days,
-        )
-    else:
-        text = i18n.label(
-            "return_inspected_damaged_note",
-            code=code,
-            note=request.inspection_note or i18n.label("inspection_damaged"),
-        )
-    rt.notify_seller(
-        session, request, title=i18n.label("return_inspected"), text=text
-    )
-
-    session.commit()
-    session.refresh(request)
-    return _return_out(session, request)
-
-
-@router.post(
-    "/returns/{return_id}/decide",
-    response_model=s.StaffReturnOut,
-    summary="The seller says what to do with goods that came back",
-)
-def decide_return(
-    return_id: int,
-    payload: s.SellerDecisionIn,
-    user: SellerUser,
-    session: SessionDep,
-) -> s.StaffReturnOut:
-    """Back on sale, or the seller collects it.
-
-    ``relist`` moves the shelf through ``app.returns.relist``, which is
-    guarded: an operator who already refunded with ``restock: true`` has
-    moved it, and one shirt back is one shirt back. The decision is recorded
-    either way — "the seller chose to sell it again" is a fact about the
-    seller, not about the ledger, and it is true whichever call moved the
-    count.
-
-    ``take_back`` moves nothing. The goods are off the shelf already and stay
-    off it; leaving the warehouse is a removal order, which is its own flow
-    with its own paperwork.
-    """
-    request = _return(session, return_id)
-    _must_be_mine(session, user, request)
-
-    if request.inspection is None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, i18n.label("return_not_inspected")
-        )
-    if request.seller_decision is not None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, i18n.label("return_already_decided")
-        )
-    if (
-        payload.decision is SellerReturnDecision.RELIST
-        and request.inspection is not ReturnInspection.OK
-    ):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, i18n.label("relist_needs_whole_goods")
-        )
-
-    request.seller_decision = payload.decision
-    request.decided_at = sv.utcnow()
-    session.add(request)
-
-    audit.record(
-        session,
-        actor=user,
-        action="return.decide",
-        entity="return_request",
-        entity_id=request.id,
-        field="seller_decision",
-        old=None,
-        new=payload.decision,
-        note=i18n.label(f"decision_{payload.decision.value}"),
-    )
-    if payload.decision is SellerReturnDecision.RELIST:
         rt.relist(
             session,
             request,
             actor=user,
-            note=i18n.label("decision_relist"),
+            note=request.inspection_note or i18n.label("inspection_ok"),
         )
 
     session.commit()
@@ -405,8 +304,8 @@ def _decide_return(
         )
         if restock:
             # Through ``app.returns`` rather than straight at the inventory:
-            # the seller may also choose to relist the same parcel, and the
-            # guard in there is what keeps one shirt from coming back twice.
+            # an inspection that passes relists the same parcel, and the guard
+            # in there is what keeps one shirt from coming back twice.
             rt.relist(session, request, actor=actor, note=payload.note)
 
     request.status = target
@@ -447,8 +346,8 @@ def _returned_lines(
     """What is coming back — see ``app.returns.returned_lines``.
 
     Kept as a name here because three things in this file ask the question and
-    the answer moved to ``app.returns`` when the warehouse and the seller
-    started asking it too.
+    the answer moved to ``app.returns`` when the warehouse started asking it
+    too.
     """
     return rt.returned_lines(session, request, order)
 
@@ -487,33 +386,24 @@ def order_queue(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> s.Page[s.StaffOrderOut]:
-    """One queue, read by four roles.
+    """One queue, read by the office and by the warehouse.
 
-    An operator runs it, the warehouse picks from it, an admin does either —
-    and a seller watches their own goods go out. Read-only for the seller:
-    ``POST /staff/orders/{id}/status`` is somebody else's door, and they get a
-    404 rather than an empty page for an order that is not theirs, because
-    "there is one and it is not yours" is a fact about a competitor's sales.
-
-    The seller's narrowing is not a filter they chose. It is the only set of
-    orders that exists for them, so it is applied here rather than offered as
-    a parameter that could be left off.
+    The office runs it and the warehouse picks from it — two jobs on one list,
+    which is why it is one endpoint with a status filter rather than two
+    renderings of the same orders.
     """
     stmt = select(Order)
     if status_filter is not None:
         stmt = stmt.where(Order.status == status_filter)
-    if user.role is UserRole.SELLER:
-        stmt = stmt.where(col(Order.id).in_(_my_order_ids(session, user)))
     total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
     # A queue is worked from the front; a history is read from the top.
     #
     # Which this is depends on what was asked for. The warehouse asks for
     # `placed` and wants the oldest first — that is a bench queue, and serving
-    # the newest order first is how the first one waits all day. Everybody
-    # else, and anybody asking for everything, is reading rather than working:
-    # a seller opening their sales and an operator scanning the whole list both
-    # want this morning at the top, and both used to get an order from three
-    # weeks ago and page forward looking for today.
+    # the newest order first is how the first one waits all day. Anybody
+    # asking for everything is reading rather than working: they want this
+    # morning at the top, and used to get an order from three weeks ago and
+    # page forward looking for today.
     working = status_filter in (OrderStatus.PLACED, OrderStatus.PACKING)
     rows = session.exec(
         stmt.order_by(
@@ -544,28 +434,10 @@ def get_order(
     # asked about what the customer is looking at, and a second rendering of
     # the same order is a second thing to keep in step.
     order = _order(session, order_id)
-    if user.role is UserRole.SELLER and order.id not in _my_order_ids(session, user):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("order_not_found"))
     # With the knocks on it. A courier who has been turned away three times
-    # does not decide to give up — an operator does, and this list is what
-    # they decide on. A seller sees them too: their goods are at that door.
+    # does not decide to give up — the office does, and this list is what it
+    # decides on.
     return sv.order_out(session, order, with_attempts=True)
-
-
-def _my_order_ids(session: SessionDep, user: User) -> list[int]:
-    """Every order carrying one of this seller's offers.
-
-    Off ``order_items.seller_id``, which is stamped when the order is placed
-    rather than read back through the offer — a seller whose offer was later
-    withdrawn still sold the thing, and their own list should still say so.
-    """
-    seller = session.exec(select(Seller).where(Seller.user_id == user.id)).first()
-    if seller is None:
-        return [-1]
-    rows = session.exec(
-        select(OrderItem.order_id).where(OrderItem.seller_id == seller.id)
-    ).all()
-    return list(rows) or [-1]
 
 
 @router.post(
@@ -999,7 +871,6 @@ def _order(session: SessionDep, order_id: int) -> Order:
 def _return_out(session: SessionDep, r: ReturnRequest) -> s.StaffReturnOut:
     order = session.get(Order, r.order_id)
     customer = session.get(User, r.user_id)
-    seller = rt.seller_of(session, r)
     lines = rt.returned_lines(session, r, order)
     product = None
     for line in lines:
@@ -1023,8 +894,6 @@ def _return_out(session: SessionDep, r: ReturnRequest) -> s.StaffReturnOut:
         refund_amount=r.refund_amount,
         next_statuses=tr.next_states(tr.RETURN_TRANSITIONS, r.status),
         created_at=r.created_at,
-        seller_id=seller.id if seller else None,
-        seller_name=seller.name if seller else "",
         product_title=product.title if product else "",
         inspection=r.inspection,
         inspection_label=(
@@ -1032,65 +901,8 @@ def _return_out(session: SessionDep, r: ReturnRequest) -> s.StaffReturnOut:
         ),
         inspection_note=r.inspection_note,
         inspected_at=r.inspected_at,
-        seller_decision=r.seller_decision,
-        seller_decision_label=(
-            i18n.label(f"decision_{r.seller_decision.value}")
-            if r.seller_decision
-            else ""
-        ),
-        seller_decisions=_open_decisions(r),
-        decision_due_at=r.decision_due_at,
-        decided_at=r.decided_at,
         relisted=r.relisted_at is not None,
     )
-
-
-def _open_decisions(r: ReturnRequest) -> list[SellerReturnDecision]:
-    """Which decisions the seller may still make, from the row's own state.
-
-    The same reasoning as ``next_statuses``: the rule that damaged goods do
-    not go back on sale is enforced in ``decide_return``, and a client that
-    draws its buttons from a second copy of that rule is a client that will
-    eventually offer a button the server refuses.
-    """
-    if r.inspection is None or r.seller_decision is not None:
-        return []
-    if r.inspection is ReturnInspection.OK:
-        return [SellerReturnDecision.RELIST, SellerReturnDecision.TAKE_BACK]
-    return [SellerReturnDecision.TAKE_BACK]
-
-
-def _mine(
-    session: SessionDep, user: User, rows: list[ReturnRequest]
-) -> list[ReturnRequest]:
-    """Only the rows this reader is entitled to.
-
-    Everybody but a seller reads all of them: an operator decides the money on
-    any request, and the warehouse holds the parcels whoever sent them. A
-    seller reads the ones on their own goods and nothing else.
-    """
-    if user.role is not UserRole.SELLER:
-        return list(rows)
-    seller = session.exec(select(Seller).where(Seller.user_id == user.id)).first()
-    if seller is None:
-        return []
-    mine = []
-    for row in rows:
-        owner = rt.seller_of(session, row)
-        if owner is not None and owner.id == seller.id:
-            mine.append(row)
-    return mine
-
-
-def _must_be_mine(session: SessionDep, user: User, request: ReturnRequest) -> None:
-    """404 rather than 403 for another seller's parcel.
-
-    A seller asking for an id that is not theirs should not be able to tell
-    "there is no such request" from "there is, and it is somebody else's" —
-    the second sentence is a fact about a competitor's returns.
-    """
-    if not _mine(session, user, [request]):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("return_not_found"))
 
 
 def _summary(items: list[OrderItem]) -> str:

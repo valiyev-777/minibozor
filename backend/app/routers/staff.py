@@ -5,7 +5,7 @@ the ordinary OTP flow and now needs to know which of the five panels they are
 looking at.
 
 The rest of the file answers the second. Until now the only ways to make
-somebody staff were a shell script and the side effect of linking a seller
+somebody staff were a shell script
 account, which meant an admin panel could show a list of operators and had no
 way to appoint one. Two endpoints close that: find the account by the only
 thing anyone knows about it — the phone number they sign in with — and set its
@@ -104,12 +104,7 @@ def set_role(
     the request, who is the likeliest person to try it. A role is granted by
     an admin, so an admin is the only one who can put it back; take the last
     one away and there is nobody left who can, and the way in is a shell on
-    the server. See ``app.roles`` for the rule itself, which the seller link
-    honours too.
-
-    Making somebody a seller is a role like any other here, but it does not
-    attach them to a seller account — that is what linking does, over in
-    ``/staff/sellers/{id}``, and it sets this role as a side effect.
+    the server. See ``app.roles`` for the rule itself.
     """
     account = session.get(User, user_id)
     if account is None:

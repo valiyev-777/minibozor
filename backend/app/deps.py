@@ -101,122 +101,71 @@ def require_role(*roles: UserRole | Iterable[UserRole]) -> Callable[[User], User
 StaffUser = Annotated[User, Depends(require_role(STAFF_ROLES))]
 AdminUser = Annotated[User, Depends(require_role(UserRole.ADMIN))]
 
-# Running the shop day to day: return decisions, review moderation, moving an
-# order along, opening delivery windows. The admin is included because an admin
-# who cannot do the operator's job is an admin who has to hand out a second
-# account to get anything done.
-#
-# Warehouse and courier belong on some of this later — picking is theirs, and
-# so is the doorstep — but that is a rule per transition rather than per
-# endpoint, and it wants their screens to exist first.
-OperatorUser = Annotated[
-    User, Depends(require_role(UserRole.OPERATOR, UserRole.ADMIN))
-]
+# Running the shop day to day: return decisions, moving an order along,
+# opening delivery windows. There is no separate operator any more — the owner
+# takes the calls — so this is the admin, named for the job rather than for
+# the role, because the endpoints that use it are about the work and not about
+# who happens to do it this year.
+OperatorUser = AdminUser
 
-# Setting a price. A seller decides what their goods cost and nothing else
-# about them — under this model the goods are in our warehouse and we ship
-# them, so the shelf is not theirs to count.
-SellerUser = Annotated[User, Depends(require_role(UserRole.SELLER, UserRole.ADMIN))]
-
-# Who may put a picture on the server. Everyone whose work produces one: a
-# seller proposing a card, an admin editing one, a courier standing on a
-# doorstep. Not a customer — their review photos come in through the review
-# endpoint, which knows what they are for.
+# Who may put a picture on the server. Everyone whose work produces one: an
+# admin writing a card, the receiving desk photographing a pile it has just
+# sorted, a courier standing on a doorstep. Not a customer — their review
+# photos come in through the review endpoint, which knows what they are for.
 MediaUploader = Annotated[
     User,
-    Depends(require_role(UserRole.SELLER, UserRole.ADMIN, UserRole.COURIER)),
+    Depends(require_role(UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.COURIER)),
 ]
 
-# Counting the shelf. A stock figure changes when something is booked in or out
-# of the warehouse, so it is the warehouse's to move — never the seller's, who
-# would otherwise be able to promise goods nobody has received.
-#
-# The warehouse module does not exist yet. The boundary is drawn now anyway:
-# moving it later means finding every caller that grew up on the wrong side
-# of it.
+# Counting the shelf. A stock figure changes when something is booked in or
+# out of the warehouse, so it is the warehouse's to move.
 WarehouseUser = Annotated[
     User, Depends(require_role(UserRole.WAREHOUSE, UserRole.ADMIN))
 ]
 
-# Reading the goods: a seller's own supplies and removals, all of them for the
-# warehouse. The scoping is done in the endpoint — a seller sees their own
-# rows and nobody else's, which is not a filter they choose but the only rows
-# that exist for them.
-StockViewer = Annotated[
-    User,
-    Depends(require_role(UserRole.SELLER, UserRole.WAREHOUSE, UserRole.ADMIN)),
-]
+# Reading the goods: the market runs, the ledger, what is on which shelf.
+StockViewer = WarehouseUser
 
 # The last mile. Couriers only, and deliberately not admins: every door in
-# ``app.routers.courier`` is scoped to the caller's own round and own shift,
-# and an admin has neither — they would be handed empty lists and a shift they
-# cannot open. An admin watches the rounds through the operator's screens,
-# where the audit trail records that they looked.
+# ``app.routers.courier`` is scoped to the caller's own round, and an admin
+# has none — they would be handed empty lists. An admin watches the rounds
+# through the office screens, where the audit trail records that they looked.
 CourierUser = Annotated[User, Depends(require_role(UserRole.COURIER))]
 
-# Reading a return request. Four roles, because a returned shirt passes
-# through four hands and every one of them has a question only this row
-# answers: the operator decides the money, the warehouse says what arrived,
-# the seller says what to do about it, and the admin does any of the three.
-#
-# A seller sees only returns on their own goods — scoped in the endpoint,
-# because that is not a filter they choose but the only rows that exist for
-# them. Not a customer: their own request is on their own orders screen, in
-# the shape the shipped apps already read.
+# Reading a return request. A returned shirt passes through two hands and both
+# have a question only this row answers: the office decides the money and the
+# warehouse says what arrived. Not a customer — their own request is on their
+# own orders screen, in the shape the shipped apps already read.
 ReturnViewer = Annotated[
-    User,
-    Depends(
-        require_role(
-            UserRole.SELLER, UserRole.WAREHOUSE, UserRole.OPERATOR, UserRole.ADMIN
-        )
-    ),
+    User, Depends(require_role(UserRole.WAREHOUSE, UserRole.ADMIN))
 ]
 
-# Reading the order queue. An operator runs it, the warehouse picks from it,
-# and a seller watches their own goods go out — three jobs on one list, which
-# is why it is one endpoint with an `awaiting`-style scope rather than three
-# renderings of `orders`.
-#
-# A seller sees only orders carrying their own offers, scoped in the endpoint.
-# They may not *move* one: `POST /staff/orders/{id}/status` stays the
-# operator's and the warehouse's.
-OrderViewer = Annotated[
-    User,
-    Depends(
-        require_role(
-            UserRole.SELLER, UserRole.WAREHOUSE, UserRole.OPERATOR, UserRole.ADMIN
-        )
-    ),
-]
+# Reading the order queue. The office runs it and the warehouse picks from it
+# — two jobs on one list, which is why it is one endpoint with an
+# `awaiting`-style scope rather than two renderings of `orders`.
+OrderViewer = ReturnViewer
 
 # Reading the catalogue's own vocabulary — the categories and brands a card
-# can be filed under. A seller picks from both when they open a product, so
-# reading is theirs; *writing* one is not, and stays `AdminUser` on the same
-# paths. Every customer path already answers with these, translated, without
-# any token at all: what a seller needs is the editorial list, in the words
-# the rows hold, which is what these two answer.
+# can be filed under. The receiving desk picks from both while sorting a
+# sack, so reading is theirs; *writing* one is not, and stays `AdminUser` on
+# the same paths.
 CatalogReader = Annotated[
-    User, Depends(require_role(UserRole.SELLER, UserRole.ADMIN))
+    User, Depends(require_role(UserRole.WAREHOUSE, UserRole.ADMIN))
 ]
 
-# Moving an order along. The warehouse joins the operator here because two of
+# Moving an order along. The warehouse joins the office here because two of
 # the three moves are theirs: a picker marks an order picked and marks it
 # handed to the courier. Which moves each of them may make is decided inside
 # the endpoint, because it is a rule per transition and not per door —
-# cancelling is the operator's, and a picker should not be able to call off a
+# cancelling is the office's, and a picker should not be able to call off a
 # sale from the packing bench.
-OrderMover = Annotated[
-    User,
-    Depends(require_role(UserRole.WAREHOUSE, UserRole.OPERATOR, UserRole.ADMIN)),
-]
+OrderMover = ReturnViewer
 
 # Handling the goods once they are back: a courier brings a collection in and
 # the warehouse books it, so both need to read a run.
 PickupHandler = Annotated[
     User,
-    Depends(
-        require_role(UserRole.COURIER, UserRole.WAREHOUSE, UserRole.OPERATOR, UserRole.ADMIN)
-    ),
+    Depends(require_role(UserRole.COURIER, UserRole.WAREHOUSE, UserRole.ADMIN)),
 ]
 
 
