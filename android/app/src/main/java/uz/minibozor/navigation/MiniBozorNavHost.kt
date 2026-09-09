@@ -43,7 +43,6 @@ import uz.minibozor.ui.checkout.CheckoutViewModel
 import uz.minibozor.ui.checkout.ConfirmScreen
 import uz.minibozor.ui.checkout.DeliveryTimeScreen
 import uz.minibozor.ui.checkout.OrderPlacedScreen
-import uz.minibozor.ui.checkout.PaymentMethodScreen
 import uz.minibozor.ui.home.HomeScreen
 import uz.minibozor.ui.onboarding.OnboardingScreen
 import uz.minibozor.ui.orders.OrderDetailScreen
@@ -53,9 +52,7 @@ import uz.minibozor.ui.orders.ReasonScreen
 import uz.minibozor.ui.product.ProductScreen
 import uz.minibozor.ui.product.ReviewsScreen
 import uz.minibozor.ui.product.WriteReviewScreen
-import uz.minibozor.ui.profile.AddCardScreen
 import uz.minibozor.ui.profile.AddressesScreen
-import uz.minibozor.ui.profile.CardsScreen
 import uz.minibozor.ui.profile.FavoritesScreen
 import uz.minibozor.ui.profile.MyReviewsScreen
 import uz.minibozor.ui.profile.PersonalScreen
@@ -371,8 +368,6 @@ fun MiniBozorNavHost(
                     onBack = { navController.popBackStack() },
                     onEditAddress = { navController.navigate(Routes.ADDRESS_PICKER) },
                     onEditTime = { navController.navigate(Routes.DELIVERY_TIME) },
-                    onEditPayment = { navController.navigate(Routes.PAYMENT_METHOD) },
-                    onAddCard = { navController.navigate("add_card") },
                     onOpenCart = { navController.popBackStack() },
                     onConfirm = { navController.navigate(Routes.CONFIRM) },
                 )
@@ -390,15 +385,6 @@ fun MiniBozorNavHost(
                 DeliveryTimeScreen(
                     viewModel = entry.checkoutViewModel(navController),
                     onBack = { navController.popBackStack() },
-                    onDone = { navController.popBackStack() },
-                )
-            }
-
-            composable(Routes.PAYMENT_METHOD) { entry ->
-                PaymentMethodScreen(
-                    viewModel = entry.checkoutViewModel(navController),
-                    onBack = { navController.popBackStack() },
-                    onAddCard = { navController.navigate("add_card") },
                     onDone = { navController.popBackStack() },
                 )
             }
@@ -484,20 +470,6 @@ fun MiniBozorNavHost(
 
         composable(Routes.PERSONAL) {
             PersonalScreen(onBack = { navController.popBackStack() })
-        }
-
-        composable(Routes.CARDS) {
-            CardsScreen(
-                onBack = { navController.popBackStack() },
-                onAddCard = { navController.navigate("add_card") },
-            )
-        }
-
-        composable("add_card") {
-            AddCardScreen(
-                onBack = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() },
-            )
         }
 
         composable(Routes.ADDRESSES) {

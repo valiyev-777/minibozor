@@ -50,6 +50,7 @@ import uz.minibozor.core.util.grouped
 import uz.minibozor.core.util.sum
 import uz.minibozor.core.util.toColor
 import uz.minibozor.data.remote.dto.ProductCardDto
+import uz.minibozor.data.remote.dto.ColourDto
 import uz.minibozor.data.remote.dto.VariantDto
 
 /**
@@ -93,7 +94,7 @@ fun VariantSheet(
                     stringResource(
                         // Nothing to choose on a product without variants, so
                         // it does not ask the customer to choose anything.
-                        if (state.colors.isEmpty() && state.sizes.isEmpty()) {
+                        if (state.colours.isEmpty() && state.sizes.isEmpty()) {
                             R.string.savatga_qoshish
                         } else {
                             R.string.xususiyatlarni_tanlang
@@ -126,26 +127,23 @@ fun VariantSheet(
                 if (state.loading) {
                     Box(Modifier.fillMaxWidth().height(140.dp)) { MbLoading() }
                 } else {
-                    if (state.colors.isNotEmpty()) {
+                    if (state.colours.isNotEmpty()) {
                         Spacer(Modifier.height(20.dp))
-                        Label(
-                            stringResource(R.string.rang),
-                            state.selectedColor?.label.orEmpty(),
-                        )
+                        Label(stringResource(R.string.rang), state.colour.orEmpty())
                         Spacer(Modifier.height(10.dp))
-                        ColorRow(state.colors, state.colorId, viewModel::selectColor)
+                        ColorRow(state.colours, state.colour, viewModel::selectColour)
                     }
                     if (state.sizes.isNotEmpty()) {
                         Spacer(Modifier.height(20.dp))
                         Label(
                             stringResource(R.string.olcham),
-                            state.selectedSize?.label.orEmpty(),
+                            state.selected?.size.orEmpty(),
                         )
                         Spacer(Modifier.height(10.dp))
-                        SizeRow(state.sizes, state.sizeId, viewModel::selectSize)
+                        SizeRow(state.sizes, state.variantId, viewModel::selectSize)
                         // The same note the product page puts under its size
                         // row: how many of the one in hand.
-                        val left = state.selectedSize?.stockLeft
+                        val left = state.selected?.stockLeft
                         if (left != null && left > 0) {
                             Spacer(Modifier.height(9.dp))
                             MbText(
@@ -253,26 +251,30 @@ private fun Label(name: String, value: String) {
  * actually made. A colour with no photograph keeps its swatch.
  */
 @Composable
-private fun ColorRow(colors: List<VariantDto>, selectedId: Int?, onSelect: (Int) -> Unit) {
+private fun ColorRow(
+    colors: List<ColourDto>,
+    selected: String?,
+    onSelect: (String) -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         colors.forEach { color ->
-            val selected = color.id == selectedId
+            val isSelected = color.colour == selected
             Box(
                 Modifier
                     .size(62.dp)
                     .clip(MbTheme.shapes.tile)
                     .border(
-                        width = if (selected) 2.dp else 1.dp,
-                        color = if (selected) MbTheme.colors.ink else MbTheme.colors.border,
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) MbTheme.colors.ink else MbTheme.colors.border,
                         shape = MbTheme.shapes.tile,
                     )
                     .mbClickable(MbTheme.shapes.tile, enabled = color.inStock) {
-                        onSelect(color.id)
+                        onSelect(color.colour)
                     }
-                    .padding(if (selected) 4.dp else 3.dp),
+                    .padding(if (isSelected) 4.dp else 3.dp),
             ) {
                 if (color.imageUrl != null) {
                     MbProductImage(
@@ -285,7 +287,7 @@ private fun ColorRow(colors: List<VariantDto>, selectedId: Int?, onSelect: (Int)
                         Modifier
                             .fillMaxSize()
                             .clip(MbTheme.shapes.tileSmall)
-                            .background(color.value.toColor(MbTheme.colors.fill))
+                            .background(color.hex.toColor(MbTheme.colors.fill))
                     )
                 }
             }

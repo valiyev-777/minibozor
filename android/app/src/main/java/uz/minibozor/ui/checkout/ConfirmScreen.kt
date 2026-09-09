@@ -93,17 +93,23 @@ fun ConfirmScreen(
                         contentPadding = 10.dp,
                     )
                     MbDivider(inset = 62.dp)
+                    // Where the money changes hands, which is the whole of
+                    // what there is to confirm: no card is stored, so there is
+                    // no "•••• 4242" to print and nothing behind it if there
+                    // were.
+                    val atTheDoor = if (state.delivery == DeliveryMethod.Courier) {
+                        stringResource(R.string.kuryerga_topshirishda)
+                    } else {
+                        stringResource(R.string.punktda_tolash)
+                    }
                     MbListRow(
-                        label = if (state.paymentMethod == "cash") stringResource(R.string.naqd_pul)
-                        else stringResource(R.string.karta_niqob, preview.card?.last4.orEmpty()),
+                        label = if (state.paymentMethod == "cash") {
+                            stringResource(R.string.naqd_pul)
+                        } else {
+                            stringResource(R.string.karta)
+                        },
                         glyph = "card",
-                        subtitle = if (state.paymentMethod == "cash") {
-                            if (state.delivery == DeliveryMethod.Courier) {
-                                stringResource(R.string.kuryerga_topshirishda)
-                            } else {
-                                stringResource(R.string.punktda_tolash)
-                            }
-                        } else preview.card?.brand,
+                        subtitle = atTheDoor,
                         showChevron = false,
                         contentPadding = 10.dp,
                     )

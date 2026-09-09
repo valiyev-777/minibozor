@@ -61,16 +61,20 @@ class CartRepository @Inject constructor(private val api: MiniBozorApi) {
      */
     private val adding = MutableStateFlow<Set<CartLine>>(emptySet())
 
-    /** The triple the server folds a repeat add into. */
-    private data class CartLine(val productId: Int, val variantId: Int?, val colorVariantId: Int?)
+    /**
+     * The pair the server folds a repeat add into.
+     *
+     * It was a triple — a variant *and* a colour variant — and the two could
+     * disagree with each other. One cell is one colour and one size.
+     */
+    private data class CartLine(val productId: Int, val variantId: Int?)
 
     suspend fun add(
         productId: Int,
         variantId: Int? = null,
-        colorVariantId: Int? = null,
         quantity: Int = 1,
     ): Outcome<CartDto> {
-        val line = CartLine(productId, variantId, colorVariantId)
+        val line = CartLine(productId, variantId)
         // getAndUpdate, so the check and the claim are one step: two taps
         // landing in the same frame would both pass a read-then-write.
         val busy = adding.getAndUpdate { it + line }.contains(line)
@@ -80,7 +84,7 @@ class CartRepository @Inject constructor(private val api: MiniBozorApi) {
         if (busy) return _cart.value?.let { Outcome.Success(it) }
             ?: Outcome.Failure(AppStrings[R.string.savatga_qoshildi])
         return try {
-            mutate { api.addToCart(CartAddRequest(productId, variantId, colorVariantId, quantity)) }
+            mutate { api.addToCart(CartAddRequest(productId, variantId, quantity)) }
         } finally {
             adding.update { it - line }
         }

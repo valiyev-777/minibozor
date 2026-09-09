@@ -10,7 +10,6 @@ import kotlinx.coroutines.launch
 import uz.minibozor.core.util.Outcome
 import uz.minibozor.data.remote.dto.AddressDto
 import uz.minibozor.data.remote.dto.AddressRequest
-import uz.minibozor.data.remote.dto.CardDto
 import uz.minibozor.data.remote.dto.CheckoutPreviewDto
 import uz.minibozor.data.remote.dto.CheckoutRequest
 import uz.minibozor.data.remote.dto.PickupPointDto
@@ -37,7 +36,15 @@ enum class DeliveryMethod { Courier, Pickup }
  * with their order, and "2 qadam qoldi — manzil va to'lov" is the difference
  * between a screen that waits and a screen that asks.
  */
-enum class CheckoutStep { Address, Time, Payment }
+/**
+ * What the checkout still needs before an order can be placed.
+ *
+ * ``Payment`` went with the card vault. There is nothing to ask for: the
+ * customer pays by card at the door or in cash at the door, and both of those
+ * are complete the moment the tile is tapped. A step that is never missing is
+ * a button that says "next" and does nothing.
+ */
+enum class CheckoutStep { Address, Time }
 
 data class CheckoutState(
     val loading: Boolean = true,
@@ -46,11 +53,9 @@ data class CheckoutState(
     val addresses: List<AddressDto> = emptyList(),
     val pickupPoints: List<PickupPointDto> = emptyList(),
     val slotDays: List<SlotDayDto> = emptyList(),
-    val cards: List<CardDto> = emptyList(),
     val addressId: Int? = null,
     val pickupPointId: Int? = null,
     val slotId: Int? = null,
-    val cardId: Int? = null,
     val paymentMethod: String = "card",
     val delivery: DeliveryMethod = DeliveryMethod.Courier,
     val promoCode: String? = null,
@@ -62,9 +67,6 @@ data class CheckoutState(
 
     val selectedAddress: AddressDto?
         get() = addresses.firstOrNull { it.id == addressId }
-
-    val selectedCard: CardDto?
-        get() = cards.firstOrNull { it.id == cardId }
 
     val selectedPickup: PickupPointDto?
         get() = pickupPoints.firstOrNull { it.id == pickupPointId }
@@ -80,7 +82,6 @@ data class CheckoutState(
                 // Nothing to schedule when the customer is coming to fetch it.
                 DeliveryMethod.Pickup -> if (pickupPointId == null) add(CheckoutStep.Address)
             }
-            if (paymentMethod != "cash" && cardId == null) add(CheckoutStep.Payment)
         }
 
     /** What the button asks for. Null once there is nothing left to ask. */
@@ -111,7 +112,6 @@ class CheckoutViewModel @Inject constructor(
             _state.update { it.copy(loading = true, error = null) }
 
             val addresses = (orders.addresses() as? Outcome.Success)?.data.orEmpty()
-            val cards = (orders.cards() as? Outcome.Success)?.data.orEmpty()
             val slotDays = (orders.slots(3) as? Outcome.Success)?.data.orEmpty()
             val pickups = (orders.pickupPoints() as? Outcome.Success)?.data.orEmpty()
 
@@ -125,13 +125,10 @@ class CheckoutViewModel @Inject constructor(
                     // berish" — the checkout asked for a preview with no code
                     // on it and quietly charged the full amount.
                     promoCode = it.promoCode ?: cart.promoCode.value,
-                    cards = cards,
                     slotDays = slotDays,
                     pickupPoints = pickups,
                     addressId = it.addressId ?: addresses.firstOrNull { a -> a.isDefault }?.id
                         ?: addresses.firstOrNull()?.id,
-                    cardId = it.cardId ?: cards.firstOrNull { c -> c.isDefault && c.status == "active" }?.id
-                        ?: cards.firstOrNull { c -> c.status == "active" }?.id,
                     slotId = it.slotId ?: slotDays.flatMap { d -> d.slots }
                         .firstOrNull { s -> s.available }?.id,
                 )
@@ -183,13 +180,20 @@ class CheckoutViewModel @Inject constructor(
         refreshPreview()
     }
 
-    fun selectCard(id: Int) {
-        _state.update { it.copy(cardId = id, paymentMethod = "card") }
+    /**
+     * How the money changes hands, and that is the whole of the question.
+     *
+     * By card at the door or in cash at the door. There is no card to pick and
+     * none to add: nothing here stores a PAN, and the customer taps the card
+     * machine when the courier arrives.
+     */
+    fun selectCard() {
+        _state.update { it.copy(paymentMethod = "card") }
         refreshPreview()
     }
 
     fun selectCash() {
-        _state.update { it.copy(paymentMethod = "cash", cardId = null) }
+        _state.update { it.copy(paymentMethod = "cash") }
         refreshPreview()
     }
 
@@ -206,24 +210,6 @@ class CheckoutViewModel @Inject constructor(
                         state.pickupPointId != null -> null
                         else -> addresses.firstOrNull { it.isDefault }?.id
                             ?: addresses.firstOrNull()?.id
-                    },
-                )
-            }
-            refreshPreview()
-        }
-    }
-
-    /** Called when returning from "add card", so a new card shows up at once. */
-    fun reloadCards() {
-        viewModelScope.launch {
-            val cards = (orders.cards() as? Outcome.Success)?.data.orEmpty()
-            _state.update { state ->
-                val stillThere = cards.any { it.id == state.cardId }
-                state.copy(
-                    cards = cards,
-                    cardId = if (stillThere) state.cardId else {
-                        cards.firstOrNull { it.isDefault && it.status == "active" }?.id
-                            ?: cards.firstOrNull { it.status == "active" }?.id
                     },
                 )
             }
@@ -264,7 +250,6 @@ class CheckoutViewModel @Inject constructor(
         pickupPointId = pickupPointId,
         slotId = slotId,
         paymentMethod = paymentMethod,
-        paymentCardId = cardId,
         promoCode = promoCode,
     )
 }

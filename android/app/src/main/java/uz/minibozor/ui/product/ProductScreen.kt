@@ -70,10 +70,8 @@ import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.ui.common.MbToastHost
 import uz.minibozor.ui.common.rememberToast
 import uz.minibozor.ui.product.component.ColorPicker
-import uz.minibozor.ui.product.component.OfferRow
 import uz.minibozor.ui.product.component.RatingPanel
 import uz.minibozor.ui.product.component.ReviewRow
-import uz.minibozor.ui.product.component.SellerLine
 import uz.minibozor.ui.product.component.ShelfLine
 import uz.minibozor.core.util.Features
 import uz.minibozor.ui.product.component.SizePicker
@@ -260,9 +258,7 @@ fun ProductScreen(
     // Card photographs first so the cover stays the cover, then the colours in
     // the order the seller listed them, each one appearing once.
     val gallery = remember(product) {
-        val colourShots = product?.variants.orEmpty()
-            .filter { it.kind == "color" }
-            .mapNotNull { it.imageUrl }
+        val colourShots = product?.colours.orEmpty().mapNotNull { it.imageUrl }
         (product?.images.orEmpty() + colourShots).distinct()
     }
 
@@ -278,30 +274,35 @@ fun ProductScreen(
     // tapping the black swatch turns the page to it. Whichever way the choice is
     // made the page agrees with itself, and the count under the picture is the
     // count of what is in the picture.
-    val productColors = remember(product) {
-        product?.variants.orEmpty().filter { it.kind == "color" }
-    }
+    val productColors = remember(product) { product?.colours.orEmpty() }
     val pageOfColor = remember(gallery, productColors) {
         productColors.mapNotNull { color ->
             val page = gallery.indexOf(color.imageUrl ?: return@mapNotNull null)
-            if (page < 0) null else color.id to page
+            if (page < 0) null else color.colour to page
         }.toMap()
     }
     LaunchedEffect(heroPager.currentPage, pageOfColor) {
-        val id = pageOfColor.entries.firstOrNull { it.value == heroPager.currentPage }?.key
-        if (id != null && id != state.selectedColorId) viewModel.selectColor(id)
+        val name = pageOfColor.entries.firstOrNull { it.value == heroPager.currentPage }?.key
+        if (name != null && name != state.selectedColour) viewModel.selectColour(name)
     }
-    LaunchedEffect(state.selectedColorId, pageOfColor) {
-        val page = pageOfColor[state.selectedColorId]
+    LaunchedEffect(state.selectedColour, pageOfColor) {
+        val page = pageOfColor[state.selectedColour]
         if (page != null && page != heroPager.currentPage) heroPager.animateScrollToPage(page)
     }
 
     // What the page is actually about: the colour on show, or the product
-    // itself when it has no colours to speak of. A colour the shop does not
-    // count apart falls back to the whole shelf.
-    val selectedColor = productColors.firstOrNull { it.id == state.selectedColorId }
+    // itself when it has no colours to speak of. A colour carries no count of
+    // its own any more — the cells under it do — so the shelf is the sum of
+    // that colour's cells, and the product's own figure where there are none.
+    val selectedColor = productColors.firstOrNull { it.colour == state.selectedColour }
         ?: productColors.firstOrNull()
-    val shelfLeft = selectedColor?.stockLeft ?: product?.stockLeft ?: 0
+    val ofColour = product?.variants.orEmpty()
+        .filter { selectedColor == null || it.colour == selectedColor.colour }
+    val shelfLeft = if (ofColour.isEmpty()) {
+        product?.stockLeft ?: 0
+    } else {
+        ofColour.sumOf { it.stockLeft }
+    }
     val shelfInStock = product?.inStock == true && (selectedColor?.inStock ?: true)
 
     // And what can actually be bought, which is a narrower question than what
@@ -312,22 +313,9 @@ fun ProductScreen(
     // be separate splits of one total and the ceiling was whichever was
     // scarcer, which offered the last black 41 for as long as a blue one was
     // left. The server counts it the same way, in `shelf_left`.
-    val selectedSize = product?.variants.orEmpty()
-        .firstOrNull { it.kind == "size" && it.id == state.selectedSizeId }
+    val selectedSize = state.selectedVariant?.takeIf { it.size.isNotBlank() }
     val buyableLeft = selectedSize?.stockLeft ?: shelfLeft
     val buyable = shelfInStock && (selectedSize?.inStock ?: true)
-
-    // Who the price at the top of the page belongs to.
-    //
-    // `product.seller` is a line of the product's own, and on a card several
-    // sellers offer it names none of them — it says "Mini Bozor" whoever is
-    // actually quoting. The winning offer is the one whose price the page is
-    // showing, so its seller is the honest answer to "who am I buying from",
-    // and the product's own line is only the fallback for a card no offer has
-    // been attached to yet.
-    val winner = state.offers.firstOrNull { it.isWinner }
-    val sellerName = winner?.seller?.name?.takeIf { it.isNotBlank() }
-        ?: product?.seller.orEmpty()
 
     Box(
         Modifier
@@ -342,17 +330,15 @@ fun ProductScreen(
                     Modifier.windowInsetsPadding(WindowInsets.statusBars),
                 )
                 else -> product?.let { product ->
-                    // The sizes of the colour on screen, not of the product.
+                    // The cells of the colour on screen, not of the product.
                     //
-                    // A size belongs to a colour and holds that pair's own
-                    // count, so a shirt with two colours has two sets of size
-                    // rows. Showing them all put "L" on the page twice and let
-                    // the last black L be sold as long as a white one was left.
-                    val sizes = product.variants.filter {
-                        it.kind == "size" &&
-                            (it.parentId == null || it.parentId == state.selectedColorId)
-                    }
-                    val colors = product.variants.filter { it.kind == "color" }
+                    // A cell is a colour and a size together and holds that
+                    // pair's own count, so a shirt in two colours has two sets
+                    // of size rows. Showing them all put "L" on the page twice
+                    // and let the last black L be sold while a white one was
+                    // still on the shelf.
+                    val sizes = state.sizes.filter { it.size.isNotBlank() }
+                    val colors = product.colours.filter { it.colour.isNotBlank() }
                     val hasOptions = sizes.isNotEmpty() || colors.isNotEmpty()
 
                     LazyColumn(
@@ -477,17 +463,10 @@ fun ProductScreen(
                                         soldCount = product.soldCount,
                                         inStock = shelfInStock,
                                     )
-                                    // And who is selling it, on the panel
-                                    // rather than folded away in the small
-                                    // print. On a marketplace the seller is
-                                    // part of what is being bought — a price
-                                    // with no name against it is half a
-                                    // sentence — and the row three sections
-                                    // down was behind a "Batafsil" nobody taps.
-                                    if (sellerName.isNotBlank()) {
-                                        Spacer(Modifier.height(7.dp))
-                                        SellerLine(sellerName, state.offers.size)
-                                    }
+                                    // Nobody is named beside the price. One
+                                    // company sells here, and a shop that puts
+                                    // its own name under every price is telling
+                                    // the customer something they already know.
                                 }
                             }
                         }
@@ -503,8 +482,8 @@ fun ProductScreen(
                                         if (colors.isNotEmpty()) {
                                             ColorPicker(
                                                 colors = colors,
-                                                selectedId = state.selectedColorId,
-                                                onSelect = viewModel::selectColor,
+                                                selected = state.selectedColour,
+                                                onSelect = viewModel::selectColour,
                                                 productImages = gallery,
                                             )
                                         }
@@ -516,7 +495,7 @@ fun ProductScreen(
                                         if (sizes.isNotEmpty()) {
                                             SizePicker(
                                                 sizes = sizes,
-                                                selectedId = state.selectedSizeId,
+                                                selectedId = state.selectedVariantId,
                                                 onSelect = viewModel::selectSize,
                                             )
                                         }
@@ -525,38 +504,12 @@ fun ProductScreen(
                             }
                         }
 
-                        // Every seller offering this, straight after the
-                        // choice of size and colour and before the prose.
-                        //
-                        // One card, several sellers — that is the whole of what
-                        // makes this a marketplace rather than a shop, and the
-                        // customer's side of it did not show a trace of it. The
-                        // page picked one price and named nobody. So: the list
-                        // behind the number, at the point where somebody has
-                        // decided what they want and is deciding what to pay
-                        // for it. One offer means there is no choice to make
-                        // and the section stays away.
-                        if (state.offers.size > 1) {
-                            item(key = "offers") {
-                                MbReveal(reveal, "offers", BlockOffers, modifier = SectionGap) {
-                                    MbCard(shape = RectangleShape) {
-                                        SectionHeader(
-                                            title = stringResource(R.string.boshqa_sotuvchilar),
-                                            subtitle = pluralStringResource(
-                                                R.plurals.n_sotuvchi,
-                                                state.offers.size,
-                                                state.offers.size,
-                                            ),
-                                        )
-                                        Spacer(Modifier.height(4.dp))
-                                        state.offers.forEachIndexed { index, offer ->
-                                            if (index > 0) MbDivider()
-                                            OfferRow(offer)
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        // A section listing every seller offering this
+                        // stood here. One card with several prices on it was
+                        // the whole of what made this a marketplace, and there
+                        // is one company now — so there is no choice of who to
+                        // buy from and nothing to put at this point in the
+                        // page.
 
                         // Straight after the choice, and above the small print.
                         //
@@ -645,23 +598,12 @@ fun ProductScreen(
                                                     product.warranty,
                                                 )
                                             }
-                                            MbDivider()
-                                            DeliveryRow(
-                                                "basket",
-                                                stringResource(R.string.sotuvchi),
-                                                // The seller, and only the
-                                                // seller. What is left moved to
-                                                // the buy bar, where the count
-                                                // is a reason rather than a
-                                                // clause in a row about
-                                                // delivery.
-                                                //
-                                                // The same name the panel at
-                                                // the top prints: whoever is
-                                                // actually quoting the price,
-                                                // not the product's own line.
-                                                sellerName,
-                                            )
+                                            // A "Sotuvchi" row stood here. One
+                                            // company sells everything in this
+                                            // shop, so the answer was always
+                                            // the shop's own name — which is
+                                            // the one thing the customer did
+                                            // not need telling.
                                         }
                                     }
                                 }

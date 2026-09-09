@@ -140,11 +140,11 @@ fun ProfileScreen(
             item {
                 MbCard(padding = 6.dp) {
                     val rows = listOf(
-                        Triple("card", stringResource(R.string.tolov_kartalari), pluralStringResource(
-            R.plurals.n_items,
-            overview?.cardsCount ?: 0,
-            overview?.cardsCount ?: 0,
-        )) to "cards",
+                        // The card vault went with the marketplace: a shopper
+                        // pays by card at checkout or in cash at the door, and
+                        // neither wants a stored PAN. `me/overview` still
+                        // answers `cards_count` at nought so this screen keeps
+                        // its shape, but there is nothing behind the row.
                         Triple("pin", stringResource(R.string.manzillarim), pluralStringResource(
             R.plurals.n_items,
             overview?.addressesCount ?: 0,

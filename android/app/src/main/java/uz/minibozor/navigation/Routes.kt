@@ -42,7 +42,6 @@ object Routes {
     /** Adding one; reachable from checkout and from the profile alike. */
     const val ADDRESS_FORM = "address_form"                 // 20
     const val DELIVERY_TIME = "delivery_time"              // 21
-    const val PAYMENT_METHOD = "payment_method"            // 22
     const val CONFIRM = "confirm"                          // 23
     const val ORDER_PLACED = "order_placed/{orderId}"      // 24
     fun orderPlaced(orderId: Int) = "order_placed/$orderId"
@@ -60,7 +59,6 @@ object Routes {
 
     // Account
     const val PERSONAL = "personal"                        // 31
-    const val CARDS = "cards"                              // 32
     const val ADDRESSES = "addresses"                      // 33
     const val MY_REVIEWS = "my_reviews"                    // 34
     const val FAVORITES = "favorites"                      // 35

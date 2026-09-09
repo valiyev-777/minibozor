@@ -71,23 +71,12 @@ fun CheckoutScreen(
     onBack: () -> Unit,
     onEditAddress: () -> Unit,
     onEditTime: () -> Unit,
-    onEditPayment: () -> Unit,
-    /** The card form, for a customer who has none saved yet. */
-    onAddCard: () -> Unit,
     onOpenCart: () -> Unit,
     onConfirm: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val preview = state.preview
     val courier = state.delivery == DeliveryMethod.Courier
-
-    // The card form is reached straight from here now, so this screen is the
-    // one that has to notice a card was added. The payment list did its own
-    // reload; going around it left the tile still saying "Karta qo'shish".
-    LifecycleResumeEffect(Unit) {
-        viewModel.reloadCards()
-        onPauseOrDispose {}
-    }
 
     MbScreen(
         topBar = { MbTopBar(stringResource(R.string.rasmiylashtirish), onBack = onBack) },
@@ -129,22 +118,12 @@ fun CheckoutScreen(
                                 if (courier) stringResource(R.string.manzil_qoshish)
                                 else stringResource(R.string.punkt_tanlash)
                             CheckoutStep.Time -> stringResource(R.string.yetkazish_vaqti_qisqa)
-                            CheckoutStep.Payment -> stringResource(R.string.karta_qoshish)
                             null -> stringResource(R.string.davom_etish)
                         },
                         onClick = {
                             when (state.nextStep) {
                                 CheckoutStep.Address -> onEditAddress()
                                 CheckoutStep.Time -> onEditTime()
-                                // The button says "Karta qo'shish", so it had
-                                // better add a card: the list of saved cards is
-                                // no answer to a customer who has none.
-                                CheckoutStep.Payment ->
-                                    if (state.cards.none { it.status == "active" }) {
-                                        onAddCard()
-                                    } else {
-                                        onEditPayment()
-                                    }
                                 null -> onConfirm()
                             }
                         },
@@ -329,7 +308,6 @@ fun CheckoutScreen(
                     } else {
                         stringResource(R.string.punktda_tolash)
                     }
-                    val card = preview.card
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         MethodTile(
                             title = stringResource(R.string.naqd_pul),
@@ -340,44 +318,19 @@ fun CheckoutScreen(
                         )
                         MethodTile(
                             title = stringResource(R.string.karta),
-                            note = card?.let {
-                                stringResource(R.string.karta_niqob, it.last4)
-                            } ?: stringResource(R.string.karta_qoshish),
+                            // Where the money changes hands, same as the cash
+                            // tile beside it: nothing here stores a card, and
+                            // the customer taps the machine at the door.
+                            note = cashNote,
                             selected = !cash,
-                            onClick = {
-                                // A card to pay with, or the screen that adds
-                                // one. Selecting "Karta" with no card saved
-                                // used to leave the order needing a step it
-                                // did not offer from here.
-                                val usable = state.cards.firstOrNull { it.status == "active" }
-                                if (usable != null) viewModel.selectCard(usable.id) else onAddCard()
-                            },
+                            onClick = viewModel::selectCard,
                             modifier = Modifier.weight(1f),
                         )
                     }
 
-                    // Which card, once it is a card being paid with. Cash needs
-                    // no second line — the tile has already said where the money
-                    // changes hands.
-                    if (!cash) {
-                        Spacer(Modifier.height(14.dp))
-                        StepRow(
-                            glyph = "card",
-                            title = card?.let {
-                                stringResource(R.string.karta_niqob, it.last4)
-                            } ?: stringResource(R.string.karta_qoshilmagan),
-                            subtitle = card?.brand
-                                ?: stringResource(R.string.karta_yoki_naqd),
-                            action = if (card == null) {
-                                stringResource(R.string.karta_qoshish)
-                            } else {
-                                null
-                            },
-                            // Straight to the form when there is nothing to
-                            // choose between, and to the list when there is.
-                            onClick = if (card == null) onAddCard else onEditPayment,
-                        )
-                    }
+                    // A row naming which card stood here. There is no card
+                    // to name: the two tiles above are the whole choice, and
+                    // both of them are complete the moment one is tapped.
                 }
             }
 
