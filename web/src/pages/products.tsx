@@ -12,7 +12,7 @@
  * the ledger, and neither is edited from a form here.
  */
 
-import { Check, Image as ImageIcon, Search } from "lucide-react"
+import { Check, Image as ImageIcon, Loader2, Search, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useSearchParams } from "react-router-dom"
 
@@ -24,6 +24,7 @@ import { cn } from "@/lib/cn"
 import { groups, money } from "@/lib/format"
 import {
   useAddImage,
+  useDeleteCard,
   useImages,
   useProducts,
   usePublish,
@@ -133,6 +134,67 @@ function Status({ status }: { status: AdminProduct["status"] }) {
 
 // ------------------------------------------------------------------- one card
 
+/**
+ * Remove a card, with the confirmation in the button rather than in a dialog.
+ *
+ * Two taps: the first turns the button into the sentence it is about to carry
+ * out, the second does it. A dialog would say the same thing in a box that has
+ * to be dismissed, and a single tap on "O'chirish" beside a catalogue is the
+ * kind of mistake nobody notices until the card is gone.
+ *
+ * What actually happens is the server's call: a card nothing has happened to is
+ * deleted, and one with a movement or an order against it is archived, because
+ * deleting that would leave an order naming a product that does not exist. The
+ * answer says which it did.
+ */
+function DeleteCard({
+  id,
+  title,
+  onGone,
+}: {
+  id: number
+  title: string
+  onGone: () => void
+}) {
+  const remove = useDeleteCard(id)
+  const [asked, setAsked] = useState(false)
+
+  if (!asked) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="gap-1 text-danger"
+        onClick={() => setAsked(true)}
+      >
+        <Trash2 className="size-4" />
+        O'chirish
+      </Button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-micro text-danger">{title || "Bu karta"} — aniqmi?</span>
+      <Button
+        size="sm"
+        className="bg-danger text-danger-ink hover:bg-danger"
+        disabled={remove.isPending}
+        onClick={() =>
+          remove.mutate(undefined, {
+            onSuccess: onGone,
+          })
+        }
+      >
+        {remove.isPending ? <Loader2 className="size-4 animate-spin" /> : "Ha"}
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => setAsked(false)}>
+        Yo'q
+      </Button>
+    </div>
+  )
+}
+
 function Card({ id, onBack }: { id: number; onBack: () => void }) {
   const products = useProducts("", "")
   const grid = useVariants(id)
@@ -155,12 +217,15 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
         title={product?.title ?? "Karta"}
         subtitle={product ? `${product.sku} · ${money(product.price)}` : ""}
       >
+        <DeleteCard id={id} title={product?.title ?? ""} onGone={onBack} />
         <Button variant="ghost" onClick={onBack}>
           Ro'yxatga
         </Button>
       </PageHeader>
 
-      <Problem error={grid.error || images.error || publish.error || addImage.error} />
+      <Problem
+        error={grid.error || images.error || publish.error || addImage.error}
+      />
 
       <section className="rounded-panel border bg-surface p-3">
         <h2 className="mb-2 text-small font-semibold">Rang × o'lcham</h2>

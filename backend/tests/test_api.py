@@ -2782,7 +2782,10 @@ def test_a_colour_with_no_photograph_is_not_in_the_shop(
     square with a hex swatch behind it in front of a customer. So the colour
     waits and the card does not.
     """
-    made = _pile(client, warehouse, kind="Ko'ylak", colour="Qora", sizes=(("M", 4),), code="C-04-01")
+    made = _pile(
+        client, warehouse, kind="Ko'ylak", colour="Qora",
+        sizes=(("M", 4),), code="C-04-01",
+    )
     card = made.json()["product"]
 
     _category(client, seller, "koylaklar")
@@ -2912,3 +2915,78 @@ def test_sizes_read_in_the_order_they_are_worn(
         f"{API}/admin/products/{shoes.json()['product']['id']}/variants", headers=seller
     )
     assert [row["size"] for row in grid.json()] == ["39", "41", "100"]
+
+
+def test_a_card_with_no_history_is_deleted_and_one_with_history_is_archived(
+    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+) -> None:
+    """The line is history, not status.
+
+    Nothing could remove a card at all, so a duplicate written at the receiving
+    desk stayed in the catalogue for ever with `draft` as the only way to hide
+    it. A card nothing has happened to is a piece of writing somebody got
+    wrong; a card with a movement against it is part of what happened here, and
+    deleting that would leave a ledger with a hole in it.
+    """
+    _category(client, admin, "sumkalar")
+    written = _card(client, admin, sku="ALFA-TYPO-1", category="sumkalar")
+    gone = client.delete(f"{API}/admin/products/{written['id']}", headers=admin)
+    assert gone.status_code == 200, gone.text
+    assert client.get(
+        f"{API}/admin/products/{written['id']}", headers=admin
+    ).status_code == 404
+
+    booked = _pile(client, warehouse, kind="Sumka", colour="Qora", code="C-03-02")
+    card = booked.json()["product"]
+    kept = client.delete(f"{API}/admin/products/{card['id']}", headers=admin)
+    assert kept.status_code == 200, kept.text
+    after = client.get(f"{API}/admin/products/{card['id']}", headers=admin)
+    assert after.status_code == 200
+    assert after.json()["status"] == "archived"
+
+
+def test_emptying_a_cell_writes_the_goods_off_rather_than_forgetting_them(
+    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+) -> None:
+    """A room being cleared is still a room with a ledger.
+
+    Deleting the placements would be quicker and would leave the ledger
+    disagreeing with the shelf for ever with nothing to explain it. So every
+    line leaves the building the way any other line does, with the reason on
+    it, and the invariant holds afterwards.
+    """
+    booked = _pile(
+        client, warehouse, kind="Ro'mol", colour="Oq", sizes=(("", 7),), code="C-03-03"
+    )
+    leaf = booked.json()["labels"][0]["variant_id"]
+    assert _in("C-03-03", leaf) == 7
+
+    emptied = client.post(
+        f"{API}/warehouse/stock/empty",
+        json={"code": "C-03-03", "reason": "sanoqda topilmadi"},
+        headers=admin,
+    )
+    assert emptied.status_code == 200, emptied.text
+    assert emptied.json() == {"moved": 1, "units": 7, "cells": 1}
+    assert _in("C-03-03", leaf) == 0
+    _assert_the_room_adds_up()
+
+    moves = client.get(
+        f"{API}/warehouse/stock/movements",
+        params={"variant_id": leaf, "kind": "write_off"},
+        headers=warehouse,
+    )
+    assert moves.json()["total"] == 1
+    assert moves.json()["items"][0]["reason"] == "sanoqda topilmadi"
+
+
+def test_only_the_office_may_empty_the_room(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """The bench moves goods; it does not decide they stopped existing."""
+    refused = client.post(
+        f"{API}/warehouse/stock/empty",
+        json={"reason": "hammasini tozalash"},
+        headers=warehouse,
+    )
+    assert refused.status_code == 403, refused.text

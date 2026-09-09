@@ -500,6 +500,41 @@ export function useFileCard(productId: number) {
   })
 }
 
+/**
+ * A card gone, or archived where it has history.
+ *
+ * The server decides which: a card nothing has happened to is a piece of
+ * writing somebody got wrong, and one with a movement or an order against it is
+ * part of what happened here. The message says which it did.
+ */
+export function useDeleteCard(productId: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      api<{ message: string }>(`/admin/products/${productId}`, { method: "DELETE" }),
+    onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
+  })
+}
+
+/**
+ * Take everything off a cell, or out of the whole room.
+ *
+ * The one write here that makes stock disappear rather than move, so it asks
+ * for a reason and the server refuses it to anybody but the office.
+ */
+export function useEmptyStock() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { code?: string; reason: string }) =>
+      api<{ moved: number; units: number; cells: number }>(
+        "/warehouse/stock/empty",
+        { body: input },
+      ),
+    onSuccess: () =>
+      invalidate(client, [keys.locations, ["products"], keys.dashboard, ["supplies"]]),
+  })
+}
+
 /** The specification table, replaced whole — the apps read it as a table. */
 export function useWriteSpecs(productId: number) {
   const client = useQueryClient()

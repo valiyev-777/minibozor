@@ -328,6 +328,21 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Нельзя переместить в ту же ячейку",
         "en": "That is the cell it is already in",
     },
+    "card_deleted": {
+        "uz": "Karta o'chirildi",
+        "ru": "Карточка удалена",
+        "en": "The card is gone",
+    },
+    "card_archived_not_deleted": {
+        "uz": "Kartaning tarixi bor — o'chirilmadi, arxivga olindi",
+        "ru": "У карточки есть история — не удалена, а в архиве",
+        "en": "This card has history — archived rather than deleted",
+    },
+    "card_has_history": {
+        "uz": "qoldiq harakati yoki buyurtmasi bor",
+        "ru": "есть движение остатка или заказ",
+        "en": "a stock movement or an order names it",
+    },
     "no_such_cell": {
         "uz": "Bunday yacheyka yo'q: {code}",
         "ru": "Такой ячейки нет: {code}",

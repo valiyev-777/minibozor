@@ -38,11 +38,13 @@ from app.deps import AdminUser, CatalogReader, CatalogWriter, SessionDep
 from app.models import (
     Brand,
     Category,
+    OrderItem,
     Product,
     ProductImage,
     ProductSpec,
     ProductStatus,
     ProductVariant,
+    StockMovement,
     User,
 )
 
@@ -226,6 +228,81 @@ def _create_card(
     session.commit()
     session.refresh(product)
     return sv.admin_product_out(session, product)
+
+
+@router.delete("/products/{product_id}", response_model=s.Message)
+def delete_product(
+    product_id: int, user: AdminUser, session: SessionDep
+) -> s.Message:
+    """A card with no history, gone. A card with history, archived.
+
+    Nothing here could remove a card at all, so a mistake written at the
+    receiving desk — a duplicate, a typo, goods that turned out to be something
+    else — stayed in the catalogue for ever with `draft` as the only way to
+    hide it.
+
+    **The line is history, not status.** A card that has never been booked in
+    and never been ordered is a piece of writing somebody got wrong, and it
+    goes. A card with a stock movement or an order line against it is part of
+    what happened here: deleting it would leave an order naming a product that
+    does not exist, and a ledger with a hole in it. That one is archived — out
+    of the shop, still answerable — and the caller is told which of the two it
+    got.
+    """
+    product = _product(session, product_id)
+    variants = pr.variants(session, product.id)
+    ids = [v.id for v in variants]
+
+    moved = ids and session.exec(
+        select(StockMovement).where(col(StockMovement.variant_id).in_(ids))
+    ).first()
+    ordered = session.exec(
+        select(OrderItem).where(OrderItem.product_id == product.id)
+    ).first()
+
+    if moved or ordered:
+        tr.ensure(tr.PRODUCT_TRANSITIONS, product.status, ProductStatus.ARCHIVED)
+        product.status = ProductStatus.ARCHIVED
+        session.add(product)
+        audit.record(
+            session,
+            actor=user,
+            action="product.archive",
+            entity="product",
+            entity_id=product.id,
+            field="status",
+            old=product.status,
+            new=ProductStatus.ARCHIVED,
+            note=i18n.label("card_has_history"),
+        )
+        session.commit()
+        return s.Message(message=i18n.label("card_archived_not_deleted"))
+
+    for row in session.exec(
+        select(ProductSpec).where(ProductSpec.product_id == product.id)
+    ).all():
+        session.delete(row)
+    for row in session.exec(
+        select(ProductImage).where(ProductImage.product_id == product.id)
+    ).all():
+        session.delete(row)
+    for row in variants:
+        session.delete(row)
+
+    audit.record(
+        session,
+        actor=user,
+        action="product.delete",
+        entity="product",
+        entity_id=product.id,
+        field="sku",
+        old=product.sku,
+        new=None,
+        note=product.title,
+    )
+    session.delete(product)
+    session.commit()
+    return s.Message(message=i18n.label("card_deleted"))
 
 
 @router.patch(

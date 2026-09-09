@@ -38,7 +38,13 @@ from app import products as pr
 from app import schemas as s
 from app import services as sv
 from app import stock as st
-from app.deps import CatalogReader, SessionDep, StockViewer, WarehouseUser
+from app.deps import (
+    AdminUser,
+    CatalogReader,
+    SessionDep,
+    StockViewer,
+    WarehouseUser,
+)
 from app.models import (
     Brand,
     Location,
@@ -49,6 +55,7 @@ from app.models import (
     ProductVariant,
     StockMovement,
     StockMovementKind,
+    StockPlacement,
     Supply,
     SupplyLine,
     SupplyStatus,
@@ -589,6 +596,86 @@ def cancel_supply(
 
 
 # --------------------------------------------------------------------------- the shelf
+
+
+@router.post(
+    "/stock/empty",
+    response_model=s.EmptiedOut,
+    summary="Take everything off a cell, or out of the whole room",
+)
+def empty_room(
+    payload: s.EmptyRoomIn, user: AdminUser, session: SessionDep
+) -> s.EmptiedOut:
+    """The one operation here that makes stock disappear rather than move.
+
+    Everything else in this file is a journey: goods arrive, cross the room,
+    go out in a courier's bag. This writes off what the shop still believes it
+    has — for a room being cleared to start again, or a cell whose contents
+    turned out not to exist.
+
+    **Still a movement per line.** It would be quicker to delete the
+    placements, and the ledger would then disagree with the shelf for ever
+    with nothing to explain it. So every line leaves the building the way any
+    other line does — ``kind=write_off``, from where it was, to nowhere — the
+    invariant that a placement equals the sum of its movements survives, and
+    the reason is on every row.
+    """
+    if payload.code.strip():
+        cells = [_pile_cell(session, payload.code)]
+    else:
+        cells = [
+            row
+            for row in session.exec(select(Location)).all()
+            if row.kind is not LocationKind.COURIER
+        ]
+
+    reason = payload.reason.strip()
+    moved = units = touched = 0
+    products: set[int] = set()
+    for cell in cells:
+        placements = session.exec(
+            select(StockPlacement).where(StockPlacement.location_id == cell.id)
+        ).all()
+        if not placements:
+            continue
+        touched += 1
+        for row in placements:
+            # Read before the move. ``st.move`` decrements this very row, so
+            # counting after it counted nought every time — the answer said
+            # "one line moved, no units" and the caller had no way to tell that
+            # from a cell that was already empty.
+            qty = row.qty
+            variant = _variant(session, row.variant_id)
+            st.move(
+                session,
+                variant=variant,
+                qty=qty,
+                kind=StockMovementKind.WRITE_OFF,
+                frm=cell,
+                to=None,
+                actor=user,
+                reason=reason,
+            )
+            moved += 1
+            units += qty
+            products.add(variant.product_id)
+
+    audit.record(
+        session,
+        actor=user,
+        action="stock.empty",
+        entity="location",
+        entity_id=cells[0].id if len(cells) == 1 else None,
+        field="qty",
+        old=units,
+        new=0,
+        note=f"{payload.code.strip() or 'hamma joy'} · {reason}",
+    )
+    session.commit()
+    for product_id in sorted(products):
+        pr.refresh(session, product_id)
+    session.commit()
+    return s.EmptiedOut(moved=moved, units=units, cells=touched)
 
 
 @router.post(

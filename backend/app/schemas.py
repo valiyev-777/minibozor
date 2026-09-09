@@ -854,6 +854,28 @@ class PutawayLineOut(CellContentOut):
     suggestion: str = ""       # a cell this model is already in, if there is one
 
 
+class EmptyRoomIn(BaseModel):
+    """Take everything off a cell, or out of the whole room.
+
+    A reason is required and there is no default. This writes off goods that
+    the shop still believes it has — the one operation here that makes stock
+    disappear rather than move — and "why" is the only thing that tells a
+    stocktake three months later from a mistake somebody made in a hurry.
+    """
+
+    # Empty when the whole room is meant. A cell code narrows it to one cell.
+    code: str = Field(default="", max_length=20)
+    reason: str = Field(min_length=3, max_length=200)
+
+
+class EmptiedOut(BaseModel):
+    """What left, so the answer is not a shrug."""
+
+    moved: int = 0
+    units: int = 0
+    cells: int = 0
+
+
 class SuggestedCellOut(BaseModel):
     """The cell the receiving form should offer, or an empty code.
 

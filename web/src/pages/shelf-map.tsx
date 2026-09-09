@@ -30,7 +30,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/cn"
 import { age, groups, units } from "@/lib/format"
-import { useLocation, useMove, useShelfMap, useWhereIs } from "@/lib/queries"
+import {
+  useEmptyStock,
+  useLocation,
+  useMove,
+  useShelfMap,
+  useWhereIs,
+} from "@/lib/queries"
+import { useSession } from "@/lib/session"
 import type { CellContent, Location } from "@/lib/types"
 
 // A tile that has been standing this long is the one thing on the screen that
@@ -79,6 +86,7 @@ export function ShelfMapPage() {
             </button>
           ) : null}
         </div>
+        <EmptyRoom />
       </PageHeader>
 
       <Problem error={room.error} />
@@ -333,6 +341,10 @@ function CellSheet({ code, onClose }: { code: string | null; onClose: () => void
               />
             </dl>
 
+            {place.data.contents.length ? (
+              <EmptyCell code={place.data.code} onDone={onClose} />
+            ) : null}
+
             {place.data.contents.length === 0 ? (
               <Empty what="Bu joy bo'sh." />
             ) : (
@@ -367,6 +379,157 @@ function CellSheet({ code, onClose }: { code: string | null; onClose: () => void
         ) : null}
       </aside>
     </div>
+  )
+}
+
+/**
+ * Clear the whole room, which is the office's to decide and nobody else's.
+ *
+ * For a shop starting again — a stocktake that found nothing where the books
+ * said something, or a test catalogue being thrown away before the real one
+ * goes in. The bench moves goods; it does not decide they stopped existing, so
+ * the server refuses this to anybody but an admin and the button is not drawn
+ * for them either.
+ *
+ * The confirmation is the word itself, typed. A cell asks for a reason and
+ * that is enough; the whole room is the kind of thing somebody should have to
+ * mean, and "OK" in a dialog is not meaning it.
+ */
+function EmptyRoom() {
+  const { staff } = useSession()
+  const empty = useEmptyStock()
+  const [open, setOpen] = useState(false)
+  const [word, setWord] = useState("")
+  const [done, setDone] = useState<string | null>(null)
+
+  if (staff?.role !== "admin") return null
+
+  if (done) {
+    return <span className="text-micro text-good">{done}</span>
+  }
+
+  if (!open) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-danger"
+        onClick={() => setOpen(true)}
+      >
+        Omborni bo'shatish
+      </Button>
+    )
+  }
+
+  return (
+    <form
+      className="flex items-center gap-2 rounded-control border border-danger bg-danger-soft p-2"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (word.trim().toUpperCase() !== "BO'SHATISH") return
+        empty.mutate(
+          { reason: "ombor to'liq bo'shatildi" },
+          {
+            onSuccess: (out) => {
+              setOpen(false)
+              setWord("")
+              setDone(`${out.cells} yacheyka · ${out.units} dona hisobdan chiqdi`)
+            },
+          },
+        )
+      }}
+    >
+      <span className="text-micro text-danger">
+        Hamma yacheyka hisobdan chiqadi. Tasdiqlash uchun <b>BO'SHATISH</b> deb
+        yozing:
+      </span>
+      <Input
+        autoFocus
+        value={word}
+        onChange={(event) => setWord(event.target.value)}
+        aria-label="Tasdiqlash so'zi"
+        className="h-control w-36"
+      />
+      <Button
+        type="submit"
+        size="sm"
+        className="bg-danger text-danger-ink hover:bg-danger"
+        disabled={word.trim().toUpperCase() !== "BO'SHATISH" || empty.isPending}
+      >
+        {empty.isPending ? <Loader2 className="size-4 animate-spin" /> : "Bo'shatish"}
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+        Bekor
+      </Button>
+    </form>
+  )
+}
+
+/**
+ * Take everything off this cell, and off the books.
+ *
+ * Not a move: a move needs somewhere to move to, and this is for a cell whose
+ * contents turned out not to exist — a miscount, goods thrown away, a room
+ * being cleared to start again. Every line leaves the building the way any
+ * other line does, so the ledger still explains the shelf afterwards.
+ *
+ * The reason is required, and typed rather than picked: three months later it
+ * is the only thing that tells a stocktake from a mistake somebody made in a
+ * hurry. Two steps, because one tap beside a full cell is a mistake nobody
+ * notices until the count is gone.
+ */
+function EmptyCell({ code, onDone }: { code: string; onDone: () => void }) {
+  const empty = useEmptyStock()
+  const [asked, setAsked] = useState(false)
+  const [reason, setReason] = useState("")
+
+  if (!asked) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAsked(true)}
+        className="mb-3 text-micro text-danger underline"
+      >
+        Yacheykani bo'shatish
+      </button>
+    )
+  }
+
+  return (
+    <form
+      className="mb-3 space-y-2 rounded-control border border-danger bg-danger-soft p-2"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (reason.trim().length < 3) return
+        empty.mutate({ code, reason: reason.trim() }, { onSuccess: onDone })
+      }}
+    >
+      <p className="text-micro text-danger">
+        {code} dagi hamma narsa hisobdan chiqadi. Nega?
+      </p>
+      <Input
+        autoFocus
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        placeholder="sanoqda topilmadi"
+        aria-label="Sabab"
+        className="h-control"
+      />
+      <div className="flex gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          className="bg-danger text-danger-ink hover:bg-danger"
+          disabled={reason.trim().length < 3 || empty.isPending}
+        >
+          {empty.isPending ? <Loader2 className="size-4 animate-spin" /> : "Bo'shatish"}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setAsked(false)}>
+          Bekor
+        </Button>
+      </div>
+      <Problem error={empty.error} />
+    </form>
   )
 }
 
