@@ -2551,3 +2551,71 @@ def test_a_card_with_colours_will_not_take_a_colourless_pile(
     refused = _pile(client, warehouse, product_id=card["id"], colour="", code="B-02-01")
     assert refused.status_code == 400, refused.text
     assert "Oq" in refused.json()["detail"]
+
+
+def test_the_desk_keeps_one_spelling_per_thing(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """`nike`, `NIKE` and `Nike` are one chip, not three.
+
+    The vocabulary is learned from what people type, so it also learns their
+    typos — and three chips for one brand is worse than no chips, because now
+    somebody has to choose between two right answers.
+    """
+    first = _pile(client, warehouse, kind="sumka", brand="nike", colour="qora", code="C-01-01")
+    assert first.status_code == 201, first.text
+    assert first.json()["product"]["title"] == "Sumka · Nike · Qora"
+
+    again = _pile(client, warehouse, kind="SUMKA", brand="NIKE", colour="QORA", code="C-01-02")
+    assert again.status_code == 201, again.text
+    # The same brand row, not a second one spelt louder.
+    assert again.json()["product"]["brand_slug"] == first.json()["product"]["brand_slug"]
+
+    words = client.get(f"{API}/warehouse/vocab", headers=warehouse).json()
+    assert words["brands"].count("Nike") == 1
+    assert "NIKE" not in words["brands"] and "nike" not in words["brands"]
+    assert "Sumka" in words["kinds"] and "SUMKA" not in words["kinds"]
+    assert "Qora" in words["colours"] and "qora" not in words["colours"]
+
+
+def test_a_brand_written_badly_once_is_tidied_in_place(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """Otherwise the chip reads `Nike` and the card it writes reads `nike`.
+
+    The row keeps lending its spelling to every card titled from it, so the
+    catalogue disagrees with the form that wrote it. Tidied on the way past.
+    """
+    sloppy = _pile(client, warehouse, kind="Kurtka", brand="adidas", colour="Qora", code="C-02-01")
+    assert sloppy.status_code == 201, sloppy.text
+    assert sloppy.json()["product"]["title"] == "Kurtka · Adidas · Qora"
+
+    # The chip now offers `Adidas`; tapping it must land on the same row and
+    # title the next card the same way.
+    words = client.get(f"{API}/warehouse/vocab", headers=warehouse).json()
+    assert "Adidas" in words["brands"]
+
+    again = _pile(client, warehouse, kind="Kurtka", brand="Adidas", colour="Oq", code="C-02-02")
+    assert again.json()["product"]["title"] == "Kurtka · Adidas · Oq"
+    assert again.json()["product"]["brand_slug"] == sloppy.json()["product"]["brand_slug"]
+
+
+def test_the_card_search_matches_every_word_in_any_order(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """"krossovka nike" has to find "Krossovka · Nike · Qora".
+
+    A single LIKE on the whole phrase does not: the separators sit between the
+    words. And this is precisely the search somebody types while checking
+    whether a card exists before writing a second one for the same goods.
+    """
+    made = _pile(client, warehouse, kind="Botinka", brand="Nike", colour="Qora", code="C-03-01")
+    assert made.status_code == 201, made.text
+
+    for query in ("botinka nike", "nike botinka", "qora botinka"):
+        found = client.get(
+            f"{API}/admin/products", params={"q": query}, headers=warehouse
+        )
+        assert found.status_code == 200, found.text
+        titles = [row["title"] for row in found.json()["items"]]
+        assert "Botinka · Nike · Qora" in titles, f"{query!r} found {titles}"

@@ -71,6 +71,26 @@ def colours_without_a_photograph(session: Session, product_id: int) -> list[str]
     return [colour for colour in wanted if colour not in photographed]
 
 
+def tidy_label(value: str) -> str:
+    """One spelling per thing, so the desk's chips do not rot.
+
+    The vocabulary is learned from what people type, which means it also learns
+    their typos: a week in, the brand row read `nike`, `Nike` and `NIKE`, and
+    the colour row `qora` beside `Oq`. Three chips for one brand is worse than
+    no chips, because now somebody has to decide which one is the real one.
+
+    So a value written in one case is capitalised and one written in mixed case
+    is left exactly as it is — `nike` and `NIKE` both become `Nike`, and
+    `On Cloud` stays `On Cloud` rather than being mangled into `On cloud`.
+    """
+    tidied = " ".join(value.split())
+    if not tidied:
+        return ""
+    if tidied.islower() or tidied.isupper():
+        return " ".join(word[:1].upper() + word[1:].lower() for word in tidied.split())
+    return tidied
+
+
 def ensure_cells(
     session: Session,
     product: Product,

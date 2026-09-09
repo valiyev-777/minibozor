@@ -74,10 +74,17 @@ def list_products(
     if status_filter is not None:
         stmt = stmt.where(Product.status == status_filter)
     if q:
-        needle = f"%{q.lower()}%"
-        stmt = stmt.where(
-            func.lower(Product.title).like(needle) | func.lower(Product.sku).like(needle)
-        )
+        # Every word, in any order, in the title or the code. A single LIKE on
+        # the whole phrase missed "krossovka nike" against
+        # "Krossovka · Nike · Qora" — the separators sit between the words —
+        # which is exactly the search somebody types when they are checking
+        # whether a card already exists before writing a second one.
+        for word in q.lower().split():
+            needle = f"%{word}%"
+            stmt = stmt.where(
+                func.lower(Product.title).like(needle)
+                | func.lower(Product.sku).like(needle)
+            )
     total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
     # Oldest first when it is a queue of cards waiting on a photograph, newest
     # first when it is a catalogue.

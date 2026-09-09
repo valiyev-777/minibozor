@@ -85,36 +85,27 @@ def vocab(user: StockViewer, session: SessionDep) -> s.VocabOut:
     means the list is short and right on day thirty and empty on day one, when
     typing is the only thing that could have worked anyway.
     """
-    kinds = [
-        row[0]
-        for row in session.exec(
+    kinds = _one_spelling(
+        session.exec(
             select(Product.kind, func.count())
             .where(col(Product.kind) != "")
             .group_by(col(Product.kind))
-            .order_by(func.count().desc())
-            .limit(40)
         ).all()
-    ]
-    brands = [
-        row[0]
-        for row in session.exec(
+    )
+    brands = _one_spelling(
+        session.exec(
             select(Brand.name, func.count())
             .join(Product, col(Product.brand_id) == col(Brand.id))
             .group_by(col(Brand.name))
-            .order_by(func.count().desc())
-            .limit(40)
         ).all()
-    ]
-    colours = [
-        row[0]
-        for row in session.exec(
+    )
+    colours = _one_spelling(
+        session.exec(
             select(ProductVariant.colour, func.count())
             .where(col(ProductVariant.colour) != "")
             .group_by(col(ProductVariant.colour))
-            .order_by(func.count().desc())
-            .limit(40)
         ).all()
-    ]
+    )
 
     # Sizes by kind: trainers were last received in 40-45 and shirts in S-XXL,
     # and offering the right row is the difference between three taps and
@@ -126,7 +117,11 @@ def vocab(user: StockViewer, session: SessionDep) -> s.VocabOut:
         .where(col(Product.kind) != "", col(ProductVariant.size) != "")
         .distinct()
     ).all():
-        sizes.setdefault(kind, []).append(size)
+        # Keyed by the tidied kind, because that is the spelling the chips
+        # carry and the form looks the sizes up by whatever it was given.
+        row = sizes.setdefault(pr.tidy_label(kind), [])
+        if size not in row:
+            row.append(size)
     for row in sizes.values():
         row.sort(key=_size_order)
 
@@ -170,7 +165,7 @@ def book_in_pile(
         return s.PileOut(**done)
 
     product = _pile_card(session, user, payload)
-    colour = payload.colour.strip()
+    colour = pr.tidy_label(payload.colour)
 
     # A card that already has colours cannot take a colourless pile. Without
     # this, an empty colour writes a cell beside the ones that exist and puts
@@ -649,6 +644,26 @@ def list_movements(
 # --------------------------------------------------------------------------- helpers
 
 
+def _one_spelling(rows: list) -> list[str]:
+    """Most-used first, and one chip per thing however it was typed.
+
+    Writes are tidied now, but the rows written before that are still there —
+    and a `nike` chip beside a `Nike` chip makes somebody choose between two
+    right answers. Grouped by spelling, and the spelling most people used wins.
+    """
+    tally: dict[str, int] = {}
+    for value, count in rows:
+        # Tidied on the way out as well as on the way in. Writes are tidy now,
+        # but the rows written before that are still there, and a `nike` chip
+        # is a chip somebody taps — which would write `nike` again. Tapping the
+        # tidy one sends `Nike`, and the brand lookup is case-insensitive, so
+        # it lands on the row that already exists.
+        label = pr.tidy_label(value)
+        if label:
+            tally[label] = tally.get(label, 0) + int(count)
+    return sorted(tally, key=lambda label: -tally[label])[:40]
+
+
 def _size_order(size: str) -> tuple[int, float, str]:
     """41 before 42 before 100, and S before M before L.
 
@@ -680,11 +695,20 @@ def _brand_named(session: SessionDep, name: str) -> Brand:
     to be able to name one that has never been seen before, without leaving the
     form. "On Cloud" is typed once and is a chip from then on.
     """
-    wanted = name.strip()
+    wanted = pr.tidy_label(name)
     found = session.exec(
         select(Brand).where(func.lower(col(Brand.name)) == wanted.lower())
     ).first()
     if found is not None:
+        # And tidied in place. A row written as `nike` before the tidying
+        # existed goes on lending its spelling to every card titled from it,
+        # so the chip reads `Nike` and the card reads `nike`. One row, one
+        # write, and the catalogue agrees with itself from here on.
+        if found.name != wanted:
+            found.name = wanted
+            session.add(found)
+            session.commit()
+            session.refresh(found)
         return found
 
     stem = re.sub(r"[^a-z0-9]+", "-", wanted.lower()).strip("-") or "brend"
@@ -740,11 +764,11 @@ def _pile_card(session: SessionDep, user: User, payload: s.PileIn) -> Product:
             )
         return product
 
-    kind = payload.kind.strip()
+    kind = pr.tidy_label(payload.kind)
     brand = _brand_named(session, payload.brand) if payload.brand.strip() else None
     title = payload.title.strip() or " · ".join(
         part
-        for part in (kind, brand.name if brand else "", payload.colour.strip())
+        for part in (kind, brand.name if brand else "", pr.tidy_label(payload.colour))
         if part
     )
     if not title:
