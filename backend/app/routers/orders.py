@@ -143,6 +143,8 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
                 item.product_id,
             ),
             variant_id=cart_item.variant_id if cart_item else None,
+            colour=item.colour,
+            size=item.size,
             variant_label=item.variant_label,
             unit_price=item.unit_price,
             quantity=item.quantity,

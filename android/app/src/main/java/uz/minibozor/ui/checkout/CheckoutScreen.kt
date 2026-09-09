@@ -211,21 +211,36 @@ fun CheckoutScreen(
                 MbCard {
                     SectionHeader(stringResource(R.string.yetkazish_usuli))
                     Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Collection only where there is somewhere to collect
+                    // from. With no pickup point on the shop's books the tile
+                    // led to a screen with nothing on it and an order that
+                    // could not be completed — a choice offered and then
+                    // refused is worse than a choice not offered.
+                    if (state.pickupPoints.isEmpty()) {
                         MethodTile(
                             title = stringResource(R.string.kuryer),
                             note = stringResource(R.string.kuryer_izoh),
-                            selected = courier,
+                            selected = true,
                             onClick = { viewModel.selectDelivery(DeliveryMethod.Courier) },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        MethodTile(
-                            title = stringResource(R.string.punktdan_olish),
-                            note = stringResource(R.string.punktdan_olish_izoh),
-                            selected = !courier,
-                            onClick = { viewModel.selectDelivery(DeliveryMethod.Pickup) },
-                            modifier = Modifier.weight(1f),
-                        )
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MethodTile(
+                                title = stringResource(R.string.kuryer),
+                                note = stringResource(R.string.kuryer_izoh),
+                                selected = courier,
+                                onClick = { viewModel.selectDelivery(DeliveryMethod.Courier) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            MethodTile(
+                                title = stringResource(R.string.punktdan_olish),
+                                note = stringResource(R.string.punktdan_olish_izoh),
+                                selected = !courier,
+                                onClick = { viewModel.selectDelivery(DeliveryMethod.Pickup) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(14.dp))

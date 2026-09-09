@@ -34,11 +34,16 @@ from app.models import (
     User,
 )
 
-# Above the median basket, so delivery is a real line on a typical order and
-# free on a large one. At 250 000 it was under a quarter of the median price in
-# the catalogue, so all but the cheapest orders shipped free and the fee never
-# appeared at all.
-FREE_DELIVERY_THRESHOLD = 3_000_000
+# Above a typical basket and below an unusual one, so the fee is a real line on
+# most orders and a reason to add one more thing on some.
+#
+# 3 000 000 was set against the seeded marketplace catalogue, where it was
+# roughly a median basket. This shop's dearest thing is 638 000 — so nothing
+# would ever have reached it, and the app was telling customers about a free
+# delivery they could not get. **This is the owner's number, not a technical
+# one:** it is one line, and it should be set to about three of whatever the
+# shop mostly sells.
+FREE_DELIVERY_THRESHOLD = 500_000
 STANDARD_DELIVERY_FEE = 19_000
 
 UZ_MONTHS = [
@@ -413,6 +418,61 @@ def cart_items(session: Session, user: User) -> list[CartItem]:
     ).all()
 
 
+# The windows a small shop delivers in. Free, because the fee is on the order
+# and not on the hour: charging more for the afternoon is a thing a shop with
+# several vans does, and there is one courier here.
+STANDARD_WINDOWS: tuple[tuple[str, str, str], ...] = (
+    ("09:00", "13:00", "Ertalab"),
+    ("13:00", "18:00", "Kunduzi"),
+    ("18:00", "21:00", "Kechqurun"),
+)
+SLOT_CAPACITY = 20
+
+
+def ensure_slots(session: Session, days: list[date]) -> None:
+    """The standard windows exist for every day in the window asked about.
+
+    Nothing wrote a ``delivery_slots`` row. The office has a door for opening
+    windows across a range of days — and until somebody walked through it the
+    checkout could not be completed at all: no slot meant no delivery time,
+    which meant a button that said "Yetkazish vaqti" and a screen with nothing
+    on it. A shop cannot take its first order.
+
+    Created on read rather than seeded once, because a seeded fortnight runs
+    out in a fortnight and the failure is silent. This is safe where
+    ``locations.staging`` refuses to do the same thing: a slot is keyed by the
+    day and the hour, so writing one that is already there is a no-op, and a
+    day nobody delivers on is a day with no orders rather than a second
+    receiving area nothing can see.
+
+    The office's own windows win: this only fills a day that has none, so a
+    day somebody has deliberately emptied or repriced is left alone.
+    """
+    have = {
+        row.day
+        for row in session.exec(
+            select(DeliverySlot).where(col(DeliverySlot.day).in_(days))
+        ).all()
+    }
+    missing = [day for day in days if day not in have]
+    if not missing:
+        return
+
+    for day in missing:
+        for start, end, note in STANDARD_WINDOWS:
+            session.add(
+                DeliverySlot(
+                    day=day,
+                    start_time=start,
+                    end_time=end,
+                    note=note,
+                    price=0,
+                    capacity_left=SLOT_CAPACITY,
+                )
+            )
+    session.commit()
+
+
 def variant_label(variant: ProductVariant) -> str:
     """"Qora · 42", or whichever half of it exists.
 
@@ -470,6 +530,8 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
             colour_image(session, product.id, variant.colour) if variant else None
         )
         or primary_image(session, product.id),
+        colour=variant.colour if variant else "",
+        size=variant.size if variant else "",
         variant_label=label
         or i18n.t(session, "product", product.id, "subtitle", product.subtitle),
         variant_id=item.variant_id,
@@ -654,6 +716,8 @@ def order_out(session: Session, o: Order, *, with_attempts: bool = False) -> s.O
                 product_id=i.product_id,
                 title=i.title,
                 image_url=media_url(i.image_url) or "",
+                colour=i.colour,
+                size=i.size,
                 variant_label=i.variant_label,
                 unit_price=i.unit_price,
                 quantity=i.quantity,

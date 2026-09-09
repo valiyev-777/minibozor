@@ -648,6 +648,13 @@ class OrderItem(SQLModel, table=True):
     # onto; the label beside it is for reading ("Qora · 42") and survives the
     # variant being renamed or deleted.
     variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
+    # Apart, as well as joined. The label is one string for a line with one
+    # line to spare, and a client with only that prints "Qora · 41" as though
+    # it were the name of one thing — the customer chose a colour *and* a size.
+    # Snapshotted for the same reason the label is: the variant may be gone by
+    # the time somebody opens this order again.
+    colour: str = Field(default="", max_length=60)
+    size: str = Field(default="", max_length=40)
     variant_label: str = ""
     unit_price: int = 0
     quantity: int = 1

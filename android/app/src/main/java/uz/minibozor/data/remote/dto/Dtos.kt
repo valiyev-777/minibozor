@@ -398,6 +398,15 @@ data class CartItemDto(
     @SerialName("product_id") val productId: Int,
     val title: String,
     @SerialName("image_url") val imageUrl: String? = null,
+    /**
+     * The colour and the size, apart.
+     *
+     * `variantLabel` joins them with a dot for a line with one line to spare.
+     * Printing only that shows "Qora · 41" as though it were the name of one
+     * thing, and the customer chose a colour *and* a size.
+     */
+    val colour: String = "",
+    val size: String = "",
     @SerialName("variant_label") val variantLabel: String = "",
     /**
      * The size and the colour this line was added for.
@@ -539,6 +548,15 @@ data class OrderItemDto(
     @SerialName("product_id") val productId: Int? = null,
     val title: String,
     @SerialName("image_url") val imageUrl: String = "",
+    /**
+     * The colour and the size, apart.
+     *
+     * `variantLabel` joins them with a dot for a line with one line to spare.
+     * Printing only that shows "Qora · 41" as though it were the name of one
+     * thing, and the customer chose a colour *and* a size.
+     */
+    val colour: String = "",
+    val size: String = "",
     @SerialName("variant_label") val variantLabel: String = "",
     @SerialName("unit_price") val unitPrice: Long,
     val quantity: Int,

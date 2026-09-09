@@ -394,6 +394,13 @@ class CartItemOut(BaseModel):
     product_id: int
     title: str
     image_url: str | None
+    # The colour and the size, apart. `variant_label` joins them with a dot
+    # for a place with one line to spare, and a client that prints only that
+    # ends up showing "Qora · 41" as though it were the name of one thing —
+    # the customer chose a colour *and* a size, and the basket should say so.
+    # Kept beside it rather than instead of it: the shipped apps read the label.
+    colour: str = ""
+    size: str = ""
     variant_label: str
     # Which size and which colour this line is, and not only what they are
     # called. The label is one joined string for reading; a client deciding
@@ -512,6 +519,8 @@ class OrderItemOut(BaseModel):
     product_id: int | None
     title: str
     image_url: str
+    colour: str = ""
+    size: str = ""
     variant_label: str
     unit_price: int
     quantity: int

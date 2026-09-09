@@ -117,7 +117,12 @@ fun OrderDetailScreen(
                             MbLineItem(
                                 title = item.title,
                                 imageUrl = item.imageUrl,
-                                meta = item.variantLabel,
+                                meta = listOfNotNull(
+                                    item.colour.takeIf { it.isNotBlank() }
+                                        ?.let { "${stringResource(R.string.rang)}: $it" },
+                                    item.size.takeIf { it.isNotBlank() }
+                                        ?.let { "${stringResource(R.string.olcham)}: $it" },
+                                ).joinToString("   ").ifBlank { item.variantLabel },
                                 price = item.unitPrice,
                                 quantity = item.quantity,
                                 trailing = {
