@@ -194,17 +194,8 @@ fun MiniBozorNavHost(
             MainScaffold(currentRoute, ::switchTab) {
                 HomeScreen(
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
-                    // A leaf category has nothing to drill into, so go straight
-                    // to its listing rather than an empty subcategory page.
-                    onOpenCategory = { category ->
-                        if (category.hasChildren) {
-                            navController.navigate(Routes.subcategory(category.slug))
-                        } else {
-                            navController.navigate(
-                                Routes.listing(category = category.slug, title = category.name)
-                            )
-                        }
-                    },
+                    // A banner with no category behind it opens the whole
+                    // shop, which is what its copy promises.
                     onOpenBanner = { banner ->
                         navController.navigate(
                             Routes.listing(category = banner.targetValue, title = banner.title)

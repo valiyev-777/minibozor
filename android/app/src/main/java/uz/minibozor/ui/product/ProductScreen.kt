@@ -337,8 +337,18 @@ fun ProductScreen(
                     // of size rows. Showing them all put "L" on the page twice
                     // and let the last black L be sold while a white one was
                     // still on the shelf.
-                    val sizes = state.sizes.filter { it.size.isNotBlank() }
-                    val colors = product.colours.filter { it.colour.isNotBlank() }
+                    // More than one, or it is not a choice. A strip holding a
+                    // single swatch asks the customer to pick the only colour
+                    // there is — and the photograph above has already shown
+                    // them what it is. Same for a lone size.
+                    val sizes = state.sizes
+                        .filter { it.size.isNotBlank() }
+                        .takeIf { it.size > 1 }
+                        .orEmpty()
+                    val colors = product.colours
+                        .filter { it.colour.isNotBlank() }
+                        .takeIf { it.size > 1 }
+                        .orEmpty()
                     val hasOptions = sizes.isNotEmpty() || colors.isNotEmpty()
 
                     LazyColumn(
@@ -458,10 +468,19 @@ fun ProductScreen(
                                     // the choice below. One line, because that
                                     // is all it has to say.
                                     Spacer(Modifier.height(10.dp))
+                                    // The count of what is actually chosen,
+                                    // which is what the buy bar counts too.
+                                    // These were two figures on one screen —
+                                    // the colour's whole shelf here and the
+                                    // cell's own share at the bottom — so the
+                                    // page said "6 dona qoldi" over a bar
+                                    // saying "2 dona qoldi", and one of them
+                                    // had to be wrong to a customer reading
+                                    // both.
                                     ShelfLine(
-                                        stockLeft = shelfLeft,
+                                        stockLeft = buyableLeft,
                                         soldCount = product.soldCount,
-                                        inStock = shelfInStock,
+                                        inStock = buyable,
                                     )
                                     // Nobody is named beside the price. One
                                     // company sells here, and a shop that puts

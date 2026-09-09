@@ -40,6 +40,7 @@ from app import locations as loc
 from app.core.security import hash_secret
 from app.db import engine, require_current_schema
 from app.models import (
+    Banner,
     CancelReason,
     HomeSection,
     ReturnReason,
@@ -149,14 +150,76 @@ def _seed_home(session: Session) -> None:
     four products has a full window and a shop with four hundred has a better
     one, and neither needs anybody to curate it.
     """
-    if session.exec(select(HomeSection)).first() is not None:
-        return
+    if session.exec(select(HomeSection)).first() is None:
+        _seed_rails(session)
+    if session.exec(select(Banner)).first() is None:
+        _seed_banners(session)
+
+
+def _seed_banners(session: Session) -> None:
+    """Four, and none of them needs a picture drawn for it.
+
+    A banner is a gradient, four lines of type and a chip — the photograph
+    beside it is 110dp of product shot, and `app/routers/home.py` fills it from
+    whatever the banner points at. So these carry no `image_url` and never go
+    stale: the first one shows whatever came off the van most recently.
+
+    Two of the four say something about the shop rather than about a category —
+    when it delivers, and that nothing is paid up front. On a shop this size
+    those are the two questions a first-time customer actually has, and a
+    banner is where they get answered without being asked.
+    """
+    for sort, (kicker, title, subtitle, cta, frm, to) in enumerate(
+        [
+            (
+                "MINI BOZOR", "Yangi keldi",
+                "Bozordan bugun kelgan tovarlar", "Ko'rish",
+                "#14162A", "#0E7BF5",
+            ),
+            (
+                "CHEGIRMA", "Eski narxidan arzon",
+                "Narxi tushgan tovarlar", "Arzonlari",
+                "#E23A6A", "#14162A",
+            ),
+            (
+                "YETKAZIB BERISH", "Ertaga qo'lingizda",
+                "Kuryer eshikkacha olib boradi", "Buyurtma berish",
+                "#0E7BF5", "#14162A",
+            ),
+            (
+                "TO'LOV", "Naqd yoki karta",
+                "Eshikda to'laysiz — oldindan to'lov yo'q", "Xarid qilish",
+                "#3A4050", "#0E0F12",
+            ),
+        ]
+    ):
+        session.add(
+            Banner(
+                kicker=kicker,
+                title=title,
+                subtitle=subtitle,
+                cta=cta,
+                image_url="",
+                gradient_from=frm,
+                gradient_to=to,
+                target_type="category",
+                target_value="",
+                sort=sort,
+            )
+        )
+    session.commit()
+
+
+def _seed_rails(session: Session) -> None:
 
     for sort, (key, title, subtitle, layout, pick) in enumerate(
         [
             ("new", "Yangi keldi", "Bozordan hozir kelgan tovarlar", "rail", "new"),
             ("deals", "Chegirmada", "Eski narxidan arzon", "deals", "deals"),
-            ("popular", "Ko'p olinadi", "Boshqalar shuni oldi", "grid", "popular"),
+            # Everything else, and the last thing on the page: a small shop
+            # has no "most bought" worth the name, and a customer who has
+            # scrolled this far is browsing rather than looking for something.
+            ("all", "Barcha tovarlar", "Do'kondagi hamma narsa", "grid", "popular"),
         ]
     ):
         session.add(

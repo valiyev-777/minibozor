@@ -81,7 +81,6 @@ import uz.minibozor.core.design.component.SectionHeader
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.util.toColor
 import uz.minibozor.data.remote.dto.BannerDto
-import uz.minibozor.data.remote.dto.CategoryDto
 import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.SectionDto
 import uz.minibozor.ui.product.VariantSheet
@@ -128,7 +127,6 @@ private val SectionGap = 22.dp
 @Composable
 fun HomeScreen(
     onOpenSearch: () -> Unit,
-    onOpenCategory: (CategoryDto) -> Unit,
     onOpenBanner: (BannerDto) -> Unit,
     onOpenProduct: (Int) -> Unit,
     onOpenListing: (category: String?, title: String) -> Unit,
@@ -226,7 +224,12 @@ fun HomeScreen(
                         }
                     }
 
-                    categoryGrid(home.categories, onOpenCategory)
+                    // A grid of category tiles stood here, under the
+                    // banners. It was the same list the Katalog tab holds —
+                    // with the drill-down into subcategories that this could
+                    // not do — so the home screen was spending its best space
+                    // on a second way to the same place. What the space is for
+                    // now is goods.
 
                     home.sections.forEach { section ->
                         homeSection(
@@ -511,113 +514,6 @@ private fun BannerCard(banner: BannerDto, drift: () -> Float, onClick: () -> Uni
             // Whole, not cropped to the panel's shape: this box is narrower
             // than the photographs are, so cropping took the sides off them.
             contentScale = ContentScale.Fit,
-        )
-    }
-}
-
-/** The 5x2 quick-link grid, one lazy item per row of five. */
-private fun LazyListScope.categoryGrid(
-    categories: List<CategoryDto>,
-    onClick: (CategoryDto) -> Unit,
-) {
-    // Five across when there are five to put across. A shop that has opened
-    // with two categories was drawing two cells hard against the left edge and
-    // three empty weights holding the rest of the card open — which reads as a
-    // row that failed to load rather than as a row of two.
-    //
-    // The last row of a longer grid still pads, and must: those cells belong
-    // under the ones above them, and a row of two stretched to full width
-    // under a row of five is a different kind of wrong.
-    val perRow = minOf(5, categories.size).coerceAtLeast(1)
-    val rows = categories.chunked(perRow)
-    rows.forEachIndexed { index, row ->
-        item(key = "categories:$index", contentType = "category-row") {
-            val first = index == 0
-            val last = index == rows.lastIndex
-            val shape = when {
-                first && last -> MbTheme.shapes.card
-                first -> CardTopShape
-                last -> CardBottomShape
-                else -> RectangleShape
-            }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = MbTheme.dimens.homeEdge,
-                        end = MbTheme.dimens.homeEdge,
-                        top = if (first) 16.dp else 0.dp,
-                    )
-                    .background(MbTheme.colors.surface, shape)
-                    .padding(
-                        start = 14.dp,
-                        end = 14.dp,
-                        // 14 dp card padding on the outer rows, plus the 7 dp
-                        // every row keeps around itself.
-                        top = if (first) 21.dp else 7.dp,
-                        bottom = if (last) 21.dp else 7.dp,
-                    ),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                row.forEach { category ->
-                    CategoryCell(category, onClick, Modifier.weight(1f))
-                }
-                repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CategoryCell(
-    category: CategoryDto,
-    onClick: (CategoryDto) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        // A bare `clickable` presses in a hard rectangle the full width of the
-        // cell and the full height of tile plus label — a corner-to-corner slab
-        // under a 44 dp rounded tile. The highlight is drawn over the content
-        // rather than clipping it, which is what keeps the two-line names off
-        // the corner arcs.
-        modifier
-            .mbPressable(
-                MbTheme.shapes.tile,
-                MbTheme.colors.ink.copy(alpha = MbPressAlpha),
-            ) { onClick(category) }
-            .padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            Modifier
-                .size(MbTheme.dimens.categoryTile)
-                .clip(MbTheme.shapes.tile)
-                .background(MbTheme.colors.fill),
-            contentAlignment = Alignment.Center,
-        ) {
-            // A photograph where the shop supplied one, the line glyph where
-            // it did not — the grid holds both without looking mixed because
-            // the tile behind them is the same.
-            val image = category.imageUrl
-            if (image != null) {
-                AsyncImage(
-                    model = image.mediaUrl(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(MbTheme.dimens.categoryTile * 0.72f),
-                )
-            } else {
-                MbIcon(category.icon, size = 20.dp)
-            }
-        }
-        MbText(
-            category.name,
-            MbTheme.type.micro.copy(
-                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-            MbTheme.colors.inkSoft,
-            maxLines = 2,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
 }

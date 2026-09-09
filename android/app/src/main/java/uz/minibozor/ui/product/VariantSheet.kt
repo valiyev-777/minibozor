@@ -323,7 +323,7 @@ private fun SizeRow(sizes: List<VariantDto>, selectedId: Int?, onSelect: (Int) -
                     .padding(horizontal = 18.dp, vertical = 12.dp),
             ) {
                 MbText(
-                    size.label,
+                    size.size,
                     MbTheme.type.label.copy(
                         // Out of stock reads as struck through, the way the
                         // design marks a size it cannot sell.

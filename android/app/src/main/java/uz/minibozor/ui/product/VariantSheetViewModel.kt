@@ -28,9 +28,18 @@ data class VariantSheetState(
     val busy: Boolean = false,
     val error: String? = null,
 ) {
-    /** Only the colours worth asking about: a card with none has one blank. */
+    /**
+     * Only the colours worth asking about.
+     *
+     * A card with none has one blank colour, and a card with one has nothing to
+     * choose — a strip holding a single swatch is a question with one answer,
+     * and the summary at the top of the sheet is already showing the thing.
+     */
     val colours: List<ColourDto>
-        get() = product?.colours.orEmpty().filter { it.colour.isNotBlank() }
+        get() = product?.colours.orEmpty()
+            .filter { it.colour.isNotBlank() }
+            .takeIf { it.size > 1 }
+            .orEmpty()
 
     /**
      * The cells of the colour chosen, not of the product.
@@ -43,6 +52,8 @@ data class VariantSheetState(
     val sizes: List<VariantDto>
         get() = product?.variants.orEmpty()
             .filter { (colour == null || it.colour == colour) && it.size.isNotBlank() }
+            .takeIf { it.size > 1 }
+            .orEmpty()
 
     val selected: VariantDto?
         get() = product?.variants.orEmpty().firstOrNull { it.id == variantId }
@@ -64,9 +75,18 @@ data class VariantSheetState(
             ?: product?.stockLeft
             ?: 1
 
-    /** A cell has to be chosen where there is a choice of size to make. */
+    /**
+     * A cell has to be chosen, full stop.
+     *
+     * It used to read "unless none of the sizes is in stock", which was a way
+     * of letting a product with nothing to choose through. Now that a lone
+     * size hides its own picker, that clause would also let a card with two
+     * colours of one size through with nothing selected — and the add would go
+     * up with no variant on it.
+     */
     val ready: Boolean
-        get() = product != null && (sizes.none { it.inStock } || variantId != null)
+        get() = product != null &&
+            (product.variants.isEmpty() || variantId != null)
 }
 
 /**
@@ -93,15 +113,20 @@ class VariantSheetViewModel @Inject constructor(
                     val product = result.data
                     val colour = product.colours.firstOrNull { c -> c.inStock }
                         ?: product.colours.firstOrNull()
-                    // A product with nothing to choose has one cell, and asking
-                    // the customer to pick it is asking a question with one
-                    // answer. Anything with sizes leaves the size to them.
-                    val only = product.variants.singleOrNull()
+                    // The first cell of that colour that can be bought.
+                    // Preselected rather than left blank: where there is only
+                    // one size the picker is hidden, so nothing would ever set
+                    // it — and where there are several the customer changes it
+                    // in one tap, which beats a sheet that opens refusing to
+                    // add anything.
+                    val cells = product.variants
+                        .filter { v -> colour == null || v.colour == colour.colour }
                     it.copy(
                         loading = false,
                         product = product,
                         colour = colour?.colour,
-                        variantId = only?.id,
+                        variantId = (cells.firstOrNull { v -> v.inStock }
+                            ?: cells.firstOrNull())?.id,
                     )
                 }
                 is Outcome.Failure -> _state.update {
@@ -128,7 +153,9 @@ class VariantSheetViewModel @Inject constructor(
         val kept = s.selected?.size
         s.copy(
             colour = colour,
-            variantId = cells.firstOrNull { it.size == kept && it.inStock }?.id,
+            variantId = (cells.firstOrNull { it.size == kept && it.inStock }
+                ?: cells.firstOrNull { it.inStock }
+                ?: cells.first()).id,
         )
     }
 

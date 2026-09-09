@@ -329,8 +329,14 @@ fun SizePicker(
     val selected = sizes.firstOrNull { it.id == selectedId }
     Column(modifier.fillMaxWidth()) {
         PickerLabel(
+            // The size, not the cell's whole label. `label` is "Qora · 41",
+            // composed for a place where the colour is worth repeating — a
+            // basket line, a pick list. Here the colour is either the strip
+            // above or the only one there is, so printing it in the heading and
+            // again on every chip made a row of "Qora · 41  Qora · 42  Qora ·
+            // 43" that says one useful digit per chip.
             name = stringResource(R.string.olcham),
-            value = selected?.label.orEmpty(),
+            value = selected?.size.orEmpty(),
             action = onOpenChart?.let { stringResource(R.string.olchamlar_jadvali) },
             onAction = onOpenChart,
         )
@@ -343,29 +349,18 @@ fun SizePicker(
         ) {
             sizes.forEach { variant ->
                 MbSizeChip(
-                    label = variant.label,
+                    label = variant.size,
                     selected = variant.id == selected?.id,
                     enabled = variant.inStock,
                     onClick = { onSelect(variant.id) },
                 )
             }
         }
-        // How many of the size in hand, under the row rather than on the chips.
-        // A 38-point chip holds two digits and nothing else, and a count on
-        // every one of eight of them is a wall of numbers to read before
-        // choosing — this answers about the one actually chosen, which is the
-        // one the question is being asked about. A size with none left is
-        // struck through in the row above and says nothing here.
-        val left = selected?.stockLeft
-        if (left != null && left > 0) {
-            Spacer(Modifier.height(9.dp))
-            MbText(
-                stringResource(R.string.n_dona_qoldi, left),
-                MbTheme.type.caption,
-                if (left <= LowStock) MbTheme.colors.danger else MbTheme.colors.textTertiary,
-                maxLines = 1,
-            )
-        }
+        // No count under the row. It used to answer about the size in hand,
+        // which was right when the page had no other figure — but the line
+        // under the rating now answers about the same cell and the buy bar
+        // repeats it a hundred pixels below this, so the screen said "2 dona
+        // qoldi" three times and a reader has to check whether they agree.
     }
 }
 
