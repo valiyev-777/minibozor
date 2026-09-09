@@ -422,7 +422,7 @@ def order_queue(
         .limit(page_size)
     ).all()
     return s.Page[s.StaffOrderOut](
-        items=[_order_row(session, o) for o in rows],
+        items=[_order_row(session, o, user.role) for o in rows],
         page=page,
         page_size=page_size,
         total=total,
@@ -468,7 +468,7 @@ def set_order_status(
     than a rule per endpoint.
     """
     order = _order(session, order_id)
-    if user.role is UserRole.WAREHOUSE and payload.status is OrderStatus.CANCELLED:
+    if user.role is not UserRole.ADMIN and payload.status is OrderStatus.CANCELLED:
         raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("cancel_is_operators"))
     tr.ensure(tr.ORDER_TRANSITIONS, order.status, payload.status)
     # Shipped to whom? `GET /courier/orders` is filtered by `courier_id`, so
@@ -929,7 +929,7 @@ def _summary(items: list[OrderItem]) -> str:
     return head if len(items) == 1 else f"{head} +{len(items) - 1}"
 
 
-def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:
+def _order_row(session: SessionDep, o: Order, reader: UserRole) -> s.StaffOrderOut:
     customer = session.get(User, o.user_id)
     courier = session.get(User, o.courier_id) if o.courier_id else None
     items = session.exec(select(OrderItem).where(OrderItem.order_id == o.id)).all()
@@ -951,15 +951,18 @@ def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:
         items_summary=_summary(items),
         total=o.total,
         paid=o.paid,
-        # The moves the rules allow, minus the one that is not staff's to
-        # make. `shipped` happens when a courier takes the parcel off the
-        # shelf, so the bench is never offered it — the panel builds its
-        # buttons from this list, and a button for somebody else's act is a
-        # button that either lies or ships to nobody.
+        # The moves the rules allow, minus the ones that are not this
+        # reader's to make. `shipped` happens when a courier takes the parcel
+        # off the shelf, so nobody at a desk is offered it; cancelling is the
+        # owner's, so nobody else is. The panel builds its buttons from this
+        # list, which is why the rule lives here rather than in the panel: a
+        # button for somebody else's act is a button that either lies or is
+        # refused after the tap.
         next_statuses=[
             move
             for move in tr.next_states(tr.ORDER_TRANSITIONS, o.status)
             if move is not OrderStatus.SHIPPED
+            and (move is not OrderStatus.CANCELLED or reader is UserRole.ADMIN)
         ],
         courier_id=o.courier_id,
         courier_name=courier.full_name if courier else "",

@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/cn"
 import { age, dateTime, minutesSince, money } from "@/lib/format"
 import { useBuildPickTask, useMoveOrder, useOrders } from "@/lib/queries"
+import { useSession } from "@/lib/session"
 import type { OrderStatus, StaffOrder } from "@/lib/types"
 
 const TABS: { key: string; label: string }[] = [
@@ -93,8 +94,14 @@ export function OrdersPage() {
 }
 
 function Row({ order }: { order: StaffOrder }) {
+  const { staff } = useSession()
   const move = useMoveOrder(order.id)
   const build = useBuildPickTask()
+
+  // Putting an order on the pick board is the bench's own act, behind the
+  // warehouse's door. The assistant on the telephone reads this queue and
+  // moves an order along; they do not decide what a picker walks to next.
+  const benched = staff?.role === "admin" || staff?.role === "warehouse"
 
   return (
     <div className="rounded-panel border bg-surface p-3">
@@ -142,7 +149,7 @@ function Row({ order }: { order: StaffOrder }) {
       <Problem error={move.error || build.error} />
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {order.status === "placed" ? (
+        {order.status === "placed" && benched ? (
           <Button
             variant="secondary"
             className="h-control gap-2"

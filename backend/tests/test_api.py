@@ -1986,6 +1986,53 @@ def test_the_warehouse_may_pack_but_not_cancel(
     assert called_off.status_code == 403, called_off.text
 
 
+def test_the_assistant_answers_the_telephone_but_does_not_call_off_a_sale(
+    client: TestClient,
+    admin: dict[str, str],
+    warehouse: dict[str, str],
+    seller: dict[str, str],
+    auth: dict[str, str],
+) -> None:
+    """The shop assistant reads the queue and moves an order along.
+
+    A customer who rings to ask where their order is asks whoever answers the
+    telephone, and that person had no screen with the answer on it — so every
+    such call reached the owner. Cancelling stays the owner's: somebody has to
+    answer for a sale called off, and it is the person whose shop it is.
+    """
+    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-PHONE", stock=5)
+    order = _order(client, auth, card["id"], ids["Qora / 42"])
+
+    queue = client.get(f"{API}/admin/orders", headers=seller)
+    assert queue.status_code == 200, queue.text
+    mine = next(row for row in queue.json()["items"] if row["id"] == order["id"])
+    # The buttons come from here, so the move the assistant may not make is
+    # not offered rather than refused after the tap.
+    assert "cancelled" not in mine["next_statuses"]
+
+    one = client.get(f"{API}/admin/orders/{order['id']}", headers=seller)
+    assert one.status_code == 200, one.text
+
+    packed = client.post(
+        f"{API}/admin/orders/{order['id']}/status",
+        json={"status": "packing"},
+        headers=seller,
+    )
+    assert packed.status_code == 200, packed.text
+
+    called_off = client.post(
+        f"{API}/admin/orders/{order['id']}/status",
+        json={"status": "cancelled", "note": "bekor"},
+        headers=seller,
+    )
+    assert called_off.status_code == 403, called_off.text
+
+    # The owner's own row still offers it.
+    owners = client.get(f"{API}/admin/orders", headers=admin).json()["items"]
+    theirs = next(row for row in owners if row["id"] == order["id"])
+    assert "cancelled" in theirs["next_statuses"]
+
+
 # --------------------------------------------------------------------------- the door
 
 

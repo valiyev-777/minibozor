@@ -60,14 +60,21 @@ const WAREHOUSE: NavItem[] = [
 ]
 
 /**
- * The shop window, and it is the whole of this role's menu.
+ * The shop window and the telephone — the assistant's two jobs.
  *
- * Not in the office's menu and not in the bench's. Goods reaching a shelf and
- * goods reaching the shop are two jobs done at different times by people
- * looking at different things — a sack, and a photograph — and while they were
- * one screen neither got done properly. The queue carries its own count,
- * because what is in it is money standing still: goods on a shelf that no
- * customer can buy, and nothing about that breaks or errors.
+ * The window is not in the office's menu and not in the bench's: goods
+ * reaching a shelf and goods reaching the shop are two jobs done at different
+ * times by people looking at different things — a sack, and a photograph —
+ * and while they were one screen neither got done properly. The queue carries
+ * its own count, because what is in it is money standing still: goods on a
+ * shelf that no customer can buy, and nothing about that breaks or errors.
+ *
+ * The order queue is here because a customer who rings to ask where their
+ * order is asks the person who answers the telephone, and that person had no
+ * screen with the answer on it — so every such call reached the owner. Read
+ * it and move an order along; **cancelling is not here**, and not because the
+ * button is hidden: the server does not offer the move to anybody but the
+ * owner. Somebody has to answer for a sale called off.
  */
 const SELLER: NavItem[] = [
   {
@@ -76,6 +83,7 @@ const SELLER: NavItem[] = [
     icon: Sparkles,
     badge: "held_back",
   },
+  { to: "/buyurtmalar", label: "Buyurtmalar", icon: ListOrdered },
   { to: "/mahsulotlar", label: "Mahsulotlar", icon: Boxes },
   { to: "/kategoriyalar", label: "Kategoriyalar", icon: Tags },
 ]

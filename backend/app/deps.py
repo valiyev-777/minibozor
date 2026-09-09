@@ -144,10 +144,16 @@ ReturnViewer = Annotated[
     User, Depends(require_role(UserRole.WAREHOUSE, UserRole.ADMIN))
 ]
 
-# Reading the order queue. The office runs it and the warehouse picks from it
-# — two jobs on one list, which is why it is one endpoint with an
-# `awaiting`-style scope rather than two renderings of `orders`.
-OrderViewer = ReturnViewer
+# Reading the order queue. Three jobs on one list, which is why it is one
+# endpoint with a status filter rather than three renderings of `orders`: the
+# office runs it, the warehouse picks from it, and the shop assistant is the
+# one who picks up the telephone. A customer ringing to ask where their order
+# is used to be a question only the owner could answer, which meant the owner
+# answered the telephone all day.
+OrderViewer = Annotated[
+    User,
+    Depends(require_role(UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.SELLER)),
+]
 
 # Reading the catalogue's own vocabulary — the categories and brands a card
 # can be filed under. The receiving desk picks from both while sorting a
@@ -175,13 +181,15 @@ DashboardViewer = Annotated[
     Depends(require_role(UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.SELLER)),
 ]
 
-# Moving an order along. The warehouse joins the office here because two of
-# the three moves are theirs: a picker marks an order picked and marks it
-# handed to the courier. Which moves each of them may make is decided inside
-# the endpoint, because it is a rule per transition and not per door —
-# cancelling is the office's, and a picker should not be able to call off a
-# sale from the packing bench.
-OrderMover = ReturnViewer
+# Moving an order along. The warehouse and the shop assistant join the office
+# here because most of the moves are theirs: a picker marks an order picked,
+# and the assistant on the telephone is the one who hears that it arrived.
+# Which moves each of them may make is decided inside the endpoint, because it
+# is a rule per transition and not per door — **cancelling is the owner's**,
+# and neither a picker at the bench nor an assistant on the telephone should
+# be able to call off a sale. Somebody has to answer for a cancelled order,
+# and that is the person whose shop it is.
+OrderMover = OrderViewer
 
 # Handling the goods once they are back: a courier brings a collection in and
 # the warehouse books it, so both need to read a run.
