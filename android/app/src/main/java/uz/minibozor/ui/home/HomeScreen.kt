@@ -520,7 +520,16 @@ private fun LazyListScope.categoryGrid(
     categories: List<CategoryDto>,
     onClick: (CategoryDto) -> Unit,
 ) {
-    val rows = categories.chunked(5)
+    // Five across when there are five to put across. A shop that has opened
+    // with two categories was drawing two cells hard against the left edge and
+    // three empty weights holding the rest of the card open — which reads as a
+    // row that failed to load rather than as a row of two.
+    //
+    // The last row of a longer grid still pads, and must: those cells belong
+    // under the ones above them, and a row of two stretched to full width
+    // under a row of five is a different kind of wrong.
+    val perRow = minOf(5, categories.size).coerceAtLeast(1)
+    val rows = categories.chunked(perRow)
     rows.forEachIndexed { index, row ->
         item(key = "categories:$index", contentType = "category-row") {
             val first = index == 0
@@ -553,7 +562,7 @@ private fun LazyListScope.categoryGrid(
                 row.forEach { category ->
                     CategoryCell(category, onClick, Modifier.weight(1f))
                 }
-                repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
+                repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

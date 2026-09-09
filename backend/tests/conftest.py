@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import pathlib
 
 os.environ.setdefault("MB_DATABASE_URL", "sqlite:///./test.db")
 os.environ.setdefault("MB_ENV", "dev")
@@ -35,7 +36,19 @@ def database() -> None:
     no version row, and ``TestClient(app)`` runs the real lifespan. The stamp
     is not a way round the check: this database genuinely holds what the
     baseline builds, and the test next door is what says so.
+
+    **The file is deleted first.** ``create_all`` creates a table that is
+    missing and never alters one that exists, so a column added to a table
+    already in ``test.db`` simply never appeared — and the suite then failed
+    with ``no such column`` a hundred times over, from a stale file rather
+    than from anything in the change. Starting from nothing is a second of
+    CREATE TABLEs and removes the whole class of confusion.
     """
+    url = os.environ["MB_DATABASE_URL"]
+    if url.startswith("sqlite:///"):
+        stale = pathlib.Path(url.removeprefix("sqlite:///"))
+        stale.unlink(missing_ok=True)
+
     init_db()
     stamp_head()
     with Session(engine) as session:

@@ -1453,7 +1453,12 @@ class CategoryWriteIn(BaseModel):
     image_url: str | None = None
     parent_slug: str | None = None
     sort: int = 0
-    is_quick_link: bool = False
+    # True by default, and that is the fix for a hole rather than a preference:
+    # the home screen's grid and the catalogue's own filter both read this, so
+    # a category written with it false is a category nobody browsing the shop
+    # can ever reach. The seller writes one while filing a card, which is the
+    # moment they are least equipped to know that.
+    is_quick_link: bool = True
     translations: dict[Lang, CategoryTextIn] = Field(default_factory=dict)
 
 

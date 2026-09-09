@@ -466,7 +466,13 @@ class HomeSection(SQLModel, table=True):
     title: str
     subtitle: str = ""
     category_slug: str | None = None
-    layout: str = "rail"            # rail | grid | deals
+    layout: str = "rail"            # rail | grid | deals — how it is drawn
+    # Which products, which is not the same question as how they are drawn. It
+    # was read off ``layout`` for a while and everything that was not ``deals``
+    # came back in sold-count order — so "Yangi keldi" and "Ko'p olinadi"
+    # answered with the same products in the same order, which reads as a
+    # broken screen rather than as two rails.
+    pick: str = "popular"           # new | popular | deals
     sort: int = 0
     # A rail taken off the home screen without being deleted. The design's
     # sections are the shop's window and a seasonal one comes back next year;

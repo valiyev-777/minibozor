@@ -86,10 +86,16 @@ def _section_products(session: SessionDep, section: HomeSection) -> list[Product
             ).all()
             stmt = stmt.where(col(Product.category_id).in_([category.id, *child_ids]))
 
-    if section.layout == "deals":
+    # What to show, from the section's own rule rather than from how it is
+    # drawn. Three answers the catalogue already holds, so a rail needs nobody
+    # to curate it: a shop with four products has a full window and a shop with
+    # four hundred has a better one.
+    if section.pick == "deals":
         stmt = stmt.where(col(Product.old_price).is_not(None)).order_by(
             (col(Product.old_price) - col(Product.price)).desc()
         )
+    elif section.pick == "new":
+        stmt = stmt.order_by(col(Product.created_at).desc(), col(Product.id).desc())
     else:
         stmt = stmt.order_by(col(Product.sold_count).desc(), col(Product.rating).desc())
 

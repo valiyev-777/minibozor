@@ -41,6 +41,7 @@ from app.core.security import hash_secret
 from app.db import engine, require_current_schema
 from app.models import (
     CancelReason,
+    HomeSection,
     ReturnReason,
     User,
     UserRole,
@@ -120,6 +121,7 @@ def seed(session: Session) -> None:
         return
 
     users = _seed_users(session)
+    _seed_home(session)
     _seed_reasons(session)
     session.commit()
     translated = seed_translations(session)
@@ -130,6 +132,44 @@ def seed(session: Session) -> None:
     print(f"Warehouse: {WAREHOUSE_PHONE} · SMS code 123456 (dev)")
     print(f"Seller:    {SELLER_PHONE} · SMS code 123456 (dev)")
     print(f"Courier:   {COURIER_PHONE} · SMS code 123456 (dev)")
+
+
+def _seed_home(session: Session) -> None:
+    """The shop window, as three rails that fill themselves.
+
+    Nothing wrote a ``home_sections`` row: the merchandising endpoints went
+    with the marketplace and nothing replaced them, so `GET /home` answered
+    with no banners, no categories and **no sections** — and the phone drew a
+    city, a search box and a blank screen. The design was not the problem; the
+    feed was empty.
+
+    So these three, and they need no maintenance because none of them names a
+    category: what they select is "newest", "cheapest against its old price"
+    and "most sold", which are answers the catalogue already has. A shop with
+    four products has a full window and a shop with four hundred has a better
+    one, and neither needs anybody to curate it.
+    """
+    if session.exec(select(HomeSection)).first() is not None:
+        return
+
+    for sort, (key, title, subtitle, layout, pick) in enumerate(
+        [
+            ("new", "Yangi keldi", "Bozordan hozir kelgan tovarlar", "rail", "new"),
+            ("deals", "Chegirmada", "Eski narxidan arzon", "deals", "deals"),
+            ("popular", "Ko'p olinadi", "Boshqalar shuni oldi", "grid", "popular"),
+        ]
+    ):
+        session.add(
+            HomeSection(
+                key=key,
+                title=title,
+                subtitle=subtitle,
+                layout=layout,
+                pick=pick,
+                sort=sort,
+            )
+        )
+    session.commit()
 
 
 def _seed_users(session: Session) -> dict[str, User]:
