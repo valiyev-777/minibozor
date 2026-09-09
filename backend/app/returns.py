@@ -53,33 +53,35 @@ def returned_lines(
     return inventory.order_items(session, order) if order else []
 
 
-def relist(
+def book_in(
     session: Session,
     request: ReturnRequest,
     *,
     actor: User | None,
     note: str = "",
+    damaged: bool = False,
 ) -> bool:
-    """Put the returned goods back on the shelf, at most once ever.
+    """Bring the returned goods back into the building, at most once ever.
 
-    Returns whether this call was the one that moved the ledger. Does not
-    commit — the caller commits together with whatever decision made the move
-    necessary, so the shelf cannot end up describing a decision that rolled
-    back.
+    Whole goods land in the receiving area and are for sale again; damaged
+    ones land in the damaged corner, where they are counted and not sold.
+    Either way the parcel arrives exactly once — ``relisted_at`` is the guard,
+    and it means "the room has moved for this request", whichever way it
+    moved.
+
+    Returns whether this call was the one that moved it. Does not commit — the
+    caller commits together with whatever decision made the move necessary, so
+    the room cannot end up describing a decision that rolled back.
     """
     if request.relisted_at is not None:
         return False
 
-    inventory.restock_returned(
+    inventory.came_back(
         session,
         returned_lines(session, request),
         actor=actor,
-        # One action name for the shelf whichever road got here, because the
-        # shelf-level fact is the same one: goods that came back are back on
-        # it. *Who decided* is the separate row against the request, and that
-        # is the row a dispute is about.
-        action="return.restock",
         note=note,
+        damaged=damaged,
     )
     request.relisted_at = utcnow()
     session.add(request)

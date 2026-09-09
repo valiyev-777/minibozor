@@ -1,8 +1,8 @@
-"""One warehouse, no sellers
+"""One warehouse: places, placements and moves
 
-Revision ID: d91273af7647
+Revision ID: 474db20bb4f8
 Revises: 
-Create Date: 2026-09-09 08:14:10.774400
+Create Date: 2026-09-09 08:31:32.602326
 
 """
 from typing import Sequence, Union
@@ -21,7 +21,7 @@ import sqlmodel
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'd91273af7647'
+revision: str = '474db20bb4f8'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -126,6 +126,22 @@ def upgrade() -> None:
     )
     with op.batch_alter_table('legal_docs', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_legal_docs_slug'), ['slug'], unique=True)
+
+    op.create_table('locations',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('code', sqlmodel.sql.sqltypes.AutoString(length=30), nullable=False),
+    sa.Column('kind', sa.Enum('BIN', 'RECEIVING', 'PACKING', 'COURIER', 'DAMAGED', 'RETURNS', name='locationkind'), nullable=False),
+    sa.Column('rack', sqlmodel.sql.sqltypes.AutoString(length=4), nullable=True),
+    sa.Column('column_no', sa.Integer(), nullable=True),
+    sa.Column('row_no', sa.Integer(), nullable=True),
+    sa.Column('capacity', sa.Integer(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('note', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('locations', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_locations_code'), ['code'], unique=True)
+        batch_op.create_index(batch_op.f('ix_locations_kind'), ['kind'], unique=False)
 
     op.create_table('otp_codes',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -396,6 +412,24 @@ def upgrade() -> None:
     with op.batch_alter_table('search_history', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_search_history_user_id'), ['user_id'], unique=False)
 
+    op.create_table('stock_counts',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('location_id', sa.Integer(), nullable=False),
+    sa.Column('status', sa.Enum('OPEN', 'CLOSED', name='countstatus'), nullable=False),
+    sa.Column('counter_id', sa.Integer(), nullable=True),
+    sa.Column('note', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('started_at', sa.DateTime(), nullable=False),
+    sa.Column('closed_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['counter_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['location_id'], ['locations.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('stock_counts', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_stock_counts_counter_id'), ['counter_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_stock_counts_location_id'), ['location_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_stock_counts_started_at'), ['started_at'], unique=False)
+        batch_op.create_index(batch_op.f('ix_stock_counts_status'), ['status'], unique=False)
+
     op.create_table('supplies',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('code', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
@@ -465,15 +499,36 @@ def upgrade() -> None:
     with op.batch_alter_table('order_events', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_order_events_order_id'), ['order_id'], unique=False)
 
+    op.create_table('pick_tasks',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('order_id', sa.Integer(), nullable=False),
+    sa.Column('status', sa.Enum('WAITING', 'PICKING', 'PICKED', name='pickstatus'), nullable=False),
+    sa.Column('picker_id', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('taken_at', sa.DateTime(), nullable=True),
+    sa.Column('finished_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
+    sa.ForeignKeyConstraint(['picker_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('order_id', name='uq_pick_task_order')
+    )
+    with op.batch_alter_table('pick_tasks', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_pick_tasks_created_at'), ['created_at'], unique=False)
+        batch_op.create_index(batch_op.f('ix_pick_tasks_order_id'), ['order_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_pick_tasks_picker_id'), ['picker_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_pick_tasks_status'), ['status'], unique=False)
+
     op.create_table('product_images',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('product_id', sa.Integer(), nullable=False),
+    sa.Column('colour', sqlmodel.sql.sqltypes.AutoString(length=60), nullable=False),
     sa.Column('url', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('sort', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('product_images', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_product_images_colour'), ['colour'], unique=False)
         batch_op.create_index(batch_op.f('ix_product_images_product_id'), ['product_id'], unique=False)
 
     op.create_table('product_specs',
@@ -491,34 +546,33 @@ def upgrade() -> None:
     op.create_table('product_variants',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('product_id', sa.Integer(), nullable=False),
-    sa.Column('kind', sa.Enum('SIZE', 'COLOR', name='variantkind'), nullable=False),
-    sa.Column('label', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('value', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('image_url', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('in_stock', sa.Boolean(), nullable=False),
+    sa.Column('colour', sqlmodel.sql.sqltypes.AutoString(length=60), nullable=False),
+    sa.Column('colour_hex', sqlmodel.sql.sqltypes.AutoString(length=9), nullable=False),
+    sa.Column('size', sqlmodel.sql.sqltypes.AutoString(length=40), nullable=False),
+    sa.Column('sku', sqlmodel.sql.sqltypes.AutoString(length=40), nullable=False),
+    sa.Column('barcode', sqlmodel.sql.sqltypes.AutoString(length=40), nullable=False),
     sa.Column('price', sa.Integer(), nullable=False),
     sa.Column('stock_left', sa.Integer(), nullable=False),
-    sa.Column('parent_id', sa.Integer(), nullable=True),
+    sa.Column('in_stock', sa.Boolean(), nullable=False),
     sa.Column('sort', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['parent_id'], ['product_variants.id'], ),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('product_id', 'colour', 'size', name='uq_variant_cell')
     )
     with op.batch_alter_table('product_variants', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_product_variants_parent_id'), ['parent_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_product_variants_barcode'), ['barcode'], unique=False)
         batch_op.create_index(batch_op.f('ix_product_variants_product_id'), ['product_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_product_variants_sku'), ['sku'], unique=False)
 
     op.create_table('cart_items',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('product_id', sa.Integer(), nullable=False),
     sa.Column('variant_id', sa.Integer(), nullable=True),
-    sa.Column('color_variant_id', sa.Integer(), nullable=True),
     sa.Column('quantity', sa.Integer(), nullable=False),
     sa.Column('selected', sa.Boolean(), nullable=False),
     sa.Column('reserved_until', sa.DateTime(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['color_variant_id'], ['product_variants.id'], ),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], ),
@@ -536,12 +590,10 @@ def upgrade() -> None:
     sa.Column('title', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('image_url', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('variant_id', sa.Integer(), nullable=True),
-    sa.Column('color_variant_id', sa.Integer(), nullable=True),
     sa.Column('variant_label', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('unit_price', sa.Integer(), nullable=False),
     sa.Column('quantity', sa.Integer(), nullable=False),
     sa.Column('reviewed', sa.Boolean(), nullable=False),
-    sa.ForeignKeyConstraint(['color_variant_id'], ['product_variants.id'], ),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
     sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], ),
@@ -549,6 +601,34 @@ def upgrade() -> None:
     )
     with op.batch_alter_table('order_items', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_order_items_order_id'), ['order_id'], unique=False)
+
+    op.create_table('stock_count_lines',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('count_id', sa.Integer(), nullable=False),
+    sa.Column('variant_id', sa.Integer(), nullable=False),
+    sa.Column('expected_qty', sa.Integer(), nullable=False),
+    sa.Column('counted_qty', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['count_id'], ['stock_counts.id'], ),
+    sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('stock_count_lines', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_stock_count_lines_count_id'), ['count_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_stock_count_lines_variant_id'), ['variant_id'], unique=False)
+
+    op.create_table('stock_placements',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('location_id', sa.Integer(), nullable=False),
+    sa.Column('variant_id', sa.Integer(), nullable=False),
+    sa.Column('qty', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['location_id'], ['locations.id'], ),
+    sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('location_id', 'variant_id', name='uq_placement')
+    )
+    with op.batch_alter_table('stock_placements', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_stock_placements_location_id'), ['location_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_stock_placements_variant_id'), ['variant_id'], unique=False)
 
     op.create_table('supply_lines',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -563,6 +643,27 @@ def upgrade() -> None:
     with op.batch_alter_table('supply_lines', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_supply_lines_supply_id'), ['supply_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_supply_lines_variant_id'), ['variant_id'], unique=False)
+
+    op.create_table('pick_lines',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('task_id', sa.Integer(), nullable=False),
+    sa.Column('order_item_id', sa.Integer(), nullable=True),
+    sa.Column('variant_id', sa.Integer(), nullable=False),
+    sa.Column('location_id', sa.Integer(), nullable=False),
+    sa.Column('qty', sa.Integer(), nullable=False),
+    sa.Column('picked_qty', sa.Integer(), nullable=False),
+    sa.Column('walk_order', sa.Integer(), nullable=False),
+    sa.Column('picked_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['location_id'], ['locations.id'], ),
+    sa.ForeignKeyConstraint(['order_item_id'], ['order_items.id'], ),
+    sa.ForeignKeyConstraint(['task_id'], ['pick_tasks.id'], ),
+    sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('pick_lines', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_pick_lines_location_id'), ['location_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_pick_lines_task_id'), ['task_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_pick_lines_variant_id'), ['variant_id'], unique=False)
 
     op.create_table('return_requests',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -613,8 +714,10 @@ def upgrade() -> None:
     op.create_table('stock_movements',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('variant_id', sa.Integer(), nullable=False),
-    sa.Column('kind', sa.Enum('OPENING', 'INTAKE', 'SALE', 'CANCEL_RETURN', 'CUSTOMER_RETURN', 'WRITE_OFF', 'COUNT_ADJUSTMENT', name='stockmovementkind'), nullable=False),
-    sa.Column('quantity', sa.Integer(), nullable=False),
+    sa.Column('from_location_id', sa.Integer(), nullable=True),
+    sa.Column('to_location_id', sa.Integer(), nullable=True),
+    sa.Column('kind', sa.Enum('RECEIPT', 'PUTAWAY', 'MOVE', 'PICK', 'HANDOVER', 'DELIVERED', 'RETURN', 'RELIST', 'DAMAGE', 'WRITE_OFF', 'ADJUST', name='stockmovementkind'), nullable=False),
+    sa.Column('qty', sa.Integer(), nullable=False),
     sa.Column('reason', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('actor_id', sa.Integer(), nullable=True),
     sa.Column('supply_id', sa.Integer(), nullable=True),
@@ -622,19 +725,23 @@ def upgrade() -> None:
     sa.Column('return_request_id', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['actor_id'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['from_location_id'], ['locations.id'], ),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
     sa.ForeignKeyConstraint(['return_request_id'], ['return_requests.id'], ),
     sa.ForeignKeyConstraint(['supply_id'], ['supplies.id'], ),
+    sa.ForeignKeyConstraint(['to_location_id'], ['locations.id'], ),
     sa.ForeignKeyConstraint(['variant_id'], ['product_variants.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('stock_movements', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_stock_movements_actor_id'), ['actor_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_stock_movements_created_at'), ['created_at'], unique=False)
+        batch_op.create_index(batch_op.f('ix_stock_movements_from_location_id'), ['from_location_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_stock_movements_kind'), ['kind'], unique=False)
         batch_op.create_index(batch_op.f('ix_stock_movements_order_id'), ['order_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_stock_movements_return_request_id'), ['return_request_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_stock_movements_supply_id'), ['supply_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_stock_movements_to_location_id'), ['to_location_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_stock_movements_variant_id'), ['variant_id'], unique=False)
 
     # ### end Alembic commands ###
@@ -645,10 +752,12 @@ def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
     with op.batch_alter_table('stock_movements', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_stock_movements_variant_id'))
+        batch_op.drop_index(batch_op.f('ix_stock_movements_to_location_id'))
         batch_op.drop_index(batch_op.f('ix_stock_movements_supply_id'))
         batch_op.drop_index(batch_op.f('ix_stock_movements_return_request_id'))
         batch_op.drop_index(batch_op.f('ix_stock_movements_order_id'))
         batch_op.drop_index(batch_op.f('ix_stock_movements_kind'))
+        batch_op.drop_index(batch_op.f('ix_stock_movements_from_location_id'))
         batch_op.drop_index(batch_op.f('ix_stock_movements_created_at'))
         batch_op.drop_index(batch_op.f('ix_stock_movements_actor_id'))
 
@@ -664,11 +773,27 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_return_requests_inspection'))
 
     op.drop_table('return_requests')
+    with op.batch_alter_table('pick_lines', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_pick_lines_variant_id'))
+        batch_op.drop_index(batch_op.f('ix_pick_lines_task_id'))
+        batch_op.drop_index(batch_op.f('ix_pick_lines_location_id'))
+
+    op.drop_table('pick_lines')
     with op.batch_alter_table('supply_lines', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_supply_lines_variant_id'))
         batch_op.drop_index(batch_op.f('ix_supply_lines_supply_id'))
 
     op.drop_table('supply_lines')
+    with op.batch_alter_table('stock_placements', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_stock_placements_variant_id'))
+        batch_op.drop_index(batch_op.f('ix_stock_placements_location_id'))
+
+    op.drop_table('stock_placements')
+    with op.batch_alter_table('stock_count_lines', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_stock_count_lines_variant_id'))
+        batch_op.drop_index(batch_op.f('ix_stock_count_lines_count_id'))
+
+    op.drop_table('stock_count_lines')
     with op.batch_alter_table('order_items', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_order_items_order_id'))
 
@@ -680,8 +805,9 @@ def downgrade() -> None:
 
     op.drop_table('cart_items')
     with op.batch_alter_table('product_variants', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_product_variants_sku'))
         batch_op.drop_index(batch_op.f('ix_product_variants_product_id'))
-        batch_op.drop_index(batch_op.f('ix_product_variants_parent_id'))
+        batch_op.drop_index(batch_op.f('ix_product_variants_barcode'))
 
     op.drop_table('product_variants')
     with op.batch_alter_table('product_specs', schema=None) as batch_op:
@@ -690,8 +816,16 @@ def downgrade() -> None:
     op.drop_table('product_specs')
     with op.batch_alter_table('product_images', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_product_images_product_id'))
+        batch_op.drop_index(batch_op.f('ix_product_images_colour'))
 
     op.drop_table('product_images')
+    with op.batch_alter_table('pick_tasks', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_pick_tasks_status'))
+        batch_op.drop_index(batch_op.f('ix_pick_tasks_picker_id'))
+        batch_op.drop_index(batch_op.f('ix_pick_tasks_order_id'))
+        batch_op.drop_index(batch_op.f('ix_pick_tasks_created_at'))
+
+    op.drop_table('pick_tasks')
     with op.batch_alter_table('order_events', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_order_events_order_id'))
 
@@ -714,6 +848,13 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_supplies_buyer_id'))
 
     op.drop_table('supplies')
+    with op.batch_alter_table('stock_counts', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_stock_counts_status'))
+        batch_op.drop_index(batch_op.f('ix_stock_counts_started_at'))
+        batch_op.drop_index(batch_op.f('ix_stock_counts_location_id'))
+        batch_op.drop_index(batch_op.f('ix_stock_counts_counter_id'))
+
+    op.drop_table('stock_counts')
     with op.batch_alter_table('search_history', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_search_history_user_id'))
 
@@ -782,6 +923,11 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_otp_codes_phone'))
 
     op.drop_table('otp_codes')
+    with op.batch_alter_table('locations', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_locations_kind'))
+        batch_op.drop_index(batch_op.f('ix_locations_code'))
+
+    op.drop_table('locations')
     with op.batch_alter_table('legal_docs', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_legal_docs_slug'))
 

@@ -20,7 +20,7 @@ from app.models import (
     OrderStatus,
     PaymentMethod,
     PickupPoint,
-    Product,
+    ProductImage,
     ProductVariant,
     ReturnReason,
     ReturnRequest,
@@ -139,31 +139,22 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
             # thing they bought, not whatever the card's cover is by then.
             image_url=_colour_or_cover(
                 session,
-                cart_item.color_variant_id if cart_item else None,
+                cart_item.variant_id if cart_item else None,
                 item.product_id,
             ),
             variant_id=cart_item.variant_id if cart_item else None,
-            color_variant_id=cart_item.color_variant_id if cart_item else None,
             variant_label=item.variant_label,
             unit_price=item.unit_price,
             quantity=item.quantity,
         )
         session.add(order_item)
-        # Paid, so it is a sale: the goods leave the shelf and the ledger says
-        # why. An unpaid order — cash to the courier — has not been sold yet,
-        # so nothing leaves; the goods are held for it instead, which
-        # ``app.stock.reserved`` reads off the order itself. Selling on
-        # promise-of-cash is how an undelivered order used to consume stock
-        # that a refusal at the door then never gave back.
+        # Nothing moves in the room. Paying for something does not fetch it
+        # off a shelf — a courier does, at a door — so the goods are held for
+        # this order and stand where they stand until somebody picks them.
+        # ``app.stock.reserved`` reads the hold off the order itself.
         if order_item.product_id is not None:
             touched.add(order_item.product_id)
-        if order.paid:
-            inventory.take(session, order_item)
-        else:
-            product = session.get(Product, order_item.product_id)
-            if product is not None:
-                product.sold_count += order_item.quantity
-                session.add(product)
+        inventory.take(session, order_item)
 
     sv.seed_order_events(session, order)
 
@@ -290,9 +281,6 @@ def cancel_order(
         actor=user,
         action="order.cancel",
         note=order.cancel_reason,
-        # An unpaid order never took the goods off the shelf — they were held
-        # for it — so there is nothing there to put back.
-        shelf=order.paid,
     )
     order.status = OrderStatus.CANCELLED
     order.updated_at = sv.utcnow()
@@ -402,17 +390,25 @@ def _resolve_address(session: SessionDep, user_id: int, address_id: int | None) 
 
 
 def _colour_or_cover(
-    session: SessionDep, color_variant_id: int | None, product_id: int | None
+    session: SessionDep, variant_id: int | None, product_id: int | None
 ) -> str:
-    """The colour's photograph if the line has one, else the card's cover.
+    """The photograph of the colour bought, if that colour has one.
 
     Relative paths on both sides, because this is a snapshot and the media
     host is allowed to move.
     """
-    if color_variant_id is not None:
-        variant = session.get(ProductVariant, color_variant_id)
-        if variant is not None and variant.image_url:
-            return variant.image_url
+    variant = session.get(ProductVariant, variant_id) if variant_id else None
+    if variant is not None and variant.colour:
+        row = session.exec(
+            select(ProductImage)
+            .where(
+                ProductImage.product_id == variant.product_id,
+                ProductImage.colour == variant.colour,
+            )
+            .order_by(col(ProductImage.sort), col(ProductImage.id))
+        ).first()
+        if row is not None:
+            return row.url
     return _raw_image(session, product_id)
 
 

@@ -146,10 +146,12 @@ def inspect_return(
     about a shirt one of them is holding, and the way to settle that is a
     conversation rather than an overwrite.
 
-    Whole goods go back on sale here, through ``app.returns.relist``, which is
-    guarded: a refund with ``restock: true`` may already have moved them, and
-    one shirt back is one shirt back. Damaged goods move nothing — they are
-    off the shelf and stay off it.
+    Either way the parcel is booked into the building here, through
+    ``app.returns.book_in``, which is guarded: a refund with ``restock: true``
+    may already have done it, and one shirt back is one shirt back. Whole
+    goods land in the receiving area and are for sale again; damaged ones land
+    in the damaged corner, counted and not sold — because a parcel nobody
+    recorded arriving is a parcel the room cannot find.
     """
     request = _return(session, return_id)
     if request.status not in (ReturnStatus.APPROVED, ReturnStatus.REFUNDED):
@@ -179,13 +181,14 @@ def inspect_return(
         note=request.inspection_note,
     )
 
-    if payload.result is ReturnInspection.OK:
-        rt.relist(
-            session,
-            request,
-            actor=user,
-            note=request.inspection_note or i18n.label("inspection_ok"),
-        )
+    rt.book_in(
+        session,
+        request,
+        actor=user,
+        note=request.inspection_note
+        or i18n.label(f"inspection_{payload.result.value}"),
+        damaged=payload.result is not ReturnInspection.OK,
+    )
 
     session.commit()
     session.refresh(request)
@@ -306,7 +309,7 @@ def _decide_return(
             # Through ``app.returns`` rather than straight at the inventory:
             # an inspection that passes relists the same parcel, and the guard
             # in there is what keeps one shirt from coming back twice.
-            rt.relist(session, request, actor=actor, note=payload.note)
+            rt.book_in(session, request, actor=actor, note=payload.note)
 
     request.status = target
     if target is ReturnStatus.REJECTED:
@@ -499,15 +502,13 @@ def set_order_status(
             actor=user,
             action="order.cancel",
             note=payload.note,
-            shelf=order.paid,
         )
-    if payload.status is OrderStatus.DELIVERED and not order.paid:
-        # Cash at the door. The goods were held for this order from the moment
-        # it was placed; this is the moment they actually leave, because this
-        # is the moment it becomes a sale.
+    if payload.status is OrderStatus.DELIVERED:
+        # The one moment goods actually leave the building. Cash at the door
+        # settles the money at the same time; the two are recorded apart
+        # because they are two facts, and only one of them is a move.
         order.paid = True
-        for line in inventory.order_items(session, order):
-            inventory.sell(session, line)
+        inventory.hand_over(session, order, actor=user, note=payload.note)
 
     # Returning an order does not restock it here: whether the goods go back on
     # the shelf is decided when the refund is made, and doing it in both places

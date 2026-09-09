@@ -9,14 +9,19 @@ sale that never happened sitting in the same table as the ones that did.
 
 So what is seeded is what cannot be typed in:
 
+* **the room** — every shelf cell and every staging area, from the list in
+  ``app.locations``. A cell is a physical fact about a building rather than
+  something anybody enters on a screen, and a warehouse with no places in it
+  cannot receive its first sack. Adding a fourth rack is a line in that list
+  and a second run of this file;
 * **the accounts**, one per role, because there is no way into an empty system
   otherwise and no second login to make one with;
 * **the vocabulary a picker needs** — why an order was called off, why
   something came back. Both are lists the apps render and neither has a screen
   to write them from.
 
-Everything else starts empty. The categories, the brands, the cards, the
-shelves and the orders are all the shop's own, and the shop does not exist yet.
+Everything else starts empty. The categories, the brands, the cards and the
+orders are all the shop's own, and the shop does not exist yet.
 
     python -m app.seed          # fill an empty database
     python -m app.seed --reset  # drop everything first
@@ -31,6 +36,7 @@ import sys
 from sqlalchemy import text as sql_text
 from sqlmodel import Session, SQLModel, delete, select
 
+from app import locations as loc
 from app.core.security import hash_secret
 from app.db import engine, require_current_schema
 from app.models import (
@@ -101,6 +107,13 @@ def reset(session: Session) -> None:
 
 
 def seed(session: Session) -> None:
+    # The room first, and on its own terms: it is idempotent on the code, so
+    # a database that already has accounts but has just grown a fourth rack
+    # gets the new cells rather than being told there is nothing to do.
+    places = loc.seed_locations(session)
+    if places:
+        print(f"Seeded {places} places — {len(loc.RACKS)} racks and the staging areas.")
+
     if session.exec(select(User)).first():
         print("Database already seeded — nothing to do. Use --reset to start over.")
         return

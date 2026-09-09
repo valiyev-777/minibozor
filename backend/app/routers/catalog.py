@@ -9,7 +9,7 @@ from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import OptionalUser, SessionDep
-from app.models import Brand, Category, Product, ProductVariant, VariantKind
+from app.models import Brand, Category, Product, ProductVariant
 
 router = APIRouter(tags=["catalog"])
 
@@ -123,9 +123,7 @@ def list_products(
         stmt = stmt.where(col(Product.old_price).is_not(None), Product.old_price > Product.price)
     if size:
         sized = session.exec(
-            select(ProductVariant.product_id).where(
-                ProductVariant.kind == VariantKind.SIZE, col(ProductVariant.label).in_(size)
-            )
+            select(ProductVariant.product_id).where(col(ProductVariant.size).in_(size))
         ).all()
         stmt = stmt.where(col(Product.id).in_(sized or [-1]))
 
@@ -166,12 +164,11 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
 
     sizes = sorted(
         {
-            v.label
+            v.size
             for v in session.exec(
-                select(ProductVariant).where(
-                    col(ProductVariant.product_id).in_(ids), ProductVariant.kind == VariantKind.SIZE
-                )
+                select(ProductVariant).where(col(ProductVariant.product_id).in_(ids))
             ).all()
+            if v.size
         },
         key=lambda x: (len(x), x),
     )

@@ -8,10 +8,15 @@ of this system.
 
 What replaced them follows the same shape as the code. **The database starts
 empty**, so a test that needs goods builds them: a category, a card, its
-variants, and a market run booked in through the same doors the warehouse
-uses. Nothing here reaches into the ledger to set a count — the one exception
-is ``_variants``, which writes the rows an editor's screen will write in a
-later phase and which has no door of its own yet.
+colour × size grid, and a market run booked in through the same doors the
+warehouse uses. Nothing here reaches into the ledger to set a count — the one
+exception is ``_variants``, which writes the rows an editor's screen will
+write in a later phase and which has no door of its own yet.
+
+**Every count is somewhere.** A quantity in this suite is always a quantity in
+a place, and the two invariants at the bottom hold the whole thing together: a
+placement equals its own movements, and a variant's shelf figure equals the
+sum of its placements.
 """
 
 from __future__ import annotations
@@ -21,22 +26,24 @@ from collections.abc import Callable
 from fastapi.testclient import TestClient
 from sqlmodel import Session, col, func, select
 
+from app import locations as loc
 from app import stock as st
 from app.db import engine
 from app.models import (
     AuditLog,
-    CartItem,
+    Location,
+    LocationKind,
     Product,
     ProductImage,
     ProductVariant,
     ReturnRequest,
     StockMovement,
     StockMovementKind,
+    StockPlacement,
     Supply,
     SupplyStatus,
     User,
     UserRole,
-    VariantKind,
 )
 from tests.conftest import COURIER_PHONE
 
@@ -90,44 +97,40 @@ def _variants(
     honest in a way that faking the ledger would not be. **No stock is set
     here** — every count in this suite arrives through a market run.
 
-    Returns the ids by label: ``{"Qora": 4, "Qora / 42": 5, …}``.
+    Returns the ids by label: ``{"Qora / 42": 5, …}``.
     """
     ids: dict[str, int] = {}
+    sort = 0
     with Session(engine) as session:
-        for c_sort, colour in enumerate(colours):
-            colour_row = ProductVariant(
-                product_id=product_id,
-                kind=VariantKind.COLOR,
-                label=colour,
-                value=colour.lower(),
-                price=price,
-                sort=c_sort,
-            )
-            session.add(colour_row)
-            session.commit()
-            session.refresh(colour_row)
-            ids[colour] = colour_row.id
-            for s_sort, size in enumerate(sizes):
-                size_row = ProductVariant(
+        for colour in colours:
+            for size in sizes:
+                row = ProductVariant(
                     product_id=product_id,
-                    kind=VariantKind.SIZE,
-                    label=size,
-                    value=size,
+                    colour=colour,
+                    colour_hex="#0E0F12",
+                    size=size,
+                    sku=f"{product_id}-{colour}-{size}",
+                    barcode=f"200{product_id:04d}{sort:03d}",
                     price=price,
-                    parent_id=colour_row.id,
-                    sort=s_sort,
+                    sort=sort,
                 )
-                session.add(size_row)
+                session.add(row)
                 session.commit()
-                session.refresh(size_row)
-                ids[f"{colour} / {size}"] = size_row.id
+                session.refresh(row)
+                ids[f"{colour} / {size}"] = row.id
+                sort += 1
     return ids
 
 
-def _photograph(product_id: int) -> None:
-    """One picture on the card, which is what lets it leave ``draft``."""
+def _photograph(product_id: int, *colours: str) -> None:
+    """A picture per colour, which is what lets a card leave ``draft``."""
     with Session(engine) as session:
-        session.add(ProductImage(product_id=product_id, url="products/alfa.jpg"))
+        for colour in colours or ("",):
+            session.add(
+                ProductImage(
+                    product_id=product_id, colour=colour, url="products/alfa.jpg"
+                )
+            )
         session.commit()
 
 
@@ -165,8 +168,10 @@ def _book_in(
     return closed.json()
 
 
-def _publish(client: TestClient, admin: dict[str, str], product_id: int) -> None:
-    _photograph(product_id)
+def _publish(
+    client: TestClient, admin: dict[str, str], product_id: int, *colours: str
+) -> None:
+    _photograph(product_id, *colours)
     put = client.post(
         f"{API}/staff/catalog/products/{product_id}/status",
         json={"status": "active"},
@@ -192,7 +197,7 @@ def _on_sale(
         warehouse,
         [(ids["Qora / 42"], stock), (ids["Oq / 42"], stock)],
     )
-    _publish(client, admin, card["id"])
+    _publish(client, admin, card["id"], "Qora", "Oq")
     return card, ids
 
 
@@ -282,13 +287,56 @@ def _to_the_door(
 
 
 def _shelf(variant_id: int) -> int:
+    """Everything of this variant in the building, off the variant's column."""
     with Session(engine) as session:
         return session.get(ProductVariant, variant_id).stock_left
 
 
 def _ledger(variant_id: int) -> int:
+    """The same, computed from the movements — what the column must equal."""
     with Session(engine) as session:
         return st.on_hand(session, variant_id)
+
+
+def _sellable(variant_id: int) -> int:
+    """What can still be bought: on a sellable shelf, less what is promised."""
+    with Session(engine) as session:
+        return st.sellable(session, session.get(ProductVariant, variant_id))
+
+
+def _in(code: str, variant_id: int) -> int:
+    """How many of this variant one place holds."""
+    with Session(engine) as session:
+        place = loc.by_code(session, code)
+        return st.at(session, place.id, variant_id) if place else 0
+
+
+def _assert_the_room_adds_up() -> None:
+    """Both invariants, over every placement and every variant there is.
+
+    Called at the end of anything that moves goods. A placement that has
+    drifted from its movements is a bug in ``app.stock``, and the point of
+    checking it here rather than in one dedicated test is that it is checked
+    after each *kind* of move rather than after one of them.
+    """
+    with Session(engine) as session:
+        for placement in session.exec(select(StockPlacement)).all():
+            assert placement.qty == st.ledger_at(
+                session, placement.location_id, placement.variant_id
+            ), f"placement {placement.location_id}/{placement.variant_id} has drifted"
+            assert placement.qty >= 0, "a place cannot hold less than nothing"
+
+        for variant in session.exec(select(ProductVariant)).all():
+            spread = sum(
+                row.qty
+                for row in session.exec(
+                    select(StockPlacement).where(
+                        StockPlacement.variant_id == variant.id
+                    )
+                ).all()
+            )
+            assert variant.stock_left == spread, f"{variant.sku} is not where it says"
+            assert variant.stock_left == st.on_hand(session, variant.id)
 
 
 # --------------------------------------------------------------------------- the door
@@ -521,6 +569,167 @@ def test_the_catalogue_summary_counts_every_state(
     assert set(counts.json()["counts"]) == {"draft", "active", "archived"}
 
 
+# --------------------------------------------------------------------------- the room
+
+
+def test_the_seed_builds_the_room_from_a_list() -> None:
+    """Three units of four by four today, and not a 3 or a 48 anywhere.
+
+    The count is asserted against ``locations.RACKS`` rather than against 48,
+    because the point of the list is that a fourth unit is a line in it — a
+    test that hard-codes the answer is the constant the code refused to have.
+    """
+    with Session(engine) as session:
+        cells = session.exec(
+            select(Location).where(Location.kind == LocationKind.BIN)
+        ).all()
+        staging = session.exec(
+            select(Location).where(Location.kind != LocationKind.BIN)
+        ).all()
+
+    expected = sum(columns * rows for _, columns, rows, _ in loc.RACKS)
+    assert len(cells) == expected
+    assert {place.code for place in staging} >= {
+        loc.QABUL, loc.YIGIM, loc.BRAK, loc.QAYTGAN
+    }
+
+
+def test_a_cell_reads_the_way_a_person_reads_a_shelf() -> None:
+    """``A-01-01`` is rack A, leftmost column, bottom row."""
+    with Session(engine) as session:
+        first = loc.by_code(session, "A-01-01")
+        assert first is not None
+        assert (first.rack, first.column_no, first.row_no) == ("A", 1, 1)
+        assert first.capacity > 0
+
+        last_rack = loc.RACKS[-1][0]
+        columns, rows = loc.RACKS[-1][1], loc.RACKS[-1][2]
+        assert loc.by_code(session, loc.cell_code(last_rack, columns, rows)) is not None
+
+
+def test_the_room_is_walked_in_serpentine_order() -> None:
+    """Up one column and down the next, so a picker walks the room once."""
+    with Session(engine) as session:
+        codes = [place.code for place in loc.cells(session)]
+
+    rows = loc.RACKS[0][2]
+    first_column = codes[:rows]
+    second_column = codes[rows : rows * 2]
+    assert first_column == [f"A-01-0{n}" for n in range(1, rows + 1)]
+    assert second_column == [f"A-02-0{n}" for n in range(rows, 0, -1)]
+
+
+def test_seeding_the_room_again_adds_nothing(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """Idempotent on the code, so a fourth rack is a seed run and not a reset."""
+    with Session(engine) as session:
+        before = len(session.exec(select(Location)).all())
+        assert loc.seed_locations(session) == 0
+        assert len(session.exec(select(Location)).all()) == before
+
+
+def test_goods_are_carried_from_the_receiving_area_to_a_cell(
+    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+) -> None:
+    """Putaway, as a move: out of QABUL and into a cell that is named.
+
+    The endpoint that does this from a screen arrives with the rest of the
+    warehouse doors; the move itself is the model's, and this is what it has
+    to do.
+    """
+    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-PUTAWAY", stock=6)
+    leaf = ids["Qora / 42"]
+
+    with Session(engine) as session:
+        variant = session.get(ProductVariant, leaf)
+        st.move(
+            session,
+            variant=variant,
+            qty=4,
+            kind=StockMovementKind.PUTAWAY,
+            frm=loc.staging(session, loc.QABUL),
+            to=loc.by_code(session, "A-02-03"),
+            reason="joylashtirildi",
+        )
+        session.commit()
+
+    assert _in(loc.QABUL, leaf) == 2
+    assert _in("A-02-03", leaf) == 4
+    # Carrying goods across the room changes where they are and not how many
+    # there are.
+    assert _shelf(leaf) == 6
+    assert _sellable(leaf) == 6
+    _assert_the_room_adds_up()
+
+
+def test_a_model_that_outgrew_its_cell_is_picked_from_both(
+    client: TestClient,
+    admin: dict[str, str],
+    warehouse: dict[str, str],
+    auth: dict[str, str],
+) -> None:
+    """Split across places, in walk order, because the goods are in two."""
+    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-TWOCELLS", stock=6)
+    leaf = ids["Qora / 42"]
+    with Session(engine) as session:
+        variant = session.get(ProductVariant, leaf)
+        st.move(
+            session,
+            variant=variant,
+            qty=5,
+            kind=StockMovementKind.PUTAWAY,
+            frm=loc.staging(session, loc.QABUL),
+            to=loc.by_code(session, "A-01-01"),
+        )
+        session.commit()
+
+    order = _order(client, auth, card["id"], leaf, quantity=6)
+    _to_the_door(client, admin, order["id"])
+
+    assert _shelf(leaf) == 0
+    assert _in("A-01-01", leaf) == 0
+    assert _in(loc.QABUL, leaf) == 0
+    _assert_the_room_adds_up()
+
+
+def test_a_courier_is_a_place_too(
+    client: TestClient,
+    admin: dict[str, str],
+    warehouse: dict[str, str],
+    auth: dict[str, str],
+) -> None:
+    """A parcel in a bag has not left the building's books.
+
+    Made the first time somebody carries something, unlike the four staging
+    areas: couriers are hired and leave, and a seed that has to be re-run
+    whenever somebody joins is a seed nobody re-runs.
+    """
+    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-BAG", stock=3)
+    leaf = ids["Qora / 42"]
+
+    with Session(engine) as session:
+        courier = session.exec(
+            select(User).where(User.phone == COURIER_PHONE)
+        ).one()
+        bag = loc.for_courier(session, courier.id)
+        assert bag.code == f"{loc.COURIER_PREFIX}-{courier.id}"
+        assert bag.kind is LocationKind.COURIER
+        st.move(
+            session,
+            variant=session.get(ProductVariant, leaf),
+            qty=1,
+            kind=StockMovementKind.HANDOVER,
+            frm=loc.staging(session, loc.QABUL),
+            to=bag,
+        )
+        session.commit()
+
+    assert _shelf(leaf) == 3          # still in the building
+    assert _sellable(leaf) == 2       # but not on a shelf anybody sells from
+    _assert_the_room_adds_up()
+
+
 # --------------------------------------------------------------------------- market runs
 
 
@@ -609,9 +818,11 @@ def test_closing_a_run_is_what_brings_the_goods_into_existence(
     assert closed["total_cost"] == 10 * 200_000 + 30_000
     assert _shelf(ids["Qora / 42"]) == 6
     assert _ledger(ids["Qora / 42"]) == 6
-    # A colour is the sum of its sizes, and nothing wrote a movement for it.
-    assert _shelf(ids["Qora"]) == 10
-    assert _ledger(ids["Qora"]) == 0
+
+    # Into the receiving area, not onto a shelf. Somebody carries it to a cell
+    # afterwards; until they do, being in QABUL *is* the unplaced state.
+    assert _in(loc.QABUL, ids["Qora / 42"]) == 6
+    assert _sellable(ids["Qora / 42"]) == 6
 
     with Session(engine) as session:
         kinds = session.exec(
@@ -619,7 +830,8 @@ def test_closing_a_run_is_what_brings_the_goods_into_existence(
                 StockMovement.variant_id == ids["Qora / 42"]
             )
         ).all()
-    assert list(kinds) == [StockMovementKind.INTAKE]
+    assert list(kinds) == [StockMovementKind.RECEIPT]
+    _assert_the_room_adds_up()
 
 
 def test_a_closed_run_is_not_reopened(
@@ -681,77 +893,94 @@ def test_only_the_warehouse_books_goods_in(
 def test_the_shelf_is_the_sum_of_the_ledger(
     client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
 ) -> None:
-    """The invariant, over a sequence with movements in both directions."""
+    """The invariant, over a sequence with moves in every direction."""
     card, ids = _on_sale(client, admin, warehouse, sku="ALFA-LEDGER", stock=10)
     leaf = ids["Qora / 42"]
 
     client.post(
-        f"{API}/staff/stock/write-off",
+        f"{API}/staff/stock/damage",
         json={"variant_id": leaf, "quantity": 2, "reason": "Ombor devoridan tushdi"},
         headers=warehouse,
     )
     _book_in(client, warehouse, [(leaf, 5)])
 
-    assert _shelf(leaf) == 13
-    assert _ledger(leaf) == 13
+    # Fifteen in the building — the two broken ones are in the corner by the
+    # door, not gone — and thirteen that can be sold.
+    assert _shelf(leaf) == 15
+    assert _ledger(leaf) == 15
+    assert _in(loc.BRAK, leaf) == 2
+    assert _sellable(leaf) == 13
+    _assert_the_room_adds_up()
 
-    with Session(engine) as session:
-        for variant in session.exec(
-            select(ProductVariant).where(ProductVariant.kind == VariantKind.SIZE)
-        ).all():
-            assert variant.stock_left == st.on_hand(session, variant.id), variant.label
 
-
-def test_a_write_off_needs_a_reason(
+def test_a_place_cannot_give_up_what_it_never_held(
     client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
 ) -> None:
-    """Stock that left without one is indistinguishable from stock that was stolen."""
+    """A cell that would go negative is a miscount, not an arithmetic result."""
+    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-SHORT", stock=2)
+    refused = client.post(
+        f"{API}/staff/stock/damage",
+        json={"variant_id": ids["Qora / 42"], "quantity": 9, "reason": "suvda qoldi"},
+        headers=warehouse,
+    )
+    assert refused.status_code == 409, refused.text
+    assert _shelf(ids["Qora / 42"]) == 2
+    _assert_the_room_adds_up()
+
+
+def test_damaged_goods_need_a_reason(
+    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+) -> None:
+    """Stock that moved without one is indistinguishable from stock that was stolen."""
     card, ids = _on_sale(client, admin, warehouse, sku="ALFA-WRITEOFF")
     refused = client.post(
-        f"{API}/staff/stock/write-off",
+        f"{API}/staff/stock/damage",
         json={"variant_id": ids["Qora / 42"], "quantity": 1, "reason": ""},
         headers=warehouse,
     )
     assert refused.status_code == 422, refused.text
 
 
-def test_a_write_off_is_audited_and_shows_in_the_ledger(
+def test_damaged_goods_are_audited_and_read_as_a_move(
     client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
 ) -> None:
     card, ids = _on_sale(client, admin, warehouse, sku="ALFA-AUDIT")
     leaf = ids["Qora / 42"]
     client.post(
-        f"{API}/staff/stock/write-off",
+        f"{API}/staff/stock/damage",
         json={"variant_id": leaf, "quantity": 1, "reason": "Suvda qoldi"},
         headers=warehouse,
     )
 
     ledger = client.get(
         f"{API}/staff/stock/movements",
-        params={"variant_id": leaf, "kind": "write_off"},
+        params={"variant_id": leaf, "kind": "damage"},
         headers=warehouse,
     ).json()
     assert ledger["total"] == 1
     row = ledger["items"][0]
-    assert row["quantity"] == -1
+    # A move reads as one: this many, out of there, into here.
+    assert row["quantity"] == 1
+    assert row["from_code"] == loc.QABUL
+    assert row["to_code"] == loc.BRAK
     assert row["reason"] == "Suvda qoldi"
     assert row["variant_label"] == "Qora · 42"
 
     with Session(engine) as session:
         logged = session.exec(
             select(AuditLog).where(
-                AuditLog.action == "stock.write_off",
+                AuditLog.action == "stock.damage",
                 AuditLog.entity_id == leaf,
             )
         ).all()
     assert len(logged) == 1
 
 
-def test_nothing_can_be_written_off_that_is_not_a_variant(
+def test_nothing_can_be_damaged_that_is_not_a_variant(
     client: TestClient, warehouse: dict[str, str]
 ) -> None:
     missing = client.post(
-        f"{API}/staff/stock/write-off",
+        f"{API}/staff/stock/damage",
         json={"variant_id": 999_999, "quantity": 1, "reason": "yo'q"},
         headers=warehouse,
     )
@@ -773,7 +1002,7 @@ def test_the_card_advertises_the_cheapest_of_its_variants(
         session.add(cheap)
         session.commit()
     _book_in(client, warehouse, [(ids["Qora / 42"], 2), (ids["Qora / 43"], 2)])
-    _publish(client, admin, card["id"])
+    _publish(client, admin, card["id"], "Qora")
 
     shown = client.get(f"{API}/products/{card['id']}").json()
     assert shown["price"] == 700_000
@@ -789,21 +1018,24 @@ def test_the_card_carries_no_stock_of_its_own_but_reports_it(
     assert shown["stock_left"] == 8          # two colours, four each
     assert shown["in_stock"] is True
 
+    # The grid is flat: four cells, each answering for itself.
+    cells = {f"{v['colour']} · {v['size']}": v for v in shown["variants"]}
+    assert set(cells) == {"Qora · 42", "Qora · 43", "Oq · 42", "Oq · 43"}
+    assert cells["Qora · 42"]["stock_left"] == 4
+    assert cells["Qora · 43"]["stock_left"] == 0
+    assert [c["colour"] for c in shown["colours"]] == ["Qora", "Oq"]
+
 
 def test_the_listing_hides_what_cannot_be_bought(
     client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
 ) -> None:
     card, ids = _on_sale(client, admin, warehouse, sku="ALFA-SOLDOUT", stock=1)
-    client.post(
-        f"{API}/staff/stock/write-off",
-        json={"variant_id": ids["Qora / 42"], "quantity": 1, "reason": "brak"},
-        headers=warehouse,
-    )
-    client.post(
-        f"{API}/staff/stock/write-off",
-        json={"variant_id": ids["Oq / 42"], "quantity": 1, "reason": "brak"},
-        headers=warehouse,
-    )
+    for leaf in (ids["Qora / 42"], ids["Oq / 42"]):
+        client.post(
+            f"{API}/staff/stock/damage",
+            json={"variant_id": leaf, "quantity": 1, "reason": "brak"},
+            headers=warehouse,
+        )
 
     ids_shown = [p["id"] for p in client.get(f"{API}/products").json()["items"]]
     assert card["id"] not in ids_shown
@@ -873,10 +1105,12 @@ def test_a_basket_holds_the_goods_off_everybody_else(
         json={"product_id": card["id"], "variant_id": ids["Qora / 42"], "quantity": 1},
         headers=other,
     )
-    # The hold is not on the shelf — the goods are still there — but nobody
-    # else may promise them.
-    assert theirs.json()["items"][0]["stock_left"] == 0
+    # The hold moved nothing: the goods are still standing where they stood,
+    # and the ledger has nothing to say about a basket.
+    assert theirs.status_code == 409, theirs.text
     assert _shelf(ids["Qora / 42"]) == 1
+    assert _in(loc.QABUL, ids["Qora / 42"]) == 1
+    _assert_the_room_adds_up()
 
 
 def test_emptying_a_basket_releases_what_it_held(
@@ -889,36 +1123,43 @@ def test_emptying_a_basket_releases_what_it_held(
         headers=auth,
     )
     with Session(engine) as session:
-        assert (
-            st.reserved(session, ids["Qora / 42"]) == 1
-        )
+        assert st.reserved(session, ids["Qora / 42"]) == 1
+    assert _sellable(ids["Qora / 42"]) == 0
 
     client.delete(f"{API}/cart", headers=auth)
     with Session(engine) as session:
         assert st.reserved(session, ids["Qora / 42"]) == 0
-        assert session.exec(select(func.count()).select_from(CartItem)).one() >= 0
+    assert _sellable(ids["Qora / 42"]) == 1
 
 
 # --------------------------------------------------------------------------- orders
 
 
-def test_a_paid_order_takes_the_goods_off_the_shelf(
+def test_paying_for_an_order_moves_nothing_in_the_room(
     client: TestClient, admin: dict[str, str], warehouse: dict[str, str], auth: dict[str, str]
 ) -> None:
+    """Money does not move goods. A courier at a door does.
+
+    Paying used to take the goods off the shelf, which meant the shop could
+    not answer "where is it" between the till and the door — and a refusal at
+    that door had nothing to put back.
+    """
     card, ids = _on_sale(client, admin, warehouse, sku="ALFA-SALE", stock=5)
     leaf = ids["Qora / 42"]
     _order(client, auth, card["id"], leaf, quantity=2)
 
-    assert _shelf(leaf) == 3
-    assert _ledger(leaf) == 3
+    assert _shelf(leaf) == 5
+    assert _in(loc.QABUL, leaf) == 5
+    # Held rather than gone: nobody else may promise them.
+    assert _sellable(leaf) == 3
     with Session(engine) as session:
         assert session.get(Product, card["id"]).sold_count == 2
+    _assert_the_room_adds_up()
 
 
-def test_a_cash_order_holds_the_goods_rather_than_selling_them(
+def test_a_cash_order_holds_the_goods_the_same_way(
     client: TestClient, admin: dict[str, str], warehouse: dict[str, str], auth: dict[str, str]
 ) -> None:
-    """Selling on promise-of-cash is how a refusal at the door lost stock."""
     card, ids = _on_sale(client, admin, warehouse, sku="ALFA-CASH", stock=5)
     leaf = ids["Qora / 42"]
     _order(client, auth, card["id"], leaf, quantity=2, payment="cash")
@@ -938,6 +1179,8 @@ def test_cancelling_an_order_puts_everything_back(
     leaf = ids["Qora / 42"]
     order = _order(client, auth, card["id"], leaf, quantity=2)
 
+    assert _sellable(leaf) == 3
+
     off = client.post(
         f"{API}/orders/{order['id']}/cancel",
         json={"reason": "Fikrimdan qaytdim"},
@@ -946,8 +1189,11 @@ def test_cancelling_an_order_puts_everything_back(
     assert off.status_code == 200, off.text
     assert _shelf(leaf) == 5
     assert _ledger(leaf) == 5
+    # The hold ends with the order, so the goods are on offer again.
+    assert _sellable(leaf) == 5
     with Session(engine) as session:
         assert session.get(Product, card["id"]).sold_count == 0
+    _assert_the_room_adds_up()
 
 
 def test_the_order_queue_is_worked_from_the_front(
@@ -1029,8 +1275,10 @@ def test_a_courier_takes_a_parcel_and_delivers_it(
     )
     assert delivered.status_code == 200, delivered.text
     assert delivered.json()["status"] == "delivered"
-    # Cash at the door is when the goods actually leave.
+    # The door is where the goods actually leave the building.
     assert _shelf(ids["Qora / 42"]) == 4
+    assert _in(loc.QABUL, ids["Qora / 42"]) == 4
+    _assert_the_room_adds_up()
 
 
 def test_a_retried_delivery_replays_rather_than_selling_twice(
@@ -1068,6 +1316,7 @@ def test_a_retried_delivery_replays_rather_than_selling_twice(
     assert first.status_code == second.status_code == 200
     assert first.json() == second.json()
     assert _shelf(ids["Qora / 42"]) == 4
+    _assert_the_room_adds_up()
 
 
 def test_a_courier_earns_per_delivery(
@@ -1119,7 +1368,11 @@ def test_a_return_is_asked_for_approved_and_refunded(
     )
     assert refunded.status_code == 200, refunded.text
     assert refunded.json()["refund_amount"] > 0
+    # Back in the building, in the receiving area, and on sale again.
     assert _shelf(leaf) == 5
+    assert _in(loc.QABUL, leaf) == 5
+    assert _sellable(leaf) == 5
+    _assert_the_room_adds_up()
 
 
 def test_goods_come_back_onto_the_shelf_exactly_once(
@@ -1155,6 +1408,7 @@ def test_goods_come_back_onto_the_shelf_exactly_once(
     assert inspected.status_code == 200, inspected.text
     assert inspected.json()["relisted"] is True
     assert _shelf(leaf) == 5
+    _assert_the_room_adds_up()
 
 
 def test_a_damaged_return_does_not_go_back_on_sale(
@@ -1185,8 +1439,14 @@ def test_a_damaged_return_does_not_go_back_on_sale(
         headers=warehouse,
     )
     assert inspected.status_code == 200, inspected.text
-    assert inspected.json()["relisted"] is False
-    assert _shelf(leaf) == 4
+    # The parcel is recorded as having arrived — a parcel nobody booked in is
+    # a parcel the room cannot find — but it lands in the damaged corner and
+    # nothing there is for sale.
+    assert inspected.json()["relisted"] is True
+    assert _shelf(leaf) == 5
+    assert _in(loc.BRAK, leaf) == 1
+    assert _sellable(leaf) == 4
+    _assert_the_room_adds_up()
 
 
 def test_a_parcel_is_inspected_once(

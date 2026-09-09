@@ -258,20 +258,27 @@ def set_product_status(
 ) -> s.AdminProductOut:
     """The only door the shop's front window opens through.
 
-    **A card with no photograph does not go on sale.** Market goods arrive
+    **A colour with no photograph does not go on sale.** Market goods arrive
     with no pictures, so the only ones that will ever exist are the ones taken
     at the receiving desk — and a catalogue of grey squares sells nothing and
     makes the whole shop look broken. So this is refused rather than warned
-    about, and the card stays in ``draft``: it is in stock, it counts towards
-    the figures, and the apps cannot see it.
+    about, and the card stays in ``draft``: it is in stock, it sits in a cell,
+    it counts towards the figures, and the apps cannot see it.
+
+    The refusal **names the colours**, because "one colour is missing a
+    photograph" leaves somebody opening all six to find out which.
     """
     product = _product(session, product_id)
     tr.ensure(tr.PRODUCT_TRANSITIONS, product.status, payload.status)
 
-    if payload.status is ProductStatus.ACTIVE and not _image_rows(session, product.id):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, i18n.label("images_required")
-        )
+    if payload.status is ProductStatus.ACTIVE:
+        missing = pr.colours_without_a_photograph(session, product.id)
+        if missing:
+            named = ", ".join(colour or product.title for colour in missing)
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                i18n.label("colour_needs_photo", colours=named),
+            )
 
     audit.record(
         session,

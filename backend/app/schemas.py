@@ -26,7 +26,6 @@ from app.models import (
     StockMovementKind,
     SupplyStatus,
     UserRole,
-    VariantKind,
 )
 
 T = TypeVar("T")
@@ -236,23 +235,40 @@ class BrandOut(BaseModel):
     product_count: int = 0
 
 
-class VariantOut(BaseModel):
-    id: int
-    kind: VariantKind
-    label: str
-    value: str
-    # The product in this colour, so the picker can show photographs instead of
-    # hex swatches. None for sizes, and for a colour nobody photographed.
+class ColourOut(BaseModel):
+    """One colour a card comes in, with the picture of it.
+
+    A colour is chosen by looking at the thing, so what the picker draws is
+    the photograph; the hex is the fallback for a colour that has none, which
+    only a draft can have.
+    """
+
+    colour: str
+    hex: str = ""
     image_url: str | None = None
+    in_stock: bool = True
+
+
+class VariantOut(BaseModel):
+    """One cell of the colour × size grid — the thing that is actually bought.
+
+    Flat, where this used to be a tree of colours with sizes hanging off them.
+    A basket line names one of these and nothing else: the pair used to be two
+    ids that could disagree with each other, and one of the two was an
+    aggregate nobody could point at on a shelf.
+    """
+
+    id: int
+    colour: str
+    size: str
+    label: str            # "Qora · 42", ready to print
+    sku: str = ""
+    barcode: str = ""
+    price: int
     in_stock: bool
-    # How many of this colour, or of this size in this colour, are left. None
-    # means the shelf is only counted as a whole, and the product's own
-    # stock_left is the answer.
-    stock_left: int | None = None
-    # The colour a size belongs to: sizes are counted per colour, so a page
-    # showing one colour shows that colour's sizes. Null on a colour, and on a
-    # size of a product that has no colours.
-    parent_id: int | None = None
+    # What can still be bought: what is on a sellable shelf, less what is
+    # already in somebody's basket or promised to an order.
+    stock_left: int = 0
 
 
 class SpecOut(BaseModel):
@@ -294,6 +310,9 @@ class ProductOut(ProductCardOut):
     images: list[str]
     category: CategoryOut
     brand: BrandOut | None
+    # The colours first, because that is the order a person chooses in: which
+    # one, looking at the photographs, and then which size of it.
+    colours: list[ColourOut]
     variants: list[VariantOut]
     specs: list[SpecOut]
     warranty: str | None
@@ -380,7 +399,6 @@ class CartItemOut(BaseModel):
     # match on the product — so a shirt in the basket in medium left no way to
     # add a large.
     variant_id: int | None = None
-    color_variant_id: int | None = None
     unit_price: int
     old_unit_price: int | None
     quantity: int
@@ -409,8 +427,9 @@ class CartOut(BaseModel):
 
 class CartAddIn(BaseModel):
     product_id: int
+    # One id, not two. It names a cell of the colour × size grid; a card with
+    # no variation has exactly one and it may be left out.
     variant_id: int | None = None
-    color_variant_id: int | None = None
     quantity: int = Field(default=1, ge=1, le=99)
 
 
@@ -641,10 +660,22 @@ class StockLineOut(BaseModel):
     product_title: str
 
 
+class PlacementOut(BaseModel):
+    """How many of one variant one place holds."""
+
+    location_id: int
+    code: str
+    qty: int
+
+
 class MovementOut(StockLineOut):
     id: int
     kind: StockMovementKind
     quantity: int
+    # Where it came from and where it went, by code. "—" at either end is the
+    # outside world: a market run arriving, a parcel going out of the door.
+    from_code: str
+    to_code: str
     reason: str
     actor: str
     supply_id: int | None
@@ -658,9 +689,12 @@ class ShelfOut(BaseModel):
 
     variant_id: int
     variant_label: str
+    # Everything in the building. Not the same as what can be sold: the
+    # damaged corner and the uninspected returns are in the building too.
     on_hand: int
     reserved: int
     sellable: int
+    places: list[PlacementOut] = []
 
 
 class SupplyLineIn(BaseModel):
@@ -832,10 +866,13 @@ class AdminImageOut(BaseModel):
     id: int
     url: str
     sort: int
+    # Which colour this is a photograph of. Empty on a card with no colours,
+    # where the picture is of the thing itself.
+    colour: str = ""
 
 
 class AdminVariantOut(BaseModel):
-    """A colour or a size, and whether it may be deleted.
+    """One cell of the grid, as the editor holds it.
 
     ``can_delete`` is the backend's own answer, from the same function the
     delete endpoint refuses with — not a rule copied into the browser that
@@ -845,30 +882,39 @@ class AdminVariantOut(BaseModel):
     """
 
     id: int
-    kind: VariantKind
+    colour: str
+    colour_hex: str
+    size: str
     label: str
-    value: str
-    image_url: str | None
-    parent_id: int | None
+    sku: str
+    barcode: str
+    price: int
     sort: int
-    stock_left: int | None
+    stock_left: int
     in_stock: bool
     can_delete: bool
     # An already-translated sentence, empty when it can be deleted.
     blocked_reason: str
 
 
-class AdminVariantsOut(BaseModel):
-    """The tree, plus whether a size may be added to it at all.
+class ColourIn(BaseModel):
+    colour: str = Field(min_length=1, max_length=60)
+    hex: str = Field(default="", max_length=9)
 
-    The second guard the editor has to show in advance: a colour with stock
-    against it cannot take its first size, because the shelf is counted on the
-    colour and the size would move where the counting happens.
+
+class VariantGridIn(BaseModel):
+    """The colour × size matrix, in one step.
+
+    Typing twelve variants by hand for every shoe model is how a warehouse
+    stops being used, so the form takes the colours and the sizes and the grid
+    is what comes back. Sending it again adds what is new and leaves what
+    exists alone — a colour added in October must not renumber the barcodes
+    printed in June.
     """
 
-    variants: list[AdminVariantOut]
-    can_add_size: bool
-    size_blocked_reason: str
+    colours: list[ColourIn] = Field(default_factory=list, max_length=40)
+    sizes: list[str] = Field(default_factory=list, max_length=40)
+    price: int = Field(default=0, ge=0)
 
 
 class AdminSpecOut(BaseModel):
@@ -995,19 +1041,26 @@ class BrandWriteIn(BaseModel):
 
 class ImageWriteIn(BaseModel):
     url: str = Field(min_length=1, max_length=300)
+    # Which colour this is a photograph of. A picture belongs to a colour, not
+    # to a variant: two colours in six sizes is two pictures, not twelve.
+    colour: str = Field(default="", max_length=60)
     sort: int = 0
 
 
 class VariantWriteIn(BaseModel):
-    kind: VariantKind
-    label: str = Field(min_length=1, max_length=60)
-    value: str = Field(min_length=1, max_length=60)
-    image_url: str | None = None
-    # Which colour this size belongs to. Required for a size on a product that
-    # has colours — a size that belongs to nothing is a cell of no grid.
-    parent_id: int | None = None
+    """One cell of the grid, edited on its own.
+
+    The grid itself is made in one step — see ``VariantGridIn`` — because
+    typing twelve variants by hand for every shoe model is how a warehouse
+    stops being used. This is for afterwards: repricing a size, correcting a
+    colour's spelling, printing a label again.
+    """
+
+    colour: str = Field(default="", max_length=60)
+    colour_hex: str = Field(default="", max_length=9)
+    size: str = Field(default="", max_length=40)
+    price: int = Field(default=0, ge=0)
     sort: int = 0
-    translations: dict[Lang, VariantTextIn] = Field(default_factory=dict)
 
 
 class SpecWriteIn(BaseModel):

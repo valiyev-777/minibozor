@@ -340,13 +340,13 @@ def deliver(
         ),
     )
 
-    if not order.paid:
-        # Cash at the door. The goods leave the shelf now, because now is when
-        # it becomes a sale — the same two-step the operator's own status door
-        # keeps, and the reason ``inventory.sell`` is separate from ``take``.
-        order.paid = True
-        for line in inventory.order_items(session, order):
-            inventory.sell(session, line)
+    # The goods leave the building here, out of this courier's own bag: this
+    # is the door, and handing them over is the only thing that empties the
+    # room. Cash settles the money at the same moment and is a separate fact.
+    order.paid = True
+    inventory.hand_over(
+        session, order, actor=user, note=payload.recipient_name.strip()
+    )
 
     order.status = OrderStatus.DELIVERED
     order.updated_at = utcnow()

@@ -29,11 +29,14 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
 from app import audit, i18n
+from app import locations as loc
 from app import products as pr
 from app import schemas as s
+from app import services as sv
 from app import stock as st
 from app.deps import SessionDep, StockViewer, WarehouseUser
 from app.models import (
+    Location,
     Product,
     ProductVariant,
     StockMovement,
@@ -211,14 +214,22 @@ def receive_supply(
             status.HTTP_409_CONFLICT, i18n.label("supply_nothing_sorted")
         )
 
+    receiving = loc.staging(session, loc.QABUL)
     touched: set[int] = set()
     for line in lines:
         variant = _variant(session, line.variant_id)
+        # Into the receiving area and not onto a shelf. Somebody carries it
+        # to a cell afterwards and records which — until they do, the goods
+        # are in QABUL, which is a place and not a state of not being
+        # anywhere. They are sellable from there: the pick list simply sends
+        # the picker to the desk instead of to a rack.
         st.move(
             session,
             variant=variant,
-            kind=StockMovementKind.INTAKE,
-            quantity=line.quantity,
+            qty=line.quantity,
+            kind=StockMovementKind.RECEIPT,
+            frm=None,
+            to=receiving,
             actor=user,
             reason=run.note or f"{run.code} qabul qilindi",
             supply_id=run.id,
@@ -286,32 +297,45 @@ def cancel_supply(
 
 
 @router.post(
-    "/stock/write-off",
+    "/stock/damage",
     response_model=s.ShelfOut,
-    summary="Goods that are gone — damaged, lost, spoiled",
+    summary="Goods that are broken — into the damaged corner",
 )
-def write_off(
+def damage(
     payload: s.WriteOffIn, user: WarehouseUser, session: SessionDep
 ) -> s.ShelfOut:
-    variant = _variant(session, payload.variant_id)
+    """Not off the books: into ``BRAK``, which is a place in the building.
 
-    st.move(
-        session,
-        variant=variant,
-        kind=StockMovementKind.WRITE_OFF,
-        quantity=payload.quantity,
-        actor=user,
-        reason=payload.reason,
-    )
+    A broken shirt has not evaporated. It is in the corner by the door, it is
+    countable, and somebody will eventually decide whether it goes back to the
+    market or into a bin — none of which is sayable if the ledger's answer to
+    "damaged" is that the goods stopped existing.
+    """
+    variant = _variant(session, payload.variant_id)
+    corner = loc.staging(session, loc.BRAK)
+
+    try:
+        st.take_from_shelf(
+            session,
+            variant,
+            payload.quantity,
+            kind=StockMovementKind.DAMAGE,
+            to=corner,
+            actor=user,
+            reason=payload.reason,
+        )
+    except st.StockError as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from None
+
     audit.record(
         session,
         actor=user,
-        action="stock.write_off",
+        action="stock.damage",
         entity="product_variant",
         entity_id=variant.id,
-        field="stock_left",
+        field="location",
         old=None,
-        new=-payload.quantity,
+        new=corner.code,
         note=payload.reason,
     )
     pr.refresh(session, variant.product_id)
@@ -385,28 +409,19 @@ def _variant(session: SessionDep, variant_id: int) -> ProductVariant:
 def _names(session: SessionDep, variant_id: int) -> tuple[str, str, str]:
     """The label, the title and the code — what a person and a scanner read.
 
-    **The label names the cell, not the leaf.** A size's own label is "S", and
-    a batch of a two-colour shirt then produced six lines reading "S", "M",
-    "L", "S", "M", "L" — with somebody at the warehouse typing a count against
-    each one. Two rows that read identically on the screen where the counting
-    happens is the shape of a miscount, so a size is prefixed with the colour
-    it is a size of: "Oq · S".
-
-    A colour with no sizes is already the cell and keeps its own label.
+    **The label names the whole cell of the grid**, "Oq · S" and not "S". A
+    receipt of a two-colour shirt used to produce six lines reading "S", "M",
+    "L", "S", "M", "L", with somebody typing a count against each: two rows
+    that read identically on the screen where the counting happens is the
+    shape of a miscount.
     """
     variant = session.get(ProductVariant, variant_id)
     product = session.get(Product, variant.product_id) if variant else None
-    if variant is None:
-        label = "—"
-    elif variant.parent_id is not None:
-        parent = session.get(ProductVariant, variant.parent_id)
-        label = f"{parent.label} · {variant.label}" if parent else variant.label
-    else:
-        label = variant.label
+    label = sv.variant_label(variant) if variant else "—"
     return (
-        label,
+        label or "—",
         (product.title if product else ""),
-        (product.sku if product else ""),
+        (variant.sku if variant and variant.sku else (product.sku if product else "")),
     )
 
 
@@ -458,7 +473,24 @@ def _shelf_out(session: SessionDep, variant: ProductVariant) -> s.ShelfOut:
         on_hand=st.on_hand(session, variant.id),
         reserved=st.reserved(session, variant.id),
         sellable=st.sellable(session, variant),
+        places=[
+            s.PlacementOut(location_id=place.id, code=place.code, qty=qty)
+            for place, qty in st.placements(session, variant.id)
+        ],
     )
+
+
+def _code(session: SessionDep, location_id: int | None) -> str:
+    """A place's code, or the outside world.
+
+    The em dash is the point: "from —" is a market run arriving and "to —" is
+    a parcel out of the door, and both are moves the room made rather than
+    holes in the record.
+    """
+    if location_id is None:
+        return "—"
+    place = session.get(Location, location_id)
+    return place.code if place else "—"
 
 
 def _movement_out(session: SessionDep, movement: StockMovement) -> s.MovementOut:
@@ -471,7 +503,9 @@ def _movement_out(session: SessionDep, movement: StockMovement) -> s.MovementOut
         variant_label=label,
         product_title=title,
         kind=movement.kind,
-        quantity=movement.quantity,
+        quantity=movement.qty,
+        from_code=_code(session, movement.from_location_id),
+        to_code=_code(session, movement.to_location_id),
         reason=movement.reason,
         actor=(actor.full_name or actor.phone) if actor else "tizim",
         supply_id=movement.supply_id,

@@ -10,6 +10,7 @@ from sqlmodel import Session, col, func, select
 from app import i18n
 from app import products as pr
 from app import schemas as s
+from app import stock as st
 from app.models import (
     Address,
     Brand,
@@ -138,22 +139,24 @@ def is_in_the_shop(product: Product | None) -> bool:
     return product is not None and product.status is ProductStatus.ACTIVE
 
 
-def colour_image(session: Session, variant_id: int | None) -> str | None:
-    """The photograph of the goods in one colour, if that colour has one.
+def colour_image(session: Session, product_id: int, colour: str) -> str | None:
+    """The first photograph of one colour of a card.
 
     A colour is chosen by looking at the thing, so a basket line for a black
     shirt showing the white cover photograph is a line the shopper does not
     recognise as theirs — and the first place they notice is the order, which
     is the worst place to be surprised. A card cannot leave ``draft`` while a
-    colour of it is without a picture, but a draft's rows may not have one, so
-    this answers ``None`` and the caller falls back to the product's cover.
+    colour of it is without a picture, but a draft's may be, so this answers
+    ``None`` and the caller falls back to the product's cover.
     """
-    if variant_id is None:
+    if not colour:
         return None
-    variant = session.get(ProductVariant, variant_id)
-    if variant is None or not variant.image_url:
-        return None
-    return media_url(variant.image_url)
+    row = session.exec(
+        select(ProductImage)
+        .where(ProductImage.product_id == product_id, ProductImage.colour == colour)
+        .order_by(col(ProductImage.sort), col(ProductImage.id))
+    ).first()
+    return media_url(row.url) if row else None
 
 
 def primary_image(session: Session, product_id: int) -> str | None:
@@ -306,16 +309,30 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
         images=[media_url(i.url) for i in images],
         category=category_out(session, category),
         brand=brand_out(session, brand) if brand else None,
+        colours=[
+            s.ColourOut(
+                colour=colour,
+                hex=next(
+                    (v.colour_hex for v in variants if v.colour == colour), ""
+                ),
+                image_url=colour_image(session, p.id, colour),
+                in_stock=any(
+                    v.in_stock for v in variants if v.colour == colour
+                ),
+            )
+            for colour in pr.colours(session, p.id)
+        ],
         variants=[
             s.VariantOut(
                 id=v.id,
-                kind=v.kind,
-                label=i18n.t(session, "variant", v.id, "label", v.label),
-                value=v.value,
-                image_url=media_url(v.image_url),
+                colour=v.colour,
+                size=v.size,
+                label=variant_label(v),
+                sku=v.sku,
+                barcode=v.barcode,
+                price=v.price or p.price,
                 in_stock=v.in_stock,
-                stock_left=v.stock_left,
-                parent_id=v.parent_id,
+                stock_left=st.sellable(session, v),
             )
             for v in variants
         ],
@@ -344,17 +361,25 @@ def cart_items(session: Session, user: User) -> list[CartItem]:
     ).all()
 
 
-def unit_price(product: Product, color: ProductVariant | None, size: ProductVariant | None):
+def variant_label(variant: ProductVariant) -> str:
+    """"Qora · 42", or whichever half of it exists.
+
+    One string, built in one place: a label assembled in the basket, in the
+    order and again on a printed label is three chances for the same shoe to
+    read three ways.
+    """
+    return " · ".join(part for part in (variant.colour, variant.size) if part)
+
+
+def unit_price(product: Product, variant: ProductVariant | None):
     """What one of the thing actually chosen costs.
 
     The money is on the variant — a 43 can cost more than a 41 — and the
     card's own price is the cheapest of them, which is what a shopper who has
-    chosen nothing yet is shown. So the size answers first, then the colour,
-    then the card.
+    chosen nothing yet is shown.
     """
-    for variant in (size, color):
-        if variant is not None and variant.price > 0:
-            return variant.price, product.old_price
+    if variant is not None and variant.price > 0:
+        return variant.price, product.old_price
     return product.price, product.old_price
 
 
@@ -362,16 +387,14 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
     product = session.get(Product, item.product_id)
     if product is None:
         return None
-    color = session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None
-    size = session.get(ProductVariant, item.variant_id) if item.variant_id else None
+    variant = session.get(ProductVariant, item.variant_id) if item.variant_id else None
 
-    price, old_unit_price = unit_price(product, color, size)
+    price, old_unit_price = unit_price(product, variant)
     # This shopper's own hold does not count against them: the line they are
     # looking at is the reason the goods are held.
     left = pr.shelf_left(
         session,
         product,
-        item.color_variant_id,
         item.variant_id,
         for_user_id=item.user_id,
     )
@@ -384,24 +407,20 @@ def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
     if not is_in_the_shop(product):
         available = False
 
-    labels = [
-        i18n.t(session, "variant", v.id, "label", v.label)
-        for v in (color, size)
-        if v is not None
-    ]
+    label = variant_label(variant) if variant else ""
     return s.CartItemOut(
         id=item.id,
         product_id=product.id,
         title=i18n.t(session, "product", product.id, "title", product.title),
         # The colour's own photograph when the line has a colour, because that
         # is the thing in the basket. The product's cover is the fallback.
-        image_url=colour_image(session, item.color_variant_id)
+        image_url=(
+            colour_image(session, product.id, variant.colour) if variant else None
+        )
         or primary_image(session, product.id),
-        variant_label=" · ".join(labels)
-        if labels
-        else i18n.t(session, "product", product.id, "subtitle", product.subtitle),
+        variant_label=label
+        or i18n.t(session, "product", product.id, "subtitle", product.subtitle),
         variant_id=item.variant_id,
-        color_variant_id=item.color_variant_id,
         unit_price=price,
         old_unit_price=old_unit_price,
         quantity=item.quantity,
