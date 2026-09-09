@@ -12,7 +12,6 @@ import type { LucideIcon } from "lucide-react"
 import {
   Boxes,
   ClipboardList,
-  Grid3x3,
   Home,
   Layers,
   ListOrdered,
@@ -55,7 +54,6 @@ const ADMIN: NavItem[] = [
 const WAREHOUSE: NavItem[] = [
   { to: "/ombor", label: "Ombor xaritasi", icon: Map },
   { to: "/qabul", label: "Qabul", icon: PackageSearch },
-  { to: "/joylashtirish", label: "Joylashtirish", icon: Grid3x3 },
   { to: "/terish", label: "Terish", icon: PackageCheck },
   { to: "/sanash", label: "Sanash", icon: Layers },
   { to: "/yorliqlar", label: "Yorliqlar", icon: ScanBarcode },

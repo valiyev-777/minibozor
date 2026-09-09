@@ -174,77 +174,85 @@ def where_is(
     return found
 
 
-# --------------------------------------------------------------------------- putaway
-
-
 @router.get(
-    "/putaway",
-    response_model=list[s.PutawayLineOut],
-    summary="What is standing in QABUL, oldest first",
+    "/suggest-cell",
+    response_model=s.SuggestedCellOut,
+    summary="Where this model already lives, if anywhere",
 )
-def putaway_queue(user: StockViewer, session: SessionDep) -> list[s.PutawayLineOut]:
-    """The queue, and how long each line has been standing.
+def suggest_cell(
+    product_id: int, user: StockViewer, session: SessionDep
+) -> s.SuggestedCellOut:
+    """The default the receiving form should offer.
 
-    There is no ``PutawayTask`` table and deliberately so: being in the
-    receiving area *is* the state of not having been shelved, and a task row
-    beside it would be a second answer to the same question — one that can
-    disagree with the shelf.
+    One model per cell is the discipline, so the useful cell is the one the
+    rest of the model is already in: every colour and size of it together,
+    which is what leaves a picker choosing between sizes rather than hunting
+    the room. Empty when the model is new or has nothing on a shelf.
 
-    The suggestion is a cell this model is already in. One model per cell is
-    the working discipline and the software supports it rather than enforcing
-    it, so this is a default somebody may overrule and not a rule.
+    A suggestion and not a rule — the cell may be full, and the person can see
+    that on the same screen.
     """
-    receiving = loc.staging(session, loc.QABUL)
-    lines = _contents(session, receiving)
-    out = []
-    for line in lines:
-        out.append(
-            s.PutawayLineOut(
-                **line.model_dump(),
-                suggestion=_suggest_cell(session, line.variant_id, line.product_id),
-            )
-        )
-    out.sort(key=lambda row: -row.minutes_here)
-    return out
+    return s.SuggestedCellOut(code=_suggest_cell(session, 0, product_id))
+
+
+# --------------------------------------------------------------------------- moving
 
 
 @router.post(
-    "/putaway",
+    "/move",
     response_model=s.LocationDetailOut,
-    summary="Carry a quantity to a cell",
+    summary="Carry a quantity from where it is to a cell",
 )
-def put_away(
-    payload: s.PutawayIn,
+def move_goods(
+    payload: s.MoveIn,
     user: WarehouseUser,
     session: SessionDep,
     idempotency_key: IdempotencyKey,
 ) -> s.LocationDetailOut:
-    """Out of the receiving area and into the cell that was typed.
+    """The only way a mis-shelved pile gets found again.
 
-    Answers with the cell, not with a message: the person who just put four
-    pairs in A-02-03 is about to want to know what is in A-02-03, and being
-    shown it is how a mistyped code is caught in the second it was made.
+    Goods land on a shelf in one action at the receiving desk, which is right —
+    whoever opened the sack is standing at the shelf with it. The cost of that
+    is that the cell is typed once, and if it was typed wrong then the ledger
+    and the room disagree with nobody to notice. There used to be a putaway
+    queue that could have caught it; there is this instead, and it does more:
+    a model that ended up split across two cells can be brought together, and
+    a shelf can be tidied without a stocktake pretending the count was wrong.
+
+    Both legs are named. ``QABUL`` to a cell is still a putaway — the kind says
+    what sort of journey it was — and cell to cell is a move.
+
+    Answers with the destination, not with a message: the person who just put
+    four pairs in A-02-03 is about to want to know what is in A-02-03, and
+    being shown it is how a mistyped code is caught in the second it was made.
     """
-    done = idem.replay(session, user, idempotency_key, "putaway", payload)
+    done = idem.replay(session, user, idempotency_key, "move", payload)
     if done is not None:
         return s.LocationDetailOut(**done)
 
     variant = _variant(session, payload.variant_id)
-    cell = _place(session, payload.code)
+    frm = _place(session, payload.from_code)
+    cell = _place(session, payload.to_code)
     if cell.kind is not LocationKind.BIN:
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("putaway_needs_a_cell"))
+    if frm.id == cell.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("move_nowhere"))
 
-    receiving = loc.staging(session, loc.QABUL)
+    kind = (
+        StockMovementKind.PUTAWAY
+        if frm.kind is LocationKind.RECEIVING
+        else StockMovementKind.MOVE
+    )
     try:
         st.move(
             session,
             variant=variant,
             qty=payload.qty,
-            kind=StockMovementKind.PUTAWAY,
-            frm=receiving,
+            kind=kind,
+            frm=frm,
             to=cell,
             actor=user,
-            reason=payload.code.strip().upper(),
+            reason=f"{frm.code} → {cell.code}",
         )
     except st.StockError as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from None
@@ -253,8 +261,8 @@ def put_away(
         **_location_out(cell, _fill(session)).model_dump(),
         contents=_contents(session, cell),
     )
-    idem.keep(session, user, idempotency_key, "putaway", payload, out)
-    replayed = idem.commit(session, user, idempotency_key, "putaway")
+    idem.keep(session, user, idempotency_key, "move", payload, out)
+    replayed = idem.commit(session, user, idempotency_key, "move")
     return s.LocationDetailOut(**replayed) if replayed else out
 
 

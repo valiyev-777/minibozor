@@ -75,8 +75,6 @@ export type WhereIs = {
   places: Placement[]
 }
 
-export type PutawayLine = CellContent & { suggestion: string }
-
 // --------------------------------------------------------------- market runs
 
 export type SupplyStatus = "draft" | "received" | "cancelled"
@@ -250,6 +248,9 @@ export type Vocab = {
   colours: string[]
   /** Keyed by kind: trainers in 40-45, shirts in S-XXL. */
   sizes: Record<string, string[]>
+  /** The specification rows written against this kind last time, so the table
+   *  arrives already named rather than empty. */
+  spec_keys: Record<string, string[]>
 }
 
 export type PileSize = { size: string; quantity: number }

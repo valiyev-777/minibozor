@@ -21,7 +21,6 @@ import { PublishPage } from "@/pages/publish"
 import { ReportsPage } from "@/pages/reports"
 import { LabelsPage } from "@/pages/labels"
 import { PickingPage } from "@/pages/picking"
-import { PutawayPage } from "@/pages/putaway"
 import { QabulPage } from "@/pages/qabul"
 import { ShelfMapPage } from "@/pages/shelf-map"
 import { homeFor, navFor } from "@/lib/nav"
@@ -55,9 +54,6 @@ export function App() {
         ) : null}
         {allowed.has("/qabul") ? (
           <Route path="/qabul" element={<QabulPage />} />
-        ) : null}
-        {allowed.has("/joylashtirish") ? (
-          <Route path="/joylashtirish" element={<PutawayPage />} />
         ) : null}
         {allowed.has("/terish") ? (
           <Route path="/terish" element={<PickingPage />} />

@@ -34,7 +34,6 @@ import type {
   LocationDetail,
   Page,
   PickTask,
-  PutawayLine,
   ShelfMap,
   StaffOrder,
   StaffUser,
@@ -51,7 +50,6 @@ import type {
 export const keys = {
   locations: ["locations"] as const,
   location: (code: string) => ["locations", code] as const,
-  putaway: ["putaway"] as const,
   supplies: (status?: string) => ["supplies", status ?? "all"] as const,
   supply: (id: number) => ["supplies", id] as const,
   pick: (status?: string) => ["pick", status ?? "all"] as const,
@@ -111,14 +109,6 @@ export function useVocab() {
     // The chips grow as goods come through the door, and a stale list is a
     // brand somebody has to type a second time. Cheap query, long enough.
     staleTime: 60_000,
-  })
-}
-
-export function usePutawayQueue() {
-  return useQuery({
-    queryKey: keys.putaway,
-    queryFn: () => api<PutawayLine[]>("/warehouse/putaway"),
-    refetchInterval: 30_000,
   })
 }
 
@@ -309,18 +299,41 @@ export function useEarnings() {
 
 /** Everything the room's own screens read. One write moves several of them. */
 function roomKeys() {
-  return [keys.locations, keys.putaway, ["pick"], ["supplies"]]
+  return [keys.locations, ["pick"], ["supplies"]]
 }
 
-export function usePutAway() {
+/**
+ * Carry a quantity from where it is to a cell.
+ *
+ * The only way a mis-shelved pile gets found again. Goods land on a shelf in
+ * one action at the receiving desk, which is right — but it means the cell is
+ * typed once, and a wrong one leaves the ledger and the room disagreeing with
+ * nobody to notice.
+ */
+export function useMove() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (input: { variant_id: number; qty: number; code: string }) =>
-      api<LocationDetail>("/warehouse/putaway", {
+    mutationFn: (input: {
+      variant_id: number
+      qty: number
+      from_code: string
+      to_code: string
+    }) =>
+      api<LocationDetail>("/warehouse/move", {
         body: input,
         idempotencyKey: idempotencyKey(),
       }),
     onSuccess: () => invalidate(client, roomKeys()),
+  })
+}
+
+/** Where this model already lives — the cell the receiving form offers. */
+export function useSuggestedCell(productId: number | null) {
+  return useQuery({
+    queryKey: ["suggest-cell", productId ?? 0],
+    queryFn: () =>
+      api<{ code: string }>(`/warehouse/suggest-cell?product_id=${productId}`),
+    enabled: Boolean(productId),
   })
 }
 
@@ -337,40 +350,8 @@ export function useStartRun() {
   })
 }
 
-export function useSortRun(id: number) {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: (input: {
-      lines: { variant_id: number; quantity: number; unit_cost: number }[]
-      place?: string
-      transport_cost?: number
-      note?: string
-    }) =>
-      api<Supply>(`/warehouse/supplies/${id}/lines`, {
-        method: "PUT",
-        body: input,
-      }),
-    onSuccess: () => invalidate(client, [["supplies"]]),
-  })
-}
 
-export function useReceiveRun(id: number) {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: () =>
-      api<Supply>(`/warehouse/supplies/${id}/receive`, { method: "POST" }),
-    onSuccess: () => invalidate(client, [...roomKeys(), ["products"]]),
-  })
-}
 
-export function useCancelRun(id: number) {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: (reason: string) =>
-      api<Supply>(`/warehouse/supplies/${id}/cancel`, { body: { reason } }),
-    onSuccess: () => invalidate(client, [["supplies"]]),
-  })
-}
 
 export function useTakeTask() {
   const client = useQueryClient()
@@ -466,7 +447,6 @@ export function useBookInPile() {
     onSuccess: () =>
       invalidate(client, [
         keys.locations,
-        keys.putaway,
         ["products"],
         ["supplies"],
         keys.dashboard,

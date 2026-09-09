@@ -22,7 +22,7 @@
  * walk.
  */
 
-import { PackageSearch, Search, X } from "lucide-react"
+import { Loader2, Search, X } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Empty, Fill, PageHeader, Problem, Waiting } from "@/components/page"
@@ -30,8 +30,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/cn"
 import { age, groups, units } from "@/lib/format"
-import { useLocation, useShelfMap, useWhereIs } from "@/lib/queries"
-import type { Location } from "@/lib/types"
+import { useLocation, useMove, useShelfMap, useWhereIs } from "@/lib/queries"
+import type { CellContent, Location } from "@/lib/types"
 
 // A tile that has been standing this long is the one thing on the screen that
 // should be impossible to ignore. An hour, because a sack that arrived before
@@ -351,27 +351,93 @@ function CellSheet({ code, onClose }: { code: string | null; onClose: () => void
                       <span>{line.variant_label}</span>
                       <span className="tabular">{line.barcode}</span>
                     </div>
-                    <div className="text-micro text-ink-faint">
-                      {age(line.minutes_here)} shu yerda
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-micro text-ink-faint">
+                        {age(line.minutes_here)} shu yerda
+                      </span>
+                      {place.data ? (
+                        <MoveLine line={line} from={place.data.code} />
+                      ) : null}
                     </div>
                   </li>
                 ))}
               </ul>
             )}
-
-            {place.data.kind === "receiving" && place.data.contents.length ? (
-              <a
-                href="/joylashtirish"
-                className="mt-4 flex h-control items-center justify-center gap-2 rounded-control bg-brand text-small text-brand-ink"
-              >
-                <PackageSearch className="size-4" />
-                Joylashtirishga o'tish
-              </a>
-            ) : null}
           </>
         ) : null}
       </aside>
     </div>
+  )
+}
+
+/**
+ * Carry some of this line somewhere else.
+ *
+ * The only way a mis-shelved pile gets found again. Goods land on a shelf in
+ * one action at the receiving desk — right, because whoever opened the sack is
+ * standing at the shelf — but that means the cell is typed once, and a wrong
+ * one leaves the ledger and the room disagreeing with nobody to notice. It
+ * also brings a model back together when it has ended up split across two
+ * cells, which is what keeps picking short.
+ */
+function MoveLine({ line, from }: { line: CellContent; from: string }) {
+  const move = useMove()
+  const [open, setOpen] = useState(false)
+  const [to, setTo] = useState("")
+  const [qty, setQty] = useState(String(line.qty))
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-micro text-brand-deep underline"
+      >
+        ko'chirish
+      </button>
+    )
+  }
+
+  return (
+    <form
+      className="flex items-center gap-1"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const wanted = to.trim().toUpperCase()
+        if (!wanted) return
+        move.mutate(
+          {
+            variant_id: line.variant_id,
+            qty: Number(qty) || 1,
+            from_code: from,
+            to_code: wanted,
+          },
+          { onSuccess: () => setOpen(false) },
+        )
+      }}
+    >
+      <Input
+        value={qty}
+        onChange={(event) => setQty(event.target.value.replace(/\D/g, ""))}
+        inputMode="numeric"
+        aria-label="Nechta ko'chirish"
+        className="h-control w-14 text-center tabular"
+      />
+      <Input
+        autoFocus
+        value={to}
+        onChange={(event) => setTo(event.target.value.toUpperCase())}
+        placeholder="A-01-01"
+        aria-label="Qaysi yacheykaga"
+        className="h-control w-24 tabular"
+      />
+      <Button type="submit" size="sm" disabled={move.isPending}>
+        {move.isPending ? <Loader2 className="size-4 animate-spin" /> : "OK"}
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+        <X className="size-4" />
+      </Button>
+    </form>
   )
 }
 

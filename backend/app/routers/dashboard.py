@@ -22,7 +22,6 @@ from fastapi import APIRouter
 from sqlmodel import col, func, select
 
 from app import i18n
-from app import locations as loc
 from app import products as pr
 from app import schemas as s
 from app import services as sv
@@ -109,30 +108,10 @@ def dashboard(user: DashboardViewer, session: SessionDep) -> s.DashboardOut:
         )
     )
 
-    # ---------------------------------------------------------- waiting in QABUL
-    receiving = loc.staging(session, loc.QABUL)
-    waiting = int(
-        session.exec(
-            select(func.coalesce(func.sum(StockPlacement.qty), 0)).where(
-                StockPlacement.location_id == receiving.id
-            )
-        ).one()
-    )
-    since = session.exec(
-        select(func.min(StockMovement.created_at)).where(
-            StockMovement.to_location_id == receiving.id
-        )
-    ).one()
-    tiles.append(
-        s.DashboardTileOut(
-            key="awaiting_putaway",
-            label=i18n.label("tile_awaiting_putaway"),
-            value=waiting,
-            hint=_age_words(since, now) if waiting else "",
-            href="/joylashtirish",
-            urgent=bool(waiting) and _minutes(since, now) >= QABUL_ALERT_MINUTES,
-        )
-    )
+    # A tile counting what stood in QABUL used to be here, beside a putaway
+    # queue that fed it. Goods land on a shelf in one action now, so nothing
+    # reaches the receiving area and the figure was always nought — a dashboard
+    # row that is always zero teaches people to stop reading the dashboard.
 
     # ------------------------------------------------- on the shelf, not in the shop
     # The thing this shop loses money on quietly. Goods are shelved, counted

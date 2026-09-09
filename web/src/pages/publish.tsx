@@ -53,6 +53,7 @@ import {
   useSpecs,
   useVariants,
   useWriteCategory,
+  useVocab,
   useWriteSpecs,
 } from "@/lib/queries"
 import type { AdminProduct, Spec } from "@/lib/types"
@@ -402,18 +403,38 @@ function Words({ card }: { card: AdminProduct }) {
 
 // ------------------------------------------------------------------- the table
 
-/** The specification table, which the phone draws as a table or not at all. */
+/**
+ * The specification table, which the phone draws as a table or not at all.
+ *
+ * **The rows arrive already named.** Typing "Mato", "Ishlab chiqarilgan",
+ * "Parvarish" from scratch for every card is how a table stays empty, and an
+ * empty table is a block the apps do not draw — so the keys come from what was
+ * written against this kind of goods last time, and from a starter set the
+ * first time a kind is described at all. The seller fills the values and
+ * deletes the row that does not apply, which is a faster thing to do than
+ * thinking of the words.
+ */
 function Specs({ card }: { card: AdminProduct }) {
   const stored = useSpecs(card.id)
+  const vocab = useVocab()
   const write = useWriteSpecs(card.id)
   const [rows, setRows] = useState<Spec[]>([])
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    if (loaded || !stored.data) return
-    setRows(stored.data.length ? stored.data : [{ key: "", value: "" }])
+    if (loaded || !stored.data || !vocab.data) return
+    if (stored.data.length) {
+      setRows(stored.data)
+    } else {
+      const keys = vocab.data.spec_keys[card.kind] ?? []
+      setRows(
+        keys.length
+          ? keys.map((key) => ({ key, value: "" }))
+          : [{ key: "", value: "" }],
+      )
+    }
     setLoaded(true)
-  }, [stored.data, loaded])
+  }, [stored.data, vocab.data, card.kind, loaded])
 
   function set(index: number, patch: Partial<Spec>) {
     setRows((was) => was.map((row, at) => (at === index ? { ...row, ...patch } : row)))

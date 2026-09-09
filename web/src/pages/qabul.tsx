@@ -52,6 +52,7 @@ import {
   useProducts,
   useSackSorted,
   useShelfMap,
+  useSuggestedCell,
   useStartRun,
   useSupplies,
   useVariants,
@@ -344,7 +345,11 @@ function PileForm({
             <Place value={draft.place} onSet={(place) => set("place", place)} />
           </div>
 
-          <Cells chosen={draft.cell} onChoose={(code) => set("cell", code)} />
+          <Cells
+            chosen={draft.cell}
+            productId={draft.product?.id ?? null}
+            onChoose={(code) => set("cell", code)}
+          />
         </>
       ) : null}
 
@@ -911,8 +916,20 @@ function Place({ value, onSet }: { value: string; onSet: (place: string) => void
  * of four by four: the racks come from the data, so a fourth one is a seed
  * change.
  */
-function Cells({ chosen, onChoose }: { chosen: string; onChoose: (code: string) => void }) {
+function Cells({
+  chosen,
+  productId,
+  onChoose,
+}: {
+  chosen: string
+  productId: number | null
+  onChoose: (code: string) => void
+}) {
   const map = useShelfMap()
+  // Where the rest of this model already is. One model per cell is what keeps
+  // picking short, so the useful cell is rarely a free one — and the person
+  // would otherwise have to remember which.
+  const suggested = useSuggestedCell(productId).data?.code ?? ""
 
   const racks = useMemo(() => {
     const byRack = new Map<string, Location[]>()
@@ -929,6 +946,14 @@ function Cells({ chosen, onChoose }: { chosen: string; onChoose: (code: string) 
         <h2 className="text-small font-semibold">Qaysi yacheykaga?</h2>
         {chosen ? (
           <span className="tabular text-small font-semibold text-brand-deep">{chosen}</span>
+        ) : suggested ? (
+          <button
+            type="button"
+            onClick={() => onChoose(suggested)}
+            className="tabular text-small font-medium text-brand-deep underline"
+          >
+            {suggested} — shu model shu yerda
+          </button>
         ) : (
           <span className="text-micro text-ink-faint">bo'sh katak — punktir</span>
         )}
@@ -964,8 +989,10 @@ function Cells({ chosen, onChoose }: { chosen: string; onChoose: (code: string) 
                         className={cn(
                           "rounded-control border py-1.5 text-center text-micro tabular",
                           picked && "border-brand bg-brand text-brand-ink",
-                          !picked && cell.units === 0 && "border-dashed text-ink-faint",
-                          !picked && cell.units > 0 && "bg-canvas",
+                          !picked && cell.code === suggested && "border-brand bg-brand-soft",
+                          !picked && cell.code !== suggested && cell.units === 0
+                            && "border-dashed text-ink-faint",
+                          !picked && cell.code !== suggested && cell.units > 0 && "bg-canvas",
                         )}
                       >
                         <span className="block font-medium">{cell.code.slice(2)}</span>

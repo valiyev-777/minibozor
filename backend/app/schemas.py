@@ -845,6 +845,33 @@ class PutawayLineOut(CellContentOut):
     suggestion: str = ""       # a cell this model is already in, if there is one
 
 
+class SuggestedCellOut(BaseModel):
+    """The cell the receiving form should offer, or an empty code.
+
+    Its own shape rather than a reused `Message`, whose fields are `ok` and
+    `message`: a cell code is not a message, and reading one out of the other
+    is how a caller ends up asserting on the wrong key.
+    """
+
+    code: str = ""
+
+
+class MoveIn(BaseModel):
+    """Carry a quantity from where it is to a cell.
+
+    ``from_code`` because a mistyped cell is the one thing nothing else can
+    fix: goods land on a shelf in one action now, and if that action named the
+    wrong shelf then the ledger and the room disagree until somebody says so.
+    Both legs are named, so the movement is a journey rather than an
+    adjustment — an adjustment says the count was wrong, and it was not.
+    """
+
+    variant_id: int
+    qty: int = Field(gt=0)
+    from_code: str = Field(min_length=1, max_length=20)
+    to_code: str = Field(min_length=1, max_length=20)
+
+
 class PutawayIn(BaseModel):
     """Carry a quantity to a cell.
 
@@ -983,9 +1010,12 @@ class PileIn(BaseModel):
     makes are two cards, which is why the brand is part of the identity and
     why the identification photograph matters more than the spelling.
 
-    ``location_code`` empty is not an error: it means the goods are going no
-    further than the receiving area for now, and somebody will shelve them
-    from the putaway queue. The physical work never waits for the paperwork.
+    ``location_code`` is required. It was optional for a while — empty meant
+    the receiving area, and a putaway queue offered the goods to whoever had
+    time — but that queue was never used: whoever opens a sack is standing at
+    the shelf with it, and shelving in the same breath is what the form is
+    for. A wrong cell is corrected with ``POST /warehouse/move`` rather than by
+    leaving goods homeless.
     """
 
     product_id: int | None = None
@@ -1007,7 +1037,7 @@ class PileIn(BaseModel):
     # profit report looking like a fact.
     unit_cost: int = Field(gt=0)
 
-    location_code: str = Field(default="", max_length=20)
+    location_code: str = Field(min_length=1, max_length=20)
 
     # This pile's own receipt. Where it was bought and what the van cost, both
     # optional — and its own row rather than a line on a shared daily run,
@@ -1048,6 +1078,11 @@ class VocabOut(BaseModel):
     brands: list[str] = []
     colours: list[str] = []
     sizes: dict[str, list[str]] = {}
+    # The rows of the specification table, keyed by kind: what was written
+    # against a Krossovka last time. Typing "Mato", "Taglik", "Ishlab
+    # chiqarilgan" from scratch for every card is how a table stays empty, and
+    # an empty table is a block the apps do not draw at all.
+    spec_keys: dict[str, list[str]] = {}
 
 
 class ProductLabelOut(BaseModel):

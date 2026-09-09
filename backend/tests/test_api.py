@@ -209,12 +209,21 @@ def _put_away(
     variant_id: int,
     qty: int,
     code: str,
+    frm: str = loc.QABUL,
 ) -> dict:
-    """Carry a quantity from the receiving area to a cell."""
+    """Carry a quantity from wherever it is to a cell."""
     done = client.post(
-        f"{API}/warehouse/putaway",
-        json={"variant_id": variant_id, "qty": qty, "code": code},
-        headers={**warehouse, "Idempotency-Key": f"putaway-{variant_id}-{code}-{qty}"},
+        f"{API}/warehouse/move",
+        json={
+            "variant_id": variant_id,
+            "qty": qty,
+            "from_code": frm,
+            "to_code": code,
+        },
+        headers={
+            **warehouse,
+            "Idempotency-Key": f"move-{variant_id}-{frm}-{code}-{qty}",
+        },
     )
     assert done.status_code == 200, done.text
     return done.json()
@@ -1090,81 +1099,132 @@ def test_where_is_it_answers_by_barcode_and_by_name(
     assert "C-03-02" in codes
 
 
-# --------------------------------------------------------------------------- putaway
+# --------------------------------------------------------------------------- moving
 
 
-def test_the_putaway_queue_is_the_receiving_area_itself(
-    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+def test_a_pile_must_name_the_cell_it_went_into(
+    client: TestClient, warehouse: dict[str, str]
 ) -> None:
-    """No task table: standing in QABUL *is* the state of not being shelved."""
-    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-QUEUE2", stock=3)
+    """There is nowhere else for goods to go.
 
-    queue = client.get(f"{API}/warehouse/putaway", headers=warehouse).json()
-    lines = {row["variant_id"]: row for row in queue}
-    assert lines[ids["Qora / 42"]]["qty"] == 3
-    assert lines[ids["Qora / 42"]]["minutes_here"] >= 0
-    assert lines[ids["Qora / 42"]]["suggestion"] == ""
+    The cell was optional for a while, and empty meant the receiving area with
+    a putaway queue offering the goods to whoever had time. Nobody used it:
+    whoever opens a sack is standing at the shelf with it. What catches a
+    wrongly-typed cell now is `POST /warehouse/move`, not homeless stock.
+    """
+    refused = _pile(client, warehouse, kind="Ro'mol", colour="Oq", code="")
+    assert refused.status_code == 422, refused.text
 
 
-def test_putting_goods_away_empties_the_queue_and_fills_a_cell(
-    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+def test_a_mis_shelved_pile_can_be_carried_to_the_right_cell(
+    client: TestClient, warehouse: dict[str, str]
 ) -> None:
-    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-AWAY", stock=6)
-    leaf = ids["Qora / 42"]
+    """Cell to cell, both legs named, and the count untouched.
 
-    cell = _put_away(client, warehouse, leaf, 4, "A-02-03")
-    assert cell["code"] == "A-02-03"
-    assert cell["units"] >= 4
-    assert _in(loc.QABUL, leaf) == 2
-    assert _in("A-02-03", leaf) == 4
+    A move is a journey and not a correction: an adjustment would say the count
+    was wrong, and it was not — the goods were only ever in the wrong place.
+    """
+    made = _pile(
+        client, warehouse, kind="Ko'ylak", colour="Oq", sizes=(("M", 6),), code="A-02-03"
+    )
+    assert made.status_code == 201, made.text
+    leaf = made.json()["labels"][0]["variant_id"]
+
+    cell = _put_away(client, warehouse, leaf, 4, "A-02-04", frm="A-02-03")
+    assert cell["code"] == "A-02-04"
+    assert _in("A-02-03", leaf) == 2
+    assert _in("A-02-04", leaf) == 4
     assert _sellable(leaf) == 6      # carrying it across the room sells nothing
     _assert_the_room_adds_up()
 
-    # And the next line of the same model is offered the cell it already lives in.
-    queue = client.get(f"{API}/warehouse/putaway", headers=warehouse).json()
-    mine = next(row for row in queue if row["variant_id"] == leaf)
-    assert mine["suggestion"] == "A-02-03"
+    # And the receiving form is told where the rest of the model lives.
+    where = client.get(
+        f"{API}/warehouse/suggest-cell",
+        params={"product_id": made.json()["product"]["id"]},
+        headers=warehouse,
+    )
+    assert where.status_code == 200, where.text
+    assert where.json()["code"] in {"A-02-03", "A-02-04"}
 
 
-def test_goods_cannot_be_put_into_a_staging_area(
-    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+def test_goods_cannot_be_moved_into_a_staging_area(
+    client: TestClient, warehouse: dict[str, str]
 ) -> None:
-    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-BADCELL", stock=2)
+    made = _pile(client, warehouse, kind="Kamar", colour="Qora", code="B-03-01")
+    leaf = made.json()["labels"][0]["variant_id"]
     refused = client.post(
-        f"{API}/warehouse/putaway",
-        json={"variant_id": ids["Qora / 42"], "qty": 1, "code": loc.BRAK},
-        headers={**warehouse, "Idempotency-Key": "putaway-brak"},
+        f"{API}/warehouse/move",
+        json={
+            "variant_id": leaf,
+            "qty": 1,
+            "from_code": "B-03-01",
+            "to_code": loc.BRAK,
+        },
+        headers={**warehouse, "Idempotency-Key": "move-brak"},
     )
     assert refused.status_code == 409, refused.text
 
 
-def test_a_mistyped_cell_is_a_404_and_moves_nothing(
-    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+def test_moving_a_pile_to_the_cell_it_is_in_is_refused(
+    client: TestClient, warehouse: dict[str, str]
 ) -> None:
-    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-TYPO", stock=2)
+    """A journey to where you already are is not a journey."""
+    made = _pile(client, warehouse, kind="Sharf", colour="Ko'k", code="B-03-02")
+    leaf = made.json()["labels"][0]["variant_id"]
+    refused = client.post(
+        f"{API}/warehouse/move",
+        json={
+            "variant_id": leaf,
+            "qty": 1,
+            "from_code": "B-03-02",
+            "to_code": "B-03-02",
+        },
+        headers={**warehouse, "Idempotency-Key": "move-nowhere"},
+    )
+    assert refused.status_code == 400, refused.text
+
+
+def test_a_mistyped_cell_is_a_404_and_moves_nothing(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    made = _pile(client, warehouse, kind="Qalpoq", colour="Qora", sizes=(("", 2),), code="B-03-03")
+    leaf = made.json()["labels"][0]["variant_id"]
     missing = client.post(
-        f"{API}/warehouse/putaway",
-        json={"variant_id": ids["Qora / 42"], "qty": 1, "code": "Z-09-09"},
-        headers={**warehouse, "Idempotency-Key": "putaway-typo"},
+        f"{API}/warehouse/move",
+        json={
+            "variant_id": leaf,
+            "qty": 1,
+            "from_code": "B-03-03",
+            "to_code": "Z-09-09",
+        },
+        headers={**warehouse, "Idempotency-Key": "move-typo"},
     )
     assert missing.status_code == 404, missing.text
-    assert _in(loc.QABUL, ids["Qora / 42"]) == 2
+    assert _in("B-03-03", leaf) == 2
     _assert_the_room_adds_up()
 
 
-def test_a_retried_putaway_does_not_carry_the_goods_twice(
-    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+def test_a_retried_move_does_not_carry_the_goods_twice(
+    client: TestClient, warehouse: dict[str, str]
 ) -> None:
-    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-IDEM", stock=5)
-    leaf = ids["Qora / 42"]
-    body = {"variant_id": leaf, "qty": 2, "code": "A-01-02"}
-    headers = {**warehouse, "Idempotency-Key": "putaway-once"}
+    made = _pile(
+        client, warehouse, kind="Qo'lqop", colour="Qora", sizes=(("L", 5),), code="B-04-01"
+    )
+    leaf = made.json()["labels"][0]["variant_id"]
+    body = {
+        "variant_id": leaf,
+        "qty": 2,
+        "from_code": "B-04-01",
+        "to_code": "B-04-02",
+    }
+    headers = {**warehouse, "Idempotency-Key": "move-once"}
 
-    first = client.post(f"{API}/warehouse/putaway", json=body, headers=headers)
-    second = client.post(f"{API}/warehouse/putaway", json=body, headers=headers)
+    first = client.post(f"{API}/warehouse/move", json=body, headers=headers)
+    second = client.post(f"{API}/warehouse/move", json=body, headers=headers)
     assert first.status_code == second.status_code == 200
     assert first.json() == second.json()
-    assert _in("A-01-02", leaf) == 2
+    assert _in("B-04-02", leaf) == 2
+    assert _in("B-04-01", leaf) == 3
     _assert_the_room_adds_up()
 
 
@@ -1563,7 +1623,6 @@ def test_the_dashboard_answers_with_figures_that_link(
 
     assert tiles["unsorted_sacks"]["value"] >= 2
     assert tiles["orders_today"]["value"] >= 1
-    assert tiles["awaiting_putaway"]["value"] >= 8
     # Goods on a shelf that the shop cannot sell: the tile that replaced a
     # narrower "no photograph" one, and the only figure here that counts money
     # standing still rather than work arriving.
@@ -2366,24 +2425,6 @@ def test_a_pile_goes_straight_to_the_cell_that_was_typed(
     )
     kinds = [row["kind"] for row in moves.json()["items"]]
     assert kinds == ["receipt"], kinds
-
-
-def test_a_pile_with_no_cell_waits_in_the_receiving_area(
-    client: TestClient, warehouse: dict[str, str]
-) -> None:
-    """An empty cell code is not an error — the physical work never waits.
-
-    Whoever tipped the sack out may not be the person who shelves it, and the
-    goods are in the building either way. QABUL is a place, not a state of not
-    being anywhere, so they are countable and they are on the putaway queue.
-    """
-    made = _pile(client, warehouse, colour="Oq", sizes=(("41", 3),), code="")
-    assert made.status_code == 201, made.text
-    assert made.json()["location_code"] == loc.QABUL
-
-    queue = client.get(f"{API}/warehouse/putaway", headers=warehouse)
-    variant_id = made.json()["labels"][0]["variant_id"]
-    assert variant_id in [row["variant_id"] for row in queue.json()]
 
 
 def test_a_pile_is_a_stub_and_the_shop_cannot_see_it(

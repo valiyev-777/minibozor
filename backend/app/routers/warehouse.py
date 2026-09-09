@@ -38,12 +38,13 @@ from app import products as pr
 from app import schemas as s
 from app import services as sv
 from app import stock as st
-from app.deps import SessionDep, StockViewer, WarehouseUser
+from app.deps import CatalogReader, SessionDep, StockViewer, WarehouseUser
 from app.models import (
     Brand,
     Location,
     LocationKind,
     Product,
+    ProductSpec,
     ProductStatus,
     ProductVariant,
     StockMovement,
@@ -61,6 +62,16 @@ IdempotencyKey = Annotated[
     str, Header(alias="Idempotency-Key", description="A uuid per queued action")
 ]
 
+# What a card of a kind nobody has described yet gets offered. Four rows that
+# fit almost anything off a market stall, and the seller deletes what does not
+# apply — which is a faster thing to do than thinking of the words.
+STARTER_SPECS: tuple[str, ...] = (
+    "Mato",
+    "Ishlab chiqarilgan",
+    "O'lcham jadvali",
+    "Parvarish",
+)
+
 
 def _next_code(session: SessionDep, model, prefix: str) -> str:
     """The next code in a series, ours rather than anybody else's."""
@@ -76,7 +87,7 @@ def _next_code(session: SessionDep, model, prefix: str) -> str:
     response_model=s.VocabOut,
     summary="The receiving desk's chips — learned, not configured",
 )
-def vocab(user: StockViewer, session: SessionDep) -> s.VocabOut:
+def vocab(user: CatalogReader, session: SessionDep) -> s.VocabOut:
     """What has come through the door before, most-used first.
 
     Nobody sets up a list of goods before they have received any, and a market
@@ -125,7 +136,29 @@ def vocab(user: StockViewer, session: SessionDep) -> s.VocabOut:
     for row in sizes.values():
         row.sort(key=_size_order)
 
-    return s.VocabOut(kinds=kinds, brands=brands, colours=colours, sizes=sizes)
+    # The specification rows, by kind. A starter set until a kind has been
+    # written once, because the first card of anything would otherwise face an
+    # empty table and nobody types one of those.
+    spec_keys: dict[str, list[str]] = {}
+    for kind, key in session.exec(
+        select(Product.kind, ProductSpec.key)
+        .join(ProductSpec, col(ProductSpec.product_id) == col(Product.id))
+        .where(col(Product.kind) != "", col(ProductSpec.key) != "")
+        .order_by(col(ProductSpec.sort))
+    ).all():
+        row = spec_keys.setdefault(pr.tidy_label(kind), [])
+        if key not in row:
+            row.append(key)
+    for kind in kinds:
+        spec_keys.setdefault(kind, list(STARTER_SPECS))
+
+    return s.VocabOut(
+        kinds=kinds,
+        brands=brands,
+        colours=colours,
+        sizes=sizes,
+        spec_keys=spec_keys,
+    )
 
 
 @router.post(
@@ -725,7 +758,7 @@ def _brand_named(session: SessionDep, name: str) -> Brand:
 
 
 def _pile_cell(session: SessionDep, code: str) -> Location:
-    """Where the pile is going: a cell, or the receiving area by default.
+    """Where the pile is going, which is always a cell.
 
     A typed cell code is checked against the cells that exist rather than
     trusted, because there is no scanner yet and ``A-03-11`` is one keystroke
@@ -733,9 +766,6 @@ def _pile_cell(session: SessionDep, code: str) -> Location:
     code for the wrong *cell* is caught by the form showing what is in it.
     """
     wanted = code.strip().upper()
-    if not wanted:
-        return loc.staging(session, loc.QABUL)
-
     cell = loc.by_code(session, wanted)
     if cell is None:
         raise HTTPException(

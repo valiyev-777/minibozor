@@ -323,6 +323,11 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Для продажи не хватает: {gaps}",
         "en": "Not ready for sale — missing: {gaps}",
     },
+    "move_nowhere": {
+        "uz": "Bir katakdan o'sha katakka ko'chirib bo'lmaydi",
+        "ru": "Нельзя переместить в ту же ячейку",
+        "en": "That is the cell it is already in",
+    },
     "no_such_cell": {
         "uz": "Bunday yacheyka yo'q: {code}",
         "ru": "Такой ячейки нет: {code}",
