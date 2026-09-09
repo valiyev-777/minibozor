@@ -13,6 +13,7 @@ import { NavLink, Outlet } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/cn"
 import { densityFor, navFor } from "@/lib/nav"
+import { useDashboard } from "@/lib/queries"
 import { useSession } from "@/lib/session"
 
 export function Shell() {
@@ -42,7 +43,8 @@ export function Shell() {
               }
             >
               <item.icon className="size-4 shrink-0" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              <Count of={item.badge} />
             </NavLink>
           ))}
         </nav>
@@ -79,7 +81,8 @@ export function Shell() {
               }
             >
               <item.icon className="size-5 shrink-0" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              <Count of={item.badge} />
             </NavLink>
           ))}
           <Button
@@ -99,6 +102,33 @@ export function Shell() {
         </div>
       </main>
     </div>
+  )
+}
+
+/**
+ * The number beside a menu item, from the dashboard tile of the same key.
+ *
+ * A queue nobody can see the length of is a queue that grows. "Sotuvga
+ * chiqarish" holds goods that are on a shelf and unsellable, which breaks
+ * nothing and errors nowhere — so the only thing that makes it get worked is
+ * a figure somebody walks past.
+ */
+function Count({ of }: { of: string | undefined }) {
+  // Called unconditionally because a hook must be, and switched off when
+  // there is no badge to draw: a courier may not read the dashboard at all.
+  const dashboard = useDashboard(Boolean(of))
+  if (!of) return null
+  const tile = dashboard.data?.tiles.find((one) => one.key === of)
+  if (!tile?.value) return null
+  return (
+    <span
+      className={cn(
+        "min-w-5 rounded-full px-1.5 text-center text-micro font-semibold tabular",
+        tile.urgent ? "bg-danger text-danger-ink" : "bg-white/20",
+      )}
+    >
+      {tile.value}
+    </span>
   )
 }
 

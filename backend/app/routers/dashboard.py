@@ -23,6 +23,7 @@ from sqlmodel import col, func, select
 
 from app import i18n
 from app import locations as loc
+from app import products as pr
 from app import schemas as s
 from app import services as sv
 from app.deps import OrderViewer, SessionDep
@@ -51,6 +52,11 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # evening they were always going to need — an unsorted run is judged against
 # a night rather than an hour, because that is the actual working pattern.
 QABUL_ALERT_MINUTES = 60
+
+# Three days. A card held back for an afternoon is somebody waiting for
+# daylight to photograph it; one held back for three days is goods nobody is
+# going to get round to, sitting on a shelf costing rent and earning nothing.
+HELD_BACK_ALERT_MINUTES = 3 * 24 * 60
 SACK_ALERT_HOURS = 14
 
 # What counts as nearly full, and as nearly out.
@@ -128,6 +134,31 @@ def dashboard(user: OrderViewer, session: SessionDep) -> s.DashboardOut:
         )
     )
 
+    # ------------------------------------------------- on the shelf, not in the shop
+    # The thing this shop loses money on quietly. Goods are shelved, counted
+    # and findable, and a customer cannot buy them because the card still has
+    # no category, no price or no photograph. Nobody notices, because nothing
+    # is broken — which is exactly why it is on the dashboard and not in a
+    # menu somewhere.
+    held_back = [
+        row
+        for row in session.exec(
+            select(Product).where(Product.status == ProductStatus.DRAFT)
+        ).all()
+        if pr.on_shelf(session, row.id) > 0
+    ]
+    oldest = min((row.created_at for row in held_back), default=None)
+    tiles.append(
+        s.DashboardTileOut(
+            key="held_back",
+            label=i18n.label("tile_held_back"),
+            value=len(held_back),
+            hint=_age_words(oldest, now) if held_back else "",
+            href="/sotuvga-chiqarish",
+            urgent=bool(held_back) and _minutes(oldest, now) >= HELD_BACK_ALERT_MINUTES,
+        )
+    )
+
     # ---------------------------------------------------------- the shelves
     cells = session.exec(
         select(Location).where(
@@ -177,21 +208,12 @@ def dashboard(user: OrderViewer, session: SessionDep) -> s.DashboardOut:
         )
     )
 
-    # ---------------------------------------------------------- held back
-    drafts_held = session.exec(
-        select(func.count())
-        .select_from(Product)
-        .where(Product.status == ProductStatus.DRAFT)
-    ).one()
-    tiles.append(
-        s.DashboardTileOut(
-            key="no_photograph",
-            label=i18n.label("tile_no_photograph"),
-            value=int(drafts_held),
-            hint=i18n.label("tile_no_photograph_hint"),
-            href="/mahsulotlar?status=draft",
-        )
-    )
+    # A tile counting cards without a photograph used to sit here. It said
+    # almost what "on the shelf, not in the shop" says above and sent people to
+    # a filtered product list rather than to the queue that fixes it — and it
+    # counted cards with nothing on a shelf, which are somebody's abandoned
+    # draft rather than money standing still. Two tiles for one problem meant
+    # neither was the one you acted on.
 
     # ---------------------------------------------------------- couriers out
     carrying = session.exec(

@@ -17,6 +17,7 @@ import { DashboardPage } from "@/pages/dashboard"
 import { OrdersPage } from "@/pages/orders"
 import { CategoriesPage, CouriersPage, StaffPage } from "@/pages/people"
 import { ProductsPage } from "@/pages/products"
+import { PublishPage } from "@/pages/publish"
 import { ReportsPage } from "@/pages/reports"
 import { LabelsPage } from "@/pages/labels"
 import { PickingPage } from "@/pages/picking"
@@ -71,6 +72,9 @@ export function App() {
         {/* ------------------------------------------------------------ admin */}
         {allowed.has("/mahsulotlar") ? (
           <Route path="/mahsulotlar" element={<ProductsPage />} />
+        ) : null}
+        {allowed.has("/sotuvga-chiqarish") ? (
+          <Route path="/sotuvga-chiqarish" element={<PublishPage />} />
         ) : null}
         {allowed.has("/kategoriyalar") ? (
           <Route path="/kategoriyalar" element={<CategoriesPage />} />

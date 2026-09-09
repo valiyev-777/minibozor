@@ -318,6 +318,7 @@ def admin_product_out(session: Session, product: Product) -> s.AdminProductOut:
         ],
         price=product.price,
         old_price=product.old_price,
+        last_cost=pr.last_cost(session, product.id),
         stock_left=pr.on_shelf(session, product.id),
         image_count=int(images),
         variant_count=int(variants),

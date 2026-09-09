@@ -82,6 +82,21 @@ export function percent(value: number): string {
   return `${Math.round(value)}%`
 }
 
+/**
+ * How many minutes ago the server said something happened.
+ *
+ * Here rather than beside its first caller because the second caller got it
+ * wrong: `Date.parse` on a bare `2026-09-09T06:20:00` reads it as local time,
+ * so a card written three minutes ago showed as five hours old on a machine
+ * five hours off UTC. `asLocal` is the one place that knows the API sends
+ * naive UTC.
+ */
+export function minutesSince(when: string): number {
+  const then = asDate(when)
+  if (!then) return 0
+  return Math.max(0, Math.round((Date.now() - then.getTime()) / 60_000))
+}
+
 function asDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null
   const when = value instanceof Date ? value : new Date(asLocal(value))

@@ -1559,7 +1559,11 @@ def test_the_dashboard_answers_with_figures_that_link(
     assert tiles["unsorted_sacks"]["value"] >= 2
     assert tiles["orders_today"]["value"] >= 1
     assert tiles["awaiting_putaway"]["value"] >= 8
-    assert tiles["no_photograph"]["value"] >= 1
+    # Goods on a shelf that the shop cannot sell: the tile that replaced a
+    # narrower "no photograph" one, and the only figure here that counts money
+    # standing still rather than work arriving.
+    assert tiles["held_back"]["value"] >= 1
+    assert tiles["held_back"]["href"] == "/sotuvga-chiqarish"
     assert all(tile["href"] for tile in body["tiles"])
 
     # Fourteen days, quiet ones included: a chart that skips empty days draws
@@ -2528,3 +2532,22 @@ def test_two_black_trainers_of_different_makes_are_two_cards(
     assert nike.json()["product"]["sku"] != adidas.json()["product"]["sku"]
     assert "Nike" in nike.json()["product"]["title"]
     assert "Adidas" in adidas.json()["product"]["title"]
+
+
+def test_a_card_with_colours_will_not_take_a_colourless_pile(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """Otherwise the count lands on a cell no picker is ever sent to.
+
+    The form picks the colour from the card's own list, and this is the same
+    rule underneath it — an empty colour against a card that has some would
+    write a colourless variant beside "Oq" and put the goods on the shelf under
+    a name nobody looks for.
+    """
+    first = _pile(client, warehouse, kind="Palto", colour="Oq", code="B-02-01")
+    assert first.status_code == 201, first.text
+    card = first.json()["product"]
+
+    refused = _pile(client, warehouse, product_id=card["id"], colour="", code="B-02-01")
+    assert refused.status_code == 400, refused.text
+    assert "Oq" in refused.json()["detail"]

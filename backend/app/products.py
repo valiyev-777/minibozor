@@ -23,7 +23,7 @@ from __future__ import annotations
 from sqlmodel import Session, col, func, select
 
 from app import stock as st
-from app.models import Product, ProductImage, ProductVariant
+from app.models import Product, ProductImage, ProductVariant, SupplyLine
 
 # --------------------------------------------------------------------------- variants
 
@@ -126,6 +126,24 @@ def ensure_cells(
         }
 
     return [existing[(colour, size)] for size in sizes]
+
+
+def last_cost(session: Session, product_id: int) -> int:
+    """What these last cost us, from the newest market run that named a cell.
+
+    Not an average and not the cheapest: the price at the market moves, and
+    what somebody pricing goods wants to know is what *this* lot cost. Zero
+    when nothing has been booked in yet, which the caller shows as "unknown"
+    rather than as free.
+    """
+    row = session.exec(
+        select(SupplyLine.unit_cost)
+        .join(ProductVariant, col(ProductVariant.id) == col(SupplyLine.variant_id))
+        .where(ProductVariant.product_id == product_id, col(SupplyLine.unit_cost) > 0)
+        .order_by(col(SupplyLine.id).desc())
+        .limit(1)
+    ).first()
+    return int(row) if row else 0
 
 
 # --------------------------------------------------------------------------- our codes

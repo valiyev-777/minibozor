@@ -189,21 +189,58 @@ export type LabelSheet = { products: ProductLabel[]; cells: CellLabel[] }
 
 export type ProductStatus = "draft" | "active" | "archived"
 
+/** One reason a card is not in the shop. The key picks the control, the label
+ *  is the server's wording — the browser keeps neither the rule nor the words. */
+export type Gap = {
+  key: "needs_category" | "needs_price" | "needs_photo"
+  label: string
+}
+
 export type AdminProduct = {
   id: number
   sku: string
   title: string
   subtitle: string
+  /** The receiving desk's word for it — "Krossovka". Not the category. */
+  kind: string
   status: ProductStatus
   next_statuses: ProductStatus[]
-  category_slug: string
+  /** Absent on a card written with the sack open and not yet filed. */
+  category_slug: string | null
   brand_slug: string | null
+  /** The identification photograph, over the open sack. Never shown to a
+   *  customer: it is what tells two black trainers apart in a search result. */
+  snapshot_url: string
+  unready: Gap[]
   price: number
   old_price: number | null
+  /** What these last cost at the market. 0 means nothing is booked in yet. */
+  last_cost: number
   stock_left: number
   image_count: number
   variant_count: number
   created_at: string
+}
+
+/** The receiving desk's chips, learned from what came through the door. */
+export type Vocab = {
+  kinds: string[]
+  brands: string[]
+  colours: string[]
+  /** Keyed by kind: trainers in 40-45, shirts in S-XXL. */
+  sizes: Record<string, string[]>
+}
+
+export type PileSize = { size: string; quantity: number }
+
+export type Pile = {
+  product: AdminProduct
+  run_id: number
+  run_code: string
+  location_code: string
+  quantity: number
+  total_cost: number
+  labels: ProductLabel[]
 }
 
 export type AdminVariant = {

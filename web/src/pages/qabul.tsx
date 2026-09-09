@@ -1,749 +1,962 @@
 /**
- * Qabul — the receiving desk, in two stages.
+ * Qabul — a pile off the van, booked in and shelved in one action.
  *
- * They are apart because the van arrives at nine in the evening and sorting
- * five sacks that night is not going to happen. The alternative — waiting
- * until somebody has time — is goods in the building that the system has
- * never heard of.
+ * The screen this replaced had a dead end in it. Writing a card needed a
+ * category, the categories start empty on purpose, and the warehouse role
+ * cannot write one — so the button was never going to enable, and the person
+ * who found that out was the owner with two sacks on the floor. It also asked
+ * for the goods one variant at a time: four of a size, then back round the
+ * loop for the next, twelve times for a sack of shoes.
  *
- * **Stage one is thirty seconds.** How many sacks, where from, what the
- * transport cost. The sacks now stand in `QABUL` as drafts and the dashboard
- * starts counting their age.
+ * So the two jobs are apart now. **Getting goods onto a shelf** is physical,
+ * urgent, and done with the sack open — that is this screen, and it asks for
+ * the six things somebody standing at a bench actually knows. **Getting them
+ * into the shop** is desk work in daylight — that is `/sotuvga-chiqarish`,
+ * and nothing here waits for it.
  *
- * **Stage two is the sorting.** Open a sack, separate by colour and size,
- * count each pile, price it. The product field **searches the existing cards
- * first**: typing "krossovka" shows the cards that match, and choosing one
- * means entering only a quantity and a cost. "Yangi karta" is there and is
- * deliberately the second option, because the same goods arriving a second
- * time as a third new card is how a catalogue rots.
+ * Three things this form does deliberately:
  *
- * Closing the run is what brings the goods into existence.
+ * **It is one row, not a matrix.** A sack from the market is usually one
+ * thing — only black trainers, only white shirts. A second colour is the form
+ * filled in twice, which keeps the kind, the make, the cell and the cost.
+ *
+ * **It saves nothing until you submit it.** The old one wrote to the server on
+ * every keystroke, which deleted and reinserted every line each time; clearing
+ * a quantity to retype it produced a red error, and out-of-order responses
+ * could lose the figure you had just typed.
+ *
+ * **Counts add.** Four of a size and then two more found in the bottom of the
+ * sack is six. The old screen replaced the earlier line and said nothing.
  */
 
-import { Check, Plus, Search, Trash2, X } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Check, Loader2, Package, Plus, Search, Sparkles, X } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 
 import { Empty, PageHeader, Problem, Waiting } from "@/components/page"
-import { PhotoStep } from "@/components/photo-step"
+import { Capture, mediaUrl } from "@/components/photo-step"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/cn"
 import { age, money } from "@/lib/format"
 import {
-  useAddImage,
-  useCancelRun,
-  useCategories,
-  useCreateProduct,
+  useBookInPile,
+  useLocation,
   useProducts,
-  usePublish,
-  useReceiveRun,
-  useSetGrid,
-  useSortRun,
+  useSackSorted,
   useStartRun,
   useSupplies,
-  useSupply,
   useVariants,
+  useVocab,
 } from "@/lib/queries"
-import type { AdminProduct } from "@/lib/types"
+import type { AdminProduct, Pile, PileSize } from "@/lib/types"
 
 // A sack that has stood this long is the thing this shop actually loses money
 // on: goods in the building that nothing has heard of.
 const OVERNIGHT_MINUTES = 14 * 60
 
-type Line = {
-  variant_id: number
-  label: string
-  product_title: string
-  quantity: number
-  unit_cost: number
-}
-
 export function QabulPage() {
-  const [openId, setOpenId] = useState<number | null>(null)
-  if (openId) return <Sorting id={openId} onBack={() => setOpenId(null)} />
-  return <Arrivals onOpen={setOpenId} />
-}
-
-// ------------------------------------------------------------------ stage one
-
-function Arrivals({ onOpen }: { onOpen: (id: number) => void }) {
-  const drafts = useSupplies("draft")
-  const everything = useSupplies()
-  const start = useStartRun()
-  const [sacks, setSacks] = useState("1")
-  const [place, setPlace] = useState("")
-  const [transport, setTransport] = useState("")
-
-  // Autocomplete from previous runs: a market is not an entity anybody
-  // maintains, and this is what keeps it spelt the same way twice.
-  const places = useMemo(() => {
-    const seen = new Set<string>()
-    for (const run of everything.data ?? []) if (run.place) seen.add(run.place)
-    return [...seen].slice(0, 8)
-  }, [everything.data])
-
   return (
     <div className="space-y-4">
-      <PageHeader title="Qabul" subtitle="Qoplar keldi — o'ttiz soniya" />
+      <PageHeader title="Qabul" subtitle="Tavar keldi — nima, nechta, qaysi javonga" />
+      <PileForm />
+      <Sacks />
+    </div>
+  )
+}
 
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          start.mutate(
-            {
-              sacks: Number(sacks) || 1,
-              place: place.trim(),
-              transport_cost: Number(transport) || 0,
-            },
-            {
-              onSuccess: () => {
-                setSacks("1")
-                setTransport("")
-              },
-            },
-          )
+// --------------------------------------------------------------------- the form
+
+type Draft = {
+  product: AdminProduct | null
+  kind: string
+  brand: string
+  colour: string
+  snapshot: string
+  sizes: Record<string, string>
+  unitCost: string
+  cell: string
+}
+
+const EMPTY: Draft = {
+  product: null,
+  kind: "",
+  brand: "",
+  colour: "",
+  snapshot: "",
+  sizes: {},
+  unitCost: "",
+  cell: "",
+}
+
+function PileForm() {
+  const vocab = useVocab()
+  const book = useBookInPile()
+  const [draft, setDraft] = useState<Draft>(EMPTY)
+  const [booked, setBooked] = useState<Pile | null>(null)
+
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
+    setDraft((was) => ({ ...was, [key]: value }))
+
+  // Sizes offered for this kind: what it last arrived in. Nobody configures a
+  // size list before receiving anything, and the market brings what it brings.
+  const remembered = vocab.data?.sizes[draft.kind] ?? []
+  const lines: PileSize[] = Object.entries(draft.sizes)
+    .map(([size, qty]) => ({ size, quantity: Number(qty) || 0 }))
+    .filter((line) => line.quantity > 0)
+
+  const named = Boolean(draft.product) || Boolean(draft.kind.trim())
+  const ready = named && lines.length > 0 && Number(draft.unitCost) > 0
+
+  if (booked) {
+    return (
+      <Booked
+        pile={booked}
+        onAgain={() => {
+          // The kind, the make, the cell and the cost survive: the next pile
+          // out of the same sack is usually the same goods in another colour.
+          setBooked(null)
+          setDraft((was) => ({ ...was, colour: "", sizes: {}, snapshot: "" }))
         }}
-        className="grid gap-3 rounded-panel border bg-surface p-3 sm:grid-cols-4"
-      >
-        <label>
-          <span className="mb-1 block text-micro text-ink-soft">Nechta qop</span>
-          <Input
-            value={sacks}
-            onChange={(event) => setSacks(event.target.value.replace(/\D/g, ""))}
-            inputMode="numeric"
-            aria-label="Nechta qop"
-            className="h-control-lg tabular text-body"
-          />
-        </label>
-        <label className="sm:col-span-2">
-          <span className="mb-1 block text-micro text-ink-soft">Qayerdan</span>
-          <Input
-            value={place}
-            onChange={(event) => setPlace(event.target.value)}
-            list="places"
-            placeholder="Chorsu"
-            aria-label="Qayerdan"
-            className="h-control-lg text-body"
-          />
-          <datalist id="places">
-            {places.map((one) => (
-              <option key={one} value={one} />
-            ))}
-          </datalist>
-        </label>
-        <label>
-          <span className="mb-1 block text-micro text-ink-soft">Yo'l xarajati</span>
-          <Input
-            value={transport}
-            onChange={(event) => setTransport(event.target.value.replace(/\D/g, ""))}
-            inputMode="numeric"
-            placeholder="0"
-            aria-label="Yo'l xarajati"
-            className="h-control-lg tabular text-body"
-          />
-        </label>
-        <Button
-          type="submit"
-          disabled={start.isPending}
-          className="h-control-lg sm:col-span-4"
-        >
-          Qoplarni qayd etish
-        </Button>
-      </form>
-
-      <Problem error={start.error || drafts.error} />
-      {drafts.isLoading ? <Waiting what="Qoplar" /> : null}
-      {drafts.data?.length === 0 ? <Empty what="Saralanmagan qop yo'q." /> : null}
-
-      <ul className="space-y-2">
-        {(drafts.data ?? []).map((run) => (
-          <li key={run.id}>
-            <button
-              type="button"
-              onClick={() => onOpen(run.id)}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-panel border bg-surface p-3 text-left",
-                run.age_minutes >= OVERNIGHT_MINUTES && "border-danger bg-danger-soft",
-              )}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-body font-semibold tabular">{run.code}</div>
-                <div className="text-small text-ink-soft">
-                  {run.place || "joyi yozilmagan"} · {run.buyer}
-                </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="text-small font-medium">{age(run.age_minutes)}</div>
-                <div className="text-micro text-ink-faint">turibdi</div>
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-// ------------------------------------------------------------------ stage two
-
-function Sorting({ id, onBack }: { id: number; onBack: () => void }) {
-  const run = useSupply(id)
-  const sort = useSortRun(id)
-  const receive = useReceiveRun(id)
-  const cancel = useCancelRun(id)
-  const [edited, setEdited] = useState<Line[] | null>(null)
-  const [adding, setAdding] = useState(false)
-
-  const lines: Line[] =
-    edited ??
-    (run.data?.lines ?? []).map((line) => ({
-      variant_id: line.variant_id,
-      label: line.variant_label,
-      product_title: line.product_title,
-      quantity: line.quantity,
-      unit_cost: line.unit_cost,
-    }))
-
-  const total =
-    lines.reduce((sum, line) => sum + line.quantity * line.unit_cost, 0) +
-    (run.data?.transport_cost ?? 0)
-
-  function save(next: Line[]) {
-    setEdited(next)
-    sort.mutate({
-      lines: next.map((line) => ({
-        variant_id: line.variant_id,
-        quantity: line.quantity,
-        unit_cost: line.unit_cost,
-      })),
-    })
-  }
-
-  function edit(variantId: number, patch: Partial<Line>) {
-    save(
-      lines.map((one) => (one.variant_id === variantId ? { ...one, ...patch } : one)),
-    )
-  }
-
-  if (run.isLoading) return <Waiting what="Qop" />
-  if (!run.data) return <Problem error={run.error} />
-
-  return (
-    <div className="space-y-4">
-      <PageHeader
-        title={`${run.data.code} — saralash`}
-        subtitle={`${run.data.place || "joyi yozilmagan"} · ${age(run.data.age_minutes)} turgan`}
-      >
-        <Button variant="ghost" onClick={onBack}>
-          Orqaga
-        </Button>
-      </PageHeader>
-
-      <Problem error={sort.error || receive.error || cancel.error} />
-
-      {lines.length === 0 && !adding ? (
-        <Empty what="Qopni to'kib, har bir uyumni alohida yozing." />
-      ) : null}
-
-      <ul className="space-y-2">
-        {lines.map((line) => (
-          <li
-            key={line.variant_id}
-            className="flex items-center gap-2 rounded-panel border bg-surface p-3"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-body font-semibold">{line.product_title}</div>
-              <div className="text-small text-ink-soft">{line.label}</div>
-            </div>
-            <label className="w-20 shrink-0">
-              <span className="mb-0.5 block text-micro text-ink-faint">dona</span>
-              <Input
-                value={String(line.quantity)}
-                inputMode="numeric"
-                aria-label="Nechta"
-                onChange={(event) =>
-                  edit(line.variant_id, {
-                    quantity: Number(event.target.value.replace(/\D/g, "")) || 0,
-                  })
-                }
-                className="h-control tabular"
-              />
-            </label>
-            <label className="w-28 shrink-0">
-              <span className="mb-0.5 block text-micro text-ink-faint">tannarx</span>
-              <Input
-                value={String(line.unit_cost)}
-                inputMode="numeric"
-                aria-label="Tannarx"
-                onChange={(event) =>
-                  edit(line.variant_id, {
-                    unit_cost: Number(event.target.value.replace(/\D/g, "")) || 0,
-                  })
-                }
-                className="h-control tabular"
-              />
-            </label>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label="O'chirish"
-              onClick={() => save(lines.filter((one) => one.variant_id !== line.variant_id))}
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          </li>
-        ))}
-      </ul>
-
-      {adding ? (
-        <AddLine
-          onCancel={() => setAdding(false)}
-          onAdd={(added) => {
-            setAdding(false)
-            save([...lines.filter((one) => one.variant_id !== added.variant_id), added])
-          }}
-        />
-      ) : (
-        <Button
-          variant="secondary"
-          className="h-control-lg w-full gap-2"
-          onClick={() => setAdding(true)}
-        >
-          <Plus className="size-5" />
-          Uyum qo'shish
-        </Button>
-      )}
-
-      <div className="rounded-panel border bg-surface p-3">
-        <div className="flex items-baseline justify-between">
-          <span className="text-small text-ink-soft">Safar qiymati</span>
-          <span className="figure">{money(total)}</span>
-        </div>
-        <div className="text-micro text-ink-faint">
-          tovar + yo'l ({money(run.data.transport_cost)})
-        </div>
-        <Button
-          className="mt-3 h-control-lg w-full gap-2 text-body"
-          disabled={receive.isPending || lines.length === 0}
-          onClick={() => receive.mutate(undefined, { onSuccess: onBack })}
-        >
-          <Check className="size-5" />
-          Qabul qilish
-        </Button>
-        <Button
-          variant="ghost"
-          className="mt-2 h-control w-full text-danger"
-          disabled={cancel.isPending}
-          onClick={() => {
-            const reason = window.prompt("Nega qabul qilinmayapti?")
-            if (reason) cancel.mutate(reason, { onSuccess: onBack })
-          }}
-        >
-          Qopni bekor qilish
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-// -------------------------------------------------------- what is in the pile
-
-function AddLine({
-  onAdd,
-  onCancel,
-}: {
-  onAdd: (line: Line) => void
-  onCancel: () => void
-}) {
-  const [needle, setNeedle] = useState("")
-  const [chosen, setChosen] = useState<AdminProduct | null>(null)
-  const [writing, setWriting] = useState(false)
-  // Drafts included: a card waiting on a photograph is exactly the card
-  // somebody is about to bring more of.
-  const found = useProducts(needle, "")
-
-  if (writing) {
-    return (
-      <NewCard onCancel={() => setWriting(false)} onWritten={setChosen} />
-    )
-  }
-  if (chosen) {
-    return <PickVariant product={chosen} onAdd={onAdd} onBack={() => setChosen(null)} />
-  }
-
-  return (
-    <div className="space-y-3 rounded-panel border bg-surface p-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-small font-semibold">Bu nima?</h2>
-        <Button variant="ghost" size="sm" onClick={onCancel} aria-label="Yopish">
-          <X className="size-4" />
-        </Button>
-      </div>
-
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
-        <Input
-          autoFocus
-          value={needle}
-          onChange={(event) => setNeedle(event.target.value)}
-          placeholder="Mavjud kartani qidiring — krossovka…"
-          aria-label="Mahsulot qidirish"
-          className="h-control-lg pl-8 text-body"
-        />
-      </div>
-
-      {found.data?.items.length ? (
-        <ul className="divide-y">
-          {found.data.items.slice(0, 8).map((product) => (
-            <li key={product.id}>
-              <button
-                type="button"
-                onClick={() => setChosen(product)}
-                className="flex w-full items-center gap-3 py-2 text-left"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-small font-medium">{product.title}</div>
-                  <div className="text-micro tabular text-ink-faint">
-                    {product.sku} · {product.variant_count} variant
-                    {product.status === "draft" ? " · rasmsiz" : ""}
-                  </div>
-                </div>
-                <span className="tabular text-small">{money(product.price)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {needle.trim() && found.data?.items.length === 0 ? (
-        <p className="text-small text-ink-soft">Bunday karta yo'q.</p>
-      ) : null}
-
-      {/* Deliberately second: the same goods arriving again as a third new
-          card is how a catalogue rots. */}
-      <Button
-        variant="secondary"
-        className="h-control w-full"
-        onClick={() => setWriting(true)}
-      >
-        Yangi karta
-      </Button>
-    </div>
-  )
-}
-
-function PickVariant({
-  product,
-  onAdd,
-  onBack,
-}: {
-  product: AdminProduct
-  onAdd: (line: Line) => void
-  onBack: () => void
-}) {
-  const grid = useVariants(product.id)
-  const [chosen, setChosen] = useState<number | null>(null)
-  const [qty, setQty] = useState("1")
-  const [cost, setCost] = useState("")
-
-  const variant = grid.data?.find((one) => one.id === chosen)
-
-  return (
-    <div className="space-y-3 rounded-panel border bg-surface p-3">
-      <div className="flex items-center justify-between">
-        <h2 className="min-w-0 truncate text-small font-semibold">{product.title}</h2>
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          Boshqasi
-        </Button>
-      </div>
-
-      {grid.isLoading ? <Waiting what="Variantlar" /> : null}
-      {grid.data?.length === 0 ? (
-        <Empty what="Bu kartada hali rang/o'lcham yo'q. Kartani tahrirlab, to'rini yarating." />
-      ) : null}
-
-      <div className="flex flex-wrap gap-1">
-        {(grid.data ?? []).map((one) => (
-          <button
-            key={one.id}
-            type="button"
-            onClick={() => {
-              setChosen(one.id)
-              if (!cost) setCost(String(Math.round(one.price * 0.6)))
-            }}
-            className={cn(
-              "h-control rounded-control border px-3 text-small",
-              one.id === chosen && "border-brand bg-brand-soft text-brand-deep",
-            )}
-          >
-            {one.label}
-          </button>
-        ))}
-      </div>
-
-      {variant ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            onAdd({
-              variant_id: variant.id,
-              label: variant.label,
-              product_title: product.title,
-              quantity: Number(qty) || 1,
-              unit_cost: Number(cost) || 0,
-            })
-          }}
-          className="flex flex-wrap items-end gap-2"
-        >
-          <label className="w-24">
-            <span className="mb-1 block text-micro text-ink-soft">Nechta</span>
-            <Input
-              value={qty}
-              onChange={(event) => setQty(event.target.value.replace(/\D/g, ""))}
-              inputMode="numeric"
-              aria-label="Nechta"
-              className="h-control-lg tabular text-body"
-            />
-          </label>
-          <label className="w-32">
-            <span className="mb-1 block text-micro text-ink-soft">Tannarx</span>
-            <Input
-              value={cost}
-              onChange={(event) => setCost(event.target.value.replace(/\D/g, ""))}
-              inputMode="numeric"
-              aria-label="Tannarx"
-              className="h-control-lg tabular text-body"
-            />
-          </label>
-          <Button type="submit" className="h-control-lg flex-1">
-            Qo'shish
-          </Button>
-        </form>
-      ) : null}
-    </div>
-  )
-}
-
-// ------------------------------------------------------------- a card, inline
-
-function NewCard({
-  onWritten,
-  onCancel,
-}: {
-  onWritten: (product: AdminProduct) => void
-  onCancel: () => void
-}) {
-  const categories = useCategories()
-  const create = useCreateProduct()
-  const [title, setTitle] = useState("")
-  const [sku, setSku] = useState("")
-  const [category, setCategory] = useState("")
-  const [price, setPrice] = useState("")
-  const [colours, setColours] = useState("")
-  const [sizes, setSizes] = useState("")
-  const [written, setWritten] = useState<AdminProduct | null>(null)
-
-  if (written) {
-    return (
-      <Photographs
-        product={written}
-        colours={split(colours)}
-        sizes={split(sizes)}
-        onDone={() => onWritten(written)}
+        onDone={() => {
+          setBooked(null)
+          setDraft(EMPTY)
+        }}
       />
     )
   }
 
   return (
     <form
+      className="space-y-4 rounded-panel border bg-surface p-3"
       onSubmit={(event) => {
         event.preventDefault()
-        create.mutate(
+        if (!ready) return
+        book.mutate(
           {
-            sku: sku.trim().toUpperCase(),
-            title: title.trim(),
-            category_slug: category,
-            price: Number(price) || 0,
+            product_id: draft.product?.id,
+            kind: draft.kind.trim(),
+            brand: draft.brand.trim(),
+            colour: draft.colour.trim(),
+            snapshot_url: draft.snapshot,
+            sizes: lines,
+            unit_cost: Number(draft.unitCost),
+            location_code: draft.cell.trim().toUpperCase(),
           },
-          { onSuccess: setWritten },
+          { onSuccess: setBooked },
         )
       }}
-      className="space-y-3 rounded-panel border bg-surface p-3"
     >
-      <div className="flex items-center justify-between">
-        <h2 className="text-small font-semibold">Yangi karta</h2>
-        <Button variant="ghost" size="sm" onClick={onCancel} aria-label="Yopish">
-          <X className="size-4" />
-        </Button>
-      </div>
+      <Identify
+        draft={draft}
+        vocab={vocab.data}
+        onPick={(product) =>
+          setDraft((was) => ({
+            ...was,
+            product,
+            kind: product?.kind ?? was.kind,
+            colour: "",
+            sizes: {},
+          }))
+        }
+        onSet={set}
+      />
 
-      <label className="block">
-        <span className="mb-1 block text-micro text-ink-soft">Nomi</span>
-        <Input
-          autoFocus
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Krossovka Alfa"
-          aria-label="Nomi"
-          className="h-control-lg text-body"
-        />
-      </label>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <label>
-          <span className="mb-1 block text-micro text-ink-soft">Kod (SKU)</span>
-          <Input
-            value={sku}
-            onChange={(event) => setSku(event.target.value.toUpperCase())}
-            placeholder="KRS-01"
-            aria-label="SKU"
-            className="h-control tabular"
-          />
-        </label>
-        <label>
-          <span className="mb-1 block text-micro text-ink-soft">Kategoriya</span>
-          <select
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-            aria-label="Kategoriya"
-            className="h-control w-full rounded-control border bg-surface px-2 text-small"
-          >
-            <option value="">tanlang</option>
-            {(categories.data ?? []).map((one) => (
-              <option key={one.slug} value={one.slug}>
-                {one.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span className="mb-1 block text-micro text-ink-soft">Sotuv narxi</span>
-          <Input
-            value={price}
-            onChange={(event) => setPrice(event.target.value.replace(/\D/g, ""))}
-            inputMode="numeric"
-            aria-label="Narx"
-            className="h-control tabular"
-          />
-        </label>
-      </div>
+      <Sizes
+        remembered={remembered}
+        sizes={draft.sizes}
+        product={draft.product}
+        colour={draft.colour}
+        onSet={(sizes) => set("sizes", sizes)}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label>
           <span className="mb-1 block text-micro text-ink-soft">
-            Ranglar — vergul bilan
+            Tannarx — bir dona
           </span>
           <Input
-            value={colours}
-            onChange={(event) => setColours(event.target.value)}
-            placeholder="Qora, Oq"
-            aria-label="Ranglar"
-            className="h-control"
+            value={draft.unitCost}
+            onChange={(event) => set("unitCost", event.target.value.replace(/\D/g, ""))}
+            inputMode="numeric"
+            placeholder="85000"
+            aria-label="Tannarx"
+            className="h-control-lg tabular text-body"
           />
-        </label>
-        <label>
-          <span className="mb-1 block text-micro text-ink-soft">
-            O'lchamlar — vergul bilan
+          <span className="mt-1 block text-micro text-ink-faint">
+            Hozir yozilmasa kechga borib esdan chiqadi — foyda hisoblanmaydi
           </span>
-          <Input
-            value={sizes}
-            onChange={(event) => setSizes(event.target.value)}
-            placeholder="41, 42, 43"
-            aria-label="O'lchamlar"
-            className="h-control"
-          />
         </label>
+        <Cell code={draft.cell} onSet={(code) => set("cell", code)} />
       </div>
-      <p className="text-micro text-ink-faint">
-        Rang × o'lcham to'ri bir qadamda yaratiladi — {split(colours).length || 1} ×{" "}
-        {split(sizes).length || 1} ={" "}
-        {(split(colours).length || 1) * (split(sizes).length || 1)} variant.
-      </p>
 
-      <Problem error={create.error} />
+      <Problem error={book.error} />
+
+      <div className="flex items-baseline justify-between text-small">
+        <span className="text-ink-soft">
+          {lines.reduce((sum, line) => sum + line.quantity, 0)} dona
+        </span>
+        <span className="figure">
+          {money(
+            lines.reduce((sum, line) => sum + line.quantity, 0) *
+              (Number(draft.unitCost) || 0),
+          )}
+        </span>
+      </div>
 
       <Button
         type="submit"
-        disabled={create.isPending || !title.trim() || !sku.trim() || !category}
-        className="h-control-lg w-full"
+        disabled={!ready || book.isPending}
+        className="h-control-lg w-full gap-2 text-body"
       >
-        Kartani yaratish
+        {book.isPending ? (
+          <Loader2 className="size-5 animate-spin" />
+        ) : (
+          <Check className="size-5" />
+        )}
+        {draft.cell.trim() ? "Javonga qo'ydim" : "QABULga qo'ydim"}
       </Button>
+      {!ready ? (
+        <p className="text-center text-micro text-ink-faint">
+          {!named
+            ? "Tavar nomi kerak"
+            : lines.length === 0
+              ? "Nechta kelganini yozing"
+              : "Tannarx kerak"}
+        </p>
+      ) : null}
     </form>
   )
 }
 
-function Photographs({
-  product,
-  colours,
-  sizes,
-  onDone,
+// ------------------------------------------------------------ what is this?
+
+function Identify({
+  draft,
+  vocab,
+  onPick,
+  onSet,
 }: {
-  product: AdminProduct
-  colours: string[]
-  sizes: string[]
-  onDone: () => void
+  draft: Draft
+  vocab: { kinds: string[]; brands: string[]; colours: string[] } | undefined
+  onPick: (product: AdminProduct | null) => void
+  onSet: <K extends keyof Draft>(key: K, value: Draft[K]) => void
 }) {
-  const grid = useSetGrid(product.id)
-  const image = useAddImage(product.id)
-  const publish = usePublish(product.id)
-  const [taken, setTaken] = useState<Record<string, string>>({})
+  const [needle, setNeedle] = useState("")
+  const found = useProducts(needle, "")
 
-  // The grid, once, as soon as there is a card to hang it on. In an effect
-  // rather than in the render, because a mutation fired while React is
-  // rendering is a mutation fired twice under StrictMode.
-  const built = useRef(false)
-  useEffect(() => {
-    if (built.current) return
-    built.current = true
-    grid.mutate({
-      colours: colours.map((colour) => ({ colour, hex: "" })),
-      sizes,
-      price: product.price,
-    })
-    // Once per card. The inputs are captured when the card is written and do
-    // not change while this screen is open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const wanted = colours.length ? colours : [""]
-  const missing = wanted.filter((colour) => !taken[colour])
+  if (draft.product) {
+    return (
+      <div className="space-y-2 rounded-control border border-brand bg-brand-soft p-2">
+        <div className="flex items-center gap-3">
+          <Thumb product={draft.product} />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-body font-semibold">{draft.product.title}</div>
+            <div className="text-micro tabular text-ink-soft">
+              {draft.product.sku} · {draft.product.variant_count} variant
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onPick(null)
+              setNeedle("")
+            }}
+          >
+            Boshqasi
+          </Button>
+        </div>
+        {/* Which colour of it arrived. Required, and it is the card's own
+            colours rather than a free field: leaving it empty would write a
+            colourless cell beside the ones that exist and put the count on a
+            variant nobody is ever going to pick from. */}
+        <OwnColours
+          product={draft.product}
+          value={draft.colour}
+          onChange={(colour) => onSet("colour", colour)}
+        />
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-3 rounded-panel border bg-surface p-3">
-      <h2 className="text-small font-semibold">{product.title} — rasm</h2>
+    <div className="space-y-3">
+      {/* Search first, and it shows the photograph — two black trainers of
+          different makes look identical in a list of names, and picking the
+          wrong one puts Adidas stock on the Nike card. */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
+        <Input
+          value={needle}
+          onChange={(event) => setNeedle(event.target.value)}
+          placeholder="Bor tavarmi? — nom yoki kod"
+          aria-label="Mavjud kartani qidirish"
+          className="h-control-lg pl-8 text-body"
+        />
+      </div>
 
-      <PhotoStep
-        colours={wanted}
-        taken={taken}
-        onTaken={(colour, url) => {
-          setTaken((was) => ({ ...was, [colour]: url }))
-          image.mutate({ url, colour })
-        }}
-      />
+      {/* With nothing typed this is the recently received, which is the
+          "same sack again?" shortcut: the second colour out of one sack, or the
+          same goods arriving next month, is a tap rather than a search. */}
+      {found.data?.items.length && !needle.trim() ? (
+        <p className="text-micro text-ink-soft">Oxirgi kartalar</p>
+      ) : null}
 
-      <Problem error={grid.error || image.error || publish.error} />
+      {found.data?.items.length ? (
+        <ul className="divide-y rounded-control border">
+          {found.data.items.slice(0, 6).map((product) => (
+            <li key={product.id}>
+              <button
+                type="button"
+                onClick={() => onPick(product)}
+                className="flex w-full items-center gap-3 p-2 text-left"
+              >
+                <Thumb product={product} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-small font-medium">{product.title}</div>
+                  <div className="text-micro tabular text-ink-faint">
+                    {product.sku} · {product.stock_left} dona
+                    {product.status === "draft" ? " · do'konda yo'q" : ""}
+                  </div>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
-      <Button
-        className="h-control-lg w-full"
-        disabled={image.isPending}
-        onClick={() => {
-          // Only when every colour has one. The server refuses otherwise, and
-          // asking it to refuse is how the person finds out on the wrong
-          // screen.
-          if (!missing.length) publish.mutate("active", { onSuccess: onDone })
-          else onDone()
-        }}
-      >
-        {missing.length ? "Rasmsiz davom etish" : "Sotuvga chiqarish va davom etish"}
-      </Button>
+      {needle.trim().length > 1 && found.data?.items.length === 0 ? (
+        <p className="text-small text-ink-soft">
+          Bunday karta yo'q — pastda yangisini yozing.
+        </p>
+      ) : null}
+
+      <div className="space-y-2 rounded-control border border-dashed p-2">
+        <p className="text-micro text-ink-soft">
+          Yangi tavar — bosib tanlang, yozish shart emas
+        </p>
+        <Chips
+          label="Tur"
+          options={vocab?.kinds ?? []}
+          value={draft.kind}
+          onChange={(value) => onSet("kind", value)}
+          placeholder="Krossovka"
+        />
+        <Chips
+          label="Brend"
+          options={vocab?.brands ?? []}
+          value={draft.brand}
+          onChange={(value) => onSet("brand", value)}
+          placeholder="Nike"
+          none="brendsiz"
+        />
+        <Chips
+          label="Rang"
+          options={vocab?.colours ?? []}
+          value={draft.colour}
+          onChange={(value) => onSet("colour", value)}
+          placeholder="Qora"
+        />
+
+        {draft.kind.trim() ? (
+          <div className="pt-1">
+            <p className="mb-1 text-micro text-ink-soft">
+              Tanish rasmi — qopning ustida, ikki soniya
+            </p>
+            <Capture
+              colour=""
+              current={draft.snapshot || undefined}
+              onTaken={(_, url) => onSet("snapshot", url)}
+              guide="mijozga ko'rinmaydi — faqat tanish uchun"
+              placeholder="rasm"
+            />
+            <p className="mt-1 text-micro text-ink-faint">
+              Bo'sh qoldirsangiz ham javonga qo'yiladi. Katalog rasmi keyin,
+              yorug'likda olinadi.
+            </p>
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
 
-function split(value: string): string[] {
-  return value
-    .split(",")
-    .map((one) => one.trim())
-    .filter(Boolean)
+/**
+ * The colours this card already has, one of which arrived.
+ *
+ * Auto-selected when there is only one, because then it is not a question —
+ * and a question with one answer on a form is a tap somebody has to make for
+ * no reason.
+ */
+function OwnColours({
+  product,
+  value,
+  onChange,
+}: {
+  product: AdminProduct
+  value: string
+  onChange: (colour: string) => void
+}) {
+  const grid = useVariants(product.id)
+  const colours = useMemo(() => {
+    const seen = new Set((grid.data ?? []).map((cell) => cell.colour))
+    return [...seen]
+  }, [grid.data])
+
+  const only = colours.length === 1 ? colours[0] : null
+  useEffect(() => {
+    if (only !== null && value !== only) onChange(only)
+    // Once, when the card's colours arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [only])
+
+  if (grid.isLoading || colours.length <= 1) return null
+
+  return (
+    <div>
+      <span className="mb-1 block text-micro text-ink-soft">Qaysi rang keldi</span>
+      <div className="flex flex-wrap gap-1">
+        {colours.map((one) => (
+          <button
+            key={one}
+            type="button"
+            onClick={() => onChange(one)}
+            className={cn(
+              "h-control rounded-control border bg-surface px-3 text-small",
+              one === value && "border-brand bg-brand text-brand-ink",
+            )}
+          >
+            {one || "rangsiz"}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Thumb({ product }: { product: AdminProduct }) {
+  if (!product.snapshot_url) {
+    return (
+      <span className="grid size-11 shrink-0 place-items-center rounded-control bg-canvas text-ink-faint">
+        <Package className="size-5" />
+      </span>
+    )
+  }
+  return (
+    <img
+      src={mediaUrl(product.snapshot_url)}
+      alt=""
+      className="size-11 shrink-0 rounded-control object-cover"
+    />
+  )
+}
+
+/**
+ * A chip row that grows. Everything received before, most-used first, and a
+ * field for one that has not been. "On Cloud" is typed once and is a chip from
+ * then on, because a market brings whatever it brings and no list drawn up
+ * beforehand survives contact with it.
+ */
+function Chips({
+  label,
+  options,
+  value,
+  onChange,
+  placeholder,
+  none,
+}: {
+  label: string
+  options: string[]
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  none?: string
+}) {
+  const [writing, setWriting] = useState(false)
+  // Most-used first from the server, and a search once there are too many to
+  // read at a glance.
+  const [filter, setFilter] = useState("")
+  const shown = filter.trim()
+    ? options.filter((one) => one.toLowerCase().includes(filter.trim().toLowerCase()))
+    : options.slice(0, 12)
+
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-micro text-ink-soft">{label}</span>
+        {value ? <span className="text-micro font-medium">{value}</span> : null}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {shown.map((one) => (
+          <button
+            key={one}
+            type="button"
+            onClick={() => onChange(one === value ? "" : one)}
+            className={cn(
+              "h-control rounded-control border px-3 text-small",
+              one === value && "border-brand bg-brand-soft text-brand-deep",
+            )}
+          >
+            {one}
+          </button>
+        ))}
+        {none ? (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className={cn(
+              "h-control rounded-control border border-dashed px-3 text-small text-ink-soft",
+              !value && "border-brand text-brand-deep",
+            )}
+          >
+            {none}
+          </button>
+        ) : null}
+        {writing ? (
+          <Input
+            autoFocus
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onBlur={() => setWriting(false)}
+            placeholder={placeholder}
+            aria-label={label}
+            className="h-control w-36"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setWriting(true)}
+            className="h-control gap-1 rounded-control border border-dashed px-3 text-small text-brand-deep"
+          >
+            + yangi
+          </button>
+        )}
+      </div>
+      {options.length > 12 && !filter ? (
+        <button
+          type="button"
+          onClick={() => setFilter(" ")}
+          className="mt-1 text-micro text-brand-deep"
+        >
+          yana {options.length - 12} ta…
+        </button>
+      ) : null}
+      {filter ? (
+        <Input
+          autoFocus
+          value={filter.trim()}
+          onChange={(event) => setFilter(event.target.value || " ")}
+          placeholder={`${label} qidirish`}
+          aria-label={`${label} qidirish`}
+          className="mt-1 h-control"
+        />
+      ) : null}
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------ how many
+
+function Sizes({
+  remembered,
+  sizes,
+  product,
+  colour,
+  onSet,
+}: {
+  remembered: string[]
+  sizes: Record<string, string>
+  product: AdminProduct | null
+  colour: string
+  onSet: (sizes: Record<string, string>) => void
+}) {
+  const [adding, setAdding] = useState("")
+  const [sizeless, setSizeless] = useState(false)
+
+  // What this card already holds, per colour and size, so that a second count
+  // of the same size reads as an addition rather than looking like a figure
+  // about to be overwritten. The screen this replaced overwrote it silently.
+  const grid = useVariants(product?.id ?? null)
+  const already = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const cell of grid.data ?? []) {
+      map.set(`${cell.colour}\u0000${cell.size}`, cell.stock_left)
+    }
+    return map
+  }, [grid.data])
+
+  // A card that already exists brings its own sizes, which beats anything
+  // remembered by kind.
+  const offered = useMemo(() => {
+    const own = (grid.data ?? [])
+      .filter((cell) => !colour || cell.colour === colour)
+      .map((cell) => cell.size)
+    const seen = new Set([...own, ...remembered, ...Object.keys(sizes)])
+    seen.delete("")
+    return [...seen]
+  }, [grid.data, colour, remembered, sizes])
+
+  // Sizes are the default and being sizeless is a choice, not a fallback. It
+  // was the other way round for one build: on day one nothing is remembered
+  // for any kind, so the first sack of shoes anybody received offered a single
+  // quantity box and no sizes at all.
+  if (sizeless) {
+    return (
+      <div>
+        <div className="mb-1 flex items-baseline justify-between">
+          <span className="text-micro text-ink-soft">Nechta keldi</span>
+          <button
+            type="button"
+            onClick={() => {
+              setSizeless(false)
+              onSet({})
+            }}
+            className="text-micro text-brand-deep"
+          >
+            o'lchamlari bor
+          </button>
+        </div>
+        <Input
+          value={sizes[""] ?? ""}
+          onChange={(event) => onSet({ "": event.target.value.replace(/\D/g, "") })}
+          inputMode="numeric"
+          placeholder="12"
+          aria-label="Nechta"
+          className="h-control-lg w-28 tabular text-body"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-micro text-ink-soft">O'lchamlar — nechta keldi</span>
+        {/* Bags and accessories have none, and asking for one is how a fake
+            size gets typed. */}
+        <button
+          type="button"
+          onClick={() => {
+            setSizeless(true)
+            onSet({})
+          }}
+          className="text-micro text-brand-deep"
+        >
+          o'lchamsiz
+        </button>
+      </div>
+
+      {offered.length === 0 ? (
+        <p className="mb-1 text-micro text-ink-faint">
+          O'lchamni yozib Enter bosing — 41, keyin 42. Keyingi safar o'zi
+          taklif qiladi.
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        {offered.map((size) => (
+          <SizeBox
+            key={size}
+            size={size}
+            value={sizes[size] ?? ""}
+            already={already.get(`${colour}\u0000${size}`) ?? 0}
+            onChange={(value) => onSet({ ...sizes, [size]: value })}
+          />
+        ))}
+
+        <label className="w-24">
+          <span className="mb-0.5 block text-center text-micro text-ink-faint">
+            + o'lcham
+          </span>
+          {/* Enter adds it and leaves the caret here, because the first sack of
+              a kind means typing 41, 42, 43 one after another. */}
+          <Input
+            value={adding}
+            onChange={(event) => setAdding(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return
+              event.preventDefault()
+              const size = adding.trim()
+              if (size) onSet({ ...sizes, [size]: "" })
+              setAdding("")
+              event.currentTarget.focus()
+            }}
+            onBlur={() => {
+              const size = adding.trim()
+              if (size) onSet({ ...sizes, [size]: "" })
+              setAdding("")
+            }}
+            placeholder="44"
+            aria-label="Yangi o'lcham"
+            className="h-control-lg text-center"
+          />
+        </label>
+      </div>
+    </div>
+  )
+}
+
+function SizeBox({
+  size,
+  value,
+  already,
+  onChange,
+}: {
+  size: string
+  value: string
+  already: number
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="w-24">
+      <span className="mb-0.5 block text-center text-micro text-ink-soft">{size}</span>
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value.replace(/\D/g, ""))}
+        inputMode="numeric"
+        aria-label={`${size} — nechta`}
+        className={cn(
+          "h-control-lg text-center tabular text-body",
+          Number(value) > 0 && "border-brand",
+        )}
+      />
+      {already > 0 && Number(value) > 0 ? (
+        <span className="mt-0.5 block text-center text-micro text-ink-faint">
+          {already} + {Number(value)} = {already + Number(value)}
+        </span>
+      ) : null}
+    </label>
+  )
+}
+
+// -------------------------------------------------------------------- the cell
+
+function Cell({ code, onSet }: { code: string; onSet: (code: string) => void }) {
+  const typed = code.trim().toUpperCase()
+  // Shown as soon as it looks like a cell code, because what is *in* the cell
+  // is the check that matters: a valid code for the wrong cell is the mistake
+  // a capacity bar cannot catch.
+  const cell = useLocation(/^[A-Z]-\d{2}-\d{2}$/.test(typed) ? typed : null)
+
+  return (
+    <label className="block">
+      <span className="mb-1 block text-micro text-ink-soft">
+        Javon — bo'sh qoldirsa QABULda turadi
+      </span>
+      <Input
+        value={code}
+        onChange={(event) => onSet(event.target.value.toUpperCase())}
+        placeholder="A-03-01"
+        aria-label="Javon kodi"
+        className="h-control-lg tabular text-body"
+      />
+
+      {cell.isLoading ? (
+        <span className="mt-1 block text-micro text-ink-faint">tekshirilmoqda…</span>
+      ) : null}
+
+      {cell.isError ? (
+        <span className="mt-1 block rounded-control bg-danger-soft p-2 text-micro text-danger">
+          Bunday yacheyka yo'q. Xaritada bor kodni tekshiring.
+        </span>
+      ) : null}
+
+      {cell.data ? (
+        cell.data.contents.length ? (
+          <span className="mt-1 block rounded-control bg-warn-soft p-2 text-micro text-warn-ink">
+            Bu yacheykada: <b>{cell.data.contents[0].product_title}</b>
+            {cell.data.contents.length > 1
+              ? ` va yana ${cell.data.contents.length - 1} xil`
+              : ""}
+            {" — "}
+            {cell.data.contents.reduce((sum, row) => sum + row.qty, 0)} dona
+          </span>
+        ) : (
+          <span className="mt-1 block rounded-control bg-good-soft p-2 text-micro text-good">
+            Bo'sh
+          </span>
+        )
+      ) : null}
+    </label>
+  )
+}
+
+// ------------------------------------------------------------------ what to write
+
+function Booked({
+  pile,
+  onAgain,
+  onDone,
+}: {
+  pile: Pile
+  onAgain: () => void
+  onDone: () => void
+}) {
+  return (
+    <div className="space-y-3 rounded-panel border border-good bg-good-soft p-3">
+      <div className="flex items-start gap-2">
+        <Sparkles className="mt-0.5 size-5 shrink-0 text-good" />
+        <div className="min-w-0">
+          <div className="text-body font-semibold">{pile.product.title}</div>
+          <div className="text-small text-ink-soft">
+            {pile.quantity} dona · {pile.location_code} · {money(pile.total_cost)}
+          </div>
+        </div>
+      </div>
+
+      {/* The codes, big, because there is no printer yet: they get written on
+          the box with a marker. The print button is there for when there is
+          one, and nothing about the codes changes when it arrives. */}
+      <div className="rounded-control bg-surface p-2">
+        <p className="mb-1 text-micro text-ink-soft">
+          Qutiga yozib qo'ying — keyin shu kod bilan topiladi
+        </p>
+        <ul className="space-y-1">
+          {pile.labels.map((one) => (
+            <li key={one.variant_id} className="flex items-baseline justify-between gap-2">
+              <span className="text-small text-ink-soft">{one.variant_label || "—"}</span>
+              <span className="tabular text-body font-semibold">{one.sku}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <p className="text-micro text-ink-soft">
+        Do'konda hali yo'q — kategoriya, narx va rasm kerak.{" "}
+        <a href="/sotuvga-chiqarish" className="font-medium text-brand-deep underline">
+          Sotuvga chiqarish
+        </a>
+      </p>
+
+      <div className="flex gap-2">
+        <Button className="h-control-lg flex-1 gap-2" onClick={onAgain}>
+          <Plus className="size-5" />
+          Shu qopdan yana
+        </Button>
+        <Button variant="secondary" className="h-control-lg" onClick={onDone}>
+          Tugadi
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ------------------------------------------------------- sacks nobody has opened
+
+/**
+ * The reminder, and it is only a reminder.
+ *
+ * Its whole value is the age: goods are standing in the building and nobody
+ * knows what they are. Tipping one out produces piles, which go in through the
+ * form above — a sack is not one pile, so there is no arrangement of lines on
+ * this row that would describe what came out of it. "Saralandi" dismisses it.
+ */
+function Sacks() {
+  const drafts = useSupplies("draft")
+  const start = useStartRun()
+  const [open, setOpen] = useState(false)
+  const [sacks, setSacks] = useState("1")
+  const [place, setPlace] = useState("")
+
+  const waiting = drafts.data?.length ?? 0
+
+  return (
+    <section className="rounded-panel border bg-surface p-3">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-baseline justify-between"
+      >
+        <span className="text-small font-semibold">Ochilmagan qoplar</span>
+        <span className={cn("text-small tabular", waiting && "font-semibold text-warn-ink")}>
+          {waiting || "yo'q"}
+        </span>
+      </button>
+
+      {open ? (
+        <div className="mt-3 space-y-3">
+          <form
+            className="flex flex-wrap items-end gap-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              start.mutate(
+                { sacks: Number(sacks) || 1, place: place.trim(), transport_cost: 0 },
+                { onSuccess: () => setSacks("1") },
+              )
+            }}
+          >
+            <label className="w-24">
+              <span className="mb-1 block text-micro text-ink-soft">Nechta qop</span>
+              <Input
+                value={sacks}
+                onChange={(event) => setSacks(event.target.value.replace(/\D/g, ""))}
+                inputMode="numeric"
+                aria-label="Nechta qop"
+                className="h-control tabular"
+              />
+            </label>
+            <label className="min-w-32 flex-1">
+              <span className="mb-1 block text-micro text-ink-soft">Qayerdan</span>
+              <Input
+                value={place}
+                onChange={(event) => setPlace(event.target.value)}
+                placeholder="Chorsu"
+                aria-label="Qayerdan"
+                className="h-control"
+              />
+            </label>
+            <Button type="submit" variant="secondary" className="h-control">
+              Keldi
+            </Button>
+          </form>
+
+          {drafts.isLoading ? <Waiting what="Qoplar" /> : null}
+          {waiting === 0 ? <Empty what="Hamma qop saralangan." /> : null}
+
+          <ul className="space-y-2">
+            {(drafts.data ?? []).map((sack) => (
+              <Sack key={sack.id} sack={sack} />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function Sack({
+  sack,
+}: {
+  sack: { id: number; code: string; place: string; age_minutes: number }
+}) {
+  const sorted = useSackSorted(sack.id)
+  const overnight = sack.age_minutes >= OVERNIGHT_MINUTES
+
+  return (
+    <li
+      className={cn(
+        "flex items-center gap-2 rounded-control border p-2",
+        overnight && "border-danger bg-danger-soft",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-small font-medium">
+          {sack.code} · {sack.place || "joyi yozilmagan"}
+        </div>
+        <div className={cn("text-micro tabular", overnight ? "text-danger" : "text-ink-faint")}>
+          {age(sack.age_minutes)} turgan
+        </div>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={sorted.isPending}
+        onClick={() => sorted.mutate()}
+      >
+        {sorted.isPending ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
+        Saralandi
+      </Button>
+    </li>
+  )
 }

@@ -171,6 +171,20 @@ def book_in_pile(
 
     product = _pile_card(session, user, payload)
     colour = payload.colour.strip()
+
+    # A card that already has colours cannot take a colourless pile. Without
+    # this, an empty colour writes a cell beside the ones that exist and puts
+    # the count on a variant no picker will ever be sent to — the goods would
+    # be on the shelf under a name nobody looks for. Guarded here and not only
+    # on the form, because the form is not the only caller there will be.
+    if payload.product_id is not None and not colour:
+        known = [one for one in pr.colours(session, product.id) if one]
+        if known:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                i18n.label("pile_needs_a_colour", colours=", ".join(known)),
+            )
+
     cells = pr.ensure_cells(
         session,
         product,
@@ -468,6 +482,48 @@ def receive_supply(
         pr.refresh(session, product_id)
     session.commit()
 
+    session.refresh(run)
+    return _supply_out(session, run)
+
+
+@router.post(
+    "/supplies/{supply_id}/sorted",
+    response_model=s.SupplyOut,
+    summary="This sack has been dealt with — its goods went in as piles",
+)
+def sack_sorted(
+    supply_id: int, user: WarehouseUser, session: SessionDep
+) -> s.SupplyOut:
+    """Closes the reminder, not a receipt.
+
+    A ``draft`` supply is two words for one thing: goods are standing in the
+    building and nobody knows what they are. Its value is entirely the age on
+    the dashboard. When somebody finally tips it out, what comes out is piles —
+    one card each, one receipt each, booked through ``POST /piles`` — and there
+    is no arrangement of lines on *this* row that would describe that, because
+    a sack is not one pile.
+
+    So this row is dismissed rather than filled in. Not ``cancel``: cancelling
+    says the goods were never booked, and these were.
+    """
+    run = _draft(session, supply_id)
+    run.status = SupplyStatus.RECEIVED
+    run.received_at = utcnow()
+    run.received_by_id = user.id
+    run.note = i18n.label("sack_sorted_note")
+    session.add(run)
+    audit.record(
+        session,
+        actor=user,
+        action="supply.sorted",
+        entity="supply",
+        entity_id=run.id,
+        field="status",
+        old=SupplyStatus.DRAFT,
+        new=SupplyStatus.RECEIVED,
+        note=run.note,
+    )
+    session.commit()
     session.refresh(run)
     return _supply_out(session, run)
 

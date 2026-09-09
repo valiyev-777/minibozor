@@ -21,6 +21,7 @@ import {
   PackageSearch,
   Route,
   ScanBarcode,
+  Sparkles,
   Tags,
   Truck,
   Users,
@@ -33,6 +34,9 @@ export type NavItem = {
   to: string
   label: string
   icon: LucideIcon
+  /** A dashboard tile key whose value rides on this item as a count. A queue
+   *  nobody can see the length of is a queue that grows. */
+  badge?: string
 }
 
 /** Interface language is Uzbek. There is no language picker: everybody who
@@ -40,6 +44,11 @@ export type NavItem = {
 const ADMIN: NavItem[] = [
   { to: "/", label: "Boshqaruv", icon: Home },
   { to: "/mahsulotlar", label: "Mahsulotlar", icon: Boxes },
+  // High in the list because what is in it is money standing still: goods on
+  // a shelf that no customer can buy. Admin only, and deliberately: filing a
+  // card needs a category, and writing a category is the office's. Putting it
+  // in the warehouse menu would be a screen whose first control refuses.
+  { to: "/sotuvga-chiqarish", label: "Sotuvga chiqarish", icon: Sparkles, badge: "held_back" },
   { to: "/kategoriyalar", label: "Kategoriyalar", icon: Tags },
   { to: "/buyurtmalar", label: "Buyurtmalar", icon: ListOrdered },
   { to: "/ombor", label: "Ombor", icon: Map },

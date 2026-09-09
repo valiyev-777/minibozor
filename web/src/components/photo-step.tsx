@@ -86,14 +86,20 @@ export function PhotoStep({
   )
 }
 
-function Capture({
+export function Capture({
   colour,
   current,
   onTaken,
+  guide = GUIDE,
+  placeholder,
 }: {
   colour: string
   current: string | undefined
   onTaken: (colour: string, url: string) => void
+  /** The line under the frame. The catalogue shot wants white paper; the
+   *  identification snapshot over an open sack wants nothing of the kind. */
+  guide?: string
+  placeholder?: string
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
@@ -169,7 +175,7 @@ function Capture({
                 than the quality of any single shot. */}
             <div className="absolute inset-4 rounded-control border-2 border-dashed border-line" />
             <div className="grid size-full place-items-center text-micro text-ink-faint">
-              {colour || "rasm"}
+              {placeholder ?? colour ?? "rasm"}
             </div>
           </>
         )}
@@ -185,7 +191,7 @@ function Capture({
         ) : null}
       </div>
 
-      <p className="text-center text-micro text-ink-faint">{GUIDE}</p>
+      <p className="text-center text-micro text-ink-faint">{guide}</p>
 
       <div className="flex flex-wrap justify-center gap-2">
         <Button

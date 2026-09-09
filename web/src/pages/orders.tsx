@@ -18,7 +18,7 @@ import { useState } from "react"
 import { Empty, PageHeader, Problem, Waiting } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/cn"
-import { age, dateTime, money } from "@/lib/format"
+import { age, dateTime, minutesSince, money } from "@/lib/format"
 import { useBuildPickTask, useMoveOrder, useOrders } from "@/lib/queries"
 import type { OrderStatus, StaffOrder } from "@/lib/types"
 
@@ -189,7 +189,3 @@ function Row({ order }: { order: StaffOrder }) {
   )
 }
 
-function minutesSince(when: string): number {
-  const then = new Date(when.endsWith("Z") || when.includes("+") ? when : `${when}Z`)
-  return Math.max(0, Math.round((Date.now() - then.getTime()) / 60_000))
-}

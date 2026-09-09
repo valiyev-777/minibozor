@@ -40,6 +40,9 @@ import type {
   StaffUser,
   StockCount,
   Supply,
+  Pile,
+  PileSize,
+  Vocab,
   WhereIs,
 } from "@/lib/types"
 
@@ -65,6 +68,7 @@ export const keys = {
   available: ["round", "available"] as const,
   earnings: ["earnings"] as const,
   whereIs: (q: string) => ["where-is", q] as const,
+  vocab: ["vocab"] as const,
 }
 
 // --------------------------------------------------------------------- reads
@@ -93,6 +97,16 @@ export function useWhereIs(q: string) {
     queryKey: keys.whereIs(q),
     queryFn: () => api<WhereIs[]>(`/warehouse/where-is?q=${encodeURIComponent(q)}`),
     enabled: q.trim().length > 1,
+  })
+}
+
+export function useVocab() {
+  return useQuery({
+    queryKey: keys.vocab,
+    queryFn: () => api<Vocab>("/warehouse/vocab"),
+    // The chips grow as goods come through the door, and a stale list is a
+    // brand somebody has to type a second time. Cheap query, long enough.
+    staleTime: 60_000,
   })
 }
 
@@ -206,10 +220,14 @@ export function useOnDemand<T>(
   } as UseQueryOptions<T>)
 }
 
-export function useDashboard() {
+export function useDashboard(enabled = true) {
   return useQuery({
     queryKey: keys.dashboard,
     queryFn: () => api<Dashboard>("/admin/dashboard"),
+    // The rail asks for this to put a count beside a menu item, and a courier
+    // is not allowed to read it — so it is off unless somebody actually wants
+    // the figure. Otherwise every page load a courier makes is a 403.
+    enabled,
     // The screen that stays open all day, on a shop several people are
     // changing.
     refetchInterval: 60_000,
@@ -396,6 +414,79 @@ export function useSubmitCount(id: number) {
 
 // ------------------------------------------------------- writing a card
 
+/**
+ * A pile off the van: booked in, shelved, and labelled, in one request.
+ *
+ * The one write on the receiving screen. It carries an idempotency key because
+ * the person tapping it is standing in a warehouse on warehouse wifi, and a
+ * second tap on a slow connection must not be a second sack.
+ */
+export function useBookInPile() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      product_id?: number
+      kind?: string
+      brand?: string
+      colour?: string
+      title?: string
+      snapshot_url?: string
+      sizes: PileSize[]
+      unit_cost: number
+      location_code?: string
+      place?: string
+      transport_cost?: number
+    }) =>
+      api<Pile>("/warehouse/piles", {
+        body: input,
+        idempotencyKey: idempotencyKey(),
+      }),
+    // Everything this touches: the room, the receiving queue, the catalogue,
+    // the publishing queue behind it, and the figures on the dashboard.
+    onSuccess: () =>
+      invalidate(client, [
+        keys.locations,
+        keys.putaway,
+        ["products"],
+        ["supplies"],
+        keys.dashboard,
+        keys.vocab,
+      ]),
+  })
+}
+
+/** The reminder closed: its goods went in as piles, not as lines. */
+export function useSackSorted(id: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => api<Supply>(`/warehouse/supplies/${id}/sorted`, { body: {} }),
+    onSuccess: () => invalidate(client, [["supplies"], keys.dashboard]),
+  })
+}
+
+/** One selling price for every cell of a card — what publishing needs. */
+export function usePriceCard(productId: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { price: number; old_price?: number | null; colour?: string }) =>
+      api<AdminVariant[]>(`/admin/products/${productId}/price`, { body: input }),
+    onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
+  })
+}
+
+/** Filing a card in the shop: the category it is browsed under. */
+export function useFileCard(productId: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { category_slug?: string; title?: string }) =>
+      api<AdminProduct>(`/admin/products/${productId}`, {
+        method: "PATCH",
+        body: input,
+      }),
+    onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
+  })
+}
+
 export function useCreateProduct() {
   const client = useQueryClient()
   return useMutation({
@@ -430,7 +521,11 @@ export function useAddImage(productId: number) {
   return useMutation({
     mutationFn: (input: { url: string; colour: string }) =>
       api<AdminImage[]>(`/admin/products/${productId}/images`, { body: input }),
-    onSuccess: () => invalidate(client, [["products"]]),
+    // The dashboard too: a photograph is one of the three things holding a
+    // card back, and the count in the rail is the only reason the queue gets
+    // worked. A badge that still says 1 after you have fixed the one is a
+    // badge people stop believing.
+    onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
   })
 }
 
@@ -439,7 +534,7 @@ export function usePublish(productId: number) {
   return useMutation({
     mutationFn: (status: "active" | "draft" | "archived") =>
       api<AdminProduct>(`/admin/products/${productId}/status`, { body: { status } }),
-    onSuccess: () => invalidate(client, [["products"]]),
+    onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
   })
 }
 

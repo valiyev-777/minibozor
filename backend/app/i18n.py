@@ -286,6 +286,16 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "фото",
         "en": "a photograph",
     },
+    "tile_held_back": {
+        "uz": "Javonda bor, do'konda yo'q",
+        "ru": "На полке есть, в магазине нет",
+        "en": "On the shelf, not in the shop",
+    },
+    "sack_sorted_note": {
+        "uz": "Saralandi — tovarlari uyum bo'lib kirdi",
+        "ru": "Разобрано — товар оформлен партиями",
+        "en": "Sorted — the goods went in as piles",
+    },
     "card_not_ready": {
         "uz": "Sotuvga chiqarish uchun yetishmaydi: {gaps}",
         "ru": "Для продажи не хватает: {gaps}",
@@ -295,6 +305,11 @@ LABELS: dict[str, dict[str, str]] = {
         "uz": "Bunday yacheyka yo'q: {code}",
         "ru": "Такой ячейки нет: {code}",
         "en": "No such cell: {code}",
+    },
+    "pile_needs_a_colour": {
+        "uz": "Qaysi rang kelganini tanlang: {colours}",
+        "ru": "Выберите, какой цвет пришёл: {colours}",
+        "en": "Say which colour arrived: {colours}",
     },
     "pile_needs_a_name": {
         "uz": "Tavar nomi yoki turi kerak",

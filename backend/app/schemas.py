@@ -1166,6 +1166,12 @@ class AdminProductOut(BaseModel):
     unready: list[GapOut] = []
     price: int
     old_price: int | None
+    # What these last cost at the market, from the most recent market run that
+    # named any of this card's cells. The publishing screen offers a markup
+    # against it, because "+75%" is how the person who bought them thinks — and
+    # they wrote the cost at the bench with the sack open, which is the only
+    # moment anybody knew it.
+    last_cost: int = 0
     stock_left: int
     image_count: int
     variant_count: int
