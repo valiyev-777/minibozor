@@ -49,6 +49,7 @@ import { cn } from "@/lib/cn"
 import { age, money, units } from "@/lib/format"
 import {
   useBookInPile,
+  useLocation,
   useProducts,
   useSackSorted,
   useShelfMap,
@@ -86,11 +87,32 @@ export function QabulPage() {
       {booked ? (
         <Booked
           pile={booked}
-          onSameGoods={() => {
-            // The rest of the pile into another cell. The goods and the cost
-            // stay, because it is the same box in the same hands — but the
-            // counts are cleared, and that is not tidiness: keeping them meant
-            // one tap on the button booked the same nine pairs a second time.
+          onAnotherColour={() => {
+            // Another colour out of the same sack, which is the case this form
+            // did not have an answer for: a sack of shirts that is 20 black
+            // and 20 white meant filling the whole thing in twice. The kind,
+            // the make, the cost and the cell stay — only the colour and the
+            // counts are asked again.
+            //
+            // **Onto the card that was just written.** Without carrying the
+            // product through, the second colour walked the new-card path
+            // again and opened a *second* card for the same goods — the exact
+            // duplicate this screen warns about everywhere else.
+            const card = booked.product
+            setBooked(null)
+            setDraft((was) => ({
+              ...was,
+              product: card,
+              kind: card.kind || was.kind,
+              colour: "",
+              sizes: {},
+              snapshot: "",
+            }))
+          }}
+          onAnotherCell={() => {
+            // The rest of *this* colour into another cell. The counts are
+            // cleared, and that is not tidiness: keeping them meant one tap
+            // booked the same nine pairs a second time.
             setBooked(null)
             setDraft((was) => ({ ...was, cell: "", sizes: {} }))
           }}
@@ -635,7 +657,15 @@ function Chips({
   none?: string
 }) {
   const [writing, setWriting] = useState(false)
-  const shown = options.slice(0, 10)
+  // The value first, always, even when it is not one of the learned options.
+  // A word typed into "+ yangi" and finished with Enter was held in state and
+  // drawn nowhere: the chip row showed the six old kinds, none of them lit,
+  // and the person who had just typed "Palto" saw no sign of it. It read as
+  // the field having eaten what they wrote.
+  const shown = [
+    ...(value && !options.includes(value) ? [value] : []),
+    ...options.slice(0, 10),
+  ]
   const typing = writing || (shown.length === 0 && !value)
 
   return (
@@ -665,6 +695,16 @@ function Chips({
             autoFocus={writing}
             value={value}
             onChange={(event) => onChange(event.target.value)}
+            // Enter finishes the word, and nothing else. Without this it
+            // reached the form around this field and submitted the pile —
+            // typing a new kind and pressing Enter, which is what anybody
+            // does, either booked goods or bounced off a disabled button.
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return
+              event.preventDefault()
+              setWriting(false)
+              event.currentTarget.blur()
+            }}
             onBlur={() => setWriting(false)}
             placeholder={placeholder}
             aria-label={label}
@@ -704,6 +744,7 @@ function Counts({
   const vocab = useVocab()
   const grid = useVariants(product?.id ?? null)
   const [adding, setAdding] = useState("")
+  const [naming, setNaming] = useState(false)
   const [sizeless, setSizeless] = useState(false)
 
   // Which colour of an existing card arrived. Auto-picked when there is only
@@ -714,7 +755,7 @@ function Counts({
   }, [grid.data])
   const only = own.length === 1 ? own[0] : null
   useEffect(() => {
-    if (only !== null && colour !== only) onColour(only)
+    if (only !== null && !colour && !naming) onColour(only)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [only])
 
@@ -763,9 +804,15 @@ function Counts({
         </button>
       </div>
 
-      {own.length > 1 ? (
+      {/* Which colour of an existing card arrived — its own colours, **or a
+          new one**. Drawn even where the card has a single colour, which looks
+          like a question with one answer and is not: a card that arrived in
+          black had no way at all to receive a pile of white, because the row
+          was hidden precisely when there was one colour, which is exactly when
+          a second one turns up. */}
+      {product ? (
         <div className="flex flex-wrap gap-1">
-          {own.map((one) => (
+          {[...own, ...(colour && !own.includes(colour) ? [colour] : [])].map((one) => (
             <button
               key={one}
               type="button"
@@ -778,6 +825,34 @@ function Counts({
               {one || "rangsiz"}
             </button>
           ))}
+          {naming ? (
+            <Input
+              autoFocus
+              value={colour}
+              onChange={(event) => onColour(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                setNaming(false)
+                event.currentTarget.blur()
+              }}
+              onBlur={() => setNaming(false)}
+              placeholder="Oq"
+              aria-label="Yangi rang"
+              className="h-control w-32"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                onColour("")
+                setNaming(true)
+              }}
+              className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep"
+            >
+              + yangi rang
+            </button>
+          )}
         </div>
       ) : null}
 
@@ -801,9 +876,13 @@ function Counts({
               onChange={(value) => onSet({ ...sizes, [size]: value })}
             />
           ))}
-          <label className="w-20">
-            <span className="mb-0.5 block text-center text-micro text-ink-faint">
-              o'lcham
+          {/* Dashed, and it says what it is. It used to be a bare box the
+              same size and shape as the quantity boxes beside it, sitting
+              under the word "o'lcham" — so a count typed into the wrong one
+              became a *size* called "5", and the row grew nonsense. */}
+          <label className="w-24 rounded-control border border-dashed border-brand/50 p-1">
+            <span className="mb-0.5 block text-center text-micro text-brand-deep">
+              + o'lcham
             </span>
             <Input
               value={adding}
@@ -814,9 +893,9 @@ function Counts({
                 add(adding)
               }}
               onBlur={() => add(adding)}
-              placeholder="+"
+              placeholder="XL"
               aria-label="Yangi o'lcham"
-              className="h-control-lg text-center"
+              className="h-control text-center"
             />
           </label>
         </div>
@@ -916,6 +995,47 @@ function Place({ value, onSet }: { value: string; onSet: (place: string) => void
  * of four by four: the racks come from the data, so a fourth one is a seed
  * change.
  */
+/**
+ * What is already in the cell that was picked.
+ *
+ * One model per cell is the working discipline, and the software supports it
+ * rather than enforcing it — so this is the thing that makes a wrong choice
+ * visible: a picker reaching into a cell of black shirts to fetch a red one is
+ * the mistake nobody catches until the parcel is at a door. A valid code for
+ * the wrong cell is exactly what a grid of 48 identical squares invites.
+ */
+function Inside({ code }: { code: string }) {
+  const cell = useLocation(code || null)
+  if (!code) return null
+  if (!cell.data) return null
+
+  if (!cell.data.contents.length) {
+    return (
+      <p className="rounded-control bg-good-soft p-2 text-micro text-good">
+        {code} — bo'sh
+      </p>
+    )
+  }
+  // Counted by *model*, not by cell of the grid. A shirt in two sizes is two
+  // rows of contents and one thing on the shelf, so counting rows said "and 1
+  // other kind" about the goods the person was holding — and the whole point
+  // of the line is to warn that something *else* is in there.
+  const models = [...new Set(cell.data.contents.map((row) => row.product_title))]
+  const units = cell.data.contents.reduce((sum, row) => sum + row.qty, 0)
+  const others = models.length - 1
+  return (
+    <p
+      className={cn(
+        "rounded-control p-2 text-micro",
+        others ? "bg-warn-soft text-warn-ink" : "bg-canvas text-ink-soft",
+      )}
+    >
+      {code} da bor: <b>{models[0]}</b>
+      {others ? ` — va yana ${others} xil tovar` : ""} · {units} dona
+    </p>
+  )
+}
+
 function Cells({
   chosen,
   productId,
@@ -961,6 +1081,8 @@ function Cells({
 
       {map.isLoading ? <Waiting what="Javonlar" /> : null}
 
+      <Inside code={chosen} />
+
       <div className="grid gap-3 sm:grid-cols-3">
         {racks.map(([rack, cells]) => {
           const columns = Math.max(...cells.map((cell) => cell.column_no ?? 1))
@@ -968,13 +1090,34 @@ function Cells({
           return (
             <div key={rack}>
               <div className="mb-1 text-micro text-ink-soft">{rack} javoni</div>
+              {/* The column numbers along the top and the row numbers down the
+                  side, the way a shelf is labelled — the codes on the cells
+                  alone left somebody counting across to work out where
+                  "A-03-02" actually is. */}
               <div
                 className="grid gap-1"
-                style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+                style={{
+                  gridTemplateColumns: `1.1rem repeat(${columns}, minmax(0, 1fr))`,
+                }}
               >
+                <span />
+                {Array.from({ length: columns }, (_, index) => index + 1).map((column) => (
+                  <span
+                    key={`head-${rack}-${column}`}
+                    className="pb-0.5 text-center text-micro tabular text-ink-faint"
+                  >
+                    {column}
+                  </span>
+                ))}
                 {/* Bottom row at the bottom, the way a person reads a shelf. */}
-                {Array.from({ length: rows }, (_, index) => rows - index).flatMap((row) =>
-                  Array.from({ length: columns }, (_, index) => index + 1).map((column) => {
+                {Array.from({ length: rows }, (_, index) => rows - index).flatMap((row) => [
+                  <span
+                    key={`row-${rack}-${row}`}
+                    className="self-center text-center text-micro tabular text-ink-faint"
+                  >
+                    {row}
+                  </span>,
+                  ...Array.from({ length: columns }, (_, index) => index + 1).map((column) => {
                     const cell = cells.find(
                       (one) => one.row_no === row && one.column_no === column,
                     )
@@ -1000,7 +1143,7 @@ function Cells({
                       </button>
                     )
                   }),
-                )}
+                ])}
               </div>
             </div>
           )
@@ -1014,11 +1157,13 @@ function Cells({
 
 function Booked({
   pile,
-  onSameGoods,
+  onAnotherColour,
+  onAnotherCell,
   onDone,
 }: {
   pile: BookedPile
-  onSameGoods: () => void
+  onAnotherColour: () => void
+  onAnotherCell: () => void
   onDone: () => void
 }) {
   return (
@@ -1059,14 +1204,25 @@ function Booked({
         <p className="text-micro text-good">Do'konda ham bor — sotuvda turibdi.</p>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <Button className="h-control-lg flex-1 gap-2" onClick={onSameGoods}>
+      {/* Two ways on, because a sack has two ways of not being finished: it
+          holds another colour, or this colour did not fit one cell. */}
+      <div className="space-y-2">
+        <Button className="h-control-lg w-full gap-2" onClick={onAnotherColour}>
           <Plus className="size-5" />
-          Qolganini boshqa yacheykaga
+          Shu qopdan yana bir rang
         </Button>
-        <Button variant="secondary" className="h-control-lg" onClick={onDone}>
-          Tugadi
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            className="h-control flex-1"
+            onClick={onAnotherCell}
+          >
+            Qolganini boshqa yacheykaga
+          </Button>
+          <Button variant="ghost" className="h-control" onClick={onDone}>
+            Tugadi
+          </Button>
+        </div>
       </div>
     </div>
   )
