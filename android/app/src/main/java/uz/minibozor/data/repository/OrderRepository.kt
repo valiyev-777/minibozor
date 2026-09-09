@@ -25,14 +25,8 @@ class OrderRepository @Inject constructor(private val api: MiniBozorApi) {
 
     suspend fun pickupPoints(): Outcome<List<PickupPointDto>> = apiCall { api.pickupPoints() }
 
-    suspend fun cards(): Outcome<List<CardDto>> = apiCall { api.cards() }
-
-    suspend fun addCard(body: CardRequest): Outcome<CardDto> = apiCall { api.addCard(body) }
-
-    suspend fun makeCardDefault(id: Int): Outcome<CardDto> = apiCall { api.makeCardDefault(id) }
-
-    suspend fun deleteCard(id: Int): Outcome<Unit> =
-        apiCall { api.deleteCard(id) }.let { if (it is Outcome.Failure) it else Outcome.Success(Unit) }
+    // Cards went with the marketplace: `payment-cards` no longer exists on the
+    // API, so neither do the four calls that were here.
 
     suspend fun preview(body: CheckoutRequest): Outcome<CheckoutPreviewDto> =
         apiCall { api.checkoutPreview(body) }

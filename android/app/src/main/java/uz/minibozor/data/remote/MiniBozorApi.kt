@@ -81,10 +81,6 @@ interface MiniBozorApi {
     @GET("products/{id}/similar")
     suspend fun similar(@Path("id") id: Int): List<ProductCardDto>
 
-    /** Every seller offering this product, cheapest first. */
-    @GET("products/{id}/offers")
-    suspend fun offers(@Path("id") id: Int): List<OfferDto>
-
     @GET("brands")
     suspend fun brands(): List<BrandDto>
 
@@ -185,18 +181,11 @@ interface MiniBozorApi {
     suspend fun pickupPoints(): List<PickupPointDto>
 
     // ----------------------------------------------------------- 32 cards
-
-    @GET("payment-cards")
-    suspend fun cards(): List<CardDto>
-
-    @POST("payment-cards")
-    suspend fun addCard(@Body body: CardRequest): CardDto
-
-    @POST("payment-cards/{id}/default")
-    suspend fun makeCardDefault(@Path("id") id: Int): CardDto
-
-    @DELETE("payment-cards/{id}")
-    suspend fun deleteCard(@Path("id") id: Int): MessageDto
+    //
+    // Gone with the marketplace. There is no card vault behind this API any
+    // more: a shopper pays by card at checkout or in cash at the door, and
+    // neither needs a saved PAN. `me/overview` still answers `cards_count`,
+    // at nought, so the profile screen keeps its shape.
 
     // -------------------------------------------------------- 19, 23-29 orders
 
