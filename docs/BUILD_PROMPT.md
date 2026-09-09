@@ -410,6 +410,49 @@ Stop and report after each one.
 7. **Native apps.** List exactly what in `android/` and `ios/` breaks against
    the new API, and make the source changes you can make without building.
 
+## 8b. What the receiving desk became (2026-09-09, built and walked)
+
+The brief above described `Qabul` as two stages with a sorting table. It was
+built that way and it had a dead end in it: writing a card needed a category,
+the seed writes none, and the warehouse role may read categories but not write
+one. It also asked for goods one variant at a time. What replaced it, and what
+any further work must not undo:
+
+- **A card can be a stub.** `Product.category_id` is nullable and `price`
+  starts at 0. `app.products.unready` names the three gaps — category, price,
+  a photograph per colour — and `POST .../status` refuses on all three.
+- **`POST /warehouse/piles` is the receiving door.** One request writes or
+  reuses the card, generates the codes, makes the cells for the sizes that
+  arrived, and moves the goods to the cell that was typed. One movement, from
+  the outside world to where the goods are. An empty cell code means the
+  receiving area and is not an error.
+- **The vocabulary is learned, not configured.** `GET /warehouse/vocab`
+  answers with the kinds, makes, colours and per-kind sizes that have come
+  through the door. No vocabulary screen. `+ yangi` writes a brand the first
+  time somebody types it, because two black trainers of different makes are
+  two cards.
+- **`Product.kind`** is the desk's word ("Krossovka"), not the category, and
+  it is what the chips are built from. **`Product.snapshot_url`** is the
+  identification photograph taken over the open sack — never shown to a
+  customer; its job is telling two black trainers apart in a search result.
+- **`/sotuvga-chiqarish`** is the queue of stubs, in the **admin** menu only:
+  filing a card needs a category and writing a category is the office's, so
+  putting it in the warehouse menu would be a screen whose first control
+  refuses. Its count rides in the rail and on the dashboard.
+- **Cost is captured at the bench** (`PileIn.unit_cost`, required) and the
+  selling price at the desk (`POST .../products/{id}/price`, every cell at
+  once). A guessed cost is worse than an empty one: it reaches the profit
+  report looking like a fact.
+- **There is no printer yet.** The codes are shown large enough to write on the
+  box with a marker; a print button is additive when hardware arrives, and the
+  code format does not change.
+- **Counts add, and nothing saves until submit.** Both were bugs in the screen
+  this replaced.
+
+**Walk the flow before reporting a phase done.** Sign in, do the thing, look at
+what happens. Every defect in the list above was found that way and none of
+them by the test suite, because each phase's tests passed in isolation.
+
 ## 9. What to ask about
 
 Ask before: adding a dependency not named here, changing the cell code format,
