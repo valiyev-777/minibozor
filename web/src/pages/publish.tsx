@@ -250,7 +250,7 @@ function Editor({ card }: { card: AdminProduct }) {
 
           <Problem error={publish.error} />
         </div>
-      ) : (
+      ) : card.next_statuses.includes("active") ? (
         <>
           <Problem error={publish.error} />
           <Button
@@ -263,9 +263,19 @@ function Editor({ card }: { card: AdminProduct }) {
             ) : (
               <Check className="size-5" />
             )}
-            {card.status === "active" ? "Sotuvda" : "Sotuvga chiqarish"}
+            Sotuvga chiqarish
           </Button>
         </>
+      ) : (
+        /* Already on sale. The button used to be drawn here too, labelled
+           "Sotuvda" and still sending `active` — so pressing it asked the
+           server to move a card from active to active and got the refusal it
+           deserved. Which button exists is the server's answer, not a guess
+           from the status: `next_statuses` is on the card for exactly this. */
+        <p className="flex items-center gap-2 rounded-control bg-good-soft p-2 text-small text-good">
+          <Check className="size-4 shrink-0" />
+          Sotuvda — quyidagilarni to'ldirsangiz to'liqroq ko'rinadi
+        </p>
       )}
 
       <div className="space-y-4 border-t pt-4">

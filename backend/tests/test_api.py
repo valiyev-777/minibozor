@@ -2465,6 +2465,18 @@ def test_the_bench_books_goods_in_and_the_seller_puts_them_on_sale(
     assert live.json()["unready"] == []
     assert live.json()["price"] == 149_000
 
+    # And a card already on sale does not offer to go on sale again. The
+    # publishing screen draws that button from this field rather than from the
+    # status, because guessing produced a button that asked the server to move
+    # a card from active to active and was refused.
+    assert "active" not in live.json()["next_statuses"]
+    again = client.post(
+        f"{API}/admin/products/{card['id']}/status",
+        json={"status": "active"},
+        headers=seller,
+    )
+    assert again.status_code == 409, again.text
+
 
 def test_the_words_and_the_table_the_phone_renders(
     client: TestClient, warehouse: dict[str, str], seller: dict[str, str]
