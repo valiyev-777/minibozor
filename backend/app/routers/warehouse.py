@@ -134,7 +134,7 @@ def vocab(user: CatalogReader, session: SessionDep) -> s.VocabOut:
         if size not in row:
             row.append(size)
     for row in sizes.values():
-        row.sort(key=_size_order)
+        row.sort(key=pr.size_order)
 
     # The specification rows, by kind. A starter set until a kind has been
     # written once, because the first card of anything would otherwise face an
@@ -695,25 +695,6 @@ def _one_spelling(rows: list) -> list[str]:
         if label:
             tally[label] = tally.get(label, 0) + int(count)
     return sorted(tally, key=lambda label: -tally[label])[:40]
-
-
-def _size_order(size: str) -> tuple[int, float, str]:
-    """41 before 42 before 100, and S before M before L.
-
-    Sizes are strings because "42" and "XL" are both sizes, so sorting them
-    lexically puts 100 before 41 and XL before S. Numbers sort as numbers,
-    clothing sizes in the order they are worn, and anything else alphabetically
-    after both.
-    """
-    try:
-        return (0, float(size.replace(",", ".")), "")
-    except ValueError:
-        pass
-    known = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "3XL", "4XL"]
-    upper = size.strip().upper()
-    if upper in known:
-        return (1, known.index(upper), "")
-    return (2, 0.0, upper)
 
 
 def _label(variant: ProductVariant) -> str:

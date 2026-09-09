@@ -2877,3 +2877,38 @@ def test_a_basket_line_never_shows_another_colour(
     line = next(row for row in added.json()["items"] if row["variant_id"] == other)
     assert line["colour"] == "Kulrang"
     assert not line["image_url"]
+
+
+def test_sizes_read_in_the_order_they_are_worn(
+    client: TestClient, warehouse: dict[str, str], seller: dict[str, str]
+) -> None:
+    """S M L XL XXL, whatever order the goods turned up in.
+
+    The cells are made as the piles arrive, so a shirt that came in M and L and
+    then S, XL and XXL was read off the shelf in exactly that order — and a
+    customer looking for their size faced a row with no order at all. Shoes
+    have the same problem the other way: 100 sorts before 41 lexically.
+    """
+    first = _pile(
+        client, warehouse, kind="Futbolka", colour="Oq",
+        sizes=(("M", 2), ("L", 2)), code="C-02-03",
+    )
+    card = first.json()["product"]
+    again = _pile(
+        client, warehouse, product_id=card["id"], colour="Oq",
+        sizes=(("XXL", 1), ("S", 3), ("XL", 2)), code="C-02-03",
+    )
+    assert again.status_code == 201, again.text
+
+    grid = client.get(f"{API}/admin/products/{card['id']}/variants", headers=seller)
+    assert [row["size"] for row in grid.json()] == ["S", "M", "L", "XL", "XXL"]
+
+    # And numbers as numbers, not as text.
+    shoes = _pile(
+        client, warehouse, kind="Botinka", colour="Qora",
+        sizes=(("41", 1), ("100", 1), ("39", 1)), code="C-02-04",
+    )
+    grid = client.get(
+        f"{API}/admin/products/{shoes.json()['product']['id']}/variants", headers=seller
+    )
+    assert [row["size"] for row in grid.json()] == ["39", "41", "100"]

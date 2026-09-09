@@ -340,11 +340,12 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
     images = session.exec(
         select(ProductImage).where(ProductImage.product_id == p.id).order_by(col(ProductImage.sort))
     ).all()
-    variants = session.exec(
-        select(ProductVariant)
-        .where(ProductVariant.product_id == p.id)
-        .order_by(col(ProductVariant.sort))
-    ).all()
+    # Through `products.variants`, not a query of its own: that is where "in
+    # what order does a person read these" is answered — colours in the order
+    # they arrived, sizes in the order they are worn. A second query here meant
+    # the phone got the order the cells were *made* in, so a shirt that came in
+    # M and L and then S, XL and XXL read "M L S XL XXL".
+    variants = pr.variants(session, p.id)
     specs = session.exec(
         select(ProductSpec).where(ProductSpec.product_id == p.id).order_by(col(ProductSpec.sort))
     ).all()

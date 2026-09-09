@@ -34,15 +34,45 @@ from app.models import (
 # --------------------------------------------------------------------------- variants
 
 
+def size_order(size: str) -> tuple[int, float, str]:
+    """41 before 42 before 100, and S before M before L.
+
+    Sizes are strings, because "42" and "XL" are both sizes — so sorting them
+    lexically puts 100 before 41 and XL before S. Numbers sort as numbers,
+    clothing sizes in the order they are worn, and anything else
+    alphabetically after both.
+    """
+    try:
+        return (0, float(size.replace(",", ".")), "")
+    except ValueError:
+        pass
+    known = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "3XL", "4XL"]
+    upper = size.strip().upper()
+    if upper in known:
+        return (1, known.index(upper), "")
+    return (2, 0.0, upper)
+
+
 def variants(session: Session, product_id: int) -> list[ProductVariant]:
-    """Every cell of the colour × size grid, in the order the form made them."""
-    return list(
-        session.exec(
-            select(ProductVariant)
-            .where(ProductVariant.product_id == product_id)
-            .order_by(col(ProductVariant.sort), col(ProductVariant.id))
-        ).all()
-    )
+    """Every cell of the colour × size grid, in the order a person reads them.
+
+    Colours in the order they first arrived, and the sizes of each colour in
+    the order they are worn. It used to be the order the cells were *made* in,
+    which is the order the goods turned up in — so a shirt that came in M and L
+    and then S, XL and XXL read "M L S XL XXL" on the phone, and a customer
+    looking for their size has to search a row that has no order at all.
+    """
+    rows = session.exec(
+        select(ProductVariant)
+        .where(ProductVariant.product_id == product_id)
+        .order_by(col(ProductVariant.sort), col(ProductVariant.id))
+    ).all()
+    # The colour's own arrival order is kept: it is the order the shop chose to
+    # show them in, and the sizes are sorted inside it.
+    seen: dict[str, int] = {}
+    for row in rows:
+        seen.setdefault(row.colour, len(seen))
+    return sorted(rows, key=lambda row: (seen[row.colour], size_order(row.size)))
 
 
 def colours(session: Session, product_id: int) -> list[str]:
