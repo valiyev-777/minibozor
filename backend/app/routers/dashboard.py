@@ -98,7 +98,7 @@ def dashboard(user: OrderViewer, session: SessionDep) -> s.DashboardOut:
             key="orders_today",
             label=i18n.label("tile_orders_today"),
             value=len(todays),
-            hint=sv.money(sum(order.total for order in todays)),
+            hint=f"{sv.money(sum(order.total for order in todays))} so'm",
             href="/buyurtmalar",
         )
     )

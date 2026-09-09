@@ -12,12 +12,17 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { Shell } from "@/components/shell"
 import { LoginPage } from "@/pages/login"
 import { CountsPage } from "@/pages/counts"
+import { CourierHistoryPage, EarningsPage, MyWorkPage } from "@/pages/courier"
+import { DashboardPage } from "@/pages/dashboard"
+import { OrdersPage } from "@/pages/orders"
+import { CategoriesPage, CouriersPage, StaffPage } from "@/pages/people"
+import { ProductsPage } from "@/pages/products"
+import { ReportsPage } from "@/pages/reports"
 import { LabelsPage } from "@/pages/labels"
 import { PickingPage } from "@/pages/picking"
 import { PutawayPage } from "@/pages/putaway"
 import { QabulPage } from "@/pages/qabul"
 import { ShelfMapPage } from "@/pages/shelf-map"
-import { Soon } from "@/pages/soon"
 import { homeFor, navFor } from "@/lib/nav"
 import { useSession } from "@/lib/session"
 
@@ -38,10 +43,7 @@ export function App() {
     <Routes>
       <Route element={<Shell />}>
         {allowed.has("/") ? (
-          <Route
-            index
-            element={<Soon title="Boshqaruv" what="Raqamlar va grafik — 6-bosqichda." />}
-          />
+          <Route index element={<DashboardPage />} />
         ) : (
           <Route index element={<Navigate to={home} replace />} />
         )}
@@ -67,29 +69,38 @@ export function App() {
         ) : null}
 
         {/* ------------------------------------------------------------ admin */}
-        {guard(allowed, "/mahsulotlar", "Mahsulotlar", "Kartalar, rang × o'lcham to'ri va rasmlar — 6-bosqichda.")}
-        {guard(allowed, "/kategoriyalar", "Kategoriyalar", "Kategoriya daraxti — 6-bosqichda.")}
-        {guard(allowed, "/buyurtmalar", "Buyurtmalar", "Buyurtmalar navbati — 6-bosqichda.")}
-        {guard(allowed, "/kuryerlar", "Kuryerlar", "Kim nima olib ketdi — 6-bosqichda.")}
-        {guard(allowed, "/xodimlar", "Xodimlar", "Rollar — 6-bosqichda.")}
-        {guard(allowed, "/hisobotlar", "Hisobotlar", "Sotuv va ombor hisobotlari — 6-bosqichda.")}
+        {allowed.has("/mahsulotlar") ? (
+          <Route path="/mahsulotlar" element={<ProductsPage />} />
+        ) : null}
+        {allowed.has("/kategoriyalar") ? (
+          <Route path="/kategoriyalar" element={<CategoriesPage />} />
+        ) : null}
+        {allowed.has("/buyurtmalar") ? (
+          <Route path="/buyurtmalar" element={<OrdersPage />} />
+        ) : null}
+        {allowed.has("/kuryerlar") ? (
+          <Route path="/kuryerlar" element={<CouriersPage />} />
+        ) : null}
+        {allowed.has("/xodimlar") ? (
+          <Route path="/xodimlar" element={<StaffPage />} />
+        ) : null}
+        {allowed.has("/hisobotlar") ? (
+          <Route path="/hisobotlar" element={<ReportsPage />} />
+        ) : null}
 
         {/* ---------------------------------------------------------- kuryer */}
-        {guard(allowed, "/ishlarim", "Mening ishlarim", "Olish, yetkazish, urinish — 6-bosqichda.")}
-        {guard(allowed, "/tarix", "Tarix", "Yetkazilgan buyurtmalar — 6-bosqichda.")}
-        {guard(allowed, "/daromad", "Daromad", "Kunlik va oylik daromad — 6-bosqichda.")}
+        {allowed.has("/ishlarim") ? (
+          <Route path="/ishlarim" element={<MyWorkPage />} />
+        ) : null}
+        {allowed.has("/tarix") ? (
+          <Route path="/tarix" element={<CourierHistoryPage />} />
+        ) : null}
+        {allowed.has("/daromad") ? (
+          <Route path="/daromad" element={<EarningsPage />} />
+        ) : null}
 
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>
     </Routes>
-  )
-}
-
-/** A route only when this role's navigation has it, so a URL typed by hand
- * lands on the role's own home rather than on a screen it may not read. */
-function guard(allowed: Set<string>, path: string, title: string, what: string) {
-  if (!allowed.has(path)) return null
-  return (
-    <Route key={path} path={path} element={<Soon title={title} what={what} />} />
   )
 }

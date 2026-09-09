@@ -234,3 +234,104 @@ export type AdminCategory = {
 }
 
 export type Media = { media_url: string; width: number; height: number; bytes: number }
+
+// -------------------------------------------------------------------- orders
+
+export type OrderStatus =
+  | "placed"
+  | "packing"
+  | "shipped"
+  | "delivered"
+  | "cancelled"
+  | "returned"
+
+export type StaffOrder = {
+  id: number
+  code: string
+  status: OrderStatus
+  status_label: string
+  customer_name: string
+  customer_phone: string
+  delivery_kind: string
+  address_line: string
+  delivery_day: string | null
+  delivery_window: string
+  items_count: number
+  items_summary: string
+  total: number
+  paid: boolean
+  next_statuses: OrderStatus[]
+  courier_id: number | null
+  courier_name: string
+  courier_sequence: number
+  created_at: string
+}
+
+export type StaffUser = {
+  id: number
+  phone: string
+  full_name: string
+  role: "admin" | "warehouse" | "courier" | "customer"
+  is_active: boolean
+  created_at: string
+}
+
+// ----------------------------------------------------------------- the round
+
+export type CourierOrder = {
+  id: number
+  code: string
+  sequence: number
+  status: OrderStatus
+  recipient_name: string
+  recipient_phone: string
+  address_line: string
+  address_meta: string
+  delivery_kind: string
+  delivery_day: string | null
+  delivery_window: string
+  items_count: number
+  total: number
+  payment_method: "card" | "cash"
+  cash_due: number
+  attempts: number
+  last_failure: string
+}
+
+export type CourierEarnings = {
+  delivered_today: number
+  delivered_month: number
+  delivered_total: number
+  fee_per_delivery: number
+  earned_today: number
+  earned_month: number
+  earned_total: number
+  cash_on_hand: number
+  failed_attempts: number
+}
+
+// ----------------------------------------------------------------- dashboard
+
+export type DashboardTile = {
+  key: string
+  label: string
+  value: number
+  hint: string
+  href: string
+  urgent: boolean
+}
+
+export type SalesPoint = { day: string; orders: number; total: number }
+
+export type Mover = {
+  variant_id: number
+  product_title: string
+  variant_label: string
+  qty: number
+}
+
+export type Dashboard = {
+  tiles: DashboardTile[]
+  sales: SalesPoint[]
+  movers: Mover[]
+}

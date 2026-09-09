@@ -24,6 +24,9 @@ import {
 import { api, idempotencyKey } from "@/lib/api"
 import type {
   AdminCategory,
+  CourierEarnings,
+  CourierOrder,
+  Dashboard,
   AdminImage,
   AdminProduct,
   AdminVariant,
@@ -33,6 +36,8 @@ import type {
   PickTask,
   PutawayLine,
   ShelfMap,
+  StaffOrder,
+  StaffUser,
   StockCount,
   Supply,
   WhereIs,
@@ -52,6 +57,13 @@ export const keys = {
   images: (productId: number) => ["products", productId, "images"] as const,
   labels: (what: string) => ["labels", what] as const,
   categories: ["categories"] as const,
+  dashboard: ["dashboard"] as const,
+  orders: (status: string) => ["orders", status] as const,
+  staff: ["staff"] as const,
+  couriers: ["couriers"] as const,
+  round: ["round"] as const,
+  available: ["round", "available"] as const,
+  earnings: ["earnings"] as const,
   whereIs: (q: string) => ["where-is", q] as const,
 }
 
@@ -192,6 +204,67 @@ export function useOnDemand<T>(
     enabled: false,
     ...options,
   } as UseQueryOptions<T>)
+}
+
+export function useDashboard() {
+  return useQuery({
+    queryKey: keys.dashboard,
+    queryFn: () => api<Dashboard>("/admin/dashboard"),
+    // The screen that stays open all day, on a shop several people are
+    // changing.
+    refetchInterval: 60_000,
+  })
+}
+
+export function useOrders(status: string) {
+  return useQuery({
+    queryKey: keys.orders(status),
+    queryFn: () => {
+      const search = new URLSearchParams({ page_size: "40" })
+      if (status) search.set("status", status)
+      return api<Page<StaffOrder>>(`/admin/orders?${search}`)
+    },
+    refetchInterval: 60_000,
+  })
+}
+
+export function useStaff() {
+  return useQuery({
+    queryKey: keys.staff,
+    // Paged, because the same door lists customers too — everybody who has
+    // ever signed in. Staff are the first page of it in practice.
+    queryFn: () => api<Page<StaffUser>>("/admin/users?page_size=100"),
+  })
+}
+
+export function useCouriers() {
+  return useQuery({
+    queryKey: keys.couriers,
+    queryFn: () => api<StaffUser[]>("/admin/couriers"),
+  })
+}
+
+export function useMyRound() {
+  return useQuery({
+    queryKey: keys.round,
+    queryFn: () => api<CourierOrder[]>("/courier/orders"),
+    refetchInterval: 60_000,
+  })
+}
+
+export function useAvailableOrders() {
+  return useQuery({
+    queryKey: keys.available,
+    queryFn: () => api<CourierOrder[]>("/courier/orders/available"),
+    refetchInterval: 60_000,
+  })
+}
+
+export function useEarnings() {
+  return useQuery({
+    queryKey: keys.earnings,
+    queryFn: () => api<CourierEarnings>("/courier/earnings"),
+  })
 }
 
 // ------------------------------------------------------------------- writes
@@ -367,6 +440,89 @@ export function usePublish(productId: number) {
     mutationFn: (status: "active" | "draft" | "archived") =>
       api<AdminProduct>(`/admin/products/${productId}/status`, { body: { status } }),
     onSuccess: () => invalidate(client, [["products"]]),
+  })
+}
+
+// -------------------------------------------------------------- the last mile
+
+/** Everything a courier's own screens read. */
+function roundKeys() {
+  return [keys.round, keys.available, keys.earnings]
+}
+
+export function useTakeOrder() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      api<CourierOrder>(`/courier/orders/${id}/take`, {
+        method: "POST",
+        idempotencyKey: idempotencyKey(),
+      }),
+    onSuccess: () => invalidate(client, roundKeys()),
+  })
+}
+
+export function useDeliver(id: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      recipient_name: string
+      cash_collected: number
+      note?: string
+    }) =>
+      api<CourierOrder>(`/courier/orders/${id}/deliver`, {
+        body: input,
+        idempotencyKey: idempotencyKey(),
+      }),
+    onSuccess: () => invalidate(client, [...roundKeys(), ["orders"]]),
+  })
+}
+
+export function useFailed(id: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (reason: string) =>
+      api<CourierOrder>(`/courier/orders/${id}/failed`, {
+        body: { reason },
+        idempotencyKey: idempotencyKey(),
+      }),
+    onSuccess: () => invalidate(client, [...roundKeys(), ["orders"]]),
+  })
+}
+
+export function useMoveOrder(id: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { status: string; note?: string }) =>
+      api(`/admin/orders/${id}/status`, { body: input }),
+    onSuccess: () => invalidate(client, [["orders"], keys.dashboard, ["pick"]]),
+  })
+}
+
+export function useSetRole(userId: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { role: string; note?: string }) =>
+      api<StaffUser>(`/admin/users/${userId}/role`, { method: "PATCH", body: input }),
+    onSuccess: () => invalidate(client, [keys.staff, keys.couriers]),
+  })
+}
+
+export function useWriteCategory() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { slug: string; name: string; parent_slug?: string | null }) =>
+      api<AdminCategory>("/admin/categories", { body: input }),
+    onSuccess: () => invalidate(client, [keys.categories]),
+  })
+}
+
+export function useBuildPickTask() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (orderId: number) =>
+      api(`/warehouse/pick/orders/${orderId}`, { method: "POST" }),
+    onSuccess: () => invalidate(client, [["pick"], ["orders"]]),
   })
 }
 
