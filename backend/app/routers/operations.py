@@ -69,7 +69,12 @@ from app.models import (
 # reported.
 from app.routers import courier as courier_router
 
-router = APIRouter(prefix="/staff", tags=["staff"])
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+# The one door in this file the warehouse walks through rather than the
+# office: opening a parcel that came back and saying what was in it. It is
+# grouped by who calls it, not by which file it happens to live in.
+bench = APIRouter(prefix="/warehouse", tags=["warehouse"])
 
 
 # --------------------------------------------------------------------------- returns
@@ -129,7 +134,7 @@ def get_return(
     return _return_out(session, request)
 
 
-@router.post(
+@bench.post(
     "/returns/{return_id}/inspect",
     response_model=s.StaffReturnOut,
     summary="What the warehouse found in the parcel",

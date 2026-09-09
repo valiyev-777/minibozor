@@ -32,6 +32,7 @@ from app import audit, i18n
 from app import products as pr
 from app import schemas as s
 from app import services as sv
+from app import stock as st
 from app import transitions as tr
 from app.deps import AdminUser, CatalogReader, SessionDep
 from app.models import (
@@ -44,14 +45,14 @@ from app.models import (
     User,
 )
 
-router = APIRouter(prefix="/staff", tags=["staff"])
+router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 # --------------------------------------------------------------------------- the catalogue
 
 
 @router.get(
-    "/catalog/products",
+    "/products",
     response_model=s.Page[s.AdminProductOut],
     summary="Every card, whatever its state",
 )
@@ -94,7 +95,7 @@ def list_products(
 
 
 @router.get(
-    "/catalog/summary",
+    "/products/summary",
     response_model=s.CatalogSummaryOut,
     summary="How many cards are in each state",
 )
@@ -114,7 +115,7 @@ def catalog_summary(user: AdminUser, session: SessionDep) -> s.CatalogSummaryOut
     return s.CatalogSummaryOut(counts=counts)
 
 
-@router.get("/catalog/products/{product_id}", response_model=s.AdminProductDetailOut)
+@router.get("/products/{product_id}", response_model=s.AdminProductDetailOut)
 def get_product(
     product_id: int, user: AdminUser, session: SessionDep
 ) -> s.AdminProductDetailOut:
@@ -138,7 +139,7 @@ def get_product(
 
 
 @router.post(
-    "/catalog/products",
+    "/products",
     response_model=s.AdminProductOut,
     status_code=status.HTTP_201_CREATED,
     summary="Write a card",
@@ -210,7 +211,7 @@ def _create_card(
 
 
 @router.patch(
-    "/catalog/products/{product_id}",
+    "/products/{product_id}",
     response_model=s.AdminProductDetailOut,
     summary="Edit a card",
 )
@@ -246,7 +247,7 @@ def update_product(
 
 
 @router.post(
-    "/catalog/products/{product_id}/status",
+    "/products/{product_id}/status",
     response_model=s.AdminProductOut,
     summary="Put a card in the shop, or take it out",
 )
@@ -303,8 +304,255 @@ def set_product_status(
     return _product_out(session, product)
 
 
+# ------------------------------------------------------------------ the grid
+
+
 @router.get(
-    "/catalog/categories",
+    "/products/{product_id}/variants",
+    response_model=list[s.AdminVariantOut],
+    summary="Every cell of the colour × size grid",
+)
+def list_variants(
+    product_id: int, user: CatalogReader, session: SessionDep
+) -> list[s.AdminVariantOut]:
+    product = _product(session, product_id)
+    return [_variant_out(session, row) for row in pr.variants(session, product.id)]
+
+
+@router.put(
+    "/products/{product_id}/variants",
+    response_model=list[s.AdminVariantOut],
+    summary="Generate the colour × size matrix in one step",
+)
+def set_grid(
+    product_id: int,
+    payload: s.VariantGridIn,
+    user: CatalogReader,
+    session: SessionDep,
+) -> list[s.AdminVariantOut]:
+    """Pick the colours, pick the sizes, get the variants.
+
+    Typing twelve rows by hand for every shoe model is how a warehouse stops
+    being used, so the grid is what the form sends and the cells are what
+    comes back.
+
+    **Adds; never renumbers.** Sending the grid again with a colour added
+    writes the new cells and leaves the existing ones exactly as they are —
+    their prices, their counts, and above all their barcodes. A variant's
+    barcode is permanent: when the same goods arrive again the label is
+    reprinted, and a regenerated code would leave the shelf holding one thing
+    under two of them.
+
+    Nothing is deleted here either. A cell with history is deleted through its
+    own door, which can refuse.
+    """
+    product = _product(session, product_id)
+    existing = {(row.colour, row.size): row for row in pr.variants(session, product.id)}
+
+    colours = payload.colours or [s.ColourIn(colour="", hex="")]
+    sizes = payload.sizes or [""]
+    price = payload.price or product.price
+    sort = max((row.sort for row in existing.values()), default=-1) + 1
+
+    for colour in colours:
+        for size in sizes:
+            key = (colour.colour, size)
+            row = existing.get(key)
+            if row is not None:
+                # The hex may be corrected — it is a display detail — but the
+                # code and the count are the row's own.
+                if colour.hex:
+                    row.colour_hex = colour.hex
+                session.add(row)
+                continue
+            session.add(
+                ProductVariant(
+                    product_id=product.id,
+                    colour=colour.colour,
+                    colour_hex=colour.hex,
+                    size=size,
+                    price=price,
+                    sort=sort,
+                )
+            )
+            sort += 1
+    session.commit()
+
+    # The codes are ours, and they are only knowable once the row has an id.
+    for row in pr.variants(session, product.id):
+        if not row.sku:
+            row.sku = _variant_sku(product, row)
+        if not row.barcode:
+            row.barcode = _barcode(row.id)
+        session.add(row)
+    pr.refresh(session, product.id)
+    session.commit()
+    return [_variant_out(session, row) for row in pr.variants(session, product.id)]
+
+
+@router.patch(
+    "/products/{product_id}/variants/{variant_id}",
+    response_model=s.AdminVariantOut,
+    summary="Reprice or relabel one cell",
+)
+def update_variant(
+    product_id: int,
+    variant_id: int,
+    payload: s.VariantWriteIn,
+    user: CatalogReader,
+    session: SessionDep,
+) -> s.AdminVariantOut:
+    """The money is here and not on the card: a 43 can cost more than a 41.
+
+    The barcode is not in the shape and cannot be changed. It is on labels
+    that are already on shelves.
+    """
+    product = _product(session, product_id)
+    variant = _variant(session, product, variant_id)
+    fields = payload.model_dump(exclude_unset=True)
+
+    if "price" in fields and fields["price"] != variant.price:
+        audit.record(
+            session,
+            actor=user,
+            action="variant.price",
+            entity="product_variant",
+            entity_id=variant.id,
+            field="price",
+            old=variant.price,
+            new=fields["price"],
+            note=sv.variant_label(variant),
+        )
+    for field, value in fields.items():
+        setattr(variant, field, value)
+    session.add(variant)
+    pr.refresh(session, product.id)
+    session.commit()
+    session.refresh(variant)
+    return _variant_out(session, variant)
+
+
+@router.delete(
+    "/products/{product_id}/variants/{variant_id}",
+    response_model=s.Message,
+    summary="Remove a cell that never held anything",
+)
+def delete_variant(
+    product_id: int, variant_id: int, user: AdminUser, session: SessionDep
+) -> s.Message:
+    """Refused once it has a history, and that is not a technicality.
+
+    A variant is what every movement, every placement and every order line
+    points at. Deleting one with a ledger behind it would leave the room
+    holding goods nothing can name.
+    """
+    product = _product(session, product_id)
+    variant = _variant(session, product, variant_id)
+    blocked = _why_not_deletable(session, variant)
+    if blocked:
+        raise HTTPException(status.HTTP_409_CONFLICT, blocked)
+    session.delete(variant)
+    pr.refresh(session, product.id)
+    session.commit()
+    return s.Message(message=i18n.label("deleted"))
+
+
+# ------------------------------------------------------------------ photographs
+
+
+@router.get(
+    "/products/{product_id}/images",
+    response_model=list[s.AdminImageOut],
+    summary="Every photograph, and which colour it is of",
+)
+def list_images(
+    product_id: int, user: CatalogReader, session: SessionDep
+) -> list[s.AdminImageOut]:
+    product = _product(session, product_id)
+    return [
+        s.AdminImageOut(id=row.id, url=sv.media_url(row.url), sort=row.sort, colour=row.colour)
+        for row in _image_rows(session, product.id)
+    ]
+
+
+@router.post(
+    "/products/{product_id}/images",
+    response_model=list[s.AdminImageOut],
+    status_code=status.HTTP_201_CREATED,
+    summary="Hang a photograph on a colour",
+)
+def add_image(
+    product_id: int,
+    payload: s.ImageWriteIn,
+    user: CatalogReader,
+    session: SessionDep,
+) -> list[s.AdminImageOut]:
+    """A picture belongs to a colour, not to a variant.
+
+    Two colours in six sizes is two photographs, not twelve, and nobody is
+    ever asked to photograph a size. A colour with no picture is what keeps
+    the whole card out of the shop.
+    """
+    product = _product(session, product_id)
+    known = pr.colours(session, product.id)
+    if payload.colour and payload.colour not in known:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("variant_invalid"))
+
+    session.add(
+        ProductImage(
+            product_id=product.id,
+            colour=payload.colour,
+            url=payload.url,
+            sort=payload.sort,
+        )
+    )
+    session.commit()
+    return list_images(product_id, user, session)
+
+
+@router.delete(
+    "/products/{product_id}/images/{image_id}",
+    response_model=s.Message,
+    summary="Take a photograph down",
+)
+def delete_image(
+    product_id: int, image_id: int, user: CatalogReader, session: SessionDep
+) -> s.Message:
+    """Which may put the card back into ``draft``.
+
+    Deliberately: the rule is that a colour without a picture does not reach
+    the apps, and a card that stayed on sale because the last photograph was
+    deleted rather than never taken is the same grey square.
+    """
+    product = _product(session, product_id)
+    row = session.get(ProductImage, image_id)
+    if row is None or row.product_id != product.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("image_not_found"))
+    session.delete(row)
+    session.commit()
+
+    if product.status is ProductStatus.ACTIVE and pr.colours_without_a_photograph(
+        session, product.id
+    ):
+        audit.record(
+            session,
+            actor=user,
+            action="product.status",
+            entity="product",
+            entity_id=product.id,
+            field="status",
+            old=ProductStatus.ACTIVE,
+            new=ProductStatus.DRAFT,
+            note=i18n.label("colour_needs_photo", colours=""),
+        )
+        product.status = ProductStatus.DRAFT
+        session.add(product)
+        session.commit()
+    return s.Message(message=i18n.label("deleted"))
+
+
+@router.get(
+    "/categories",
     response_model=list[s.AdminCategoryOut],
     summary="Every category, flat, in the words the rows hold",
 )
@@ -349,7 +597,7 @@ def list_categories(user: CatalogReader, session: SessionDep) -> list[s.AdminCat
 
 
 @router.post(
-    "/catalog/categories",
+    "/categories",
     response_model=s.CategoryOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -378,7 +626,7 @@ def create_category(
     return sv.category_out(session, row)
 
 
-@router.patch("/catalog/categories/{slug}", response_model=s.CategoryOut)
+@router.patch("/categories/{slug}", response_model=s.CategoryOut)
 def update_category(
     slug: str, payload: s.CategoryUpdateIn, user: AdminUser, session: SessionDep
 ) -> s.CategoryOut:
@@ -401,7 +649,7 @@ def update_category(
     return sv.category_out(session, row)
 
 
-@router.delete("/catalog/categories/{slug}", response_model=s.Message)
+@router.delete("/categories/{slug}", response_model=s.Message)
 def delete_category(slug: str, user: AdminUser, session: SessionDep) -> s.Message:
     """Refused while anything still points at it.
 
@@ -424,7 +672,7 @@ def delete_category(slug: str, user: AdminUser, session: SessionDep) -> s.Messag
 
 
 @router.get(
-    "/catalog/brands",
+    "/brands",
     response_model=list[s.AdminBrandOut],
     summary="Every brand, with how many cards carry it",
 )
@@ -447,7 +695,7 @@ def list_brands(user: CatalogReader, session: SessionDep) -> list[s.AdminBrandOu
 
 
 @router.post(
-    "/catalog/brands", response_model=s.BrandOut, status_code=status.HTTP_201_CREATED
+    "/brands", response_model=s.BrandOut, status_code=status.HTTP_201_CREATED
 )
 def create_brand(
     payload: s.BrandWriteIn, user: AdminUser, session: SessionDep
@@ -464,7 +712,7 @@ def create_brand(
     return s.BrandOut(id=row.id, slug=row.slug, name=row.name)
 
 
-@router.patch("/catalog/brands/{slug}", response_model=s.BrandOut)
+@router.patch("/brands/{slug}", response_model=s.BrandOut)
 def update_brand(
     slug: str, payload: s.BrandWriteIn, user: AdminUser, session: SessionDep
 ) -> s.BrandOut:
@@ -477,7 +725,7 @@ def update_brand(
     return s.BrandOut(id=row.id, slug=row.slug, name=row.name)
 
 
-@router.delete("/catalog/brands/{slug}", response_model=s.Message)
+@router.delete("/brands/{slug}", response_model=s.Message)
 def delete_brand(slug: str, user: AdminUser, session: SessionDep) -> s.Message:
     row = _brand(session, slug)
     if session.exec(select(Product).where(Product.brand_id == row.id)).first():
@@ -532,6 +780,70 @@ def _brand(session: SessionDep, slug: str) -> Brand:
 
 def _has_any_stock(session: SessionDep, product_id: int) -> bool:
     return pr.on_shelf(session, product_id) > 0
+
+
+def _variant(
+    session: SessionDep, product: Product, variant_id: int
+) -> ProductVariant:
+    row = session.get(ProductVariant, variant_id)
+    if row is None or row.product_id != product.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("variant_invalid"))
+    return row
+
+
+def _variant_sku(product: Product, variant: ProductVariant) -> str:
+    """The card's code with the cell's on the end: ``KRS-01-QORA-42``.
+
+    Readable on purpose. A picker reading a label wants to recognise the thing
+    without decoding it, and a random string is a string somebody transcribes
+    wrong when the printer is out of toner.
+    """
+    parts = [product.sku, variant.colour, variant.size]
+    return "-".join(part.upper().replace(" ", "") for part in parts if part)
+
+
+def _barcode(variant_id: int) -> str:
+    """Ours, printed by us, and permanent.
+
+    Market goods arrive with no usable code of their own — no label, and two
+    sacks of the same shoe from two traders would collide if there were — so
+    the code is generated from the row's own id and never regenerated. ``200``
+    is the prefix reserved for in-store use, which is exactly what this is.
+    """
+    return f"200{variant_id:09d}"
+
+
+def _why_not_deletable(session: SessionDep, variant: ProductVariant) -> str:
+    from app.models import OrderItem, StockMovement
+
+    if session.exec(
+        select(StockMovement).where(StockMovement.variant_id == variant.id)
+    ).first():
+        return i18n.label("variant_has_history")
+    if session.exec(
+        select(OrderItem).where(OrderItem.variant_id == variant.id)
+    ).first():
+        return i18n.label("variant_has_history")
+    return ""
+
+
+def _variant_out(session: SessionDep, variant: ProductVariant) -> s.AdminVariantOut:
+    blocked = _why_not_deletable(session, variant)
+    return s.AdminVariantOut(
+        id=variant.id,
+        colour=variant.colour,
+        colour_hex=variant.colour_hex,
+        size=variant.size,
+        label=sv.variant_label(variant) or "—",
+        sku=variant.sku,
+        barcode=variant.barcode,
+        price=variant.price,
+        sort=variant.sort,
+        stock_left=variant.stock_left,
+        in_stock=st.sellable(session, variant) > 0,
+        can_delete=not blocked,
+        blocked_reason=blocked,
+    )
 
 
 def _image_rows(session: SessionDep, product_id: int) -> list[ProductImage]:

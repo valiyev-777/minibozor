@@ -29,10 +29,15 @@ from app import schemas as s
 from app.deps import AdminUser, SessionDep, StaffUser
 from app.models import User, UserRole
 
-router = APIRouter(prefix="/staff", tags=["staff"])
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+# "Who am I, and what am I allowed to do" is a question about the caller
+# rather than about the office, so it hangs off ``/me`` where every signed-in
+# person can reach it — a warehouse worker has to be able to ask it too.
+me = APIRouter(prefix="/me", tags=["profile"])
 
 
-@router.get("/me", response_model=s.StaffMeOut, summary="Which backoffice am I?")
+@me.get("/staff", response_model=s.StaffMeOut, summary="Who am I, and what may I do?")
 def staff_me(user: StaffUser) -> s.StaffMeOut:
     return s.StaffMeOut(
         id=user.id,

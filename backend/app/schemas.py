@@ -14,11 +14,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import (
     AttemptResult,
+    CountStatus,
     DeliveryKind,
     Language,
+    LocationKind,
     NotificationKind,
     OrderStatus,
     PaymentMethod,
+    PickStatus,
     PickupRunStatus,
     ProductStatus,
     ReturnInspection,
@@ -758,6 +761,256 @@ class SupplyOut(BaseModel):
     # How long the sacks have been standing there. The one figure that turns
     # an unsorted run from a row in a list into something anybody acts on.
     age_minutes: int
+
+
+class LocationOut(BaseModel):
+    """One place, as the shelf map draws it.
+
+    ``units`` and ``products`` are what a cell is judged by: how full it is
+    and how many different things are mixed into it. A picker reaching into a
+    cell of black and white shoes needs to be told to look, and the count is
+    what tells them.
+    """
+
+    id: int
+    code: str
+    kind: LocationKind
+    rack: str | None = None
+    column_no: int | None = None
+    row_no: int | None = None
+    capacity: int = 0
+    is_active: bool = True
+    note: str = ""
+
+    products: int = 0
+    units: int = 0
+    # Against capacity, capped at a hundred. Zero capacity — every staging
+    # area — reads as nought rather than as a division by nothing.
+    fill_percent: int = 0
+    # How long the oldest thing here has been standing, in minutes. The one
+    # figure that turns QABUL from a list into something somebody acts on.
+    oldest_minutes: int = 0
+
+
+class CellContentOut(BaseModel):
+    """One variant in one place, named the way a person reads a label."""
+
+    variant_id: int
+    product_id: int
+    product_title: str
+    variant_label: str
+    sku: str
+    barcode: str
+    qty: int
+    minutes_here: int = 0
+
+
+class LocationDetailOut(LocationOut):
+    contents: list[CellContentOut] = []
+
+
+class ShelfMapOut(BaseModel):
+    """The room in one answer, because the map draws all of it at once.
+
+    Three lists rather than one: the racks are a grid, the staging areas are a
+    row of tiles above them, and a courier's bag is a tile that exists only
+    while somebody is carrying something.
+    """
+
+    cells: list[LocationOut]
+    staging: list[LocationOut]
+    couriers: list[LocationOut]
+
+
+class WhereIsOut(BaseModel):
+    """Where one thing is, for the search box on the map.
+
+    Type a name or paste a barcode and the cells holding it light up. The
+    answer is per variant and not per card: "krossovka" is in nine cells and
+    none of that helps; "qora 42" is in one.
+    """
+
+    variant_id: int
+    product_id: int
+    product_title: str
+    variant_label: str
+    sku: str
+    barcode: str
+    places: list[PlacementOut] = []
+
+
+class PutawayLineOut(CellContentOut):
+    """Something standing in the receiving area, waiting to be shelved."""
+
+    suggestion: str = ""       # a cell this model is already in, if there is one
+
+
+class PutawayIn(BaseModel):
+    """Carry a quantity to a cell.
+
+    ``code`` is typed, not scanned — market goods have no usable code of their
+    own and the owner's phone cameras read them badly. It must keep working
+    unchanged when a scanner gun is plugged in later: the gun types the code
+    and presses Enter, which is what a text input already does.
+    """
+
+    variant_id: int
+    qty: int = Field(gt=0)
+    code: str = Field(min_length=1, max_length=30)
+
+
+class PickLineOut(BaseModel):
+    """One place to walk to, and the thing to bring back from it.
+
+    **The variant leads, not the cell.** The cell is where you walk to; the
+    variant is the thing you must not get wrong, so the model, the colour and
+    the size come first and the code follows them.
+    """
+
+    id: int
+    variant_id: int
+    product_title: str
+    colour: str
+    size: str
+    variant_label: str
+    sku: str
+    barcode: str
+    location_id: int
+    location_code: str
+    qty: int
+    picked_qty: int
+    walk_order: int
+    # Whether this cell holds anything else. A picker reaching into a cell of
+    # black and white shoes has to be told to look.
+    mixed_cell: bool = False
+
+
+class PickTaskOut(BaseModel):
+    id: int
+    order_id: int
+    order_code: str
+    status: PickStatus
+    picker: str = ""
+    lines: list[PickLineOut] = []
+    created_at: datetime
+    taken_at: datetime | None = None
+    finished_at: datetime | None = None
+    age_minutes: int = 0
+
+
+class PickLineIn(BaseModel):
+    qty: int = Field(gt=0)
+
+
+class CountLineOut(BaseModel):
+    variant_id: int
+    product_title: str
+    variant_label: str
+    sku: str
+    barcode: str
+    expected_qty: int
+    counted_qty: int
+
+
+class CountOut(BaseModel):
+    id: int
+    location_id: int
+    location_code: str
+    status: CountStatus
+    counter: str = ""
+    note: str = ""
+    lines: list[CountLineOut] = []
+    started_at: datetime
+    closed_at: datetime | None = None
+
+
+class CountStartIn(BaseModel):
+    code: str = Field(min_length=1, max_length=30)
+
+
+class CountedLineIn(BaseModel):
+    variant_id: int
+    counted_qty: int = Field(ge=0)
+
+
+class CountSubmitIn(BaseModel):
+    """What is actually in the cell, as counted.
+
+    Every variant the system thinks is there has to be answered for — a line
+    left out is a line nobody counted, and treating silence as agreement is
+    how a stocktake finds nothing. Variants *not* expected may be added: goods
+    turn up in the wrong cell, and that is exactly what a count is for.
+    """
+
+    lines: list[CountedLineIn] = Field(min_length=1, max_length=500)
+    note: str = ""
+
+
+class ProductLabelOut(BaseModel):
+    """One printable label: what we generate, because nothing else has a code."""
+
+    variant_id: int
+    product_title: str
+    variant_label: str
+    sku: str
+    barcode: str
+    price: int
+
+
+class CellLabelOut(BaseModel):
+    code: str
+    rack: str | None = None
+    column_no: int | None = None
+    row_no: int | None = None
+
+
+class LabelSheetOut(BaseModel):
+    """The data behind an A4 sheet the browser prints.
+
+    Rendered client-side: a barcode is a picture of a string and drawing it in
+    the browser means no image to store, no font to install on a server, and a
+    reprint that cannot drift from the code on the row.
+    """
+
+    products: list[ProductLabelOut] = []
+    cells: list[CellLabelOut] = []
+
+
+class DashboardTileOut(BaseModel):
+    """One figure on the dashboard, and where to go and act on it.
+
+    ``href`` is not decoration. A dashboard figure that is not a link is a
+    dead end: somebody reads "4 cards held back for want of a photograph" and
+    then has to go and find them.
+    """
+
+    key: str
+    label: str
+    value: int
+    hint: str = ""
+    href: str = ""
+    # For the one tile that must be impossible to ignore — sacks that have
+    # been standing too long.
+    urgent: bool = False
+
+
+class SalesPointOut(BaseModel):
+    day: date
+    orders: int
+    total: int
+
+
+class MoverOut(BaseModel):
+    variant_id: int
+    product_title: str
+    variant_label: str
+    qty: int
+
+
+class DashboardOut(BaseModel):
+    tiles: list[DashboardTileOut]
+    sales: list[SalesPointOut]
+    movers: list[MoverOut]
 
 
 class WriteOffIn(BaseModel):

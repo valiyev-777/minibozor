@@ -525,6 +525,146 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Сначала разберите мешок: ни одной строки.",
         "en": "Sort the sack first: it has no lines.",
     },
+    "tile_unsorted_sacks": {
+        "uz": "Saralanmagan qoplar",
+        "ru": "Неразобранные мешки",
+        "en": "Sacks nobody has opened",
+    },
+    "tile_orders_today": {
+        "uz": "Bugungi buyurtmalar",
+        "ru": "Заказы за сегодня",
+        "en": "Orders today",
+    },
+    "tile_awaiting_putaway": {
+        "uz": "Qabulda turibdi",
+        "ru": "Ждёт размещения",
+        "en": "Standing in the receiving area",
+    },
+    "tile_cells_full": {
+        "uz": "To'lgan kataklar",
+        "ru": "Заполненные ячейки",
+        "en": "Cells nearly full",
+    },
+    "tile_cells_empty": {
+        "uz": "{count} ta bo'sh katak",
+        "ru": "{count} пустых ячеек",
+        "en": "{count} empty cells",
+    },
+    "tile_low_stock": {
+        "uz": "Tugayotgan variantlar",
+        "ru": "Заканчиваются",
+        "en": "Running out",
+    },
+    "tile_low_stock_hint": {
+        "uz": "{count} tadan kam qolgan",
+        "ru": "Осталось {count} или меньше",
+        "en": "{count} left or fewer",
+    },
+    "tile_no_photograph": {
+        "uz": "Rasmsiz — sotuvga chiqmagan",
+        "ru": "Без фото — не в продаже",
+        "en": "Held back for want of a photograph",
+    },
+    "tile_no_photograph_hint": {
+        "uz": "Rasm qo'yilsa, o'zi sotuvga chiqadi",
+        "ru": "Появится в продаже, как только будет фото",
+        "en": "One picture each and they are in the shop",
+    },
+    "tile_couriers_out": {
+        "uz": "Yo'ldagi kuryerlar",
+        "ru": "Курьеры в пути",
+        "en": "Couriers out with parcels",
+    },
+    "age_hours_minutes": {
+        "uz": "{hours} soat {minutes} daqiqa",
+        "ru": "{hours} ч {minutes} мин",
+        "en": "{hours} h {minutes} min",
+    },
+    "age_hours": {
+        "uz": "{hours} soat",
+        "ru": "{hours} ч",
+        "en": "{hours} h",
+    },
+    "age_minutes": {
+        "uz": "{minutes} daqiqa",
+        "ru": "{minutes} мин",
+        "en": "{minutes} min",
+    },
+    "location_not_found": {
+        "uz": "Bunday joy yo'q: {code}",
+        "ru": "Такого места нет: {code}",
+        "en": "No such place: {code}",
+    },
+    "putaway_needs_a_cell": {
+        "uz": "Faqat javon katagiga joylashtiriladi",
+        "ru": "Разместить можно только в ячейку стеллажа",
+        "en": "Goods go into a shelf cell, not into a staging area",
+    },
+    "count_already_open": {
+        "uz": "Bu katak allaqachon sanalmoqda",
+        "ru": "Эта ячейка уже пересчитывается",
+        "en": "Somebody is already counting this cell",
+    },
+    "count_already_closed": {
+        "uz": "Sanash yakunlangan",
+        "ru": "Пересчёт уже закрыт",
+        "en": "That count is closed",
+    },
+    "count_not_found": {
+        "uz": "Sanash topilmadi",
+        "ru": "Пересчёт не найден",
+        "en": "Count not found",
+    },
+    "count_difference": {
+        "uz": "Sanashdagi farq",
+        "ru": "Расхождение при пересчёте",
+        "en": "What the count found",
+    },
+    "labels_need_a_selection": {
+        "uz": "Qaysi yorliqlar? Qabul yoki variantlarni tanlang",
+        "ru": "Какие этикетки? Укажите поставку или варианты",
+        "en": "Which labels? Name a market run or some variants",
+    },
+    "order_not_pickable": {
+        "uz": "Bu buyurtma terishga tayyor emas",
+        "ru": "Этот заказ ещё не для сборки",
+        "en": "That order is not one to pick",
+    },
+    "pick_not_found": {
+        "uz": "Terish vazifasi topilmadi",
+        "ru": "Задание на сборку не найдено",
+        "en": "Pick task not found",
+    },
+    "pick_line_not_found": {
+        "uz": "Terish qatori topilmadi",
+        "ru": "Строка сборки не найдена",
+        "en": "That line is not on this task",
+    },
+    "pick_already_taken": {
+        "uz": "Bu vazifani boshqa xodim oldi",
+        "ru": "Задание уже взял другой сотрудник",
+        "en": "Somebody has already taken this one",
+    },
+    "pick_not_yours": {
+        "uz": "Bu vazifa sizniki emas",
+        "ru": "Это не ваше задание",
+        "en": "That trolley is somebody else's",
+    },
+    "pick_already_done": {
+        "uz": "Bu vazifa yakunlangan",
+        "ru": "Задание уже завершено",
+        "en": "That task is finished",
+    },
+    "pick_line_done": {
+        "uz": "Bu qator allaqachon terilgan",
+        "ru": "Эта строка уже собрана",
+        "en": "That line is already fetched",
+    },
+    "pick_not_finished": {
+        "uz": "Hali hamma qator terilmagan",
+        "ru": "Собрано не всё",
+        "en": "Not everything has been fetched yet",
+    },
     "supply_not_found": {
         "uz": "Partiya topilmadi",
         "ru": "Поставка не найдена",

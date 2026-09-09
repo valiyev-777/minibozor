@@ -48,7 +48,7 @@ from app.models import (
     utcnow,
 )
 
-router = APIRouter(prefix="/staff", tags=["staff"])
+router = APIRouter(prefix="/warehouse", tags=["warehouse"])
 
 
 def _next_code(session: SessionDep, model, prefix: str) -> str:

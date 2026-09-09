@@ -23,7 +23,7 @@ from app import schemas as s
 from app import services as sv
 from app.deps import MediaUploader
 
-router = APIRouter(prefix="/staff", tags=["staff"])
+router = APIRouter(tags=["media"])
 
 
 @router.post(
