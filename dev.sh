@@ -272,6 +272,12 @@ database() {
     sqlite*)                  dialect=sqlite ;;
     *)                        dialect=other ;;
   esac
+  # The summary printed a Postgres address whichever database was in use, so
+  # the line under "SQLite — minibozor.db" said to connect to a container that
+  # was not running. What is open is worth knowing; what is not open is worth
+  # not being told.
+  DB_DIALECT="$dialect"
+  DB_FILE="${url##*/}"
 
   if [ "$dialect" = postgres ]; then
     if ! command -v docker >/dev/null 2>&1; then
@@ -402,10 +408,16 @@ bring_up() {
 # ---------------------------------------------------------------- the summary
 
 summary() {
-  local admin warehouse courier demo
-  read -r admin warehouse courier demo <<<"$( cd "$ROOT/backend" && "$PY" -c \
-    'from app import seed; print(seed.ADMIN_PHONE, seed.WAREHOUSE_PHONE, seed.COURIER_PHONE, seed.DEMO_PHONE)' \
-    2>/dev/null || echo '+998900000001 +998900000002 +998900000003 +998901234567' )"
+  local admin warehouse seller courier demo store
+  read -r admin warehouse seller courier demo <<<"$( cd "$ROOT/backend" && "$PY" -c \
+    'from app import seed; print(seed.ADMIN_PHONE, seed.WAREHOUSE_PHONE, seed.SELLER_PHONE, seed.COURIER_PHONE, seed.DEMO_PHONE)' \
+    2>/dev/null || echo '+998900000001 +998900000002 +998900000004 +998900000003 +998901234567' )"
+
+  if [ "${DB_DIALECT:-}" = postgres ]; then
+    store="$(printf '%-16s%-31s%s' 'Postgres' "localhost:$DB_PORT" "(docker: $DB_CONTAINER)")"
+  else
+    store="$(printf '%-16s%-31s%s' 'SQLite' "backend/$DB_FILE" '(a file, not a service)')"
+  fi
 
   cat <<EOF
 
@@ -414,10 +426,11 @@ ${B}Everything is up.${N}
   ${B}Interface${N}       ${B}Address${N}                        ${B}Sign in as${N}
   web             http://localhost:$WEB_PORT           admin      $admin
                                                     ombor      $warehouse
+                                                    sotuvchi   $seller
                                                     kuryer     $courier
   API + /docs     $API_URL/docs      —
   API health      $API_URL/health    —
-  Postgres        localhost:$DB_PORT                  (docker: $DB_CONTAINER)
+  $store
 
   One web app, not three panels: the same bundle is the office, the bench and
   the van, and the role on the account decides which. The Android and iOS
