@@ -55,7 +55,8 @@ export const keys = {
   pick: (status?: string) => ["pick", status ?? "all"] as const,
   pickTask: (id: number) => ["pick", id] as const,
   count: (id: number) => ["counts", id] as const,
-  products: (query: string, status: string) => ["products", query, status] as const,
+  products: (query: string, status: string, stock = "") =>
+    ["products", query, status, stock] as const,
   variants: (productId: number) => ["products", productId, "variants"] as const,
   images: (productId: number) => ["products", productId, "images"] as const,
   labels: (what: string) => ["labels", what] as const,
@@ -161,13 +162,16 @@ export function useLabels(params: string, enabled: boolean) {
   })
 }
 
-export function useProducts(query: string, status: string) {
+export function useProducts(query: string, status: string, stock = "") {
   return useQuery({
-    queryKey: keys.products(query, status),
+    queryKey: keys.products(query, status, stock),
     queryFn: () => {
       const search = new URLSearchParams({ page_size: "30" })
       if (query.trim()) search.set("q", query.trim())
       if (status) search.set("status", status)
+      // `out` is a live card with an empty cell, `low` one nearly empty. The
+      // dashboard's tiles land here with it already set.
+      if (stock) search.set("stock", stock)
       return api<Page<AdminProduct>>(`/admin/products?${search}`)
     },
   })
@@ -558,6 +562,18 @@ export function useCreateProduct() {
       price: number
     }) => api<AdminProduct>("/admin/products", { body: input }),
     onSuccess: () => invalidate(client, [["products"]]),
+  })
+}
+
+export function useRetireVariant(productId: number) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { variantId: number; retired: boolean }) =>
+      api<AdminVariant>(
+        `/admin/products/${productId}/variants/${input.variantId}/retired`,
+        { body: { retired: input.retired } },
+      ),
+    onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
   })
 }
 

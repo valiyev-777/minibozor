@@ -28,16 +28,21 @@ import {
   useImages,
   useProducts,
   usePublish,
+  useRetireVariant,
   useVariants,
 } from "@/lib/queries"
-import type { AdminProduct } from "@/lib/types"
+import type { AdminProduct, AdminVariant } from "@/lib/types"
 
 export function ProductsPage() {
   const [params, setParams] = useSearchParams()
   const status = params.get("status") ?? ""
+  // What the dashboard's "Tugagan tavarlar" tile lands on. The tile linked to
+  // `?low=1`, which nothing on either side read: the count was right and the
+  // list it sent you to was the whole catalogue.
+  const stock = params.get("stock") ?? ""
   const [needle, setNeedle] = useState("")
   const [openId, setOpenId] = useState<number | null>(null)
-  const products = useProducts(needle, status)
+  const products = useProducts(needle, status, stock)
 
   if (openId) return <Card id={openId} onBack={() => setOpenId(null)} />
 
@@ -69,7 +74,28 @@ export function ProductsPage() {
             onClick={() => setParams(tab.key ? { status: tab.key } : {})}
             className={cn(
               "h-control rounded-control border px-3 text-small",
-              tab.key === status && "border-brand bg-brand-soft text-brand-deep",
+              tab.key === status && !stock && "border-brand bg-brand-soft text-brand-deep",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+        {/* The two that are about the shelf rather than about the card.
+            Money standing still in both directions: goods on sale that the
+            shop cannot supply, and goods about to become that. */}
+        {[
+          { key: "out", label: "Tugagan" },
+          { key: "low", label: "Tugayotgan" },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setParams(stock === tab.key ? {} : { stock: tab.key })}
+            className={cn(
+              "h-control rounded-control border px-3 text-small",
+              tab.key === stock
+                ? "border-danger bg-danger-soft text-danger"
+                : "text-ink-soft",
             )}
           >
             {tab.label}
@@ -97,6 +123,15 @@ export function ProductsPage() {
                   {product.sku} · {product.variant_count} variant ·{" "}
                   {product.image_count} rasm
                 </div>
+                {/* By name. A card is rarely out of stock as a whole — one
+                    colour of it is, the total still reads comfortably, and
+                    nobody hears about it until a customer orders that
+                    colour. */}
+                {product.sold_out.length && product.status === "active" ? (
+                  <div className="mt-0.5 truncate text-micro text-danger">
+                    Tugagan: {product.sold_out.join(", ")}
+                  </div>
+                ) : null}
               </div>
               <div className="shrink-0 text-right">
                 <div className="tabular text-small font-medium">
@@ -112,6 +147,58 @@ export function ProductsPage() {
         ))}
       </ul>
     </div>
+  )
+}
+
+/**
+ * Take one cell out of the shop window, or put it back.
+ *
+ * A cell that has ever held anything cannot be deleted — every movement and
+ * order line points at it — so a size booked in by mistake used to be a chip
+ * struck through on the product page for the life of the card. This is the way
+ * out, and it is refused while the cell still holds goods: hiding stock the
+ * shop has paid for is worse than an untidy row, because a picker can still
+ * be sent to it and the office cannot see why the money is missing.
+ */
+function RetireLine({
+  variant,
+  onSet,
+  busy,
+}: {
+  variant: AdminVariant
+  onSet: (retired: boolean) => void
+  busy: boolean
+}) {
+  if (variant.retired) {
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => onSet(false)}
+        className="shrink-0 text-micro text-brand-deep"
+      >
+        Qaytarish
+      </button>
+    )
+  }
+  if (variant.stock_left > 0) {
+    // Nothing to press and a reason it is not there, rather than a button that
+    // asks and is refused.
+    return (
+      <span className="w-20 shrink-0 text-right text-micro text-ink-faint">
+        javonda bor
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => onSet(true)}
+      className="shrink-0 text-micro text-ink-soft hover:text-danger"
+    >
+      Olib tashlash
+    </button>
   )
 }
 
@@ -201,6 +288,7 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
   const images = useImages(id)
   const addImage = useAddImage(id)
   const publish = usePublish(id)
+  const retire = useRetireVariant(id)
 
   const product = products.data?.items.find((one) => one.id === id)
   const colours = [...new Set((grid.data ?? []).map((one) => one.colour))].filter(
@@ -224,26 +312,69 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
       </PageHeader>
 
       <Problem
-        error={grid.error || images.error || publish.error || addImage.error}
+        error={
+          grid.error ||
+          images.error ||
+          publish.error ||
+          addImage.error ||
+          retire.error
+        }
       />
 
       <section className="rounded-panel border bg-surface p-3">
         <h2 className="mb-2 text-small font-semibold">Rang × o'lcham</h2>
         {grid.isLoading ? <Waiting /> : null}
         {grid.data?.length === 0 ? <Empty what="To'r hali yaratilmagan." /> : null}
+        {/* Where a colour comes from, said once and here: the sack. Somebody
+            publishing a card asked whether they were meant to be adding
+            colours on this screen — nothing on it invents one, and a colour
+            with no goods behind it would be a shop window offering something
+            the room does not have. */}
+        <p className="mb-2 text-micro text-ink-faint">
+          Ranglar va o'lchamlar qabulda yoziladi — qop ochilganda. Bu yerda
+          faqat rasm, narx va sotuvga chiqarish.
+        </p>
         <ul className="divide-y">
           {(grid.data ?? []).map((variant) => (
-            <li key={variant.id} className="flex items-center gap-3 py-2">
+            <li
+              key={variant.id}
+              className={cn(
+                "flex items-center gap-3 py-2",
+                variant.retired && "opacity-55",
+              )}
+            >
               <div className="min-w-0 flex-1">
-                <div className="text-small font-medium">{variant.label}</div>
+                <div className="text-small font-medium">
+                  {variant.label}
+                  {variant.retired ? (
+                    <span className="ml-2 rounded-full bg-line-soft px-2 py-0.5 text-micro font-normal text-ink-soft">
+                      sotuvda emas
+                    </span>
+                  ) : null}
+                </div>
                 <div className="text-micro tabular text-ink-faint">
                   {variant.sku} · {variant.barcode}
                 </div>
               </div>
               <span className="tabular text-small">{money(variant.price)}</span>
-              <span className="w-16 text-right tabular text-small font-semibold">
-                {groups(variant.stock_left)}
-              </span>
+              {/* Nought is a word, not a figure to be read off a column. The
+                  list showed "0" in the same grey as every other count. */}
+              {variant.stock_left <= 0 ? (
+                <span className="w-16 text-right text-small font-semibold text-danger">
+                  {variant.retired ? "—" : "tugagan"}
+                </span>
+              ) : (
+                <span className="w-16 text-right tabular text-small font-semibold">
+                  {groups(variant.stock_left)}
+                </span>
+              )}
+              <RetireLine
+                variant={variant}
+                onSet={(retired) =>
+                  retire.mutate({ variantId: variant.id, retired })
+                }
+                busy={retire.isPending}
+              />
             </li>
           ))}
         </ul>

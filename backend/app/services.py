@@ -329,6 +329,11 @@ def admin_product_out(session: Session, product: Product) -> s.AdminProductOut:
         old_price=product.old_price,
         last_cost=pr.last_cost(session, product.id),
         stock_left=pr.on_shelf(session, product.id),
+        # Which cells are empty, not whether the card as a whole is. The black
+        # bag runs out, the red one does not, the total still reads 3 and the
+        # card still says "sotuvda" — so the first anybody hears of it is a
+        # customer ordering black.
+        sold_out=pr.sold_out(session, product.id),
         image_count=int(images),
         variant_count=int(variants),
         created_at=product.created_at,
@@ -345,7 +350,10 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
     # they arrived, sizes in the order they are worn. A second query here meant
     # the phone got the order the cells were *made* in, so a shirt that came in
     # M and L and then S, XL and XXL read "M L S XL XXL".
-    variants = pr.variants(session, p.id)
+    # What the shop offers, which is not every cell there is: a size received
+    # by mistake is retired rather than deleted — the ledger points at it —
+    # and a retired cell is not a size this shop sells.
+    variants = pr.offered(session, p.id)
     specs = session.exec(
         select(ProductSpec).where(ProductSpec.product_id == p.id).order_by(col(ProductSpec.sort))
     ).all()
@@ -357,6 +365,12 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
     # has photographed, and it would otherwise reach the shop as a grey square.
     # A card with no colours at all — one default cell — shows everything.
     shown = pr.photographed_colours(session, p.id)
+
+    # What of each cell a customer could actually buy, asked once per cell and
+    # then answered from here — the colour strip, the size row and the count
+    # under them are three renderings of one figure and used to be three
+    # queries, one of which read a cached flag instead.
+    sellable = {v.id: st.sellable(session, v) for v in variants}
 
     note = i18n.label("eta_next_day" if p.next_day_delivery else "eta_few_days")
     if p.free_delivery:
@@ -381,7 +395,7 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
                 ),
                 image_url=colour_image(session, p.id, colour),
                 in_stock=any(
-                    v.in_stock for v in variants if v.colour == colour
+                    sellable[v.id] > 0 for v in variants if v.colour == colour
                 ),
             )
             for colour in shown
@@ -395,8 +409,16 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
                 sku=v.sku,
                 barcode=v.barcode,
                 price=v.price or p.price,
-                in_stock=v.in_stock,
-                stock_left=st.sellable(session, v),
+                # From the shelf, not from the flag beside it. `in_stock` is a
+                # cache kept by `stock.move`, so it is right for a cell that
+                # has ever moved and wrong for one that never has: a size
+                # written into the grid and never received sat there saying
+                # `true` with nothing behind it, and the shop offered a size
+                # the shop had never owned. Two fields answering one question
+                # from two places is one field too many, and the picker was
+                # reading the wrong one.
+                in_stock=sellable[v.id] > 0,
+                stock_left=sellable[v.id],
             )
             for v in variants
             if not shown or v.colour in shown

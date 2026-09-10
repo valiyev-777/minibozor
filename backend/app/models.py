@@ -424,7 +424,24 @@ class ProductVariant(SQLModel, table=True):
     # damaged corner and goods that came back uninspected are in the building
     # too.
     stock_left: int = 0
-    in_stock: bool = True
+    # A cache kept by ``app.stock.move``, and false on a cell that has never
+    # held anything. The customer-facing shapes derive availability from the
+    # shelf rather than reading this: a cell written into the grid and never
+    # received said `true` with nothing behind it, and the shop offered a size
+    # it had never owned.
+    in_stock: bool = False
+
+    # Taken out of the shop window without being erased.
+    #
+    # A cell cannot be deleted once anything has moved through it — every
+    # movement, placement and order line points at it, and deleting one would
+    # leave the room holding goods nothing can name. But a cell written by
+    # mistake, or a size this shop has stopped buying, has to be able to stop
+    # being offered: a typo received once was otherwise a size struck through
+    # on the product page for the life of the card. Retiring is allowed only
+    # when it holds nothing, because retiring a cell with goods on a shelf
+    # would hide stock the shop has paid for.
+    retired: bool = False
 
     sort: int = 0
 

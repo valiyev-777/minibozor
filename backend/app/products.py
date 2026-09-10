@@ -65,6 +65,43 @@ def tidy_size(size: str) -> str:
     return clean.upper() if any(ch.isalpha() for ch in clean) else clean
 
 
+# What counts as nearly out. A shelf figure is not a warning until somebody
+# has said how few is few, and both the dashboard and the catalogue list ask.
+LOW_STOCK = 3
+
+
+def sold_out(session: Session, product_id: int) -> list[str]:
+    """The colours and sizes of this card that the shop cannot supply.
+
+    A card is not out of stock as a whole very often; one colour of it is, and
+    that is the thing nobody notices. The black bag is finished, the red one
+    is not, the card still says "sotuvda", and the first anybody hears of it
+    is a customer ordering black. So the office is told which cells are empty
+    rather than being told a total that is still comfortably positive.
+    """
+    return [
+        label(row)
+        for row in offered(session, product_id)
+        if row.stock_left <= 0
+    ]
+
+
+def label(variant: ProductVariant) -> str:
+    """`Qora / 42`, or just `Qora` on a card with no sizes."""
+    return " / ".join(part for part in (variant.colour, variant.size) if part)
+
+
+def sizeless(session: Session, product_id: int) -> bool:
+    """Whether this card is one of the things that has no size.
+
+    A cap, a bag, a wristwatch. The question is asked of the card rather than
+    of the kind because the card is what a pile is being added to, and a card
+    that arrived without sizes does not grow them in the second sack.
+    """
+    rows = variants(session, product_id)
+    return bool(rows) and all(not row.size for row in rows)
+
+
 def variants(session: Session, product_id: int) -> list[ProductVariant]:
     """Every cell of the colour × size grid, in the order a person reads them.
 
@@ -85,6 +122,17 @@ def variants(session: Session, product_id: int) -> list[ProductVariant]:
     for row in rows:
         seen.setdefault(row.colour, len(seen))
     return sorted(rows, key=lambda row: (seen[row.colour], size_order(row.size)))
+
+
+def offered(session: Session, product_id: int) -> list[ProductVariant]:
+    """The cells a customer is shown, which is not every cell there is.
+
+    A retired cell keeps its ledger and stops being offered — a size received
+    by mistake cannot be deleted, because every movement and order line points
+    at it, and it would otherwise be on the product page for the life of the
+    card. The editor still sees it; the shop does not.
+    """
+    return [row for row in variants(session, product_id) if not row.retired]
 
 
 def colours(session: Session, product_id: int) -> list[str]:
@@ -120,7 +168,12 @@ def photographed_colours(session: Session, product_id: int) -> list[str]:
             select(ProductImage).where(ProductImage.product_id == product_id)
         ).all()
     }
-    return [colour for colour in colours(session, product_id) if colour in photographed]
+    live = {row.colour for row in offered(session, product_id)}
+    return [
+        colour
+        for colour in colours(session, product_id)
+        if colour in photographed and colour in live
+    ]
 
 
 def colours_without_a_photograph(session: Session, product_id: int) -> list[str]:

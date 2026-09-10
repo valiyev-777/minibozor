@@ -1093,6 +1093,12 @@ class PileOut(BaseModel):
     labels: list[ProductLabelOut] = []
 
 
+class RetireIn(BaseModel):
+    """Whether this cell is offered in the shop. False puts it back."""
+
+    retired: bool
+
+
 class VocabOut(BaseModel):
     """The receiving desk's chips, learned rather than configured.
 
@@ -1109,6 +1115,12 @@ class VocabOut(BaseModel):
     brands: list[str] = []
     colours: list[str] = []
     sizes: dict[str, list[str]] = {}
+    # The kinds that have no sizes at all — a cap, a bag, a wristwatch. The
+    # desk asked every kind for sizes, and somebody holding a sack of caps
+    # types *something* into a box that will not go away, which is how a size
+    # called "KS" was born. Learned the same way as the rest: a kind belongs
+    # here while every one of its cells is sizeless.
+    sizeless: list[str] = []
     # The rows of the specification table, keyed by kind: what was written
     # against a Krossovka last time. Typing "Mato", "Taglik", "Ishlab
     # chiqarilgan" from scratch for every card is how a table stays empty, and
@@ -1243,6 +1255,10 @@ class AdminProductOut(BaseModel):
     # moment anybody knew it.
     last_cost: int = 0
     stock_left: int
+    # The cells of this card that are empty — `Qora`, or `Qora / 42`. A card
+    # is rarely out of stock as a whole; one colour of it is, and that is the
+    # one nobody notices until a customer orders it.
+    sold_out: list[str] = []
     image_count: int
     variant_count: int
     created_at: datetime
@@ -1345,6 +1361,10 @@ class AdminVariantOut(BaseModel):
     sort: int
     stock_left: int
     in_stock: bool
+    # Out of the shop window without being erased: a size received by mistake
+    # cannot be deleted — the ledger points at it — and would otherwise be
+    # offered, struck through, for the life of the card.
+    retired: bool = False
     can_delete: bool
     # An already-translated sentence, empty when it can be deleted.
     blocked_reason: str

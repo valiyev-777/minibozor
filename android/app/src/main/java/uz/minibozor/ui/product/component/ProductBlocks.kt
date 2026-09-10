@@ -24,6 +24,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
@@ -300,6 +301,25 @@ fun ColorPicker(
                                 .fillMaxSize()
                                 .clip(MbTheme.shapes.tileSmall)
                                 .background(color.hex.toColor(MbTheme.colors.fill))
+                        )
+                    }
+                    // In a word. A sold-out colour was a dimmed photograph and
+                    // nothing else: it reads as a photograph that came out
+                    // badly, and the customer taps it again. The sizes say so
+                    // with a line through them; a photograph cannot be struck
+                    // through, so it is said.
+                    if (!color.inStock) {
+                        MbText(
+                            stringResource(R.string.tugagan),
+                            MbTheme.type.caption,
+                            MbTheme.colors.surface,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .clip(MbTheme.shapes.tileSmall)
+                                .background(MbTheme.colors.ink.copy(alpha = 0.66f))
+                                .padding(vertical = 2.dp),
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }

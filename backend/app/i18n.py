@@ -353,6 +353,29 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Выберите, какой цвет пришёл: {colours}",
         "en": "Say which colour arrived: {colours}",
     },
+    "variant_still_holds": {
+        "uz": "Bu yacheykada {count} dona bor — avval javondan chiqarish kerak",
+        "ru": "Здесь ещё {count} шт. — сначала спишите или переместите",
+        "en": "It still holds {count} — take them off the shelf first",
+    },
+    "pile_sized_or_not": {
+        "uz": "«{card}» kartasi {shape}. Bir kartada ikkalasi bo'lmaydi — "
+              "yangi karta oching yoki o'lchamni to'g'rilang",
+        "ru": "Карточка «{card}» {shape}. В одной карточке не может быть и "
+              "того и другого — заведите новую или исправьте размер",
+        "en": "The card \u201c{card}\u201d {shape}. One card cannot be both — "
+              "open a new card or correct the size",
+    },
+    "shape_sized": {
+        "uz": "o'lchamli",
+        "ru": "с размерами",
+        "en": "has sizes",
+    },
+    "shape_sizeless": {
+        "uz": "o'lchamsiz",
+        "ru": "без размеров",
+        "en": "has no sizes",
+    },
     "pile_needs_a_name": {
         "uz": "Tavar nomi yoki turi kerak",
         "ru": "Нужно название или тип товара",
@@ -639,6 +662,16 @@ LABELS: dict[str, dict[str, str]] = {
         "uz": "{count} ta bo'sh katak",
         "ru": "{count} пустых ячеек",
         "en": "{count} empty cells",
+    },
+    "tile_sold_out": {
+        "uz": "Tugagan tavarlar",
+        "ru": "Закончились",
+        "en": "Sold out",
+    },
+    "tile_sold_out_hint": {
+        "uz": "sotuvda turibdi, lekin qolmagan",
+        "ru": "в продаже, но на складе нет",
+        "en": "on sale with nothing on the shelf",
     },
     "tile_low_stock": {
         "uz": "Tugayotgan variantlar",

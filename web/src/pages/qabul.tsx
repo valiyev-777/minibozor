@@ -746,7 +746,20 @@ function Counts({
   const [adding, setAdding] = useState("")
   const [typing, setTyping] = useState(false)
   const [naming, setNaming] = useState(false)
-  const [sizeless, setSizeless] = useState(false)
+
+  // Some things have no size: a cap, a bag, a wristwatch. The form asked
+  // every kind for sizes, and a person holding a sack of caps types
+  // *something* into a box that will not go away — which is how a size called
+  // "KS" was born, and how one card ended up holding both a sizeless grey cap
+  // and a grey cap in M. So the question is answered before it is asked: from
+  // the card when there is one, and otherwise from what this kind has always
+  // arrived as. `chose` is a hand on the wheel — once somebody has said which
+  // it is, nothing overrules them.
+  const [chose, setChose] = useState<boolean | null>(null)
+  const cardIsSizeless =
+    (grid.data ?? []).length > 0 && (grid.data ?? []).every((cell) => !cell.size)
+  const kindIsSizeless = (vocab.data?.sizeless ?? []).includes(kind)
+  const sizeless = chose ?? (product ? cardIsSizeless : kindIsSizeless)
 
   // Which colour of an existing card arrived. Auto-picked when there is only
   // one, because a question with one answer is a tap for nothing.
@@ -784,6 +797,17 @@ function Counts({
     return [...seen].sort(bySize)
   }, [grid.data, colour, kind, vocab.data, sizes])
 
+  // A sized count left behind after the shape changed would be submitted from
+  // behind the sizeless box, where nobody can see it. The shape on screen and
+  // the counts underneath it are the same thing or they are a bug.
+  const stale = sizeless
+    ? Object.keys(sizes).some((size) => size !== "")
+    : sizes[""] !== undefined
+  useEffect(() => {
+    if (stale) onSet({})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stale])
+
   const chosen = useMemo(() => Object.keys(sizes).sort(bySize), [sizes])
   const total = useMemo(
     () => Object.values(sizes).reduce((sum, one) => sum + (Number(one) || 0), 0),
@@ -806,18 +830,35 @@ function Counts({
 
   return (
     <section className="space-y-3 rounded-panel border bg-surface p-3">
-      <div className="flex items-baseline justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-small font-semibold">Nechta keldi?</h2>
-        <button
-          type="button"
-          onClick={() => {
-            setSizeless(!sizeless)
-            onSet({})
-          }}
-          className="text-micro text-brand-deep"
-        >
-          {sizeless ? "o'lchamlari bor" : "o'lchamsiz"}
-        </button>
+        {/* Two visible choices. It was one faint word in the corner reading
+            "o'lchamsiz", which is both the name of a state and the name of the
+            act of leaving it — nobody found it, and the sack of caps got a
+            size typed into it instead. */}
+        <div className="flex gap-1" role="group" aria-label="O'lcham bormi?">
+          {[
+            { on: false, word: "O'lchamli" },
+            { on: true, word: "O'lchamsiz" },
+          ].map((one) => (
+            <button
+              key={one.word}
+              type="button"
+              onClick={() => {
+                if (one.on === sizeless) return
+                setChose(one.on)
+                onSet({})
+              }}
+              aria-pressed={one.on === sizeless}
+              className={cn(
+                "h-control rounded-control border px-3 text-small",
+                one.on === sizeless && "border-brand bg-brand-soft text-brand-deep",
+              )}
+            >
+              {one.word}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Which colour of an existing card arrived — its own colours, **or a

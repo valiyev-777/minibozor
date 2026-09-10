@@ -224,6 +224,8 @@ export type AdminProduct = {
   /** What these last cost at the market. 0 means nothing is booked in yet. */
   last_cost: number
   stock_left: number
+  /** The cells of this card that are empty — `Qora`, or `Qora / 42`. */
+  sold_out: string[]
   image_count: number
   variant_count: number
   created_at: string
@@ -248,6 +250,8 @@ export type Vocab = {
   colours: string[]
   /** Keyed by kind: trainers in 40-45, shirts in S-XXL. */
   sizes: Record<string, string[]>
+  /** The kinds that have no sizes at all — a cap, a bag, a wristwatch. */
+  sizeless: string[]
   /** The specification rows written against this kind last time, so the table
    *  arrives already named rather than empty. */
   spec_keys: Record<string, string[]>
@@ -277,6 +281,10 @@ export type AdminVariant = {
   sort: number
   stock_left: number
   in_stock: boolean
+  /** Out of the shop window without being erased. A size received by mistake
+   *  cannot be deleted — the ledger points at it — and would otherwise be
+   *  offered, struck through, for the life of the card. */
+  retired: boolean
   can_delete: boolean
   blocked_reason: string
 }

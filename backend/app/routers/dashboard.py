@@ -58,9 +58,10 @@ QABUL_ALERT_MINUTES = 60
 HELD_BACK_ALERT_MINUTES = 3 * 24 * 60
 SACK_ALERT_HOURS = 14
 
-# What counts as nearly full, and as nearly out.
+# What counts as nearly full. Nearly out is `products.LOW_STOCK`, because the
+# catalogue list asks the same question and two answers would disagree.
 FULL_AT_PERCENT = 80
-LOW_STOCK = 3
+LOW_STOCK = pr.LOW_STOCK
 
 SALES_DAYS = 14
 MOVERS = 8
@@ -169,6 +170,33 @@ def dashboard(user: DashboardViewer, session: SessionDep) -> s.DashboardOut:
         )
     )
 
+    # ------------------------------------------------------------ run out
+    # Counted in cards, because a card is what somebody goes and deals with —
+    # and counted only among what the shop is offering, because a draft with
+    # empty cells is an unfinished card and a different queue. Nothing counted
+    # this at all: the tile below starts at one left, so a colour that had
+    # actually finished fell out of the bottom of the dashboard and the first
+    # anybody heard of it was a customer ordering it.
+    gone = session.exec(
+        select(func.count(func.distinct(ProductVariant.product_id)))
+        .select_from(ProductVariant)
+        .join(Product, col(Product.id) == col(ProductVariant.product_id))
+        .where(
+            ProductVariant.stock_left <= 0,
+            Product.status == ProductStatus.ACTIVE,
+        )
+    ).one()
+    tiles.append(
+        s.DashboardTileOut(
+            key="sold_out",
+            label=i18n.label("tile_sold_out"),
+            value=int(gone),
+            hint=i18n.label("tile_sold_out_hint"),
+            href="/mahsulotlar?stock=out",
+            urgent=bool(gone),
+        )
+    )
+
     # ---------------------------------------------------------- running out
     low = session.exec(
         select(func.count())
@@ -183,7 +211,7 @@ def dashboard(user: DashboardViewer, session: SessionDep) -> s.DashboardOut:
             label=i18n.label("tile_low_stock"),
             value=int(low),
             hint=i18n.label("tile_low_stock_hint", count=LOW_STOCK),
-            href="/mahsulotlar?low=1",
+            href="/mahsulotlar?stock=low",
         )
     )
 

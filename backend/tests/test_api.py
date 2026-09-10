@@ -1962,6 +1962,216 @@ def test_the_order_queue_is_worked_from_the_front(
     assert newest == sorted(newest, reverse=True)
 
 
+def test_a_card_is_sized_or_sizeless_and_not_both(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """A cap has no size, and the second sack of caps must not invent one.
+
+    One card held a sizeless grey cap beside a grey cap in `M` — the same cap
+    on the same shelf under two names, and the shop drew a blank size chip
+    next to a real one. The desk is also told which kinds have never had a
+    size, so it asks the right question before anybody types into a box that
+    will not go away.
+    """
+    first = client.post(
+        f"{API}/warehouse/piles",
+        json={
+            "kind": "Kepka",
+            "colour": "Kulrang",
+            "sizes": [{"size": "", "quantity": 6}],
+            "unit_cost": 12_000,
+            "location_code": "A-04-04",
+        },
+        headers={**warehouse, "Idempotency-Key": "cap-one"},
+    )
+    assert first.status_code == 201, first.text
+    card = first.json()["product"]
+
+    vocab = client.get(f"{API}/warehouse/vocab", headers=warehouse).json()
+    assert "Kepka" in vocab["sizeless"]
+    assert vocab["sizes"].get("Kepka") in (None, [])
+
+    sized = client.post(
+        f"{API}/warehouse/piles",
+        json={
+            "product_id": card["id"],
+            "colour": "Kulrang",
+            "sizes": [{"size": "M", "quantity": 4}],
+            "unit_cost": 12_000,
+            "location_code": "A-04-04",
+        },
+        headers={**warehouse, "Idempotency-Key": "cap-two"},
+    )
+    assert sized.status_code == 409, sized.text
+    assert "o'lchamsiz" in sized.json()["detail"]
+
+    # And the other way round, on a card that does have sizes.
+    shirt = client.post(
+        f"{API}/warehouse/piles",
+        json={
+            "kind": "Ko'ylak",
+            "colour": "Oq",
+            "sizes": [{"size": "m", "quantity": 3}],
+            "unit_cost": 20_000,
+            "location_code": "A-04-03",
+        },
+        headers={**warehouse, "Idempotency-Key": "shirt-one"},
+    )
+    assert shirt.status_code == 201, shirt.text
+    # One spelling, whatever the hurry: `m` is `M`.
+    assert [line["variant_label"] for line in shirt.json()["labels"]] == ["Oq / M"]
+
+    bare = client.post(
+        f"{API}/warehouse/piles",
+        json={
+            "product_id": shirt.json()["product"]["id"],
+            "colour": "Oq",
+            "sizes": [{"size": "", "quantity": 2}],
+            "unit_cost": 20_000,
+            "location_code": "A-04-03",
+        },
+        headers={**warehouse, "Idempotency-Key": "shirt-two"},
+    )
+    assert bare.status_code == 409, bare.text
+
+
+def test_a_size_received_by_mistake_can_leave_the_shop_window(
+    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+) -> None:
+    """A typo cannot be deleted, so it has to be able to stop being offered.
+
+    Every movement and order line points at a cell, so a cell that has ever
+    held anything is not deletable — and that left a cap booked in as `M`
+    struck through on the product page for the life of the card. Retiring
+    keeps the ledger and stops the offer, and is refused while the cell still
+    holds goods: hiding stock the shop paid for is worse than an untidy row.
+    """
+    booked = client.post(
+        f"{API}/warehouse/piles",
+        json={
+            "kind": "Ko'ylak",
+            "colour": "Yashil",
+            "sizes": [{"size": "M", "quantity": 4}, {"size": "KS", "quantity": 2}],
+            "unit_cost": 30_000,
+            "location_code": "C-04-01",
+        },
+        headers={**warehouse, "Idempotency-Key": "typo-pile"},
+    )
+    assert booked.status_code == 201, booked.text
+    card = booked.json()["product"]
+    grid = client.get(
+        f"{API}/admin/products/{card['id']}/variants", headers=admin
+    ).json()
+    wrong = next(row for row in grid if row["size"] == "KS")
+
+    # It has a ledger behind it, so it cannot be deleted — that is the point.
+    gone = client.delete(
+        f"{API}/admin/products/{card['id']}/variants/{wrong['id']}", headers=admin
+    )
+    assert gone.status_code == 409, gone.text
+
+    refused = client.post(
+        f"{API}/admin/products/{card['id']}/variants/{wrong['id']}/retired",
+        json={"retired": True},
+        headers=admin,
+    )
+    assert refused.status_code == 409, refused.text
+    assert "2" in refused.json()["detail"]
+
+    # Written off the shelf — the two were never there — and then it can go.
+    emptied = client.post(
+        f"{API}/warehouse/stock/empty",
+        json={"code": "C-04-01", "reason": "KS degan o'lcham yo'q edi"},
+        headers=admin,
+    )
+    assert emptied.status_code == 200, emptied.text
+
+    retired = client.post(
+        f"{API}/admin/products/{card['id']}/variants/{wrong['id']}/retired",
+        json={"retired": True},
+        headers=admin,
+    )
+    assert retired.status_code == 200, retired.text
+    assert retired.json()["retired"] is True
+
+    # The editor still holds it; the shop is not offering it.
+    after = client.get(
+        f"{API}/admin/products/{card['id']}/variants", headers=admin
+    ).json()
+    assert wrong["id"] in [row["id"] for row in after]
+    assert [row["retired"] for row in after if row["id"] == wrong["id"]] == [True]
+
+    # Filed, priced and photographed — the three gates — so the shop can be
+    # asked what it offers.
+    _category(client, admin, "koylaklar")
+    client.patch(
+        f"{API}/admin/products/{card['id']}",
+        json={"category_slug": "koylaklar"},
+        headers=admin,
+    )
+    client.post(
+        f"{API}/admin/products/{card['id']}/price",
+        json={"price": 90_000},
+        headers=admin,
+    )
+    _publish(client, admin, card["id"], "Yashil")
+
+    shown = client.get(f"{API}/products/{card['id']}").json()
+    assert [v["size"] for v in shown["variants"]] == ["M"]
+
+    # And back again, for a size this shop starts buying after all.
+    back = client.post(
+        f"{API}/admin/products/{card['id']}/variants/{wrong['id']}/retired",
+        json={"retired": False},
+        headers=admin,
+    )
+    assert back.status_code == 200, back.text
+    assert back.json()["retired"] is False
+
+
+def test_a_colour_that_has_run_out_is_said_out_loud(
+    client: TestClient,
+    admin: dict[str, str],
+    warehouse: dict[str, str],
+    auth: dict[str, str],
+) -> None:
+    """One colour finishing is the thing nobody notices.
+
+    The card still says "sotuvda", the total on it still reads comfortably,
+    and the first anybody hears of it is a customer ordering black. The
+    dashboard counted from one left upwards, so a cell that had actually
+    finished fell out of the bottom of it.
+    """
+    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-GONE", stock=1)
+
+    before = client.get(f"{API}/admin/products?stock=out", headers=admin).json()
+    mine = next(row for row in before["items"] if row["id"] == card["id"])
+    # The 43s of this card were never received, so they are already empty —
+    # and the 42s, which were, are not named yet.
+    assert "Qora / 42" not in mine["sold_out"]
+
+    # A customer buys the only black 42 there was, and a courier takes it out.
+    order = _order(client, auth, card["id"], ids["Qora / 42"], payment="cash")
+    _to_the_door(client, admin, order["id"])
+
+    page = client.get(f"{API}/admin/products?stock=out", headers=admin).json()
+    mine = next(row for row in page["items"] if row["id"] == card["id"])
+    assert "Qora / 42" in mine["sold_out"]
+
+    tiles = client.get(f"{API}/admin/dashboard", headers=admin).json()["tiles"]
+    gone = next(tile for tile in tiles if tile["key"] == "sold_out")
+    assert gone["value"] >= 1
+    # The tile has to land somewhere that reads the filter. It used to link to
+    # `?low=1`, which nothing on either side read.
+    assert gone["href"] == "/mahsulotlar?stock=out"
+
+    # And the shop says so to the customer, on the colour and not only in a
+    # total that is still positive.
+    shown = client.get(f"{API}/products/{card['id']}").json()
+    black = next(one for one in shown["colours"] if one["colour"] == "Qora")
+    assert black["in_stock"] is False
+
+
 def test_the_warehouse_may_pack_but_not_cancel(
     client: TestClient,
     admin: dict[str, str],

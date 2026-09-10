@@ -28,9 +28,14 @@ import {
 } from "@/lib/queries"
 import type { StaffUser } from "@/lib/types"
 
+// Every role there is, or the screen lies twice: the missing one cannot be
+// granted, and the person who already holds it shows with nothing selected —
+// which reads as an account with no role at all rather than as a shop
+// assistant. `seller` was left out when the role came back.
 const ROLES = [
   { key: "admin", label: "Administrator" },
   { key: "warehouse", label: "Ombor" },
+  { key: "seller", label: "Sotuvchi" },
   { key: "courier", label: "Kuryer" },
   { key: "customer", label: "Mijoz" },
 ]

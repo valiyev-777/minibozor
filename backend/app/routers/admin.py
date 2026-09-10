@@ -25,6 +25,8 @@ out again. See ``app.i18n`` for both halves.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
@@ -70,12 +72,32 @@ def list_products(
         None, alias="status", description="`draft` is what is held back from sale"
     ),
     q: str | None = Query(None),
+    stock: Literal["out", "low"] | None = Query(
+        None,
+        description="`out`: a live card with an empty cell. `low`: one nearly empty",
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(30, ge=1, le=100),
 ) -> s.Page[s.AdminProductOut]:
     stmt = select(Product)
     if status_filter is not None:
         stmt = stmt.where(Product.status == status_filter)
+    if stock is not None:
+        # A card, not a cell: the office works through cards, and a card with
+        # one empty colour is one thing to go and deal with rather than four
+        # rows of the same name. The dashboard tile lands here — it used to
+        # link to `?low=1`, which nothing read, so the count was right and the
+        # list you were sent to was the whole catalogue.
+        empty = select(ProductVariant.product_id).where(
+            ProductVariant.stock_left <= 0
+            if stock == "out"
+            else col(ProductVariant.stock_left).between(1, pr.LOW_STOCK)
+        )
+        stmt = stmt.where(col(Product.id).in_(empty))
+        if stock == "out":
+            # Only what the shop is offering. A draft with empty cells is a
+            # card somebody has not finished, which is a different queue.
+            stmt = stmt.where(Product.status == ProductStatus.ACTIVE)
     if q:
         # Every word, in any order, in the title or the code. A single LIKE on
         # the whole phrase missed "krossovka nike" against
@@ -571,6 +593,59 @@ def delete_variant(
     pr.refresh(session, product.id)
     session.commit()
     return s.Message(message=i18n.label("deleted"))
+
+
+@router.post(
+    "/products/{product_id}/variants/{variant_id}/retired",
+    response_model=s.AdminVariantOut,
+    summary="Take a cell out of the shop window, or put it back",
+)
+def retire_variant(
+    product_id: int,
+    variant_id: int,
+    payload: s.RetireIn,
+    user: CatalogWriter,
+    session: SessionDep,
+) -> s.AdminVariantOut:
+    """The way out for a cell that cannot be deleted.
+
+    A cell is deletable only while nothing has ever moved through it, which is
+    right: every movement, placement and order line points at it. But that
+    left a typo received once — a cap booked in as `M`, a size called `KS` —
+    as a size struck through on the product page for the life of the card,
+    with no way at all to remove it. Retiring keeps the ledger and stops the
+    offer.
+
+    **Only while it holds nothing.** Retiring a cell with goods on a shelf
+    would hide stock the shop has paid for, which is worse than an untidy
+    size row: the goods would be in the room, findable by a picker, and
+    invisible to the office asking why the money is missing.
+    """
+    product = _product(session, product_id)
+    variant = _variant(session, product, variant_id)
+    if payload.retired and variant.stock_left > 0:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("variant_still_holds", count=variant.stock_left),
+        )
+    was = variant.retired
+    variant.retired = payload.retired
+    audit.record(
+        session,
+        actor=user,
+        action="variant.retired",
+        entity="variant",
+        entity_id=variant.id,
+        field="retired",
+        old=str(was),
+        new=str(payload.retired),
+        note=pr.label(variant),
+    )
+    session.add(variant)
+    pr.refresh(session, product.id)
+    session.commit()
+    session.refresh(variant)
+    return _variant_out(session, variant)
 
 
 @router.post(
@@ -1075,6 +1150,7 @@ def _variant_out(session: SessionDep, variant: ProductVariant) -> s.AdminVariant
         sort=variant.sort,
         stock_left=variant.stock_left,
         in_stock=st.sellable(session, variant) > 0,
+        retired=variant.retired,
         can_delete=not blocked,
         blocked_reason=blocked,
     )

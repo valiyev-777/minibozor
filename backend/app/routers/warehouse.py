@@ -103,10 +103,17 @@ def vocab(user: CatalogReader, session: SessionDep) -> s.VocabOut:
     means the list is short and right on day thirty and empty on day one, when
     typing is the only thing that could have worked anyway.
     """
+    # Archived cards are not vocabulary. A card written by mistake is deleted
+    # if nothing has moved through it and archived if something has — and its
+    # kind then sat in the chip row for good. A word this shop has finished
+    # with is a word the desk should stop offering, which also means the row
+    # tidies itself: get rid of the card and the chip goes with it.
+    alive = col(Product.status) != ProductStatus.ARCHIVED
+
     kinds = _one_spelling(
         session.exec(
             select(Product.kind, func.count())
-            .where(col(Product.kind) != "")
+            .where(col(Product.kind) != "", alive)
             .group_by(col(Product.kind))
         ).all()
     )
@@ -114,13 +121,15 @@ def vocab(user: CatalogReader, session: SessionDep) -> s.VocabOut:
         session.exec(
             select(Brand.name, func.count())
             .join(Product, col(Product.brand_id) == col(Brand.id))
+            .where(alive)
             .group_by(col(Brand.name))
         ).all()
     )
     colours = _one_spelling(
         session.exec(
             select(ProductVariant.colour, func.count())
-            .where(col(ProductVariant.colour) != "")
+            .join(Product, col(Product.id) == col(ProductVariant.product_id))
+            .where(col(ProductVariant.colour) != "", alive)
             .group_by(col(ProductVariant.colour))
         ).all()
     )
@@ -128,11 +137,28 @@ def vocab(user: CatalogReader, session: SessionDep) -> s.VocabOut:
     # Sizes by kind: trainers were last received in 40-45 and shirts in S-XXL,
     # and offering the right row is the difference between three taps and
     # twelve.
+    # Some things have no size: a cap, a bag, a wristwatch. The form used to
+    # ask for sizes whatever had arrived, and a person holding a sack of caps
+    # types *something* into a box that will not go away — which is how a size
+    # called "KS" was born. So the desk is also told which kinds have never
+    # had one, and asks the right question before it is asked anything.
+    sizeless: list[str] = []
+    for kind, sized in session.exec(
+        select(Product.kind, func.max(func.length(ProductVariant.size)))
+        .join(ProductVariant, col(ProductVariant.product_id) == col(Product.id))
+        .where(col(Product.kind) != "", alive)
+        .group_by(col(Product.kind))
+    ).all():
+        if not sized:
+            tidied = pr.tidy_label(kind)
+            if tidied not in sizeless:
+                sizeless.append(tidied)
+
     sizes: dict[str, list[str]] = {}
     for kind, size in session.exec(
         select(Product.kind, ProductVariant.size)
         .join(ProductVariant, col(ProductVariant.product_id) == col(Product.id))
-        .where(col(Product.kind) != "", col(ProductVariant.size) != "")
+        .where(col(Product.kind) != "", col(ProductVariant.size) != "", alive)
         .distinct()
     ).all():
         # Keyed by the tidied kind, because that is the spelling the chips
@@ -150,7 +176,7 @@ def vocab(user: CatalogReader, session: SessionDep) -> s.VocabOut:
     for kind, key in session.exec(
         select(Product.kind, ProductSpec.key)
         .join(ProductSpec, col(ProductSpec.product_id) == col(Product.id))
-        .where(col(Product.kind) != "", col(ProductSpec.key) != "")
+        .where(col(Product.kind) != "", col(ProductSpec.key) != "", alive)
         .order_by(col(ProductSpec.sort))
     ).all():
         row = spec_keys.setdefault(pr.tidy_label(kind), [])
@@ -164,6 +190,7 @@ def vocab(user: CatalogReader, session: SessionDep) -> s.VocabOut:
         brands=brands,
         colours=colours,
         sizes=sizes,
+        sizeless=sizeless,
         spec_keys=spec_keys,
     )
 
@@ -220,12 +247,38 @@ def book_in_pile(
                 i18n.label("pile_needs_a_colour", colours=", ".join(known)),
             )
 
+    wanted = [pr.tidy_size(line.size) for line in payload.sizes]
+
+    # A card is one shape: either its goods have sizes or they do not. A cap
+    # arrived sizeless, then arrived again as `M` and `XL`, and the card ended
+    # up holding both — a grey cap with no size beside a grey cap in M, which
+    # nobody can tell apart, on a shelf where they are the same cap. The shop
+    # then offered a blank size chip next to a real one. Refused here rather
+    # than tidied afterwards: by the time it is on the shelf the counts have
+    # already been split between two names for one thing.
+    if payload.product_id is not None:
+        had = pr.variants(session, product.id)
+        if had:
+            was_sized = any(row.size for row in had)
+            now_sized = any(wanted)
+            if was_sized != now_sized:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    i18n.label(
+                        "pile_sized_or_not",
+                        card=product.title,
+                        shape=i18n.label(
+                            "shape_sized" if was_sized else "shape_sizeless"
+                        ),
+                    ),
+                )
+
     cells = pr.ensure_cells(
         session,
         product,
         colour=colour,
         colour_hex=payload.colour_hex,
-        sizes=[pr.tidy_size(line.size) for line in payload.sizes],
+        sizes=wanted,
         price=product.price,
     )
     where = _pile_cell(session, payload.location_code)
@@ -304,7 +357,7 @@ def book_in_pile(
             s.ProductLabelOut(
                 variant_id=variant.id,
                 product_title=product.title,
-                variant_label=_label(variant),
+                variant_label=pr.label(variant),
                 sku=variant.sku,
                 barcode=variant.barcode,
                 price=variant.price,
@@ -782,10 +835,6 @@ def _one_spelling(rows: list) -> list[str]:
         if label:
             tally[label] = tally.get(label, 0) + int(count)
     return sorted(tally, key=lambda label: -tally[label])[:40]
-
-
-def _label(variant: ProductVariant) -> str:
-    return " / ".join(part for part in (variant.colour, variant.size) if part)
 
 
 def _brand_named(session: SessionDep, name: str) -> Brand:
