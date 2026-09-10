@@ -69,8 +69,7 @@ export function LoginPage() {
     <div className="density-cozy grid min-h-full place-items-center bg-canvas p-6">
       <form
         onSubmit={sent ? verify : ask}
-        className="w-full max-w-sm space-y-5 rounded-panel border bg-surface p-6"
-      >
+        className="w-full max-w-sm space-y-5 rounded-panel border border-line bg-surface shadow-panel p-6">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="grid size-8 place-items-center rounded-control bg-brand text-brand-ink">
@@ -95,8 +94,7 @@ export function LoginPage() {
             disabled={sent}
             onChange={(event) => setPhone(event.target.value)}
             placeholder="+998901234567"
-            className="h-control"
-          />
+            className="h-control" />
         </div>
 
         {sent ? (
@@ -110,8 +108,7 @@ export function LoginPage() {
               value={code}
               onChange={(event) => setCode(event.target.value)}
               placeholder="123456"
-              className="h-control tabular tracking-widest"
-            />
+              className="h-control tabular tracking-widest" />
             <button
               type="button"
               className="text-micro text-ink-soft underline underline-offset-2"
@@ -132,7 +129,7 @@ export function LoginPage() {
           </p>
         ) : null}
 
-        <Button type="submit" disabled={busy} className="h-control w-full">
+        <Button type="submit" disabled={busy} className="w-full">
           {busy ? "..." : sent ? "Kirish" : "Kod olish"}
         </Button>
       </form>

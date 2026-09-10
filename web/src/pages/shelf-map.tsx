@@ -73,15 +73,13 @@ export function ShelfMapPage() {
             onChange={(event) => setNeedle(event.target.value)}
             placeholder="Nomi yoki shtrix-kod"
             className="h-control w-56 pl-8"
-            aria-label="Qidirish"
-          />
+            aria-label="Qidirish" />
           {needle ? (
             <button
               type="button"
               onClick={() => setNeedle("")}
               aria-label="Tozalash"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint"
-            >
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint">
               <X className="size-4" />
             </button>
           ) : null}
@@ -165,7 +163,7 @@ function Rack({
     cells.find((cell) => cell.column_no === column && cell.row_no === row)
 
   return (
-    <section className="rounded-panel border bg-surface p-3">
+    <section className="rounded-panel border border-line bg-surface shadow-panel p-3">
       <h2 className="mb-2 text-small font-semibold">{rack} javoni</h2>
 
       <div
@@ -278,7 +276,7 @@ function Staging({
             type="button"
             onClick={() => onOpen(tile.code)}
             className={cn(
-              "rounded-panel border bg-surface p-3 text-left transition hover:border-brand",
+              "rounded-panel border border-line bg-surface shadow-panel p-3 text-left transition hover:border-brand",
               shouting && "border-danger bg-danger-soft",
               highlighted && "border-brand ring-2 ring-brand",
               lit !== null && !highlighted && "opacity-25",
@@ -315,8 +313,7 @@ function CellSheet({ code, onClose }: { code: string | null; onClose: () => void
         type="button"
         aria-label="Yopish"
         onClick={onClose}
-        className="flex-1 bg-black/30"
-      />
+        className="flex-1 bg-black/30" />
       {/* A side sheet at a desk and a bottom sheet on a phone, which is where
           the thumb is. */}
       <aside className="flex max-h-[75vh] w-full flex-col overflow-auto rounded-t-panel border bg-surface p-4 sm:max-h-none sm:w-96 sm:rounded-none sm:rounded-l-panel self-end sm:self-auto">
@@ -410,11 +407,7 @@ function EmptyRoom() {
 
   if (!open) {
     return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="text-danger"
-        onClick={() => setOpen(true)}
+      <Button variant="ghost" size="sm" className="text-danger" onClick={() => setOpen(true)}
       >
         Omborni bo'shatish
       </Button>
@@ -448,14 +441,8 @@ function EmptyRoom() {
         value={word}
         onChange={(event) => setWord(event.target.value)}
         aria-label="Tasdiqlash so'zi"
-        className="h-control w-36"
-      />
-      <Button
-        type="submit"
-        size="sm"
-        className="bg-danger text-danger-ink hover:bg-danger"
-        disabled={word.trim().toUpperCase() !== "BO'SHATISH" || empty.isPending}
-      >
+        className="h-control w-36" />
+      <Button type="submit" size="sm" className="bg-danger text-danger-ink hover:bg-danger" disabled={word.trim().toUpperCase() !=="BO'SHATISH" || empty.isPending} >
         {empty.isPending ? <Loader2 className="size-4 animate-spin" /> : "Bo'shatish"}
       </Button>
       <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
@@ -488,8 +475,7 @@ function EmptyCell({ code, onDone }: { code: string; onDone: () => void }) {
       <button
         type="button"
         onClick={() => setAsked(true)}
-        className="mb-3 text-micro text-danger underline"
-      >
+        className="mb-3 text-micro text-danger underline">
         Yacheykani bo'shatish
       </button>
     )
@@ -513,15 +499,9 @@ function EmptyCell({ code, onDone }: { code: string; onDone: () => void }) {
         onChange={(event) => setReason(event.target.value)}
         placeholder="sanoqda topilmadi"
         aria-label="Sabab"
-        className="h-control"
-      />
+        className="h-control" />
       <div className="flex gap-2">
-        <Button
-          type="submit"
-          size="sm"
-          className="bg-danger text-danger-ink hover:bg-danger"
-          disabled={reason.trim().length < 3 || empty.isPending}
-        >
+        <Button type="submit" size="sm" className="bg-danger text-danger-ink hover:bg-danger" disabled={reason.trim().length < 3 || empty.isPending} >
           {empty.isPending ? <Loader2 className="size-4 animate-spin" /> : "Bo'shatish"}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={() => setAsked(false)}>
@@ -554,8 +534,7 @@ function MoveLine({ line, from }: { line: CellContent; from: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-micro text-brand-deep underline"
-      >
+        className="text-micro text-brand-deep underline">
         ko'chirish
       </button>
     )
@@ -584,16 +563,14 @@ function MoveLine({ line, from }: { line: CellContent; from: string }) {
         onChange={(event) => setQty(event.target.value.replace(/\D/g, ""))}
         inputMode="numeric"
         aria-label="Nechta ko'chirish"
-        className="h-control w-14 text-center tabular"
-      />
+        className="h-control w-14 text-center tabular" />
       <Input
         autoFocus
         value={to}
         onChange={(event) => setTo(event.target.value.toUpperCase())}
         placeholder="A-01-01"
         aria-label="Qaysi yacheykaga"
-        className="h-control w-24 tabular"
-      />
+        className="h-control w-24 tabular" />
       <Button type="submit" size="sm" disabled={move.isPending}>
         {move.isPending ? <Loader2 className="size-4 animate-spin" /> : "OK"}
       </Button>

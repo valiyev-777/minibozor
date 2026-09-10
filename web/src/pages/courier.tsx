@@ -71,8 +71,7 @@ export function MyWorkPage() {
         {(board.data ?? []).map((order) => (
           <div
             key={order.id}
-            className="flex items-center gap-3 rounded-panel border bg-surface p-3"
-          >
+            className="flex items-center gap-3 rounded-panel border border-line bg-surface shadow-panel p-3">
             <div className="min-w-0 flex-1">
               <div className="text-body font-semibold tabular">{order.code}</div>
               <div className="truncate text-small text-ink-soft">
@@ -83,10 +82,7 @@ export function MyWorkPage() {
                 {order.cash_due ? ` · naqd ${money(order.cash_due)}` : ""}
               </div>
             </div>
-            <Button
-              className="h-control-lg"
-              disabled={take.isPending}
-              onClick={() => take.mutate(order.id)}
+            <Button size="lg" disabled={take.isPending} onClick={() => take.mutate(order.id)}
             >
               Olish
             </Button>
@@ -105,7 +101,7 @@ function Parcel({ order }: { order: CourierOrder }) {
   const [cash, setCash] = useState(String(order.cash_due || 0))
 
   return (
-    <div className="rounded-panel border bg-surface p-3">
+    <div className="rounded-panel border border-line bg-surface shadow-panel p-3">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="text-body font-semibold tabular">{order.code}</div>
@@ -113,8 +109,7 @@ function Parcel({ order }: { order: CourierOrder }) {
             href={`https://yandex.uz/maps/?text=${encodeURIComponent(order.address_line)}`}
             target="_blank"
             rel="noreferrer"
-            className="flex items-start gap-1 text-body underline underline-offset-2"
-          >
+            className="flex items-start gap-1 text-body underline underline-offset-2">
             <MapPin className="mt-0.5 size-4 shrink-0 text-ink-faint" />
             {order.address_line}
           </a>
@@ -123,8 +118,7 @@ function Parcel({ order }: { order: CourierOrder }) {
           ) : null}
           <a
             href={`tel:${order.recipient_phone}`}
-            className="mt-1 inline-flex items-center gap-1 text-small underline underline-offset-2"
-          >
+            className="mt-1 inline-flex items-center gap-1 text-small underline underline-offset-2">
             <Phone className="size-4 text-ink-faint" />
             {order.recipient_phone}
           </a>
@@ -156,8 +150,7 @@ function Parcel({ order }: { order: CourierOrder }) {
               cash_collected: Number(cash) || 0,
             })
           }}
-          className="mt-3 space-y-2 border-t pt-3"
-        >
+          className="mt-3 space-y-2 border-t pt-3">
           <label className="block">
             <span className="mb-1 block text-micro text-ink-soft">
               Kim qabul qildi
@@ -170,8 +163,7 @@ function Parcel({ order }: { order: CourierOrder }) {
               value={name}
               onChange={(event) => setName(event.target.value)}
               aria-label="Kim qabul qildi"
-              className="h-control-lg text-body"
-            />
+              className="h-control-lg text-body" />
           </label>
           {order.cash_due ? (
             <label className="block">
@@ -181,31 +173,20 @@ function Parcel({ order }: { order: CourierOrder }) {
                 onChange={(event) => setCash(event.target.value.replace(/\D/g, ""))}
                 inputMode="numeric"
                 aria-label="Olingan naqd"
-                className="h-control-lg tabular text-body"
-              />
+                className="h-control-lg tabular text-body" />
             </label>
           ) : null}
-          <Button
-            type="submit"
-            disabled={deliver.isPending || !name.trim()}
-            className="h-control-lg w-full text-body"
-          >
+          <Button size="lg" type="submit" disabled={deliver.isPending || !name.trim()} className="w-full">
             Yetkazildi
           </Button>
         </form>
       ) : (
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <Button
-            className="h-control-lg text-body"
-            onClick={() => setOpen(true)}
+          <Button size="lg" onClick={() => setOpen(true)}
           >
             Yetkazdim
           </Button>
-          <Button
-            variant="secondary"
-            className="h-control-lg text-body"
-            disabled={failed.isPending}
-            onClick={() => {
+          <Button size="lg" variant="secondary" disabled={failed.isPending} onClick={() => {
               const reason = window.prompt("Nima bo'ldi?")
               if (reason) failed.mutate(reason)
             }}
@@ -235,8 +216,7 @@ export function CourierHistoryPage() {
         {done.map((order) => (
           <li
             key={order.id}
-            className="flex items-center gap-3 rounded-panel border bg-surface p-3"
-          >
+            className="flex items-center gap-3 rounded-panel border border-line bg-surface shadow-panel p-3">
             <div className="min-w-0 flex-1">
               <div className="text-small font-semibold tabular">{order.code}</div>
               <div className="truncate text-micro text-ink-faint">
@@ -298,7 +278,7 @@ export function EarningsPage() {
             </div>
           ) : null}
 
-          <div className="rounded-panel border bg-surface p-3 text-small text-ink-soft">
+          <div className="rounded-panel border border-line bg-surface shadow-panel p-3 text-small text-ink-soft">
             Jami {groups(earnings.data.delivered_total)} ta yetkazilgan ·{" "}
             {groups(earnings.data.failed_attempts)} marta bo'lmagan
           </div>
@@ -310,7 +290,7 @@ export function EarningsPage() {
 
 function Figure({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-panel border bg-surface p-3">
+    <div className="rounded-panel border border-line bg-surface shadow-panel p-3">
       <div className="text-micro text-ink-soft">{label}</div>
       <div className="figure">{value}</div>
     </div>

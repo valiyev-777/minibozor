@@ -90,6 +90,19 @@
    * roundness as the other panel" is a token and not a guess. */
   --radius-control: 0.5rem;
   --radius-panel: 0.875rem;
+
+  /* Elevation, and only two steps of it.
+   *
+   * There was none: every surface was a 1px outline on an off-white page, so
+   * a panel, a menu and a pressed button were the same object with different
+   * words in them, and a screen with six panels read as a wireframe. One step
+   * lifts a resting surface off the page; the other belongs to the thing that
+   * is *acting* — the primary button, an open menu, a row being dragged.
+   * Both are grey rather than black: a shadow with hue in it reads as a
+   * colour cast on a white shop screen. */
+  --shadow-panel: 0 1px 2px oklch(0.21 0.012 265 / 0.05);
+  --shadow-raised:
+    0 1px 2px oklch(0.21 0.012 265 / 0.1), 0 4px 12px oklch(0.21 0.012 265 / 0.08);
 }
 
 :root {

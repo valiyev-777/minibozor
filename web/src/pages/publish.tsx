@@ -186,7 +186,7 @@ function Row({
   return (
     <div
       className={cn(
-        "rounded-panel border bg-surface",
+        "rounded-panel border border-line bg-surface shadow-panel",
         stale && "border-danger",
         open && "border-brand",
       )}
@@ -194,14 +194,12 @@ function Row({
       <button
         type="button"
         onClick={onOpen}
-        className="flex w-full items-center gap-3 p-3 text-left"
-      >
+        className="flex w-full items-center gap-3 p-3 text-left">
         {card.snapshot_url ? (
           <img
             src={mediaUrl(card.snapshot_url)}
             alt=""
-            className="size-12 shrink-0 rounded-control object-cover"
-          />
+            className="size-12 shrink-0 rounded-control object-cover" />
         ) : (
           <span className="grid size-12 shrink-0 place-items-center rounded-control bg-canvas text-ink-faint">
             <Package className="size-5" />
@@ -270,10 +268,7 @@ function Editor({ card }: { card: AdminProduct }) {
       ) : card.next_statuses.includes("active") ? (
         <>
           <Problem error={publish.error} />
-          <Button
-            className="h-control-lg w-full gap-2 text-body"
-            disabled={publish.isPending}
-            onClick={() => publish.mutate("active")}
+          <Button size="lg" className="w-full gap-2" disabled={publish.isPending} onClick={() => publish.mutate("active")}
           >
             {publish.isPending ? (
               <Loader2 className="size-5 animate-spin" />
@@ -361,8 +356,7 @@ function Words({ card }: { card: AdminProduct }) {
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Erkaklar krossovkasi Alfa"
           aria-label="Nomi"
-          className="h-control-lg text-body"
-        />
+          className="h-control-lg text-body" />
       </label>
 
       <label className="block">
@@ -374,8 +368,7 @@ function Words({ card }: { card: AdminProduct }) {
           onChange={(event) => setSubtitle(event.target.value)}
           placeholder="Qora, yengil, kunlik"
           aria-label="Qisqa izoh"
-          className="h-control"
-        />
+          className="h-control" />
       </label>
 
       <label className="block">
@@ -386,8 +379,7 @@ function Words({ card }: { card: AdminProduct }) {
           rows={4}
           placeholder="Nimadan tikilgan, kimga to'g'ri keladi, qanday parvarish qilinadi."
           aria-label="Tavsif"
-          className="w-full rounded-control border bg-surface p-2 text-small"
-        />
+          className="w-full rounded-control border bg-surface p-2 text-small" />
       </label>
 
       <label className="block">
@@ -399,17 +391,11 @@ function Words({ card }: { card: AdminProduct }) {
           onChange={(event) => setWarranty(event.target.value)}
           placeholder="1 yil"
           aria-label="Kafolat"
-          className="h-control"
-        />
+          className="h-control" />
       </label>
 
       <Problem error={write.error} />
-      <Button
-        type="submit"
-        variant="secondary"
-        className="h-control w-full"
-        disabled={write.isPending}
-      >
+      <Button type="submit" variant="secondary" className="w-full" disabled={write.isPending} >
         {write.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
         Saqlash
       </Button>
@@ -471,21 +457,14 @@ function Specs({ card }: { card: AdminProduct }) {
               onChange={(event) => set(index, { key: event.target.value })}
               placeholder="Mato"
               aria-label={`${index + 1} — nomi`}
-              className="h-control w-1/3"
-            />
+              className="h-control w-1/3" />
             <Input
               value={row.value}
               onChange={(event) => set(index, { value: event.target.value })}
               placeholder="Paxta"
               aria-label={`${index + 1} — qiymati`}
-              className="h-control flex-1"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label="Qatorni o'chirish"
-              onClick={() => setRows((was) => was.filter((_, at) => at !== index))}
+              className="h-control flex-1" />
+            <Button type="button" variant="ghost" size="sm" aria-label="Qatorni o'chirish" onClick={() => setRows((was) => was.filter((_, at) => at !== index))}
             >
               <Trash2 className="size-4" />
             </Button>
@@ -494,21 +473,12 @@ function Specs({ card }: { card: AdminProduct }) {
       </ul>
 
       <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-control gap-1"
-          onClick={() => setRows((was) => [...was, { key: "", value: "" }])}
+        <Button type="button" variant="ghost" className="gap-1" onClick={() => setRows((was) => [...was, { key: "", value: "" }])}
         >
           <Plus className="size-4" />
           Qator
         </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          className="h-control flex-1"
-          disabled={write.isPending}
-          onClick={() =>
+        <Button type="button" variant="secondary" className="flex-1" disabled={write.isPending} onClick={() =>
             write.mutate(
               rows
                 .map((row) => ({ key: row.key.trim(), value: row.value.trim() }))
@@ -585,8 +555,7 @@ function Photos({ card, more }: { card: AdminProduct; more?: boolean }) {
               <img
                 src={mediaUrl(shot.url)}
                 alt=""
-                className="size-16 rounded-control border object-cover"
-              />
+                className="size-16 rounded-control border object-cover" />
             </li>
           ))}
         </ul>
@@ -599,17 +568,11 @@ function Photos({ card, more }: { card: AdminProduct; more?: boolean }) {
           <img
             src={mediaUrl(card.snapshot_url)}
             alt=""
-            className="size-12 rounded-control object-cover"
-          />
+            className="size-12 rounded-control object-cover" />
           <p className="min-w-0 flex-1 text-micro text-ink-soft">
             Qabuldagi tanish rasmi. Yaxshi chiqqan bo'lsa qaytadan olish shart emas.
           </p>
-          <Button
-            type="button"
-            variant="secondary"
-            className="h-control"
-            disabled={image.isPending}
-            onClick={() =>
+          <Button type="button" variant="secondary" disabled={image.isPending} onClick={() =>
               image.mutate(
                 { url: card.snapshot_url, colour: active },
                 {
@@ -703,10 +666,9 @@ function Filing({ card }: { card: AdminProduct }) {
             onChange={(event) => setName(event.target.value)}
             placeholder="Oyoq kiyim"
             aria-label="Yangi kategoriya"
-            className="h-control"
-          />
+            className="h-control" />
         </label>
-        <Button type="submit" variant="secondary" className="h-control">
+        <Button type="submit" variant="secondary">
           Qo'shish
         </Button>
       </form>
@@ -751,8 +713,7 @@ function Pricing({ card }: { card: AdminProduct }) {
               onClick={() =>
                 setSale(String(Math.round((cost * (100 + percent)) / 100 / 1000) * 1000))
               }
-              className="h-control rounded-control border px-3 text-small"
-            >
+              className="h-control rounded-control border px-3 text-small">
               +{percent}%
             </button>
           ))}
@@ -776,8 +737,7 @@ function Pricing({ card }: { card: AdminProduct }) {
             inputMode="numeric"
             placeholder="149 000"
             aria-label="Sotuv narxi"
-            className="h-control-lg tabular text-body"
-          />
+            className="h-control-lg tabular text-body" />
         </label>
         <label className="w-36">
           <span className="mb-1 block text-micro text-ink-soft">
@@ -789,15 +749,9 @@ function Pricing({ card }: { card: AdminProduct }) {
             inputMode="numeric"
             placeholder="199 000"
             aria-label="Eski narx"
-            className="h-control tabular"
-          />
+            className="h-control tabular" />
         </label>
-        <Button
-          type="submit"
-          variant="secondary"
-          className="h-control-lg"
-          disabled={wanted <= 0 || price.isPending}
-        >
+        <Button size="lg" type="submit" variant="secondary" disabled={wanted <= 0 || price.isPending} >
           Qo'yish
         </Button>
         {markup > 0 ? (

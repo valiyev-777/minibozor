@@ -57,6 +57,27 @@
   height: var(--control-lg);
 }
 
+@utility h-control-sm {
+  height: var(--control-sm);
+}
+
+/* Square, for a button that is only an icon: one token, so the icon button in
+ * a row is exactly as tall as the text button beside it. */
+@utility size-control {
+  height: var(--control-md);
+  width: var(--control-md);
+}
+
+@utility size-control-sm {
+  height: var(--control-sm);
+  width: var(--control-sm);
+}
+
+@utility size-control-lg {
+  height: var(--control-lg);
+  width: var(--control-lg);
+}
+
 @layer base {
   * {
     border-color: var(--color-line);

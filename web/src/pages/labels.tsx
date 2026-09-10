@@ -44,7 +44,7 @@ export function LabelsPage() {
         ) : null}
       </PageHeader>
 
-      <div className="no-print space-y-3 rounded-panel border bg-surface p-3">
+      <div className="no-print space-y-3 rounded-panel border border-line bg-surface shadow-panel p-3">
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex-1">
             <span className="mb-1 block text-micro text-ink-soft">
@@ -56,20 +56,13 @@ export function LabelsPage() {
               inputMode="numeric"
               placeholder="12"
               className="h-control tabular"
-              aria-label="Qabul raqami"
-            />
+              aria-label="Qabul raqami" />
           </label>
-          <Button
-            className="h-control"
-            disabled={!runId}
-            onClick={() => setWhat({ kind: "supply", id: Number(runId) })}
+          <Button disabled={!runId} onClick={() => setWhat({ kind: "supply", id: Number(runId) })}
           >
             Tovar yorliqlari
           </Button>
-          <Button
-            variant="secondary"
-            className="h-control"
-            onClick={() => setWhat({ kind: "cells" })}
+          <Button variant="secondary" onClick={() => setWhat({ kind: "cells" })}
           >
             Katak yorliqlari
           </Button>
@@ -86,8 +79,7 @@ export function LabelsPage() {
                   setRunId(String(run.id))
                   setWhat({ kind: "supply", id: run.id })
                 }}
-                className="mr-2 tabular underline underline-offset-2"
-              >
+                className="mr-2 tabular underline underline-offset-2">
                 {run.code}
               </button>
             ))}
@@ -111,8 +103,7 @@ export function LabelsPage() {
           {sheet.data.cells.map((cell) => (
             <div
               key={cell.code}
-              className="grid aspect-[2/1] place-items-center rounded-control border bg-surface"
-            >
+              className="grid aspect-[2/1] place-items-center rounded-control border bg-surface">
               {/* A cell label is read across a room, so it is one enormous
                   string and nothing else. */}
               <span className="tabular text-2xl font-bold tracking-tight">

@@ -67,8 +67,7 @@ export function ReportsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Hisobotlar"
-        subtitle="Daftar — har bir dona qayerdan qayerga ketgani"
-      />
+        subtitle="Daftar — har bir dona qayerdan qayerga ketgani" />
 
       <div className="flex flex-wrap gap-1">
         {KINDS.map((one) => (
@@ -96,7 +95,7 @@ export function ReportsPage() {
       ) : null}
 
       {ledger.data?.items.length ? (
-        <div className="overflow-x-auto rounded-panel border bg-surface">
+        <div className="overflow-x-auto rounded-panel border border-line bg-surface shadow-panel">
           <table className="w-full text-small">
             <thead className="border-b text-micro text-ink-soft">
               <tr>
@@ -142,19 +141,11 @@ export function ReportsPage() {
             {ledger.data.total} ta harakat · {page}-sahifa
           </span>
           <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              className="h-control"
-              disabled={page === 1}
-              onClick={() => setPage((was) => was - 1)}
+            <Button variant="secondary" disabled={page === 1} onClick={() => setPage((was) => was - 1)}
             >
               Oldingi
             </Button>
-            <Button
-              variant="secondary"
-              className="h-control"
-              disabled={!ledger.data.has_more}
-              onClick={() => setPage((was) => was + 1)}
+            <Button variant="secondary" disabled={!ledger.data.has_more} onClick={() => setPage((was) => was + 1)}
             >
               Keyingi
             </Button>

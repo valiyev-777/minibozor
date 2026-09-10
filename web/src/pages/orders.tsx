@@ -15,7 +15,8 @@
 import { PackageCheck } from "lucide-react"
 import { useState } from "react"
 
-import { Empty, PageHeader, Problem, Waiting } from "@/components/page"
+import { Empty, PageHeader, Pill, Problem, Waiting } from "@/components/page"
+import type { Tone } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/cn"
 import { age, dateTime, minutesSince, money } from "@/lib/format"
@@ -45,6 +46,17 @@ const WORD: Record<OrderStatus, string> = {
  * They used to share a word — a filter tab reading "Yig'ilmoqda" beside a
  * button reading "Yig'ilmoqda" — and one of them changes the order while the
  * other changes the list. */
+/** Where the order is, as a colour: amber not yet, blue on its way, green
+ *  arrived, grey over. The same three meanings as everywhere else. */
+const TONE: Record<OrderStatus, Tone> = {
+  placed: "warn",
+  packing: "brand",
+  shipped: "brand",
+  delivered: "good",
+  cancelled: "neutral",
+  returned: "neutral",
+}
+
 const MOVE: Record<OrderStatus, string> = {
   placed: "Yangi qilish",
   packing: "Yig'ishga o'tkazish",
@@ -62,15 +74,25 @@ export function OrdersPage() {
     <div className="space-y-4">
       <PageHeader title="Buyurtmalar" subtitle="Navbat oldindan ishlanadi" />
 
-      <div className="flex flex-wrap gap-1">
+      {/* One segmented control, not five outlined boxes with one of them
+          tinted. Five bordered rectangles in a row read as five things to
+          decide; a segment reads as one thing with a position. */}
+      <div
+        role="tablist"
+        aria-label="Holat"
+        className="inline-flex flex-wrap gap-0.5 rounded-control border border-line bg-line-soft p-0.5">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
+            role="tab"
+            aria-selected={tab.key === status}
             onClick={() => setStatus(tab.key)}
             className={cn(
-              "h-control rounded-control border px-3 text-small",
-              tab.key === status && "border-brand bg-brand-soft text-brand-deep",
+              "h-control-sm rounded-[calc(var(--radius-control)-2px)] px-3 text-small transition-colors",
+              tab.key === status
+                ? "bg-surface font-medium text-ink shadow-panel"
+                : "text-ink-soft hover:text-ink",
             )}
           >
             {tab.label}
@@ -104,29 +126,13 @@ function Row({ order }: { order: StaffOrder }) {
   const benched = staff?.role === "admin" || staff?.role === "warehouse"
 
   return (
-    <div className="rounded-panel border bg-surface p-3">
+    <div className="rounded-panel border border-line bg-surface p-3 shadow-panel transition-colors hover:border-brand/40">
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-body font-semibold tabular">{order.code}</span>
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-micro",
-                order.status === "placed" && "bg-warn-soft text-warn-ink",
-                order.status === "packing" && "bg-brand-soft text-brand-deep",
-                order.status === "shipped" && "bg-brand-soft text-brand-deep",
-                order.status === "delivered" && "bg-good-soft text-good",
-                (order.status === "cancelled" || order.status === "returned") &&
-                  "bg-line-soft text-ink-soft",
-              )}
-            >
-              {WORD[order.status]}
-            </span>
-            {!order.paid ? (
-              <span className="rounded-full bg-line-soft px-2 py-0.5 text-micro text-ink-soft">
-                naqd
-              </span>
-            ) : null}
+            <Pill tone={TONE[order.status]}>{WORD[order.status]}</Pill>
+            {!order.paid ? <Pill>naqd</Pill> : null}
           </div>
           {/* What to fetch, in one line: a picker recognises an order by the
               thing in it. */}
@@ -150,13 +156,9 @@ function Row({ order }: { order: StaffOrder }) {
 
       <div className="mt-3 flex flex-wrap gap-2">
         {order.status === "placed" && benched ? (
-          <Button
-            variant="secondary"
-            className="h-control gap-2"
-            disabled={build.isPending}
-            onClick={() => build.mutate(order.id)}
+          <Button variant="secondary" disabled={build.isPending} onClick={() => build.mutate(order.id)}
           >
-            <PackageCheck className="size-4" />
+            <PackageCheck />
             Terishga qo'yish
           </Button>
         ) : null}
@@ -167,12 +169,7 @@ function Row({ order }: { order: StaffOrder }) {
           // else picked it up.
           .filter((next) => next !== "shipped")
           .map((next) => (
-            <Button
-              key={next}
-              variant={next === "cancelled" ? "ghost" : "secondary"}
-              className={cn("h-control", next === "cancelled" && "text-danger")}
-              disabled={move.isPending}
-              onClick={() => {
+            <Button key={next} variant={next ==="cancelled" ?"ghost" :"primary"} className={cn(next ==="cancelled" &&"text-danger hover:text-danger")} disabled={move.isPending} onClick={() => {
                 if (next === "cancelled") {
                   const note = window.prompt("Nega bekor qilinyapti?")
                   if (!note) return

@@ -55,7 +55,7 @@ function Queue({ onOpen }: { onOpen: (id: number) => void }) {
       <ul className="space-y-2">
         {waiting.map((task) => (
           <li key={task.id}>
-            <div className="flex items-center gap-3 rounded-panel border bg-surface p-3">
+            <div className="flex items-center gap-3 rounded-panel border border-line bg-surface shadow-panel p-3">
               <div className="min-w-0 flex-1">
                 <div className="text-body font-semibold tabular">{task.order_code}</div>
                 <div className="text-small text-ink-soft">
@@ -66,20 +66,14 @@ function Queue({ onOpen }: { onOpen: (id: number) => void }) {
                 ) : null}
               </div>
               {task.status === "waiting" ? (
-                <Button
-                  className="h-control-lg gap-2"
-                  disabled={take.isPending}
-                  onClick={() =>
+                <Button size="lg" className="gap-2" disabled={take.isPending} onClick={() =>
                     take.mutate(task.id, { onSuccess: () => onOpen(task.id) })
                   }
                 >
                   Olish
                 </Button>
               ) : (
-                <Button
-                  variant="secondary"
-                  className="h-control-lg"
-                  onClick={() => onOpen(task.id)}
+                <Button size="lg" variant="secondary" onClick={() => onOpen(task.id)}
                 >
                   Davom etish
                 </Button>
@@ -122,7 +116,7 @@ function Task({ id, onBack }: { id: number; onBack: () => void }) {
             <li
               key={line.id}
               className={cn(
-                "rounded-panel border bg-surface p-3",
+                "rounded-panel border border-line bg-surface shadow-panel p-3",
                 done && "opacity-60",
               )}
             >
@@ -161,10 +155,7 @@ function Task({ id, onBack }: { id: number; onBack: () => void }) {
               </div>
 
               {!done ? (
-                <Button
-                  className="mt-3 h-control-lg w-full gap-2 text-body"
-                  disabled={pick.isPending}
-                  onClick={() =>
+                <Button size="lg" className="mt-3 w-full gap-2" disabled={pick.isPending} onClick={() =>
                     pick.mutate({ lineId: line.id, qty: line.qty - line.picked_qty })
                   }
                 >
@@ -179,9 +170,7 @@ function Task({ id, onBack }: { id: number; onBack: () => void }) {
         })}
       </ol>
 
-      <Button
-        className="h-control-lg w-full text-body"
-        disabled={left > 0 || complete.isPending || task.data.status === "picked"}
+      <Button size="lg" className="w-full" disabled={left > 0 || complete.isPending || task.data.status === "picked"}
         onClick={() => complete.mutate(undefined, { onSuccess: onBack })}
       >
         {task.data.status === "picked"

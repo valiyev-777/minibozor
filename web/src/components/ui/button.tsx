@@ -1,60 +1,86 @@
+/**
+ * The button, speaking this project's design system.
+ *
+ * It arrived as shadcn's own — `h-9`, `text-sm`, `rounded-md` — which are
+ * Tailwind's numbers and not ours. So the height did not follow the density
+ * class, the radius did not match a panel's, and the type was a size the
+ * theme does not have. Every screen then wrote `className="h-control …"` over
+ * the top of it, one screen at a time, and no two buttons in the app were the
+ * same object: some 36px, some 40, some full width because the class went on
+ * whatever was nearest.
+ *
+ * Now the size *is* a token. `sm`/`md`/`lg` are `--control-sm/md/lg`, which
+ * means one button component is a desk button in the office and a glove-sized
+ * one in the warehouse without a single caller asking for it.
+ *
+ * **Four variants, and they mean different things.** `primary` is the one act
+ * this screen exists for — one per screen, and it is the only filled one.
+ * `secondary` is everything else that is a real action. `ghost` is for what
+ * sits inside a row and must not compete with it. `danger` is for the act
+ * somebody has to mean. A screen with three filled buttons has told the
+ * reader nothing about which to press.
+ */
+
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
 import { Slot } from "radix-ui"
 
+import { cn } from "@/lib/cn"
+
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  [
+    "inline-flex shrink-0 select-none items-center justify-center gap-2 rounded-control",
+    "font-medium whitespace-nowrap",
+    // Colour and shadow move; nothing here changes size on hover, because a
+    // button that grows under the cursor moves the row it is in.
+    "transition-[background-color,border-color,box-shadow,color] duration-150",
+    "outline-none focus-visible:ring-2 focus-visible:ring-brand/45 focus-visible:ring-offset-1 focus-visible:ring-offset-surface",
+    "disabled:pointer-events-none disabled:opacity-45",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0",
+  ].join(" "),
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
-        outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        primary:
+          "bg-brand text-brand-ink shadow-panel hover:bg-brand-deep active:bg-brand-deep",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "text-primary underline-offset-4 hover:underline",
+          "border border-line bg-surface text-ink shadow-panel hover:border-line hover:bg-line-soft active:bg-line-soft",
+        ghost: "text-ink-soft hover:bg-line-soft hover:text-ink active:bg-line-soft",
+        danger:
+          "bg-danger text-danger-ink shadow-panel hover:brightness-95 active:brightness-90",
+        link: "text-brand-deep underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9",
-        "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-8",
-        "icon-lg": "size-10",
+        // Padding is in ems of the button's own type so a warehouse button
+        // gets wider as it gets taller, rather than becoming a tall pill with
+        // a word rattling around in it.
+        sm: "h-control-sm px-2.5 text-micro [&_svg]:size-3.5",
+        md: "h-control px-3.5 text-small [&_svg]:size-4",
+        lg: "h-control-lg px-5 text-body [&_svg]:size-5",
+        icon: "size-control [&_svg]:size-4",
+        "icon-sm": "size-control-sm [&_svg]:size-3.5",
+        "icon-lg": "size-control-lg [&_svg]:size-5",
       },
     },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  }
+    defaultVariants: { variant: "primary", size: "md" },
+  },
 )
 
 function Button({
   className,
-  variant = "default",
-  size = "default",
+  variant,
+  size,
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean
-  }) {
+  VariantProps<typeof buttonVariants> & { asChild?: boolean }) {
   const Comp = asChild ? Slot.Root : "button"
-
   return (
     <Comp
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(buttonVariants({ variant, size }), className)}
       {...props}
     />
   )

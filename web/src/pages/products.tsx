@@ -16,7 +16,8 @@ import { Check, Image as ImageIcon, Loader2, Search, Trash2 } from "lucide-react
 import { useState } from "react"
 import { useSearchParams } from "react-router-dom"
 
-import { Empty, PageHeader, Problem, Waiting } from "@/components/page"
+import { Empty, PageHeader, Panel, Pill, Problem, Waiting } from "@/components/page"
+import type { Tone } from "@/components/page"
 import { PhotoStep, mediaUrl } from "@/components/photo-step"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -56,33 +57,45 @@ export function ProductsPage() {
             onChange={(event) => setNeedle(event.target.value)}
             placeholder="Nomi yoki kodi"
             aria-label="Qidirish"
-            className="h-control w-56 pl-8"
-          />
+            className="h-control w-56 pl-8" />
         </div>
       </PageHeader>
 
-      <div className="flex flex-wrap gap-1">
-        {[
-          { key: "", label: "Hammasi" },
-          { key: "draft", label: "Rasmsiz — sotuvda emas" },
-          { key: "active", label: "Sotuvda" },
-          { key: "archived", label: "Arxivda" },
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setParams(tab.key ? { status: tab.key } : {})}
-            className={cn(
-              "h-control rounded-control border px-3 text-small",
-              tab.key === status && !stock && "border-brand bg-brand-soft text-brand-deep",
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-        {/* The two that are about the shelf rather than about the card.
-            Money standing still in both directions: goods on sale that the
-            shop cannot supply, and goods about to become that. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* What state the card is in — one segmented control, because these
+            four are one question with four answers. */}
+        <div
+          role="tablist"
+          aria-label="Holat"
+          className="inline-flex flex-wrap gap-0.5 rounded-control border border-line bg-line-soft p-0.5">
+          {[
+            { key: "", label: "Hammasi" },
+            { key: "draft", label: "Rasmsiz" },
+            { key: "active", label: "Sotuvda" },
+            { key: "archived", label: "Arxivda" },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={tab.key === status && !stock}
+              onClick={() => setParams(tab.key ? { status: tab.key } : {})}
+              className={cn(
+                "h-control-sm rounded-[calc(var(--radius-control)-2px)] px-3 text-small transition-colors",
+                tab.key === status && !stock
+                  ? "bg-surface font-medium text-ink shadow-panel"
+                  : "text-ink-soft hover:text-ink",
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* And these two are about the shelf rather than about the card —
+            money standing still in both directions: goods on sale the shop
+            cannot supply, and goods about to become that. A different
+            question, so not in the same control. */}
         {[
           { key: "out", label: "Tugagan" },
           { key: "low", label: "Tugayotgan" },
@@ -92,10 +105,10 @@ export function ProductsPage() {
             type="button"
             onClick={() => setParams(stock === tab.key ? {} : { stock: tab.key })}
             className={cn(
-              "h-control rounded-control border px-3 text-small",
+              "h-control-sm rounded-full border px-3 text-small transition-colors",
               tab.key === stock
-                ? "border-danger bg-danger-soft text-danger"
-                : "text-ink-soft",
+                ? "border-danger/40 bg-danger-soft font-medium text-danger"
+                : "border-line text-ink-soft hover:text-ink",
             )}
           >
             {tab.label}
@@ -115,8 +128,7 @@ export function ProductsPage() {
             <button
               type="button"
               onClick={() => setOpenId(product.id)}
-              className="flex w-full items-center gap-3 rounded-panel border bg-surface p-3 text-left hover:border-brand"
-            >
+              className="flex w-full items-center gap-3 rounded-panel border border-line bg-surface p-3 text-left shadow-panel transition-colors hover:border-brand">
               <div className="min-w-0 flex-1">
                 <div className="truncate text-body font-semibold">{product.title}</div>
                 <div className="text-micro tabular text-ink-faint">
@@ -175,8 +187,7 @@ function RetireLine({
         type="button"
         disabled={busy}
         onClick={() => onSet(false)}
-        className="shrink-0 text-micro text-brand-deep"
-      >
+        className="shrink-0 text-micro text-brand-deep">
         Qaytarish
       </button>
     )
@@ -195,8 +206,7 @@ function RetireLine({
       type="button"
       disabled={busy}
       onClick={() => onSet(true)}
-      className="shrink-0 text-micro text-ink-soft hover:text-danger"
-    >
+      className="shrink-0 text-micro text-ink-soft hover:text-danger">
       Olib tashlash
     </button>
   )
@@ -205,18 +215,9 @@ function RetireLine({
 function Status({ status }: { status: AdminProduct["status"] }) {
   const word =
     status === "active" ? "sotuvda" : status === "draft" ? "rasmsiz" : "arxiv"
-  return (
-    <span
-      className={cn(
-        "shrink-0 rounded-full px-2 py-0.5 text-micro",
-        status === "active" && "bg-good-soft text-good",
-        status === "draft" && "bg-warn-soft text-warn-ink",
-        status === "archived" && "bg-line-soft text-ink-soft",
-      )}
-    >
-      {word}
-    </span>
-  )
+  const tone: Tone =
+    status === "active" ? "good" : status === "draft" ? "warn" : "neutral"
+  return <Pill tone={tone}>{word}</Pill>
 }
 
 // ------------------------------------------------------------------- one card
@@ -248,11 +249,7 @@ function DeleteCard({
 
   if (!asked) {
     return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="gap-1 text-danger"
-        onClick={() => setAsked(true)}
+      <Button variant="ghost" size="sm" className="gap-1 text-danger" onClick={() => setAsked(true)}
       >
         <Trash2 className="size-4" />
         O'chirish
@@ -263,11 +260,7 @@ function DeleteCard({
   return (
     <div className="flex items-center gap-2">
       <span className="text-micro text-danger">{title || "Bu karta"} — aniqmi?</span>
-      <Button
-        size="sm"
-        className="bg-danger text-danger-ink hover:bg-danger"
-        disabled={remove.isPending}
-        onClick={() =>
+      <Button size="sm" className="bg-danger text-danger-ink hover:bg-danger" disabled={remove.isPending} onClick={() =>
           remove.mutate(undefined, {
             onSuccess: onGone,
           })
@@ -321,8 +314,7 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
         }
       />
 
-      <section className="rounded-panel border bg-surface p-3">
-        <h2 className="mb-2 text-small font-semibold">Rang × o'lcham</h2>
+      <Panel title="Rang × o'lcham">
         {grid.isLoading ? <Waiting /> : null}
         {grid.data?.length === 0 ? <Empty what="To'r hali yaratilmagan." /> : null}
         {/* Where a colour comes from, said once and here: the sack. Somebody
@@ -378,13 +370,12 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
             </li>
           ))}
         </ul>
-      </section>
+      </Panel>
 
-      <section className="rounded-panel border bg-surface p-3">
-        <h2 className="mb-2 flex items-center gap-2 text-small font-semibold">
-          <ImageIcon className="size-4" />
-          Rasmlar — har rangga bittadan
-        </h2>
+      <Panel
+        title="Rasmlar — har rangga bittadan"
+        aside={<ImageIcon className="size-4 text-ink-faint" />}
+      >
         <PhotoStep
           colours={colours.length ? colours : [""]}
           taken={taken}
@@ -397,8 +388,7 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
                 <img
                   src={mediaUrl(image.url)}
                   alt={image.colour}
-                  className="aspect-square w-full rounded-control object-cover"
-                />
+                  className="aspect-square w-full rounded-control object-cover" />
                 <figcaption className="truncate text-center text-micro text-ink-faint">
                   {image.colour || "umumiy"}
                 </figcaption>
@@ -406,12 +396,10 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
             ))}
           </div>
         ) : null}
-      </section>
+      </Panel>
 
       {product ? (
-        <Button
-          className="h-control-lg w-full gap-2"
-          disabled={publish.isPending || (product.status !== "active" && missing.length > 0)}
+        <Button size="lg" className="w-full gap-2" disabled={publish.isPending || (product.status !=="active" && missing.length > 0)}
           onClick={() =>
             publish.mutate(product.status === "active" ? "archived" : "active")
           }

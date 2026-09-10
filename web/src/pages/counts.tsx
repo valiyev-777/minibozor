@@ -42,21 +42,15 @@ export function CountsPage() {
             },
           })
         }}
-        className="flex flex-wrap gap-2 rounded-panel border bg-surface p-3"
-      >
+        className="flex flex-wrap gap-2 rounded-panel border border-line bg-surface shadow-panel p-3">
         <Input
           autoFocus
           value={code}
           onChange={(event) => setCode(event.target.value.toUpperCase())}
           placeholder="A-02-03"
           aria-label="Katak kodi"
-          className="h-control-lg flex-1 tabular text-body"
-        />
-        <Button
-          type="submit"
-          disabled={start.isPending || !code.trim()}
-          className="h-control-lg"
-        >
+          className="h-control-lg flex-1 tabular text-body" />
+        <Button size="lg" type="submit" disabled={start.isPending || !code.trim()} >
           Sanashni boshlash
         </Button>
       </form>
@@ -111,8 +105,7 @@ function Sheet({ id, onDone }: { id: number; onDone: () => void }) {
           return (
             <li
               key={line.variant_id}
-              className="flex items-center gap-3 rounded-panel border bg-surface p-3"
-            >
+              className="flex items-center gap-3 rounded-panel border border-line bg-surface shadow-panel p-3">
               <div className="min-w-0 flex-1">
                 <div className="truncate text-small text-ink-soft">
                   {line.product_title}
@@ -136,8 +129,7 @@ function Sheet({ id, onDone }: { id: number; onDone: () => void }) {
                       [line.variant_id]: event.target.value.replace(/\D/g, ""),
                     }))
                   }
-                  className="h-control-lg tabular text-body"
-                />
+                  className="h-control-lg tabular text-body" />
                 {difference ? (
                   <div
                     className={cn(
@@ -156,18 +148,14 @@ function Sheet({ id, onDone }: { id: number; onDone: () => void }) {
       </ul>
 
       {!closed && count.data.lines.length ? (
-        <div className="space-y-2 rounded-panel border bg-surface p-3">
+        <div className="space-y-2 rounded-panel border border-line bg-surface shadow-panel p-3">
           <Input
             value={note}
             onChange={(event) => setNote(event.target.value)}
             placeholder="Izoh (ixtiyoriy)"
             aria-label="Izoh"
-            className="h-control"
-          />
-          <Button
-            className="h-control-lg w-full gap-2 text-body"
-            disabled={submit.isPending}
-            onClick={() =>
+            className="h-control" />
+          <Button size="lg" className="w-full gap-2" disabled={submit.isPending} onClick={() =>
               submit.mutate(
                 {
                   lines: count.data.lines.map((line) => ({

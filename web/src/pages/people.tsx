@@ -64,7 +64,7 @@ function Person({ person }: { person: StaffUser }) {
   const setRole = useSetRole(person.id)
 
   return (
-    <div className="rounded-panel border bg-surface p-3">
+    <div className="rounded-panel border border-line bg-surface shadow-panel p-3">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">
           <div className="truncate text-small font-medium">
@@ -115,16 +115,14 @@ export function CategoriesPage() {
             { onSuccess: () => setName("") },
           )
         }}
-        className="flex flex-wrap gap-2 rounded-panel border bg-surface p-3"
-      >
+        className="flex flex-wrap gap-2 rounded-panel border border-line bg-surface shadow-panel p-3">
         <Input
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="Krossovkalar"
           aria-label="Kategoriya nomi"
-          className="h-control flex-1"
-        />
-        <Button type="submit" disabled={write.isPending || !name.trim()} className="h-control">
+          className="h-control flex-1" />
+        <Button type="submit" disabled={write.isPending || !name.trim()} >
           Qo'shish
         </Button>
         {name.trim() ? (
@@ -144,8 +142,7 @@ export function CategoriesPage() {
         {(categories.data ?? []).map((category) => (
           <li
             key={category.slug}
-            className="flex items-center gap-3 rounded-panel border bg-surface p-3"
-          >
+            className="flex items-center gap-3 rounded-panel border border-line bg-surface shadow-panel p-3">
             <div className="min-w-0 flex-1">
               <div className="truncate text-small font-medium">{category.name}</div>
               <div className="text-micro tabular text-ink-faint">{category.slug}</div>
@@ -193,8 +190,7 @@ export function CouriersPage() {
         {(couriers.data ?? []).map((courier) => (
           <li
             key={courier.id}
-            className="flex items-center gap-3 rounded-panel border bg-surface p-3"
-          >
+            className="flex items-center gap-3 rounded-panel border border-line bg-surface shadow-panel p-3">
             <div className="min-w-0 flex-1">
               <div className="truncate text-small font-medium">
                 {courier.full_name || courier.phone}
@@ -205,8 +201,7 @@ export function CouriersPage() {
                 on the shelf map as a tile per bag rather than duplicated here. */}
             <a
               href="/ombor"
-              className="text-micro underline underline-offset-2 text-ink-soft"
-            >
+              className="text-micro underline underline-offset-2 text-ink-soft">
               Xaritada
             </a>
           </li>

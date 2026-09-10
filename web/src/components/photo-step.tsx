@@ -160,15 +160,13 @@ export function Capture({
     <div
       ref={area}
       tabIndex={0}
-      className="space-y-2 rounded-panel border border-dashed p-3 focus:outline-none focus:ring-2 focus:ring-brand"
-    >
+      className="space-y-2 rounded-panel border border-dashed p-3 focus:outline-none focus:ring-2 focus:ring-brand">
       <div className="relative mx-auto aspect-square w-full max-w-56 overflow-hidden rounded-control bg-canvas">
         {current ? (
           <img
             src={mediaUrl(current)}
             alt={colour}
-            className="size-full object-contain"
-          />
+            className="size-full object-contain" />
         ) : (
           <>
             {/* The guide frame. Consistency across the catalogue is worth more
@@ -194,20 +192,12 @@ export function Capture({
       <p className="text-center text-micro text-ink-faint">{guide}</p>
 
       <div className="flex flex-wrap justify-center gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          className="h-control gap-2"
-          onClick={() => camera.current?.click()}
+        <Button type="button" variant="secondary" className="gap-2" onClick={() => camera.current?.click()}
         >
           <Camera className="size-4" />
           Kamera
         </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          className="h-control gap-2"
-          onClick={() => gallery.current?.click()}
+        <Button type="button" variant="secondary" className="gap-2" onClick={() => gallery.current?.click()}
         >
           <ImagePlus className="size-4" />
           Fayl

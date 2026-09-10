@@ -182,15 +182,14 @@ function Steps({ at }: { at: 1 | 2 }) {
             {step.href ? (
               <a
                 href={step.href}
-                className="flex h-full items-center gap-2 rounded-panel border border-dashed bg-surface p-2 hover:border-brand"
-              >
+                className="flex h-full items-center gap-2 rounded-panel border border-dashed bg-surface p-2 hover:border-brand">
                 {body}
                 <ArrowRight className="size-4 shrink-0 text-ink-faint" />
               </a>
             ) : (
               <div
                 className={cn(
-                  "flex h-full items-center gap-2 rounded-panel border bg-surface p-2",
+                  "flex h-full items-center gap-2 rounded-panel border border-line bg-surface shadow-panel p-2",
                   here && "border-brand",
                 )}
               >
@@ -219,8 +218,7 @@ function Choose({ onPick }: { onPick: (mode: Mode) => void }) {
       <button
         type="button"
         onClick={() => onPick("existing")}
-        className="flex flex-col items-start gap-1 rounded-panel border-2 bg-surface p-4 text-left hover:border-brand"
-      >
+        className="flex flex-col items-start gap-1 rounded-panel border-2 bg-surface p-4 text-left hover:border-brand">
         <Search className="size-6 text-brand" />
         <span className="text-body font-semibold">Bor tavar yana keldi</span>
         <span className="text-small text-ink-soft">
@@ -231,8 +229,7 @@ function Choose({ onPick }: { onPick: (mode: Mode) => void }) {
       <button
         type="button"
         onClick={() => onPick("new")}
-        className="flex flex-col items-start gap-1 rounded-panel border-2 bg-surface p-4 text-left hover:border-brand"
-      >
+        className="flex flex-col items-start gap-1 rounded-panel border-2 bg-surface p-4 text-left hover:border-brand">
         <Sparkles className="size-6 text-brand" />
         <span className="text-body font-semibold">Yangi tavar</span>
         <span className="text-small text-ink-soft">
@@ -350,7 +347,7 @@ function PileForm({
             onColour={(colour) => set("colour", colour)}
           />
 
-          <div className="grid gap-3 rounded-panel border bg-surface p-3 sm:grid-cols-2">
+          <div className="grid gap-3 rounded-panel border border-line bg-surface shadow-panel p-3 sm:grid-cols-2">
             <label>
               <span className="mb-1 block text-micro text-ink-soft">
                 Tannarx — bir dona
@@ -361,8 +358,7 @@ function PileForm({
                 inputMode="numeric"
                 placeholder="85 000"
                 aria-label="Tannarx"
-                className="h-control-lg tabular text-body"
-              />
+                className="h-control-lg tabular text-body" />
             </label>
             <Place value={draft.place} onSet={(place) => set("place", place)} />
           </div>
@@ -391,11 +387,7 @@ function PileForm({
                 {money(total * (Number(draft.unitCost) || 0))}
               </div>
             </div>
-            <Button
-              type="submit"
-              disabled={!ready || book.isPending}
-              className="h-control-lg gap-2 text-body"
-            >
+            <Button size="lg" type="submit" disabled={!ready || book.isPending} className="gap-2">
               {book.isPending ? (
                 <Loader2 className="size-5 animate-spin" />
               ) : (
@@ -446,7 +438,7 @@ function FindCard({
   const found = useProducts(needle, "")
 
   return (
-    <section className="space-y-3 rounded-panel border bg-surface p-3">
+    <section className="space-y-3 rounded-panel border border-line bg-surface shadow-panel p-3">
       <div className="flex items-center justify-between">
         <h2 className="text-small font-semibold">Qaysi tavar keldi?</h2>
         <Button type="button" variant="ghost" size="sm" onClick={onBack} aria-label="Orqaga">
@@ -462,8 +454,7 @@ function FindCard({
           onChange={(event) => setNeedle(event.target.value)}
           placeholder="nom yoki kod"
           aria-label="Mavjud kartani qidirish"
-          className="h-control-lg pl-8 text-body"
-        />
+          className="h-control-lg pl-8 text-body" />
       </div>
 
       {found.isLoading ? <Waiting what="Kartalar" /> : null}
@@ -474,8 +465,7 @@ function FindCard({
             <button
               type="button"
               onClick={() => onPick(product)}
-              className="flex w-full items-center gap-3 py-2 text-left"
-            >
+              className="flex w-full items-center gap-3 py-2 text-left">
               <Thumb product={product} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-small font-medium">{product.title}</div>
@@ -516,7 +506,7 @@ function WriteCard({
   const vocab = useVocab()
 
   return (
-    <section className="space-y-3 rounded-panel border bg-surface p-3">
+    <section className="space-y-3 rounded-panel border border-line bg-surface shadow-panel p-3">
       <div className="flex items-center justify-between">
         <h2 className="text-small font-semibold">Qanday tavar?</h2>
         <Button type="button" variant="ghost" size="sm" onClick={onBack} aria-label="Orqaga">
@@ -529,23 +519,20 @@ function WriteCard({
         options={vocab.data?.kinds ?? []}
         value={draft.kind}
         onChange={(value) => onSet("kind", value)}
-        placeholder="Krossovka"
-      />
+        placeholder="Krossovka" />
       <Chips
         label="Brend"
         options={vocab.data?.brands ?? []}
         value={draft.brand}
         onChange={(value) => onSet("brand", value)}
         placeholder="Nike"
-        none="brendsiz"
-      />
+        none="brendsiz" />
       <Chips
         label="Rang"
         options={vocab.data?.colours ?? []}
         value={draft.colour}
         onChange={(value) => onSet("colour", value)}
-        placeholder="Qora"
-      />
+        placeholder="Qora" />
 
       {draft.kind.trim() ? (
         <>
@@ -555,9 +542,8 @@ function WriteCard({
             current={draft.snapshot || undefined}
             onTaken={(_, url) => onSet("snapshot", url)}
             guide="tanish uchun — mijozga ko'rinmaydi"
-            placeholder="rasm"
-          />
-          <Button type="button" className="h-control-lg w-full gap-2" onClick={onNamed}>
+            placeholder="rasm" />
+          <Button size="lg" type="button" className="w-full gap-2" onClick={onNamed}>
             Davom etish
             <ArrowRight className="size-5" />
           </Button>
@@ -605,8 +591,7 @@ function Maybe({
             <button
               type="button"
               onClick={() => onPick(product)}
-              className="flex w-full items-center gap-2 rounded-control bg-surface p-2 text-left"
-            >
+              className="flex w-full items-center gap-2 rounded-control bg-surface p-2 text-left">
               <Thumb product={product} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-small font-medium">{product.title}</div>
@@ -635,8 +620,7 @@ function Thumb({ product }: { product: AdminProduct }) {
     <img
       src={mediaUrl(product.snapshot_url)}
       alt=""
-      className="size-11 shrink-0 rounded-control object-cover"
-    />
+      className="size-11 shrink-0 rounded-control object-cover" />
   )
 }
 
@@ -708,14 +692,12 @@ function Chips({
             onBlur={() => setWriting(false)}
             placeholder={placeholder}
             aria-label={label}
-            className="h-control w-40"
-          />
+            className="h-control w-40" />
         ) : (
           <button
             type="button"
             onClick={() => setWriting(true)}
-            className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep"
-          >
+            className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep">
             + yangi
           </button>
         )}
@@ -829,7 +811,7 @@ function Counts({
   }
 
   return (
-    <section className="space-y-3 rounded-panel border bg-surface p-3">
+    <section className="space-y-3 rounded-panel border border-line bg-surface shadow-panel p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-small font-semibold">Nechta keldi?</h2>
         {/* Two visible choices. It was one faint word in the corner reading
@@ -896,8 +878,7 @@ function Counts({
               onBlur={() => setNaming(false)}
               placeholder="Oq"
               aria-label="Yangi rang"
-              className="h-control w-32"
-            />
+              className="h-control w-32" />
           ) : (
             <button
               type="button"
@@ -905,8 +886,7 @@ function Counts({
                 onColour("")
                 setNaming(true)
               }}
-              className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep"
-            >
+              className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep">
               + yangi rang
             </button>
           )}
@@ -921,8 +901,7 @@ function Counts({
             inputMode="numeric"
             placeholder="12"
             aria-label="Nechta"
-            className="h-control-lg w-28 tabular text-body"
-          />
+            className="h-control-lg w-28 tabular text-body" />
           <span className="text-small text-ink-soft">dona keldi</span>
         </label>
       ) : (
@@ -957,8 +936,7 @@ function Counts({
                 key={size}
                 type="button"
                 onClick={() => add(size)}
-                className="h-control rounded-control border px-3 text-small"
-              >
+                className="h-control rounded-control border px-3 text-small">
                 {size}
               </button>
             ))}
@@ -978,14 +956,12 @@ function Counts({
                 }}
                 placeholder="XL"
                 aria-label="Yangi o'lcham"
-                className="h-control w-24 text-center"
-              />
+                className="h-control w-24 text-center" />
             ) : (
               <button
                 type="button"
                 onClick={() => setTyping(true)}
-                className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep"
-              >
+                className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep">
                 + boshqa
               </button>
             )}
@@ -1031,8 +1007,7 @@ function SizeRow({
         type="button"
         onClick={() => onChange(count > 1 ? String(count - 1) : "")}
         aria-label={`${size} — bittasini ayirish`}
-        className="h-control w-11 shrink-0 rounded-control border text-body"
-      >
+        className="h-control w-11 shrink-0 rounded-control border text-body">
         −
       </button>
       <Input
@@ -1049,8 +1024,7 @@ function SizeRow({
         type="button"
         onClick={() => onChange(String(count + 1))}
         aria-label={`${size} — bittasini qo'shish`}
-        className="h-control w-11 shrink-0 rounded-control border text-body"
-      >
+        className="h-control w-11 shrink-0 rounded-control border text-body">
         +
       </button>
       <span className="text-small text-ink-soft">dona</span>
@@ -1063,8 +1037,7 @@ function SizeRow({
         type="button"
         onClick={onDrop}
         aria-label={`${size} — ro'yxatdan olib tashlash`}
-        className="ml-auto h-control w-11 shrink-0 rounded-control text-small text-ink-faint"
-      >
+        className="ml-auto h-control w-11 shrink-0 rounded-control text-small text-ink-faint">
         ✕
       </button>
     </li>
@@ -1090,8 +1063,7 @@ function Place({ value, onSet }: { value: string; onSet: (place: string) => void
         placeholder="Chorsu"
         aria-label="Qayerdan"
         list="mb-places"
-        className="h-control-lg"
-      />
+        className="h-control-lg" />
       <datalist id="mb-places">
         {places.map((one) => (
           <option key={one} value={one} />
@@ -1177,7 +1149,7 @@ function Cells({
   }, [map.data])
 
   return (
-    <section className="space-y-3 rounded-panel border bg-surface p-3">
+    <section className="space-y-3 rounded-panel border border-line bg-surface shadow-panel p-3">
       <div className="flex items-baseline justify-between">
         <h2 className="text-small font-semibold">Qaysi yacheykaga?</h2>
         {chosen ? (
@@ -1186,8 +1158,7 @@ function Cells({
           <button
             type="button"
             onClick={() => onChoose(suggested)}
-            className="tabular text-small font-medium text-brand-deep underline"
-          >
+            className="tabular text-small font-medium text-brand-deep underline">
             {suggested} — shu model shu yerda
           </button>
         ) : (
@@ -1220,8 +1191,7 @@ function Cells({
                 {Array.from({ length: columns }, (_, index) => index + 1).map((column) => (
                   <span
                     key={`head-${rack}-${column}`}
-                    className="pb-0.5 text-center text-micro tabular text-ink-faint"
-                  >
+                    className="pb-0.5 text-center text-micro tabular text-ink-faint">
                     {column}
                   </span>
                 ))}
@@ -1229,8 +1199,7 @@ function Cells({
                 {Array.from({ length: rows }, (_, index) => rows - index).flatMap((row) => [
                   <span
                     key={`row-${rack}-${row}`}
-                    className="self-center text-center text-micro tabular text-ink-faint"
-                  >
+                    className="self-center text-center text-micro tabular text-ink-faint">
                     {row}
                   </span>,
                   ...Array.from({ length: columns }, (_, index) => index + 1).map((column) => {
@@ -1323,19 +1292,15 @@ function Booked({
       {/* Two ways on, because a sack has two ways of not being finished: it
           holds another colour, or this colour did not fit one cell. */}
       <div className="space-y-2">
-        <Button className="h-control-lg w-full gap-2" onClick={onAnotherColour}>
+        <Button size="lg" className="w-full gap-2" onClick={onAnotherColour}>
           <Plus className="size-5" />
           Shu qopdan yana bir rang
         </Button>
         <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            className="h-control flex-1"
-            onClick={onAnotherCell}
-          >
+          <Button variant="secondary" className="flex-1" onClick={onAnotherCell} >
             Qolganini boshqa yacheykaga
           </Button>
-          <Button variant="ghost" className="h-control" onClick={onDone}>
+          <Button variant="ghost" onClick={onDone}>
             Tugadi
           </Button>
         </div>
@@ -1364,12 +1329,11 @@ function Sacks() {
   const waiting = drafts.data?.length ?? 0
 
   return (
-    <section className="rounded-panel border bg-surface p-3">
+    <section className="rounded-panel border border-line bg-surface shadow-panel p-3">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-baseline justify-between"
-      >
+        className="flex w-full items-baseline justify-between">
         <span className="text-small font-semibold">Ochilmagan qoplar</span>
         <span className={cn("text-small tabular", waiting && "font-semibold text-warn-ink")}>
           {waiting || "yo'q"}
@@ -1395,8 +1359,7 @@ function Sacks() {
                 onChange={(event) => setSacks(event.target.value.replace(/\D/g, ""))}
                 inputMode="numeric"
                 aria-label="Nechta qop"
-                className="h-control tabular"
-              />
+                className="h-control tabular" />
             </label>
             <label className="min-w-32 flex-1">
               <span className="mb-1 block text-micro text-ink-soft">Qayerdan</span>
@@ -1405,10 +1368,9 @@ function Sacks() {
                 onChange={(event) => setPlace(event.target.value)}
                 placeholder="Chorsu"
                 aria-label="Qop qayerdan"
-                className="h-control"
-              />
+                className="h-control" />
             </label>
-            <Button type="submit" variant="secondary" className="h-control">
+            <Button type="submit" variant="secondary">
               Keldi
             </Button>
           </form>
@@ -1449,11 +1411,7 @@ function Sack({
           {age(sack.age_minutes)} turgan
         </div>
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={sorted.isPending}
-        onClick={() => sorted.mutate()}
+      <Button variant="ghost" size="sm" disabled={sorted.isPending} onClick={() => sorted.mutate()}
       >
         {sorted.isPending ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
         Saralandi

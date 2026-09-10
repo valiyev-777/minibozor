@@ -58,8 +58,7 @@ export function Shell() {
           type="button"
           onClick={() => setOpen((was) => !was)}
           aria-label="Menyu"
-          className="rounded-control p-2 hover:bg-white/10"
-        >
+          className="rounded-control p-2 hover:bg-white/10">
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
       </header>
@@ -85,11 +84,7 @@ export function Shell() {
               <Count of={item.badge} />
             </NavLink>
           ))}
-          <Button
-            variant="ghost"
-            onClick={signOut}
-            className="h-control-lg justify-start gap-3 px-3 text-rail-ink hover:bg-white/10"
-          >
+          <Button size="lg" variant="ghost" onClick={signOut} className="justify-start gap-3 px-3 text-rail-ink hover:bg-white/10">
             <LogOut className="size-5" />
             Chiqish
           </Button>
@@ -158,11 +153,7 @@ function Who({
         <div className="truncate text-small">{name}</div>
         <div className="text-micro opacity-70">{roleWord(role)}</div>
       </div>
-      <Button
-        variant="ghost"
-        onClick={onSignOut}
-        className="h-control w-full justify-start gap-2 px-1 text-rail-ink hover:bg-white/10"
-      >
+      <Button variant="ghost" onClick={onSignOut} className="w-full justify-start gap-2 px-1 text-rail-ink hover:bg-white/10">
         <LogOut className="size-4" />
         Chiqish
       </Button>
