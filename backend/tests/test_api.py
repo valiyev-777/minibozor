@@ -1449,6 +1449,48 @@ def test_a_count_can_find_something_nobody_expected(
     _assert_the_room_adds_up()
 
 
+def test_a_count_that_skips_a_line_is_refused(
+    client: TestClient, admin: dict[str, str], warehouse: dict[str, str]
+) -> None:
+    """Silence is not agreement.
+
+    The rule was written down and not enforced: a variant the system believes
+    is in this cell and that nobody answered for kept its old figure, with a
+    stocktake's signature on it. The whole point of counting is to find the
+    cell that disagrees.
+    """
+    card, ids = _on_sale(client, admin, warehouse, sku="ALFA-SKIP", stock=4)
+    started = client.post(
+        f"{API}/warehouse/counts", json={"code": loc.QABUL}, headers=warehouse
+    )
+    assert started.status_code == 201, started.text
+    count = started.json()
+    assert len(count["lines"]) >= 2
+
+    one = count["lines"][0]
+    short = client.post(
+        f"{API}/warehouse/counts/{count['id']}/submit",
+        json={"lines": [{"variant_id": one["variant_id"], "counted_qty": 1}]},
+        headers={**warehouse, "Idempotency-Key": f"skip-{count['id']}"},
+    )
+    assert short.status_code == 400, short.text
+    assert "sanash kerak" in short.json()["detail"]
+
+    # Answered in full, and the difference goes in the ledger as always.
+    whole = client.post(
+        f"{API}/warehouse/counts/{count['id']}/submit",
+        json={
+            "lines": [
+                {"variant_id": line["variant_id"], "counted_qty": line["expected_qty"]}
+                for line in count["lines"]
+            ]
+        },
+        headers={**warehouse, "Idempotency-Key": f"whole-{count['id']}"},
+    )
+    assert whole.status_code == 200, whole.text
+    _assert_the_room_adds_up()
+
+
 def test_one_count_per_cell_at_a_time(
     client: TestClient, warehouse: dict[str, str]
 ) -> None:

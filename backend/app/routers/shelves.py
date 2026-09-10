@@ -354,6 +354,26 @@ def submit_count(
         ).all()
     }
 
+    # Silence is not agreement. The rule was written down and not enforced: a
+    # variant the system believes is in this cell and that nobody answered for
+    # is a line nobody counted, and skipping it quietly leaves the old figure
+    # standing with a stocktake's signature on it. The whole point of counting
+    # is to find the cell that disagrees, so an unanswered line is refused
+    # rather than assumed right.
+    answered = {line.variant_id for line in payload.lines}
+    missing = [row for variant_id, row in lines.items() if variant_id not in answered]
+    if missing:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            i18n.label(
+                "count_needs_every_line",
+                labels=", ".join(
+                    sorted(pr.label(session.get(ProductVariant, row.variant_id)) or "—"
+                           for row in missing)
+                ),
+            ),
+        )
+
     touched: set[int] = set()
     for counted in payload.lines:
         variant = _variant(session, counted.variant_id)

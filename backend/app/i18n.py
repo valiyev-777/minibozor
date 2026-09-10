@@ -353,6 +353,11 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Выберите, какой цвет пришёл: {colours}",
         "en": "Say which colour arrived: {colours}",
     },
+    "count_needs_every_line": {
+        "uz": "Har bir qatorni sanash kerak — bunisi qolib ketdi: {labels}",
+        "ru": "Каждую строку нужно пересчитать — эти пропущены: {labels}",
+        "en": "Every line has to be counted — these were left out: {labels}",
+    },
     "variant_still_holds": {
         "uz": "Bu yacheykada {count} dona bor — avval javondan chiqarish kerak",
         "ru": "Здесь ещё {count} шт. — сначала спишите или переместите",
