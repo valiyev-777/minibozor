@@ -15,6 +15,13 @@ export default defineConfig({
     tailwind(),
     VitePWA({
       registerType: "autoUpdate",
+      // The bundle passed 2 MiB — recharts, the barcode writer and the icon
+      // set are most of it — and workbox refuses to precache a file over its
+      // default limit, which fails the build rather than shipping an app that
+      // does not work offline. Raised deliberately: this is an installed shop
+      // application on a warehouse phone, and the whole point of precaching
+      // is that the wifi by the shelves is the thing that fails.
+      workbox: { maximumFileSizeToCacheInBytes: 4 * 1024 * 1024 },
       // Installable because half of this app is used standing up, in a
       // warehouse, on a phone — a browser chrome and an address bar are two
       // rows of a screen that wants them for a pick list.

@@ -55,6 +55,7 @@ import { useEffect, useMemo, useState } from "react"
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 
 import { RailSearch } from "@/components/rail-search"
+import { ScreenBoundary } from "@/pages/oops"
 import {
   DropdownMenu,
   DropdownMenuCheckItem,
@@ -68,7 +69,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/cn"
-import { densityFor, isGroup, matchNav, navFor, type NavItem } from "@/lib/nav"
+import { densityFor, homeFor, isGroup, matchNav, navFor, type NavItem } from "@/lib/nav"
 import { useDashboard } from "@/lib/queries"
 import { useSession } from "@/lib/session"
 import { useTheme, type ThemeMode } from "@/lib/theme"
@@ -184,7 +185,12 @@ export function Shell() {
         ) : null}
 
         <main className="p-(--gap-page)">
-          <Outlet />
+          {/* Inside the shell: the rail and the top bar did not throw, and
+              somebody whose screen fell over still wants the menu. Keyed by
+              path so leaving the broken screen clears it. */}
+          <ScreenBoundary home={homeFor(staff.role)} at={location.pathname}>
+            <Outlet />
+          </ScreenBoundary>
         </main>
       </div>
     </div>

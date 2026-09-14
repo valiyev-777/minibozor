@@ -36,7 +36,7 @@
  * pixels above the thing it adds a row to is a button in the wrong place.
  */
 
-import { Filter as FilterGlyph, Search, X } from "lucide-react"
+import { Download, Filter as FilterGlyph, Search, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 
@@ -57,6 +57,10 @@ export type Column<T> = {
   numeric?: boolean
   /** A CSS width. `"1%"` for a column that should shrink to its content. */
   width?: string
+  /** What this column writes into an export, when the cell is not text. */
+  export?: (row: T) => React.ReactNode
+  /** A column of pictures or buttons: nothing to export. */
+  hideExport?: boolean
   className?: string
   /** Sortable, by `key`, through the URL. */
   sortable?: boolean
@@ -184,6 +188,7 @@ export function DataTable<T>({
   namespace,
   search,
   searchable = true,
+  exportable = true,
   className,
 }: {
   title: string
@@ -225,6 +230,8 @@ export function DataTable<T>({
    * wrong question is worse than no box, so that table says so here.
    */
   searchable?: boolean
+  /** A list nobody would take away from the screen — a pick queue, a shelf. */
+  exportable?: boolean
   className?: string
 }) {
   const state = useTableState(namespace)
@@ -365,6 +372,21 @@ export function DataTable<T>({
               S
             </kbd>
           </div>
+          ) : null}
+
+          {/* Every list can leave the screen. The boilerplate puts this on
+              each table and so does this one — once, here, rather than as a
+              thing each screen remembers. */}
+          {exportable && records > 0 ? (
+            <button
+              type="button"
+              onClick={() => download(title, shown, columns)}
+              title="Ko'rinib turgan ro'yxatni yuklab olish"
+              className="inline-flex h-control shrink-0 items-center gap-2 rounded-control bg-good-soft px-3 text-small font-medium text-good transition-colors hover:brightness-95"
+            >
+              <Download className="size-4" />
+              Yuklab olish
+            </button>
           ) : null}
 
           {afterSearch}
@@ -828,4 +850,64 @@ function pages(page: number, last: number): Array<number | null> {
   if (to < last - 1) out.push(null)
   out.push(last)
   return out
+}
+
+/* ------------------------------------------------------------------ export */
+
+/**
+ * The rows on screen, as a file.
+ *
+ * **What is exported is what is displayed** — the same columns, in the same
+ * order, filtered and sorted the same way. An export that quietly hands back
+ * the unfiltered table is how somebody sends a supplier a list of everything.
+ *
+ * The text comes out of the *cells*, not out of the data: a cell that renders
+ * "Qora / 42" from two fields should export "Qora / 42" and not make the
+ * reader reassemble it. Cells are React nodes, so the tree is walked for its
+ * strings; a column whose cell is a picture or a button gives an empty
+ * string, which is the honest answer for a column that has no text in it.
+ *
+ * CSV with a semicolon and a byte-order mark: that is the pair Excel opens
+ * into columns on a machine set to Uzbek or Russian, where a comma is a
+ * decimal point. `utf-8` alone gives one column of mojibake.
+ */
+function text(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") return ""
+  if (typeof node === "string") return node
+  if (typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(text).join(" ")
+  if (typeof node === "object" && "props" in (node as { props?: unknown })) {
+    const props = (node as { props?: { children?: React.ReactNode } }).props
+    return text(props?.children)
+  }
+  return ""
+}
+
+function download<T>(name: string, rows: T[], columns: Column<T>[]) {
+  const wanted = columns.filter((column) => !column.hideExport)
+  const lines = [
+    wanted.map((column) => text(column.header)),
+    ...rows.map((row, index) =>
+      wanted.map((column) => text(column.export?.(row) ?? column.cell(row, index))),
+    ),
+  ]
+  const csv = lines
+    .map((line) =>
+      line
+        .map((cell) => {
+          const clean = cell.replace(/\s+/g, " ").trim()
+          return /[";\n]/.test(clean) ? `"${clean.replace(/"/g, '""')}"` : clean
+        })
+        .join(";"),
+    )
+    .join("\r\n")
+
+  const stamp = new Date().toISOString().slice(0, 10)
+  const file = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" })
+  const url = URL.createObjectURL(file)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = `${name} ${stamp}.csv`.replace(/[\\/:*?"<>|]/g, "-")
+  link.click()
+  URL.revokeObjectURL(url)
 }

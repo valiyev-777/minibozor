@@ -104,15 +104,54 @@ async function unwrap<T>(response: Response): Promise<T> {
   return body as T
 }
 
+/** The field names a person would recognise, for the sentence above. */
+const FIELDS: Record<string, string> = {
+  name: "nomi",
+  title: "nomi",
+  phone: "telefon",
+  price: "narx",
+  quantity: "soni",
+  unit_cost: "tannarx",
+  colour: "rang",
+  size: "o'lcham",
+  sku: "kod",
+  code: "kod",
+  location_code: "yacheyka",
+  reason: "sabab",
+  note: "izoh",
+  slug: "manzil",
+  sizes: "o'lchamlar",
+  full_name: "ism",
+}
+
 function detail(body: unknown): string {
   if (body && typeof body === "object" && "detail" in body) {
     const value = (body as { detail: unknown }).detail
     if (typeof value === "string") return value
     // A validation error is a list of field problems. The first one is the
     // one somebody can act on; the rest are the same form, further down.
+    //
+    // **Said in Uzbek, and about the field.** FastAPI's own message is
+    // Pydantic's English — "String should have at least 1 character" — which
+    // is a sentence about a type, shown to a warehouse worker who typed a
+    // name wrong. Everything else this API refuses with is already
+    // translated by `app.i18n`; this was the one door that let English out.
     if (Array.isArray(value) && value.length) {
-      const first = value[0] as { msg?: string }
-      return first.msg ?? ""
+      const first = value[0] as { msg?: string; type?: string; loc?: unknown[] }
+      const field = Array.isArray(first.loc) ? String(first.loc.at(-1) ?? "") : ""
+      const named = FIELDS[field] ?? field
+      const about = named ? ` — ${named}` : ""
+      if (first.type?.includes("missing")) return `To'ldirilmagan${about}`
+      if (first.type?.includes("too_short") || first.type?.includes("min_length")) {
+        return `Juda qisqa${about}`
+      }
+      if (first.type?.includes("too_long") || first.type?.includes("max_length")) {
+        return `Juda uzun${about}`
+      }
+      if (first.type?.includes("greater_than") || first.type?.includes("less_than")) {
+        return `Noto'g'ri son${about}`
+      }
+      return `Ma'lumot noto'g'ri${about}`
     }
   }
   return ""

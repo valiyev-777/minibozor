@@ -350,6 +350,14 @@ export type AdminCategory = {
 /** What building a shelf unit answers with: the letter, and how many cells. */
 export type Rack = { rack: string; cells: number; message: string }
 
+/** A cell taken out of the room, and whether its row went with it.
+ *
+ *  `erased` is reported, never asked for: the server deletes the row when
+ *  nothing in the ledger names the cell and keeps it invisibly when a
+ *  movement or a stocktake does. Both are gone from the map, which is why no
+ *  screen branches on it — it is only there for the sentence afterwards. */
+export type CellRemoved = { code: string; erased: boolean; message: string }
+
 // -------------------------------------------------------------------- returns
 
 export type ReturnStatus = "submitted" | "approved" | "rejected" | "refunded"

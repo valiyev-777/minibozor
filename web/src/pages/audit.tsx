@@ -103,6 +103,8 @@ export const ACTIONS: Record<string, string> = {
   "stock.damage": "Yaroqsizga chiqarildi",
   "stock.empty": "Bo'shatildi",
   "location.rack_added": "Javon qo'shildi",
+  "location.rack_extended": "Javonga katak qo'shildi",
+  "location.removed": "Yacheyka o'chirildi",
   "pickup.create": "Olib ketish ochildi",
   "pickup.collect": "Olib ketildi",
   "pickup.receive": "Olib ketish qabul qilindi",
@@ -115,7 +117,7 @@ export const ACTIONS: Record<string, string> = {
 
 /** Something was taken away, called off or thrown out. Worth a colour in a
  *  log that is otherwise a wall of ordinary work. */
-const UNDOING = /cancel|delete|archive|damage|failed|empty|retired/
+const UNDOING = /cancel|delete|archive|damage|failed|empty|retired|removed/
 
 function toneOf(row: AuditRow): Tone | null {
   // An account switched off is an undoing, and the action alone cannot say

@@ -11,6 +11,7 @@ import { Navigate, Route, Routes } from "react-router-dom"
 
 import { Shell } from "@/components/shell"
 import { LoginPage } from "@/pages/login"
+import { NotFound } from "@/pages/oops"
 import { CountsPage } from "@/pages/counts"
 import { CourierHistoryPage, EarningsPage, MyWorkPage } from "@/pages/courier"
 import { DashboardPage } from "@/pages/dashboard"
@@ -121,7 +122,10 @@ export function App() {
           <Route path="/daromad" element={<EarningsPage />} />
         ) : null}
 
-        <Route path="*" element={<Navigate to={home} replace />} />
+        {/* Said, not silently corrected. A wrong address that redirects
+            home leaves somebody believing the link they were sent *is* the
+            dashboard. */}
+        <Route path="*" element={<NotFound home={home} />} />
       </Route>
     </Routes>
   )

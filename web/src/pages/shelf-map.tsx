@@ -63,10 +63,10 @@ import {
   Grid3x3,
   Layers,
   Loader2,
+  Minus,
   PackageCheck,
   PackageSearch,
   Plus,
-  RotateCcw,
   Search,
   X,
 } from "lucide-react"
@@ -97,8 +97,8 @@ import {
   useMove,
   useMoveCell,
   usePickQueue,
-  useRetiredCells,
-  useSetCellActive,
+  useRemoveCell,
+  useRemoveCells,
   useShelfMap,
   useSupplies,
   useWhereIs,
@@ -165,9 +165,6 @@ function movingModel(moving: Moving): { id: number; title: string } | null {
 
 export function ShelfMapPage() {
   const room = useShelfMap()
-  // The holes in the room, on their own door. They are drawn in the grid and
-  // counted in nothing — see `Racks`.
-  const gone = useRetiredCells()
   const [needle, setNeedle] = useState("")
   const found = useWhereIs(needle)
   const [open, setOpen] = useState<string | null>(null)
@@ -321,7 +318,6 @@ export function ShelfMapPage() {
           />
           <Racks
             cells={room.data.cells}
-            retired={gone.data ?? []}
             lit={searching && !moving ? lit : null}
             onOpen={setOpen}
             targeting={targeting}
@@ -642,14 +638,11 @@ function Job({
 
 function Racks({
   cells,
-  retired,
   lit,
   onOpen,
   targeting,
 }: {
   cells: Location[]
-  /** Cells that are no longer part of the room. Drawn, never counted. */
-  retired: Location[]
   lit: Set<string> | null
   onOpen: (code: string) => void
   targeting: Targeting | null
@@ -657,27 +650,26 @@ function Racks({
   // Grouped from the data, so a fourth rack is a seed change and not a code
   // change — and so is a rack with five columns.
   //
-  // **The retired cells are grouped in here and nowhere else.** A rack takes
-  // its shape from the cells it is given — `max(column_no) × max(row_no)` —
-  // so a cell retired out of the last column or the top row would quietly
-  // shrink the shelf on screen, and the shelf standing in the room would not
-  // have moved. The hole has to be drawn for the picture to stay true; it is
-  // still a hole, and every figure below is counted from `cells` alone.
+  // **One list, and it is the room's.** Cells taken out used to be fetched
+  // separately and drawn back in here, struck through, so that a rack would
+  // not appear to shrink when its last column went. It was the wrong picture:
+  // a column that has been unbolted is not a column of crossed-out tiles, it
+  // is a rack that is four wide. The shape below is measured from what the
+  // room has, and so is every figure beside it.
   const racks = useMemo(() => {
     const byRack = new Map<string, Location[]>()
-    for (const cell of [...cells, ...retired]) {
+    for (const cell of cells) {
       const key = cell.rack ?? "?"
       byRack.set(key, [...(byRack.get(key) ?? []), cell])
     }
     return [...byRack.entries()].sort(([a], [b]) => a.localeCompare(b))
-  }, [cells, retired])
+  }, [cells])
 
   // What the room itself is doing, on the line that names it. Three figures
   // and no more: how much is on the shelves, how much of the shelving is
   // spoken for, and how many cells are at capacity — which is the one that
   // decides whether the next sack has anywhere to go.
   //
-  // A retired cell is not shelving the shop has. It is in none of these.
   const held = cells.reduce((sum, cell) => sum + cell.units, 0)
   const busy = cells.filter((cell) => cell.units > 0).length
   const full = cells.filter((cell) => cell.fill_percent >= 90).length
@@ -737,7 +729,7 @@ function Racks({
           />
         ))}
       </div>
-      <Legend targeting={targeting} anyRetired={retired.length > 0} />
+      <Legend targeting={targeting} />
     </Panel>
   )
 }
@@ -749,15 +741,7 @@ function Racks({
  * saying so — colour that has to be learnt by watching it change is colour
  * that is read wrong on the day it matters.
  */
-function Legend({
-  targeting,
-  anyRetired,
-}: {
-  targeting: Targeting | null
-  /** Only drawn when there is a struck-through tile on screen to explain —
-   *  a legend entry for a state the room is not in is a line to read past. */
-  anyRetired: boolean
-}) {
+function Legend({ targeting }: { targeting: Targeting | null }) {
   // In a move the bars are not drawn and the colours mean something else:
   // what is on the cells is room and whether the model is already there.
   if (targeting) {
@@ -800,12 +784,6 @@ function Legend({
         <span className="h-3 w-4 rounded-xs border border-dashed border-line" />
         bo'sh katak
       </span>
-      {anyRetired ? (
-        <span className="flex items-center gap-1.5">
-          <span className="h-3 w-4 rounded-xs border border-dashed border-line bg-line-soft" />
-          <span className="line-through">olib tashlangan</span>
-        </span>
-      ) : null}
     </p>
   )
 }
@@ -868,7 +846,7 @@ function Rack({
 
       {/* Where somebody standing in front of this shelf would look for it:
           on the shelf, not in the page's header. */}
-      <AddCells rack={rack} columns={columns} rows={rows} />
+      <RackShape rack={rack} cells={cells} columns={columns} rows={rows} />
     </section>
   )
 }
@@ -938,13 +916,6 @@ function Cell({
   const highlighted = lit?.has(cell.code) ?? false
   const dimmed = lit !== null && !highlighted
   const empty = cell.units === 0
-
-  // A cell that is no longer part of the room. Drawn in the place it used to
-  // occupy so the rack keeps its real shape, struck through so it is not
-  // mistaken for a shelf with nothing on it, and never a destination.
-  if (!cell.is_active) {
-    return <RetiredCell cell={cell} onOpen={onOpen} targeting={targeting} />
-  }
 
   // --------------------------------------------------- the cell as a target
   if (targeting) {
@@ -1056,79 +1027,6 @@ function Cell({
           <Fill percent={cell.fill_percent} />
         </>
       )}
-    </button>
-  )
-}
-
-/**
- * The hole where a cell used to be, with the way back on it.
- *
- * Not a gap. A rack that was built 6×4 by mistake and had two columns taken
- * out of it is a different thing from a rack that was only ever 4×4, and the
- * difference matters the moment somebody asks why A stops at four: one of
- * them can be undone from here and the other cannot. So the tile stays in the
- * grid in the position it owns — which is also what keeps the rack its real
- * size — and says what happened to it.
- *
- * In a move it is inert. The pile door refuses a retired destination, and a
- * tile that takes a click and then explains a refusal is a tile that lied.
- */
-function RetiredCell({
-  cell,
-  onOpen,
-  targeting,
-}: {
-  cell: Location
-  onOpen: (code: string) => void
-  targeting: Targeting | null
-}) {
-  const { staff } = useSession()
-  const skin =
-    "flex min-h-16 flex-col justify-between rounded-control border border-dashed border-line bg-line-soft p-1.5 text-left"
-
-  if (targeting) {
-    return (
-      <div
-        className={cn(skin, "opacity-40")}
-        title={`${cell.code} — olib tashlangan, bu yerga qo'yib bo'lmaydi`}
-      >
-        <span className="whitespace-nowrap text-micro tabular leading-none text-ink-faint line-through">
-          {cell.code}
-        </span>
-        <span className="truncate text-micro leading-none text-ink-faint">olingan</span>
-      </div>
-    )
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(cell.code)}
-      title={`${cell.code} — olib tashlangan${
-        staff?.role === "admin" ? " · qaytarish uchun bosing" : ""
-      }`}
-      className={cn(
-        skin,
-        // Quieter than a live cell and quieter than an empty one: a hole in
-        // the shelving is not news every morning. The way back is legible on
-        // it and only picks up the accent under the cursor — forty struck
-        // tiles each printing a blue word would be the loudest thing in the
-        // room, and the goods are what the ink on this grid belongs to.
-        "group opacity-60 transition hover:border-brand hover:bg-brand-soft hover:opacity-100",
-      )}
-    >
-      <span className="whitespace-nowrap text-micro tabular leading-none text-ink-faint line-through">
-        {cell.code}
-      </span>
-      <span className="truncate text-micro leading-none text-ink-faint">
-        {staff?.role === "admin" ? (
-          <span className="group-hover:font-medium group-hover:text-brand-deep">
-            qaytarish
-          </span>
-        ) : (
-          "olingan"
-        )}
-      </span>
     </button>
   )
 }
@@ -1288,24 +1186,17 @@ function CellDialog({
 }) {
   const place = useLocation(code)
   const [chosen, setChosen] = useState<number[]>([])
-  // Bolting a cell back into the room. Unconditional on the server's side —
-  // nothing can have gone wrong with it while it was empty and closed.
-  const back = useSetCellActive()
 
-  // A different cell is a different question; a tick left over from the last
-  // one would move the wrong goods, and a refusal left over from the last one
-  // would be read as this cell's.
+  // A different cell is a different question, and a tick left over from the
+  // last one would move the wrong goods.
   useEffect(() => {
     setChosen([])
-    back.reset()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code])
 
   const contents = place.data?.contents ?? []
   const picked = contents.filter((line) => chosen.includes(line.variant_id))
   const going = picked.length ? picked : contents
   const some = picked.length > 0
-  const retired = Boolean(place.data) && !place.data!.is_active
 
   return (
     <Dialog open={Boolean(code)} onOpenChange={(next) => (next ? undefined : onClose())}>
@@ -1315,18 +1206,13 @@ function CellDialog({
           {/* Where to walk, rather than a figure the body repeats underneath:
               the code is on the shelf and the rack letter is on its end. */}
           <DialogDescription>
-            {retired
-              ? "Xonadan olib tashlangan — bu yerga hech narsa qo'yib bo'lmaydi"
-              : place.data
-                ? whereItIs(place.data)
-                : "Yacheyka tarkibi"}
+            {place.data ? whereItIs(place.data) : "Yacheyka tarkibi"}
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="space-y-4">
           {place.isLoading ? <Waiting /> : null}
           <Problem error={place.error} />
-          <Problem error={back.error} />
 
           {place.data ? (
             <>
@@ -1341,8 +1227,31 @@ function CellDialog({
               </dl>
 
               {contents.length === 0 ? (
-                <Empty bare what={retired ? "Bu joy bo'sh — shuning uchun uni olib tashlash mumkin bo'lgan." : "Bu joy bo'sh."} />
+                <Empty bare what="Bu joy bo'sh." />
               ) : (
+                /* The list scrolls inside itself once it is long, and the
+                   dialog around it does not.
+                
+                   The two acts at the bottom of this dialog — write the cell
+                   off, take the cell out — were below the goods, which is the
+                   right order to read them in and was fine for the three lines
+                   a cell normally holds. Then a cell turned up holding a
+                   hundred and twelve, and "Yacheykani bo'shatish" was a
+                   hundred and twelve rows down a scrolling dialog: present,
+                   reachable, and for practical purposes not there. The cell
+                   that most needs emptying is exactly the cell whose list
+                   buries the button.
+                
+                   So the goods get a box of their own to scroll in and the
+                   acts stay on screen. Only once there is enough to scroll —
+                   a border drawn around three lines is a box for its own
+                   sake. */
+                <div
+                  className={cn(
+                    contents.length > 5 &&
+                      "max-h-[17rem] overflow-y-auto overscroll-contain rounded-control border border-line px-2",
+                  )}
+                >
                 <ul className="divide-y divide-line">
                   {contents.map((line) => {
                     const on = chosen.includes(line.variant_id)
@@ -1407,18 +1316,17 @@ function CellDialog({
                     )
                   })}
                 </ul>
+                </div>
               )}
 
               {/* The two acts that take something away rather than carry it
                   somewhere. Quiet, at the bottom, each one two steps. */}
-              {retired ? null : (
-                <div className="space-y-2 border-t border-line pt-3">
-                  {contents.length ? (
-                    <EmptyCell code={place.data.code} onDone={onClose} />
-                  ) : null}
-                  <RetireCell place={place.data} onDone={onClose} />
-                </div>
-              )}
+              <div className="space-y-2 border-t border-line pt-3">
+                {contents.length ? (
+                  <EmptyCell code={place.data.code} onDone={onClose} />
+                ) : null}
+                <RemoveCell place={place.data} onDone={onClose} />
+              </div>
             </>
           ) : null}
         </DialogBody>
@@ -1428,17 +1336,7 @@ function CellDialog({
             <Button variant="secondary">Yopish</Button>
           </DialogClose>
 
-          {retired ? (
-            <RestoreButton
-              pending={back.isPending}
-              onRestore={() =>
-                back.mutate(
-                  { code: place.data!.code, active: true, note: "xaritaga qaytarildi" },
-                  { onSuccess: onClose },
-                )
-              }
-            />
-          ) : contents.length ? (
+          {contents.length ? (
             /* The one act this dialog exists for. Everything standing here in
                one request — or the ticked lines, which is the same request
                with the list narrowed. */
@@ -1464,33 +1362,27 @@ function CellDialog({
   )
 }
 
-/** The way back, and only for whoever can take it. */
-function RestoreButton({
-  pending,
-  onRestore,
-}: {
-  pending: boolean
-  onRestore: () => void
-}) {
-  const { staff } = useSession()
-  if (staff?.role !== "admin") return null
-  return (
-    <Button className="gap-1" disabled={pending} onClick={onRestore}>
-      {pending ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
-      Qaytarish
-    </Button>
-  )
-}
-
 /**
- * Take this cell out of the room, and put it back on the same door.
+ * Take this cell out of the room.
  *
  * A rack extended to 6×4 by mistake carried two dead columns for ever: cells
  * were built and never removed, and the shape of the building was the one
- * thing on this screen nobody could correct. It is **not** a delete — the row
- * keeps its code, its capacity and every movement that ever named it, so a
- * stocktake from March still points at a cell that still exists. What changes
- * is that the room stops offering it, and that nothing may be put into it.
+ * thing on this screen nobody could correct. Then they were removed by being
+ * crossed out — the tile stayed in the grid with a way back on it — which
+ * corrected the record and not the picture: a rack unbolted to four columns
+ * is four columns, not four columns and a stripe of dead ones.
+ *
+ * So this **removes**. The server deletes the row when nothing in the ledger
+ * names the cell — every cell built by a typo and never used — and keeps it
+ * invisibly when a movement or a stocktake does, because a deleted row there
+ * would leave the ledger pointing at a place that never existed. Neither is
+ * drawn again, and the screen does not say which happened: the question the
+ * office asked was about the room, and the answer is the same in the room.
+ *
+ * **The way back is the rack's shape.** Asking the rack for that column again
+ * builds the code afresh, or wakes the kept row, and it is the same sentence
+ * either way — *this rack is five columns wide*. There is no button on a
+ * ghost, because there is no ghost.
  *
  * **The button is dead while the cell is holding anything, and says why.** The
  * server refuses it — goods in a place nobody can see are goods nobody can
@@ -1508,9 +1400,9 @@ function RestoreButton({
  * months later it is the only thing that tells a shelf that was dismantled
  * from a column somebody typed by accident.
  */
-function RetireCell({ place, onDone }: { place: LocationDetail; onDone: () => void }) {
+function RemoveCell({ place, onDone }: { place: LocationDetail; onDone: () => void }) {
   const { staff } = useSession()
-  const set = useSetCellActive()
+  const remove = useRemoveCell()
   const [asked, setAsked] = useState(false)
   const [reason, setReason] = useState("")
 
@@ -1531,7 +1423,7 @@ function RetireCell({ place, onDone }: { place: LocationDetail; onDone: () => vo
             holding ? "cursor-not-allowed text-ink-faint" : "text-danger underline",
           )}
         >
-          Yacheykani olib tashlash
+          Yacheykani o'chirish
         </button>
         {holding ? (
           <span className="text-micro text-ink-soft">
@@ -1549,15 +1441,12 @@ function RetireCell({ place, onDone }: { place: LocationDetail; onDone: () => vo
       onSubmit={(event) => {
         event.preventDefault()
         if (reason.trim().length < 3) return
-        set.mutate(
-          { code: place.code, active: false, note: reason.trim() },
-          { onSuccess: onDone },
-        )
+        remove.mutate({ code: place.code, reason: reason.trim() }, { onSuccess: onDone })
       }}
     >
       <p className="text-micro text-danger">
-        {place.code} xaritadan chiqadi va unga hech narsa qo'yib bo'lmaydi.
-        Kodi va tarixi qoladi, keyin qaytarish mumkin. Nega?
+        {place.code} xaritadan butunlay o'chadi. Qaytarish kerak bo'lsa, javon
+        shaklidan shu ustunni yana qo'shasiz. Nega?
       </p>
       <Input
         autoFocus
@@ -1570,16 +1459,16 @@ function RetireCell({ place, onDone }: { place: LocationDetail; onDone: () => vo
         <Button
           type="submit"
           size="sm"
-          className="bg-danger text-danger-ink hover:bg-danger"
-          disabled={reason.trim().length < 3 || set.isPending}
+          variant="danger"
+          disabled={reason.trim().length < 3 || remove.isPending}
         >
-          {set.isPending ? <Loader2 className="size-4 animate-spin" /> : "Olib tashlash"}
+          {remove.isPending ? <Loader2 className="size-4 animate-spin" /> : "O'chirish"}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={() => setAsked(false)}>
           Bekor
         </Button>
       </div>
-      <Problem error={set.error} />
+      <Problem error={remove.error} />
     </form>
   )
 }
@@ -1883,183 +1772,424 @@ function EmptyCell({ code, onDone }: { code: string; onDone: () => void }) {
   )
 }
 
+/** What the shape of a rack just did, said once under the rack. */
+type RackWord = { text: string; tone: "good" | "quiet" }
+
 /**
- * Bolt cells onto a rack that is already standing, from the rack itself.
+ * The shape of a shelf unit, changed from the shelf itself.
  *
- * A shelf unit grows the way buildings grow: somebody adds a plank and the
- * shelf is five columns now. Rebuilding it as a new rack would give the goods
- * a new letter and every label in the aisle would be wrong, so this asks for
- * the shape the rack **has** — "A is five by four now" — which is a sentence
- * somebody can say standing in front of it without knowing what the system
- * thought A was. Nothing is ever removed; a smaller shape adds nothing and
- * says so in the server's own words.
+ * A rack grows and a rack shrinks, and for a while those were two controls
+ * standing side by side under it — "Katak qo'shish" and "Katak olib tashlash",
+ * each opening a form of its own. Two links is two decisions before the first
+ * one: which of these am I doing? And it is a question about the software,
+ * because the person has already made the only decision there is — they are
+ * standing in front of a shelf that is now five columns wide, or four. A rack
+ * has **one** shape, so there is one control for it, and adding and removing
+ * are the two directions of the same number.
  *
- * The two that actually happen — one more column, one more row — are single
- * buttons, because counting the columns of a shelf you are standing in front
- * of is a step that only exists because a form asked for it.
+ * It is also what the two servers behind it actually want. Growing takes the
+ * shape the rack should *have*, not a delta; shrinking is the same sentence
+ * read from the other side. Typed together they reconcile: what falls inside
+ * the new rectangle and was never built gets built, what falls outside it and
+ * is still standing gets removed, and a rack going from 5×4 to 4×5 does both
+ * in the order that never leaves the shelf bigger than it is meant to be.
  *
- * The office's, like building a rack and like emptying the room: a rack is
- * the shape of the building.
+ * It is the office's, like building a rack and like emptying the room — a
+ * rack is the shape of the building. The whole row is admin-only rather than
+ * disabled for everyone else: a control nobody may press is a question nobody
+ * needed asked.
  */
-function AddCells({
+function RackShape({
   rack,
+  cells,
   columns,
   rows,
 }: {
   rack: string
+  /** Every cell this rack has. One that was taken out is not among them — it
+   *  is not shelving the shop has, and the rack's shape is measured from what
+   *  it does have. */
+  cells: Location[]
   columns: number
   rows: number
 }) {
   const { staff } = useSession()
-  const extend = useExtendRack(rack)
   const [open, setOpen] = useState(false)
-  const [across, setAcross] = useState("")
-  const [up, setUp] = useState("")
-  const [done, setDone] = useState<{ message: string; cells: number } | null>(null)
+  const [said, setSaid] = useState<RackWord | null>(null)
 
   if (staff?.role !== "admin") return null
 
-  const wantAcross = Number(across) || 0
-  const wantUp = Number(up) || 0
-  // Nothing is removed, so what is added is the new grid less the part of it
-  // the rack already covers.
-  const gained =
-    wantAcross > 0 && wantUp > 0
-      ? wantAcross * wantUp - Math.min(wantAcross, columns) * Math.min(wantUp, rows)
-      : 0
-
-  function grow(nextAcross: number, nextUp: number) {
-    setDone(null)
-    extend.mutate(
-      { columns: nextAcross, rows: nextUp },
-      {
-        onSuccess: (made) => {
-          setOpen(false)
-          setAcross("")
-          setUp("")
-          setDone({ message: made.message, cells: made.cells })
-        },
-      },
-    )
-  }
-
-  if (!open) {
+  if (open) {
     return (
-      <div className="no-print mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <button
-          type="button"
-          onClick={() => {
-            setDone(null)
-            setAcross(String(columns))
-            setUp(String(rows))
-            setOpen(true)
-          }}
-          className="flex items-center gap-1 text-micro text-brand-deep underline"
-        >
-          <Plus className="size-3.5" />
-          Katak qo'shish
-        </button>
-        {done ? (
-          <span className={cn("text-micro", done.cells ? "text-good" : "text-ink-soft")}>
-            {done.message}
-          </span>
-        ) : null}
-      </div>
+      <RackShapeForm
+        rack={rack}
+        cells={cells}
+        columns={columns}
+        rows={rows}
+        onDone={(word) => {
+          setOpen(false)
+          setSaid(word)
+        }}
+      />
     )
   }
 
   return (
+    <div className="no-print mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+      <button
+        type="button"
+        onClick={() => {
+          setSaid(null)
+          setOpen(true)
+        }}
+        className="flex items-center gap-1 text-micro text-brand-deep underline"
+      >
+        <Grid3x3 className="size-3.5" />
+        Javon shakli
+      </button>
+      {/* The shape on the link itself. It is the thing the control changes,
+          it is two characters, and it saves counting the columns on screen
+          to find out whether the number in the form is right. */}
+      <span className="tabular text-micro text-ink-faint">
+        {columns} × {rows}
+      </span>
+      {said ? (
+        <span className={cn("text-micro", said.tone === "good" ? "text-good" : "text-ink-soft")}>
+          {said.text}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * The rack's shape, as two numbers that can be stepped or typed.
+ *
+ * **Stepped, because one column is what actually happens.** Somebody bolts a
+ * plank on, or takes one off; asking them to know what the system thought the
+ * rack was, and to type a second number that is not changing, is two chances
+ * to be wrong for no gain. **Typed, because the rack may have been wrong for
+ * a month** — a shape entered as 6×4 by a slip is corrected by saying 4×4,
+ * not by pressing minus twice and hoping.
+ *
+ * **Nothing happens until Saqlash**, and the sentence above it says what that
+ * will be in cells: how many are built, how many are taken out, or that the
+ * shape did not move. A control that acts on the click of a stepper cannot
+ * show anybody what they are about to do.
+ *
+ * **A cell with goods in it stops the whole shape.** The server refuses to
+ * retire it — goods in a place nobody can see are goods nobody can find — and
+ * the refusal is brought forward to the button, by name, because the remedy
+ * is to carry the goods somewhere and that is a thing to do rather than a
+ * thing to be told afterwards.
+ *
+ * The reason appears only when something is being taken out, and goes into
+ * the audit trail on every cell it touches: three months later it is the only
+ * thing telling a shelf that was dismantled from a column somebody typed by
+ * accident. Nothing is asked for when the rack only grows — a new cell is an
+ * empty shelf and explains itself.
+ */
+function RackShapeForm({
+  rack,
+  cells,
+  columns,
+  rows,
+  onDone,
+}: {
+  rack: string
+  cells: Location[]
+  columns: number
+  rows: number
+  onDone: (word: RackWord | null) => void
+}) {
+  const extend = useExtendRack(rack)
+  const drop = useRemoveCells()
+  // Opened already holding the shape the rack has, so the common correction
+  // is one press and the uncommon one is two digits.
+  const [across, setAcross] = useState(String(columns))
+  const [up, setUp] = useState(String(rows))
+  const [reason, setReason] = useState("")
+
+  const wantAcross = Number(across) || 0
+  const wantUp = Number(up) || 0
+  const shaped = wantAcross >= 1 && wantUp >= 1
+
+  const plan = useMemo(
+    () => shapePlan(cells, wantAcross, wantUp, shaped),
+    [cells, wantAcross, wantUp, shaped],
+  )
+
+  const why = reason.trim()
+  const busy = extend.isPending || drop.isPending
+  const changed = plan.made > 0 || plan.going.length > 0
+  const ready =
+    changed &&
+    !plan.holding.length &&
+    (!plan.going.length || why.length >= 3) &&
+    !busy
+
+  async function save() {
+    try {
+      // Taking out first. The two halves can both be in one shape change —
+      // 5×4 becoming 4×5 — and retiring the old column before writing the new
+      // row keeps the rack from being momentarily wider *and* taller than it
+      // is ever meant to be.
+      if (plan.going.length) {
+        const out = await drop.mutateAsync({
+          codes: plan.going.map((cell) => cell.code),
+          reason: `${rack}: ${columns}×${rows} → ${wantAcross}×${wantUp} — ${why}`,
+        })
+        // Something was refused: stay, and name it. Closing on a sentence
+        // that says three when four were asked for is the screen deciding the
+        // fourth did not matter.
+        if (out.refused.length) return
+      }
+      if (plan.made) {
+        await extend.mutateAsync({ columns: wantAcross, rows: wantUp })
+      }
+      onDone({ text: doneWords(rack, plan.made, plan.going.length), tone: "good" })
+    } catch {
+      // The sentence is on the mutation and `Problem` is showing it.
+    }
+  }
+
+  return (
     <form
-      className="no-print mt-2 max-w-[19rem] space-y-2 rounded-control border border-line bg-surface p-2"
+      className="no-print mt-2 w-[18rem] max-w-full space-y-2.5 rounded-control border border-line bg-surface p-2.5 shadow-panel"
       onSubmit={(event) => {
         event.preventDefault()
-        if (wantAcross < 1 || wantUp < 1) return
-        grow(wantAcross, wantUp)
+        if (ready) void save()
       }}
     >
-      <p className="text-micro text-ink-soft">
-        Hozir{" "}
-        <b className="tabular font-semibold text-ink">
+      {/* What it is, and what it would become. The arrow only appears when
+          there is something on the other side of it. */}
+      <p className="flex items-center gap-1.5 text-micro text-ink-soft">
+        <span className="tabular text-small font-semibold text-ink">
           {columns} × {rows}
-        </b>{" "}
-        · {columns * rows} katak
+        </span>
+        {shaped && changed ? (
+          <>
+            <ArrowRight className="size-3 text-ink-faint" />
+            <span
+              className={cn(
+                "tabular text-small font-semibold",
+                plan.going.length ? "text-danger" : "text-good",
+              )}
+            >
+              {wantAcross} × {wantUp}
+            </span>
+          </>
+        ) : (
+          <span className="tabular">· {columns * rows} katak</span>
+        )}
       </p>
 
-      {/* The two cases that actually happen, each one click. */}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="gap-1"
-          disabled={extend.isPending}
-          onClick={() => grow(columns + 1, rows)}
-        >
-          <Plus className="size-3.5" />
-          ustun
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="gap-1"
-          disabled={extend.isPending}
-          onClick={() => grow(columns, rows + 1)}
-        >
-          <Plus className="size-3.5" />
-          qator
-        </Button>
-        {extend.isPending ? <Loader2 className="size-4 animate-spin text-brand" /> : null}
-      </div>
+      <Step
+        label="Ustun"
+        rack={rack}
+        value={across}
+        was={columns}
+        onSet={setAcross}
+      />
+      <Step label="Qator" rack={rack} value={up} was={rows} onSet={setUp} />
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label>
-          <span className="mb-1 block text-micro text-ink-soft">Ustun</span>
+      {/* The sentence that says what Saqlash does, before it is pressed. */}
+      <p
+        className={cn(
+          "text-micro",
+          plan.holding.length
+            ? "text-danger"
+            : changed
+              ? "text-ink-soft"
+              : "text-ink-faint",
+        )}
+      >
+        {planWords(plan, shaped)}
+      </p>
+
+      {plan.going.length && !plan.holding.length ? (
+        <div className="space-y-2 rounded-control bg-danger-soft p-2">
+          <p className="text-micro text-danger">
+            Kataklar butunlay o'chadi. Qaytarish kerak bo'lsa, shu ustunni yana
+            qo'shasiz. Nega?
+          </p>
           <Input
-            value={across}
-            onChange={(event) => setAcross(event.target.value.replace(/\D/g, "").slice(0, 2))}
-            inputMode="numeric"
-            aria-label={`${rack} javonining ustunlari`}
-            className="h-control w-14 tabular" />
-        </label>
-        <label>
-          <span className="mb-1 block text-micro text-ink-soft">Qator</span>
-          <Input
-            value={up}
-            onChange={(event) => setUp(event.target.value.replace(/\D/g, "").slice(0, 2))}
-            inputMode="numeric"
-            aria-label={`${rack} javonining qatorlari`}
-            className="h-control w-14 tabular" />
-        </label>
-        <Button type="submit" size="sm" disabled={extend.isPending || wantAcross < 1 || wantUp < 1}>
-          {extend.isPending ? <Loader2 className="size-4 animate-spin" /> : "Qo'shish"}
+            autoFocus
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="javon buzildi"
+            aria-label="Sabab"
+            className="h-control-sm text-micro" />
+        </div>
+      ) : null}
+
+      <div className="flex items-center gap-2">
+        <Button
+          type="submit"
+          size="sm"
+          variant={plan.going.length ? "danger" : "primary"}
+          disabled={!ready}
+        >
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : "Saqlash"}
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => onDone(null)}>
           Bekor
         </Button>
       </div>
 
-      <p className="text-micro text-ink-soft">
-        {wantAcross > 0 && wantUp > 0 ? (
-          gained > 0 ? (
-            <>
-              {rack} endi{" "}
-              <b className="tabular font-semibold text-ink">
-                {Math.max(wantAcross, columns)} × {Math.max(wantUp, rows)}
-              </b>{" "}
-              · <b className="tabular font-semibold text-ink">{gained}</b> ta yangi katak
-            </>
-          ) : (
-            "Bu shakl yangi katak qo'shmaydi — katak hech qachon o'chmaydi"
-          )
-        ) : (
-          "Javonning butun shakli: ustun × qator"
-        )}
-      </p>
+      {drop.data?.refused.length ? (
+        <ul className="space-y-0.5 text-micro text-danger">
+          {drop.data.refused.map((one) => (
+            <li key={one.code}>
+              <b className="font-semibold">{one.code}</b> — {one.why}
+            </li>
+          ))}
+        </ul>
+      ) : null}
 
       <Problem error={extend.error} />
+
+      {/* The other door, on the screen where somebody is looking for it: one
+          cell is the tile's own business, not the rack's shape. */}
+      <p className="text-micro text-ink-faint">
+        Bitta katakni o'chirish uchun uning ustiga bosing.
+      </p>
     </form>
   )
+}
+
+/**
+ * One axis of the rack: minus, the number, plus, and what it just did.
+ *
+ * The number is an input and not a label, so the shape can be said outright
+ * as well as walked to. Minus stops at one — a rack of no columns is not a
+ * smaller rack, it is a rack being demolished, and that is the tile's own
+ * decision one cell at a time rather than something a held-down button should
+ * be able to do.
+ */
+function Step({
+  label,
+  rack,
+  value,
+  was,
+  onSet,
+}: {
+  label: string
+  rack: string
+  value: string
+  /** What the rack has today, for the ± beside the box. */
+  was: number
+  onSet: (value: string) => void
+}) {
+  const now = Number(value) || 0
+  const moved = now - was
+  const word = label.toLowerCase()
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-11 shrink-0 text-micro text-ink-soft">{label}</span>
+      <div className="flex shrink-0 items-center rounded-control border border-line">
+        <button
+          type="button"
+          disabled={now <= 1}
+          onClick={() => onSet(String(now - 1))}
+          aria-label={`${rack} javoni — bitta ${word} kam`}
+          className="grid size-control-sm place-items-center rounded-l-control text-ink-soft transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-ink-soft"
+        >
+          <Minus className="size-3.5" />
+        </button>
+        <Input
+          value={value}
+          onChange={(event) => onSet(event.target.value.replace(/\D/g, "").slice(0, 2))}
+          inputMode="numeric"
+          aria-label={`${rack} javonining ${word}lari`}
+          className="h-control-sm w-10 rounded-none border-transparent bg-transparent px-0 text-center tabular text-small font-semibold" />
+        <button
+          type="button"
+          disabled={now >= 99}
+          onClick={() => onSet(String(now + 1))}
+          aria-label={`${rack} javoni — bitta ${word} ko'p`}
+          className="grid size-control-sm place-items-center rounded-r-control text-ink-soft transition-colors hover:bg-brand-soft hover:text-brand-deep disabled:opacity-35"
+        >
+          <Plus className="size-3.5" />
+        </button>
+      </div>
+      <span
+        className={cn(
+          "tabular text-micro",
+          moved > 0 ? "text-good" : moved < 0 ? "text-danger" : "text-transparent",
+        )}
+      >
+        {moved > 0 ? `+${moved}` : moved < 0 ? `−${-moved}` : "·"}
+      </span>
+    </div>
+  )
+}
+
+/** What a rack of this shape would cost in cells built and cells taken out. */
+type ShapePlan = {
+  /** Positions inside the new rectangle that no cell of this rack occupies. */
+  made: number
+  /** Cells left outside it. */
+  going: Location[]
+  /** The ones of those that are holding something, which stops everything. */
+  holding: Location[]
+}
+
+function shapePlan(
+  cells: Location[],
+  wantAcross: number,
+  wantUp: number,
+  shaped: boolean,
+): ShapePlan {
+  if (!shaped) return { made: 0, going: [], holding: [] }
+
+  // Counted against what the rack has, which is the only thing this screen
+  // knows about. A cell that was taken out and whose row the ledger made us
+  // keep is not here and not drawn, and asking for its column again wakes it
+  // — so the server may write fewer cells than this says. Its sentence is the
+  // one shown afterwards; this is what the office is about to ask for.
+  const taken = new Set(cells.map((cell) => `${cell.column_no}:${cell.row_no}`))
+  let made = 0
+  for (let column = 1; column <= wantAcross; column += 1) {
+    for (let row = 1; row <= wantUp; row += 1) {
+      if (!taken.has(`${column}:${row}`)) made += 1
+    }
+  }
+
+  const going = cells.filter(
+    (cell) => (cell.column_no ?? 1) > wantAcross || (cell.row_no ?? 1) > wantUp,
+  )
+  return { made, going, holding: going.filter((cell) => cell.units > 0) }
+}
+
+/**
+ * What Saqlash would do, in a few words.
+ *
+ * The blocked case names the cells rather than counting them: "2 ta katakda
+ * mol bor" sends somebody to look in the whole column, and the codes are the
+ * two tiles they should be standing at.
+ */
+function planWords(plan: ShapePlan, shaped: boolean): string {
+  if (!shaped) return "Javonning shakli: ustun × qator"
+  if (plan.holding.length) {
+    return `${plan.holding
+      .map((cell) => cell.code)
+      .join(", ")} da mol bor — avval ko'chiring`
+  }
+  const parts: string[] = []
+  if (plan.made) parts.push(`${plan.made} ta yangi katak`)
+  if (plan.going.length) parts.push(`${plan.going.length} katak o'chiriladi`)
+  if (!parts.length) return "Shakl o'zgarmadi"
+  return parts.join(" · ")
+}
+
+/** What just happened, on the line the person comes back to. */
+function doneWords(rack: string, made: number, gone: number): string {
+  const parts: string[] = []
+  if (made) parts.push(`${made} katak qo'shildi`)
+  if (gone) parts.push(`${gone} katak o'chirildi`)
+  return `${rack}: ${parts.join(", ")}`
 }
 
 function Figure({ label, value, hint }: { label: string; value: string; hint?: string }) {

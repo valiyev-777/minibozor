@@ -32,6 +32,7 @@ import type {
   ProductsReport,
   SalesReport,
   StockReport,
+  CellRemoved,
   Rack,
   CourierEarnings,
   CourierOrder,
@@ -42,7 +43,6 @@ import type {
   AdminProduct,
   AdminVariant,
   LabelSheet,
-  Location,
   LocationDetail,
   Page,
   PickTask,
@@ -72,9 +72,6 @@ import type {
 export const keys = {
   locations: ["locations"] as const,
   location: (code: string) => ["locations", code] as const,
-  /** The cells that are no longer part of the room. A different list from
-   *  `locations`, on purpose: everything that counts cells reads that one. */
-  retiredCells: ["locations", "retired"] as const,
   supplies: (status?: string) => ["supplies", status ?? "all"] as const,
   supply: (id: number) => ["supplies", id] as const,
   pick: (status?: string) => ["pick", status ?? "all"] as const,
@@ -578,6 +575,7 @@ function roomKeys() {
 export function useMove() {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Ko'chirildi" },
     mutationFn: (input: {
       variant_id: number
       qty: number
@@ -606,6 +604,7 @@ export function useMove() {
 export function useMoveCell() {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Yacheyka ko'chirildi" },
     mutationFn: (input: {
       from_code: string
       to_code: string
@@ -739,6 +738,7 @@ export function useStartCount() {
 export function useSubmitCount(id: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Sanash yopildi" },
     mutationFn: (input: {
       lines: { variant_id: number; counted_qty: number }[]
       note?: string
@@ -812,6 +812,7 @@ export function useSackSorted(id: number) {
 export function usePriceCard(productId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Narx saqlandi" },
     mutationFn: (input: { price: number; old_price?: number | null; colour?: string }) =>
       api<AdminVariant[]>(`/admin/products/${productId}/price`, { body: input }),
     onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
@@ -828,6 +829,7 @@ export function usePriceCard(productId: number) {
 export function useFileCard(productId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Kategoriya saqlandi" },
     mutationFn: (input: {
       category_slug?: string
       title?: string
@@ -854,6 +856,7 @@ export function useFileCard(productId: number) {
 export function useDeleteCard(productId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Karta o'chirildi" },
     mutationFn: () =>
       api<{ message: string }>(`/admin/products/${productId}`, { method: "DELETE" }),
     onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
@@ -869,6 +872,7 @@ export function useDeleteCard(productId: number) {
 export function useEmptyStock() {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Hisobdan chiqarildi" },
     mutationFn: (input: { code?: string; reason: string }) =>
       api<{ moved: number; units: number; cells: number }>(
         "/warehouse/stock/empty",
@@ -883,6 +887,7 @@ export function useEmptyStock() {
 export function useWriteSpecs(productId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Xususiyatlar saqlandi" },
     mutationFn: (specs: Spec[]) =>
       api<Spec[]>(`/admin/products/${productId}/specs`, {
         method: "PUT",
@@ -908,6 +913,7 @@ export function useCreateProduct() {
 export function useRetireVariant(productId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Saqlandi" },
     mutationFn: (input: { variantId: number; retired: boolean }) =>
       api<AdminVariant>(
         `/admin/products/${productId}/variants/${input.variantId}/retired`,
@@ -920,6 +926,7 @@ export function useRetireVariant(productId: number) {
 export function useSetGrid(productId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "To'r saqlandi" },
     mutationFn: (input: {
       colours: { colour: string; hex: string }[]
       sizes: string[]
@@ -936,6 +943,7 @@ export function useSetGrid(productId: number) {
 export function useAddImage(productId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Rasm qo'shildi" },
     mutationFn: (input: { url: string; colour: string }) =>
       api<AdminImage[]>(`/admin/products/${productId}/images`, { body: input }),
     // The dashboard too: a photograph is one of the three things holding a
@@ -949,6 +957,7 @@ export function useAddImage(productId: number) {
 export function usePublish(productId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Holat o'zgardi" },
     mutationFn: (status: "active" | "draft" | "archived") =>
       api<AdminProduct>(`/admin/products/${productId}/status`, { body: { status } }),
     onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
@@ -1005,6 +1014,7 @@ export function useFailed(id: number) {
 export function useMoveOrder(id: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Buyurtma holati o'zgardi" },
     mutationFn: (input: { status: string; note?: string }) =>
       api(`/admin/orders/${id}/status`, { body: input }),
     onSuccess: () => invalidate(client, [["orders"], keys.dashboard, ["pick"]]),
@@ -1033,6 +1043,7 @@ function peopleKeys() {
 export function useAppointStaff() {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Xodim qo'shildi" },
     mutationFn: (input: {
       phone: string
       full_name: string
@@ -1054,6 +1065,7 @@ export function useAppointStaff() {
 export function useSetRole(userId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Rol berildi" },
     mutationFn: (input: { role: UserRole; note?: string }) =>
       api<StaffUser>(`/admin/users/${userId}/role`, { method: "PATCH", body: input }),
     onSuccess: () => invalidate(client, peopleKeys()),
@@ -1070,6 +1082,7 @@ export function useSetRole(userId: number) {
 export function useSetActive(userId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Saqlandi" },
     mutationFn: (input: { active: boolean; note?: string }) =>
       api<StaffMember>(`/admin/users/${userId}/active`, { body: input }),
     onSuccess: () => invalidate(client, peopleKeys()),
@@ -1082,6 +1095,7 @@ export function useSetActive(userId: number) {
 export function useEditUser(userId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Saqlandi" },
     mutationFn: (input: { full_name?: string; email?: string }) =>
       api<StaffMember>(`/admin/users/${userId}`, { method: "PATCH", body: input }),
     onSuccess: () => invalidate(client, peopleKeys()),
@@ -1091,6 +1105,7 @@ export function useEditUser(userId: number) {
 export function useWriteCategory() {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Kategoriya saqlandi" },
     mutationFn: (input: { slug: string; name: string; parent_slug?: string | null }) =>
       api<AdminCategory>("/admin/categories", { body: input }),
     onSuccess: () => invalidate(client, [keys.categories]),
@@ -1109,6 +1124,7 @@ export function useWriteCategory() {
 export function useEditCategory(slug: string) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Kategoriya saqlandi" },
     mutationFn: (input: {
       name?: string
       subtitle?: string
@@ -1136,6 +1152,7 @@ export function useEditCategory(slug: string) {
 export function useDeleteCategory(slug: string) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Kategoriya o'chirildi" },
     mutationFn: () =>
       api<{ message: string }>(`/admin/categories/${slug}`, { method: "DELETE" }),
     onSuccess: () => invalidate(client, [keys.categories, ["products"]]),
@@ -1153,6 +1170,7 @@ export function useDeleteCategory(slug: string) {
 export function useAddRack() {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Javon qo'shildi" },
     mutationFn: (input: {
       rack: string
       columns: number
@@ -1176,6 +1194,7 @@ export function useAddRack() {
 export function useExtendRack(rack: string) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Javon kengaytirildi" },
     mutationFn: (input: { columns: number; rows: number; capacity?: number }) =>
       api<Rack>(`/warehouse/racks/${rack}/cells`, { body: input }),
     onSuccess: () => invalidate(client, [keys.locations, keys.dashboard]),
@@ -1183,62 +1202,85 @@ export function useExtendRack(rack: string) {
 }
 
 /**
- * The cells that were taken out of the room, and can be put back.
+ * Take a cell out of the room, for good.
  *
- * Its own door rather than a flag on the shelf map, and the server is
- * deliberate about that: `cells` there means *the cells of this room*, and
- * the map's own figures, the receiving screen's destination grid and the
- * label sheet all read it that way. Dead cells in that list would make every
- * one of them quietly wrong in arithmetic.
+ * This was a boolean — `active: false` to retire, `active: true` to restore —
+ * and the boolean was the problem. Retiring flipped a flag: the row stayed,
+ * the code stayed, and the map drew the dead cell struck through in the grid
+ * with a way back on it, so a rack grown to 6×4 by a typo showed two columns
+ * of crossed-out tiles for ever. Correct about the ledger, and a lie about
+ * the room — there is no fifth column standing in the shop to point at.
  *
- * So the map asks for them separately, and uses them for one thing only:
- * drawing the hole in the grid where the cell used to be, with the way back
- * on it. A gap that was retired and a gap that was never built look the same
- * otherwise — and a retired cell in the last column would silently shrink the
- * rack, because a rack's shape is measured from the cells it was given.
+ * So it is a delete, and the server decides how literally it can afford to be
+ * one: the row goes when nothing in the ledger names the cell, and is kept
+ * invisibly when a movement or a stocktake does. `erased` says which
+ * happened, and no screen has to care — both are gone from the map.
+ *
+ * The server refuses it while the cell is holding anything and says what to
+ * do instead; it refuses a staging area outright. Both come back as a
+ * sentence to show, not a code to interpret.
+ *
+ * The way back is [[useExtendRack]] — asking the rack for that column again —
+ * and not a button on a cell that is no longer drawn.
  */
-export function useRetiredCells() {
-  return useQuery({
-    queryKey: keys.retiredCells,
-    queryFn: () => api<Location[]>("/warehouse/cells/retired"),
-    // The same cadence as the map itself, and that is the point rather than
-    // thrift: the two lists are one picture. A cell retired on another screen
-    // leaves `locations` at once, and if the holes arrived half a minute
-    // later the rack would draw itself a column short in between — which is
-    // the exact bug the holes are here to prevent.
-    refetchInterval: 30_000,
+export function useRemoveCell() {
+  const client = useQueryClient()
+  return useMutation({
+    meta: { done: "Yacheyka olib tashlandi" },
+    mutationFn: (input: { code: string; reason: string }) =>
+      api<CellRemoved>(
+        `/warehouse/cells/${input.code}?reason=${encodeURIComponent(input.reason)}`,
+        { method: "DELETE" },
+      ),
+    // The room, the label sheet's idea of what to print, and the dashboard's
+    // of how full the shop is.
+    onSuccess: () => invalidate(client, [keys.locations, ["labels"], keys.dashboard]),
   })
 }
 
 /**
- * Take a cell out of the room, or bolt it back in.
+ * Take a whole column or row of cells out of the room, in one act.
  *
- * One door with a boolean, like making a colleague active or not: retiring
- * and restoring are the same decision read from opposite sides. Never a
- * delete — the row keeps its code, its capacity and every movement that ever
- * named it, so a stocktake from March still points at a cell that still
- * exists. What changes is that the room stops offering it.
+ * The same door as [[useRemoveCell]], walked once per cell. A shelf is
+ * dismantled a column at a time — somebody unbolts the planks and the rack is
+ * four wide again — and asking the office to open four tiles and type the same
+ * reason into each is asking for three of them to be done and the fourth
+ * forgotten, which leaves the rack carrying a dead cell for ever.
  *
- * The server refuses it while the cell is holding anything, and says what to
- * do instead; it refuses a staging area outright. Both come back as a
- * sentence to show, not a code to interpret.
+ * **One at a time, and a refusal stops nothing after it.** A column where one
+ * cell still holds forty pairs gives up that cell and removes the other three,
+ * and says which one it could not take — because the alternative is a column
+ * that is half gone and a screen that claims it is all gone. In order, too, so
+ * the audit trail reads the way the cells were named.
+ *
+ * The refusals come back as the server's own sentences: a cell with goods in
+ * it already says what to do instead, and the caller's job is to show that,
+ * not to work out what went wrong.
  */
-export function useSetCellActive() {
+export function useRemoveCells() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (input: { code: string; active: boolean; note?: string }) =>
-      api<Location>(`/warehouse/cells/${input.code}/active`, {
-        body: { active: input.active, note: input.note },
-      }),
-    // The room, the holes in it, the label sheet's idea of what to print and
-    // the dashboard's of how full the shop is.
-    onSuccess: () =>
-      invalidate(client, [
-        keys.locations,
-        keys.retiredCells,
-        ["labels"],
-        keys.dashboard,
-      ]),
+    meta: { done: "Yacheykalar olib tashlandi" },
+    mutationFn: async (input: { codes: string[]; reason: string }) => {
+      const done: string[] = []
+      const refused: { code: string; why: string }[] = []
+      for (const code of input.codes) {
+        try {
+          await api<CellRemoved>(
+            `/warehouse/cells/${code}?reason=${encodeURIComponent(input.reason)}`,
+            { method: "DELETE" },
+          )
+          done.push(code)
+        } catch (error) {
+          refused.push({
+            code,
+            why: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+      return { done, refused }
+    },
+    onSuccess: () => invalidate(client, [keys.locations, ["labels"], keys.dashboard]),
   })
 }
 
@@ -1290,6 +1332,7 @@ export function useReturn(id: number | null) {
 export function useDecideReturn(id: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Qaror yozildi" },
     mutationFn: (input: {
       decision: "approve" | "reject" | "refund"
       reason?: string
@@ -1314,6 +1357,7 @@ export function useDecideReturn(id: number) {
 export function useInspectReturn(id: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Ko'rik yozildi" },
     mutationFn: (input: { result: "ok" | "damaged"; note?: string }) =>
       api<StaffReturn>(`/warehouse/returns/${id}/inspect`, { body: input }),
     onSuccess: () => invalidate(client, returnKeys()),
@@ -1371,6 +1415,7 @@ export function useSlots(fromDay: string, toDay: string) {
 export function useCreateSlots() {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Oynalar ochildi" },
     mutationFn: (input: {
       days: string[]
       windows: {
@@ -1389,6 +1434,7 @@ export function useCreateSlots() {
 export function useUpdateSlot(id: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Oyna saqlandi" },
     mutationFn: (input: {
       capacity_left?: number
       price?: number
@@ -1414,6 +1460,7 @@ export function usePickups(status: string) {
 export function useCreatePickup() {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Reys yaratildi" },
     mutationFn: (input: {
       courier_id: number
       return_request_ids: number[]
@@ -1428,6 +1475,7 @@ export function useCreatePickup() {
 export function useReceivePickup(id: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Qabul qilindi" },
     mutationFn: () => api<PickupRun>(`/admin/pickups/${id}/receive`, { body: {} }),
     onSuccess: () => invalidate(client, [["pickups"], ["returns"]]),
   })
@@ -1448,6 +1496,7 @@ export function useReceivePickup(id: number) {
 export function useDeleteImage(productId: number) {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Rasm o'chirildi" },
     mutationFn: (imageId: number) =>
       api<{ message: string }>(`/admin/products/${productId}/images/${imageId}`, {
         method: "DELETE",
@@ -1469,6 +1518,7 @@ export function useDeleteImage(productId: number) {
 export function useDamage() {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Brakka o'tkazildi" },
     mutationFn: (input: { variant_id: number; quantity: number; reason: string }) =>
       api<Shelf>("/warehouse/stock/damage", { body: input }),
     onSuccess: () =>
@@ -1490,6 +1540,7 @@ export function useCancelSupply(id: number) {
 export function useBuildPickTask() {
   const client = useQueryClient()
   return useMutation({
+    meta: { done: "Terishga qo'yildi" },
     mutationFn: (orderId: number) =>
       api(`/warehouse/pick/orders/${orderId}`, { method: "POST" }),
     onSuccess: () => invalidate(client, [["pick"], ["orders"]]),
