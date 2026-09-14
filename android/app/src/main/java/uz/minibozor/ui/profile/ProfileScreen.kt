@@ -67,7 +67,9 @@ fun ProfileScreen(
         QuickAction("ret", stringResource(R.string.qaytarish), "returns"),
     )
 
-    MbScreen { padding ->
+    // The tab's header is a band of surface, so that is what goes behind the
+    // clock rather than a step of grey canvas. See [MbScreen.statusBand].
+    MbScreen(statusBand = MbTheme.colors.surface) { padding ->
       Column(Modifier.fillMaxSize().padding(padding)) {
         // In the content, not the scaffold's top bar: that slot is laid out
         // above the window insets, so the name ended up under the clock.
@@ -140,11 +142,18 @@ fun ProfileScreen(
             item {
                 MbCard(padding = 6.dp) {
                     val rows = listOf(
-                        // The card vault went with the marketplace: a shopper
-                        // pays by card at checkout or in cash at the door, and
-                        // neither wants a stored PAN. `me/overview` still
-                        // answers `cards_count` at nought so this screen keeps
-                        // its shape, but there is nothing behind the row.
+                        // The cards, with something behind the row again.
+                        //
+                        // It stood here for a while with `cards_count` answering
+                        // nought and nowhere to go — a row that depresses and
+                        // does nothing, which reads as a broken app. What it
+                        // leads to holds no card number: four digits, a name and
+                        // an expiry, and a token the server charges.
+                        Triple("card", stringResource(R.string.tolov_kartalari), pluralStringResource(
+            R.plurals.n_items,
+            overview?.cardsCount ?: 0,
+            overview?.cardsCount ?: 0,
+        )) to "cards",
                         Triple("pin", stringResource(R.string.manzillarim), pluralStringResource(
             R.plurals.n_items,
             overview?.addressesCount ?: 0,

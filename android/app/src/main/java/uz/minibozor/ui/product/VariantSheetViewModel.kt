@@ -142,10 +142,11 @@ class VariantSheetViewModel @Inject constructor(
      * A colour, and whatever the size chosen before it now means.
      *
      * A cell is a colour *and* a size, so the one picked under the old colour
-     * buys something this sheet is no longer showing. The same size is kept
-     * where the new colour has it in stock; otherwise the sheet goes back to
-     * asking, which is the honest state — the customer has not chosen a size of
-     * *this* colour yet.
+     * buys something this sheet is no longer showing. The size itself survives
+     * the change **even where the new colour has sold out of it** — struck
+     * through and still chosen, which is what lets the row of photographs above
+     * answer "which colours have a 41". Keeping it only while it was in stock
+     * moved the customer off the size they came for without saying so.
      */
     fun selectColour(colour: String) = _state.update { s ->
         val cells = s.product?.variants.orEmpty().filter { it.colour == colour }
@@ -153,7 +154,7 @@ class VariantSheetViewModel @Inject constructor(
         val kept = s.selected?.size
         s.copy(
             colour = colour,
-            variantId = (cells.firstOrNull { it.size == kept && it.inStock }
+            variantId = (cells.firstOrNull { it.size == kept }
                 ?: cells.firstOrNull { it.inStock }
                 ?: cells.first()).id,
         )

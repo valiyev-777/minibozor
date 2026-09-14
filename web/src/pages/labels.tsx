@@ -16,7 +16,7 @@ import bwipjs from "bwip-js/browser"
 import { Printer } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
-import { Empty, PageHeader, Problem, Waiting } from "@/components/page"
+import { Empty, PageHeader, Panel, Problem, Waiting } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { money } from "@/lib/format"
@@ -44,48 +44,50 @@ export function LabelsPage() {
         ) : null}
       </PageHeader>
 
-      <div className="no-print space-y-3 rounded-panel border border-line bg-surface shadow-panel p-3">
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex-1">
-            <span className="mb-1 block text-micro text-ink-soft">
-              Qabul raqami — o'sha safarning hamma yorlig'i
-            </span>
-            <Input
-              value={runId}
-              onChange={(event) => setRunId(event.target.value.replace(/\D/g, ""))}
-              inputMode="numeric"
-              placeholder="12"
-              className="h-control tabular"
-              aria-label="Qabul raqami" />
-          </label>
-          <Button disabled={!runId} onClick={() => setWhat({ kind: "supply", id: Number(runId) })}
-          >
-            Tovar yorliqlari
-          </Button>
-          <Button variant="secondary" onClick={() => setWhat({ kind: "cells" })}
-          >
-            Katak yorliqlari
-          </Button>
-        </div>
+      <Panel className="no-print">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex-1">
+              <span className="mb-1 block text-micro text-ink-soft">
+                Qabul raqami — o'sha safarning hamma yorlig'i
+              </span>
+              <Input
+                value={runId}
+                onChange={(event) => setRunId(event.target.value.replace(/\D/g, ""))}
+                inputMode="numeric"
+                placeholder="12"
+                className="h-control tabular"
+                aria-label="Qabul raqami" />
+            </label>
+            <Button disabled={!runId} onClick={() => setWhat({ kind: "supply", id: Number(runId) })}
+            >
+              Tovar yorliqlari
+            </Button>
+            <Button variant="secondary" onClick={() => setWhat({ kind: "cells" })}
+            >
+              Katak yorliqlari
+            </Button>
+          </div>
 
-        {runs.data?.length ? (
-          <p className="text-micro text-ink-soft">
-            Oxirgi qabullar:{" "}
-            {runs.data.slice(0, 6).map((run) => (
-              <button
-                key={run.id}
-                type="button"
-                onClick={() => {
-                  setRunId(String(run.id))
-                  setWhat({ kind: "supply", id: run.id })
-                }}
-                className="mr-2 tabular underline underline-offset-2">
-                {run.code}
-              </button>
-            ))}
-          </p>
-        ) : null}
-      </div>
+          {runs.data?.length ? (
+            <p className="text-micro text-ink-soft">
+              Oxirgi qabullar:{" "}
+              {runs.data.slice(0, 6).map((run) => (
+                <button
+                  key={run.id}
+                  type="button"
+                  onClick={() => {
+                    setRunId(String(run.id))
+                    setWhat({ kind: "supply", id: run.id })
+                  }}
+                  className="mr-2 tabular underline underline-offset-2">
+                  {run.code}
+                </button>
+              ))}
+            </p>
+          ) : null}
+        </div>
+      </Panel>
 
       <Problem error={sheet.error} />
       {sheet.isFetching ? <Waiting what="Yorliqlar" /> : null}
@@ -106,9 +108,7 @@ export function LabelsPage() {
               className="grid aspect-[2/1] place-items-center rounded-control border bg-surface">
               {/* A cell label is read across a room, so it is one enormous
                   string and nothing else. */}
-              <span className="tabular text-2xl font-bold tracking-tight">
-                {cell.code}
-              </span>
+              <span className="display">{cell.code}</span>
             </div>
           ))}
         </div>

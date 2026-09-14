@@ -13,12 +13,21 @@
  * **One tap confirms a line.** This is the screen a scanner gun will pay for
  * later — the picker scans the item and the system refuses the wrong
  * colour — and the shape of the row is already the shape that will take it.
+ *
+ * **The board fills itself.** Above the tasks are the orders nobody has begun
+ * — `GET /warehouse/pick/waiting` — and starting one is a tap. It used to be
+ * that a task only existed once somebody pressed "Terishga qo'yish" on the
+ * office's Buyurtmalar screen, which the warehouse role cannot even open: so
+ * an order came in from a telephone, sat in `placed`, and this board stayed
+ * empty saying "Terish uchun buyurtma yo'q" until the owner went through them
+ * one at a time. The queue is the thing that decides the order of work; it
+ * cannot also need a person to load it.
  */
 
 import { Check, MapPin, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 
-import { Empty, PageHeader, Problem, Waiting } from "@/components/page"
+import { Empty, PageHeader, Panel, Problem, Waiting } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/cn"
 import { age, groups } from "@/lib/format"
@@ -27,6 +36,8 @@ import {
   usePickLine,
   usePickQueue,
   usePickTask,
+  usePickWaiting,
+  useStartPicking,
   useTakeTask,
 } from "@/lib/queries"
 import type { PickTask } from "@/lib/types"
@@ -39,46 +50,103 @@ export function PickingPage() {
 
 function Queue({ onOpen }: { onOpen: (id: number) => void }) {
   const queue = usePickQueue()
+  const fresh = usePickWaiting()
   const take = useTakeTask()
+  const start = useStartPicking()
 
   const waiting = (queue.data ?? []).filter((task) => task.status !== "picked")
+  const unbegun = fresh.data ?? []
+  const nothing = waiting.length === 0 && unbegun.length === 0
 
   return (
     <div className="space-y-4">
       <PageHeader title="Terish" subtitle="Navbat — eng eskisi birinchi" />
-      <Problem error={queue.error || take.error} />
+      <Problem error={queue.error || fresh.error || take.error || start.error} />
       {queue.isLoading ? <Waiting what="Navbat" /> : null}
-      {queue.data && waiting.length === 0 ? (
+      {queue.data && fresh.data && nothing ? (
         <Empty what="Terish uchun buyurtma yo'q." />
+      ) : null}
+
+      {/* New orders first, because they are the ones nobody is holding. A
+          picker with an unfinished trolley finds it below; a picker with free
+          hands starts at the top. */}
+      {unbegun.length > 0 ? (
+        <section className="space-y-2">
+          <h2 className="text-small font-semibold text-ink-soft">
+            Yangi buyurtmalar · {unbegun.length}
+          </h2>
+          <ul className="space-y-2">
+            {unbegun.map((order) => (
+              <li key={order.order_id}>
+                <Panel>
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-body font-semibold tabular">
+                        {order.order_code}
+                      </div>
+                      {/* What to fetch, in one line — the same sentence the
+                          office queue prints. */}
+                      <div className="truncate text-small text-ink-soft">
+                        {order.items_summary}
+                      </div>
+                      <div className="text-micro text-ink-faint">
+                        {order.items_count} dona · {age(order.age_minutes)} kutmoqda
+                        {order.delivery_window ? ` · ${order.delivery_window}` : ""}
+                      </div>
+                    </div>
+                    <Button size="lg" disabled={start.isPending} onClick={() =>
+                        start.mutate(order.order_id, {
+                          onSuccess: (task) => onOpen(task.id),
+                        })
+                      }
+                    >
+                      Boshlash
+                    </Button>
+                  </div>
+                </Panel>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {/* Trolleys already on the floor. A heading only when there is something
+          above it to tell them apart from. */}
+      {waiting.length > 0 && unbegun.length > 0 ? (
+        <h2 className="text-small font-semibold text-ink-soft">
+          Boshlangan · {waiting.length}
+        </h2>
       ) : null}
 
       <ul className="space-y-2">
         {waiting.map((task) => (
           <li key={task.id}>
-            <div className="flex items-center gap-3 rounded-panel border border-line bg-surface shadow-panel p-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-body font-semibold tabular">{task.order_code}</div>
-                <div className="text-small text-ink-soft">
-                  {task.lines.length} qator · {age(task.age_minutes)}
+            <Panel>
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-body font-semibold tabular">{task.order_code}</div>
+                  <div className="text-small text-ink-soft">
+                    {task.lines.length} qator · {age(task.age_minutes)}
+                  </div>
+                  {task.picker ? (
+                    <div className="text-micro text-ink-faint">{task.picker} olgan</div>
+                  ) : null}
                 </div>
-                {task.picker ? (
-                  <div className="text-micro text-ink-faint">{task.picker} olgan</div>
-                ) : null}
+                {task.status === "waiting" ? (
+                  <Button size="lg" className="gap-2" disabled={take.isPending} onClick={() =>
+                      take.mutate(task.id, { onSuccess: () => onOpen(task.id) })
+                    }
+                  >
+                    Olish
+                  </Button>
+                ) : (
+                  <Button size="lg" variant="secondary" onClick={() => onOpen(task.id)}
+                  >
+                    Davom etish
+                  </Button>
+                )}
               </div>
-              {task.status === "waiting" ? (
-                <Button size="lg" className="gap-2" disabled={take.isPending} onClick={() =>
-                    take.mutate(task.id, { onSuccess: () => onOpen(task.id) })
-                  }
-                >
-                  Olish
-                </Button>
-              ) : (
-                <Button size="lg" variant="secondary" onClick={() => onOpen(task.id)}
-                >
-                  Davom etish
-                </Button>
-              )}
-            </div>
+            </Panel>
           </li>
         ))}
       </ul>
@@ -113,13 +181,8 @@ function Task({ id, onBack }: { id: number; onBack: () => void }) {
         {task.data.lines.map((line, index) => {
           const done = line.picked_qty >= line.qty
           return (
-            <li
-              key={line.id}
-              className={cn(
-                "rounded-panel border border-line bg-surface shadow-panel p-3",
-                done && "opacity-60",
-              )}
-            >
+            <li key={line.id}>
+              <Panel className={cn(done && "opacity-60")}>
               <div className="flex items-start gap-3">
                 <span className="grid size-7 shrink-0 place-items-center rounded-full bg-canvas text-micro tabular text-ink-soft">
                   {index + 1}
@@ -165,6 +228,7 @@ function Task({ id, onBack }: { id: number; onBack: () => void }) {
               ) : (
                 <p className="mt-3 text-center text-small text-good">Olindi</p>
               )}
+              </Panel>
             </li>
           )
         })}

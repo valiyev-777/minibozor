@@ -128,16 +128,22 @@ class ProductViewModel @Inject constructor(
      * A colour, and the cell that goes with it.
      *
      * A cell is a colour *and* a size, so the one chosen a moment ago belongs
-     * to the colour being left behind — kept, it would buy the wrong thing. The
-     * same size is kept where the new colour has it in stock, which is what a
-     * customer switching between two colours of one shirt means to happen;
-     * otherwise the first size the new colour actually has.
+     * to the colour being left behind — kept, it would buy the wrong thing.
+     *
+     * **The size survives the change of colour even where it has sold out.** It
+     * used to be kept only while the new colour had it in stock and to fall
+     * back to whatever that colour did have, which quietly moved the customer
+     * off the size they came for: pick 41, tap through the colours, and you end
+     * up holding a 44 without being told. Now 41 stays 41, the chip is struck
+     * through, and the strip of photographs says which colours have it — that
+     * is the answer the tapping was trying to get at. Only a colour that does
+     * not come in this size at all forces a different one.
      */
     fun selectColour(colour: String) = _state.update { s ->
         val cells = s.product?.variants.orEmpty().filter { it.colour == colour }
         if (cells.isEmpty()) return@update s.copy(selectedColour = colour)
         val kept = s.selectedVariant?.size
-        val next = cells.firstOrNull { it.size == kept && it.inStock }
+        val next = cells.firstOrNull { it.size == kept }
             ?: cells.firstOrNull { it.inStock }
             ?: cells.first()
         s.copy(selectedColour = colour, selectedVariantId = next.id)

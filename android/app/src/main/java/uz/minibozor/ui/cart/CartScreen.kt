@@ -95,7 +95,9 @@ fun CartScreen(
         onPauseOrDispose {}
     }
 
-    MbScreen { padding ->
+    // The tab's header is a band of surface, so that is what goes behind the
+    // clock rather than a step of grey canvas. See [MbScreen.statusBand].
+    MbScreen(statusBand = MbTheme.colors.surface) { padding ->
         Column(
             Modifier
                 .fillMaxSize()

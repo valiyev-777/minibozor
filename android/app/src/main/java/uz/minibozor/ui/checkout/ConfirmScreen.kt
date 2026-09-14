@@ -93,23 +93,35 @@ fun ConfirmScreen(
                         contentPadding = 10.dp,
                     )
                     MbDivider(inset = 62.dp)
-                    // Where the money changes hands, which is the whole of
-                    // what there is to confirm: no card is stored, so there is
-                    // no "•••• 4242" to print and nothing behind it if there
-                    // were.
+                    // Which card, by name, because this is the screen where
+                    // pressing the button takes the money.
+                    //
+                    // It used to print where the money would change hands for
+                    // both methods, since nothing was stored and there was no
+                    // "•• 9012" to show. A card order is charged the moment
+                    // this button is pressed, so the last thing the customer
+                    // reads before pressing it should be which card that is —
+                    // and the server names it in the preview so all three
+                    // clients cannot each mask it differently.
+                    val cash = state.paymentMethod == "cash"
                     val atTheDoor = if (state.delivery == DeliveryMethod.Courier) {
                         stringResource(R.string.kuryerga_topshirishda)
                     } else {
                         stringResource(R.string.punktda_tolash)
                     }
+                    val card = preview.card
                     MbListRow(
-                        label = if (state.paymentMethod == "cash") {
-                            stringResource(R.string.naqd_pul)
-                        } else {
-                            stringResource(R.string.karta)
+                        label = when {
+                            cash -> stringResource(R.string.naqd_pul)
+                            card != null -> stringResource(R.string.karta_niqob, card.last4)
+                            else -> stringResource(R.string.karta)
                         },
                         glyph = "card",
-                        subtitle = atTheDoor,
+                        subtitle = when {
+                            cash -> atTheDoor
+                            card != null -> card.brand
+                            else -> stringResource(R.string.karta_qoshilmagan)
+                        },
                         showChevron = false,
                         contentPadding = 10.dp,
                     )

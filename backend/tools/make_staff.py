@@ -5,16 +5,27 @@
 
 Staff sign in through the same OTP flow customers use — the role is the only
 difference — so this creates or updates a ``users`` row and nothing else.
+
+The admin panel can now appoint people too, and this goes through the same
+``roles.appoint`` it does. It used to write the row itself and no audit line
+with it, so whether the shop could say who made somebody a courier depended on
+which of the two doors the owner had used that day — and the shell was the
+only door there was for the first year, which is to say for most of the staff.
+The one difference the log keeps is the actor: nobody is signed in at a shell,
+so the row names the system rather than a person.
 """
 
 from __future__ import annotations
 
 import sys
 
+from pydantic import ValidationError
 from sqlmodel import Session, select
 
+from app import roles
 from app.db import engine, require_current_schema
 from app.models import User, UserRole
+from app.schemas import PhoneIn
 
 
 def show(session: Session) -> None:
@@ -51,17 +62,27 @@ def main() -> None:
                   ", ".join(r.value for r in UserRole))
             raise SystemExit(1) from None
 
-        user = session.exec(select(User).where(User.phone == phone)).first()
-        if user is None:
-            user = User(phone=phone, full_name=full_name, role=role)
-        else:
-            user.role = role
-            if full_name:
-                user.full_name = full_name
-        session.add(user)
+        # The same normalisation the sign-in flow applies, so `901234567`
+        # here and `+998901234567` at the OTP screen are one account rather
+        # than two, the second of which is the one they can sign in to.
+        try:
+            phone = PhoneIn(phone=phone).phone
+        except ValidationError:
+            print(f"{phone!r} is not an Uzbek mobile number.")
+            raise SystemExit(1) from None
+
+        user, created = roles.appoint(
+            session,
+            actor=None,
+            phone=phone,
+            role=role,
+            full_name=full_name,
+            note="make_staff",
+        )
         session.commit()
         session.refresh(user)
-        print(f"{user.phone} → {user.role.value}  ({user.full_name or 'nomsiz'})")
+        made = "new" if created else "updated"
+        print(f"{user.phone} → {user.role.value}  ({user.full_name or 'nomsiz'}, {made})")
 
         print("Sign in with the SMS code — 123456 in dev.")
 

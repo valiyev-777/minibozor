@@ -168,6 +168,44 @@ def build_task(
     return _task_out(session, task)
 
 
+@router.get(
+    "/pick/waiting",
+    response_model=list[s.PickWaitingOut],
+    summary="Orders nobody has begun — the front of the board",
+)
+def waiting_orders(user: StockViewer, session: SessionDep) -> list[s.PickWaitingOut]:
+    """Every placed order with no task on it, oldest first.
+
+    This is the fix for a queue that only filled when somebody remembered.
+    "A task is taken, not assigned" is the first thing this file says, and it
+    was only half true: the taking was the bench's, but the *putting on the
+    board* was a button on the office's order screen — a screen the warehouse
+    role cannot even open. So an order arrived from a telephone, sat in
+    ``placed``, and the bench's board stayed empty until the owner opened
+    Buyurtmalar and pressed a button for it, one order at a time. On the
+    evening the owner was not in, nothing was picked, which is precisely the
+    failure the docstring at the top of this file says a queue exists to
+    prevent.
+
+    Nothing is created here. A row in this list is an order, not a task; the
+    task is built when a picker starts one, which is also the moment the cells
+    are worked out, so the walk list is as fresh as the shelf. Building them
+    all up front would freeze a room that moves all day.
+
+    ``placed`` only. An order in ``packing`` has been picked — that is what
+    completing a task does — and putting it back on this board would send a
+    second person after a parcel already on the courier shelf.
+    """
+    taken = select(PickTask.order_id)
+    rows = session.exec(
+        select(Order)
+        .where(Order.status == OrderStatus.PLACED)
+        .where(col(Order.id).not_in(taken))
+        .order_by(col(Order.created_at), col(Order.id))
+    ).all()
+    return [_waiting_out(session, order) for order in rows]
+
+
 @router.get("/pick/{task_id}", response_model=s.PickTaskOut)
 def get_task(task_id: int, user: StockViewer, session: SessionDep) -> s.PickTaskOut:
     return _task_out(session, _task(session, task_id))
@@ -257,7 +295,7 @@ def pick_line(
             order_id=task.order_id,
         )
     except st.StockError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from None
+        raise st.refusal(error) from None
 
     line.picked_qty += wanted
     if line.picked_qty >= line.qty:
@@ -361,6 +399,25 @@ def _reorder(session: SessionDep, task: PickTask) -> None:
         line.walk_order = order
         session.add(line)
     session.commit()
+
+
+def _waiting_out(session: SessionDep, order: Order) -> s.PickWaitingOut:
+    items = session.exec(
+        select(OrderItem).where(OrderItem.order_id == order.id)
+    ).all()
+    return s.PickWaitingOut(
+        order_id=order.id,
+        order_code=order.code,
+        items_count=sum(item.quantity for item in items),
+        items_summary=sv.items_summary(list(items)),
+        delivery_day=order.delivery_day,
+        delivery_window=(
+            f"{order.delivery_start}–{order.delivery_end}"
+            if order.delivery_start and order.delivery_end
+            else ""
+        ),
+        age_minutes=max(0, int((utcnow() - order.created_at).total_seconds() // 60)),
+    )
 
 
 def _task_out(session: SessionDep, task: PickTask) -> s.PickTaskOut:

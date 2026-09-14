@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
 from app import i18n, inventory
+from app import payments
 from app import products as pr
 from app import schemas as s
 from app import services as sv
@@ -11,6 +12,7 @@ from app.deps import CurrentUser, SessionDep
 from app.models import (
     Address,
     CancelReason,
+    CardStatus,
     CartItem,
     DeliverySlot,
     Notification,
@@ -18,6 +20,7 @@ from app.models import (
     Order,
     OrderItem,
     OrderStatus,
+    PaymentCard,
     PaymentMethod,
     PickupPoint,
     ProductImage,
@@ -66,6 +69,15 @@ def checkout_preview(
         pickup_point=sv.pickup_out(pickup) if pickup else None,
         slot=sv.slot_out(slot) if slot else None,
         totals=totals,
+        # Read here so the confirm screen can print "•• 9012" before anybody
+        # presses anything. Resolved rather than trusted: a card id from a
+        # client is a card id somebody else's client could have sent.
+        card=(
+            sv.card_out(_card(session, user.id, payload.payment_card_id))
+            if payload.payment_method is PaymentMethod.CARD
+            and payload.payment_card_id is not None
+            else None
+        ),
     )
 
 
@@ -92,6 +104,37 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
     else:
         address_line = address_meta = ""
 
+    # The money, before the order.
+    #
+    # ``paid`` used to be `payment_method == CARD` — a card order was written
+    # down as paid at the moment it was placed and nothing was ever charged.
+    # The whole shop believed it: ``courier._cash_due`` asks for nothing at
+    # the door on a card order "because it is already paid", so a shopper
+    # could tap Karta and take delivery of goods nobody was ever paid for.
+    #
+    # So the charge happens here and the order is written only if it goes
+    # through. That ordering is the customer's too — they are paying for a
+    # basket, not settling an invoice for something already promised — and it
+    # means a refusal leaves nothing behind: no order to cancel, no counts to
+    # put back, no row for the owner to explain.
+    #
+    # 402 rather than 400: the request is right and the card is real, and what
+    # went wrong is the payment. The reason is the processor's, in the
+    # customer's language, because "another card", "more money" and "this card
+    # has expired" are three different things to go and do.
+    charge = payments.Charge(ok=True)
+    if payload.payment_method is PaymentMethod.CARD:
+        if payload.payment_card_id is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, i18n.label("card_required")
+            )
+        card = _card(session, user.id, payload.payment_card_id)
+        charge = payments.charge(card, preview.totals.total)
+        if not charge.ok:
+            raise HTTPException(
+                status.HTTP_402_PAYMENT_REQUIRED, i18n.label(charge.reason)
+            )
+
     order = Order(
         code=sv.next_order_code(session),
         user_id=user.id,
@@ -105,7 +148,10 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         delivery_start=slot.start_time if slot else None,
         delivery_end=slot.end_time if slot else None,
         payment_method=payload.payment_method,
-        paid=payload.payment_method == PaymentMethod.CARD,
+        # Paid because it was, not because of which button was pressed. Cash
+        # is settled at the door by the courier, and stays false until then.
+        paid=charge.ok and payload.payment_method is PaymentMethod.CARD,
+        payment_reference=charge.reference,
         recipient_name=payload.recipient_name or user.full_name,
         recipient_phone=payload.recipient_phone or user.phone,
         subtotal=preview.totals.subtotal,
@@ -130,6 +176,18 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         # ``variant_label`` already reads well — but so that a cancellation
         # later knows which counts to put back.
         cart_item = session.get(CartItem, item.id)
+        # What the shop paid for this cell's newest lot, frozen beside what it
+        # is charging. Snapshotted for the same reason the price is: the next
+        # market run moves the cost and this order must not move with it.
+        # Nought when nothing was ever booked in with a price — which is every
+        # order placed before the column existed — and nought means unknown,
+        # so the reports count the line's units as uncosted rather than
+        # claiming the whole price as margin.
+        bought = (
+            session.get(ProductVariant, cart_item.variant_id)
+            if cart_item and cart_item.variant_id
+            else None
+        )
         order_item = OrderItem(
             order_id=order.id,
             product_id=item.product_id,
@@ -147,6 +205,7 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
             size=item.size,
             variant_label=item.variant_label,
             unit_price=item.unit_price,
+            unit_cost=bought.last_cost if bought else 0,
             quantity=item.quantity,
         )
         session.add(order_item)
@@ -287,6 +346,17 @@ def cancel_order(
     order.status = OrderStatus.CANCELLED
     order.updated_at = sv.utcnow()
     session.add(order)
+    # The same stamp the operator's cancel writes.
+    #
+    # It was missing here, and the two cancel paths therefore left different
+    # evidence: an operator cancelling wrote a `cancelled` event and a customer
+    # pressing the button in the app wrote none at all. So the timeline the app
+    # draws stopped at "placed" for the customer's own cancellation, and
+    # anything counting cancellations off the events — a report of how many
+    # sales were called off and when — quietly saw only half of them.
+    # ``orders.updated_at`` is not the answer: it is the last change of any
+    # kind, so it moves again the next time anything touches the row.
+    sv.stamp_order_event(session, order, note=order.cancel_reason or "")
     session.add(
         Notification(
             user_id=user.id,
@@ -376,6 +446,22 @@ def _owned_order(session: SessionDep, user_id: int, order_id: int) -> Order:
     if order is None or order.user_id != user_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("order_not_found"))
     return order
+
+
+def _card(session: SessionDep, user_id: int, card_id: int | None) -> PaymentCard:
+    """This customer's card, or nothing that can be charged.
+
+    404 on somebody else's, as in ``routers.cards``: a caller who cannot use a
+    card should not be able to learn that it exists. An expired one is a 409 —
+    it is theirs, it is simply not usable, and the app should send them to the
+    form rather than telling them to try again.
+    """
+    card = session.get(PaymentCard, card_id) if card_id is not None else None
+    if card is None or card.user_id != user_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("card_not_found"))
+    if card.status is not CardStatus.ACTIVE:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("card_expired"))
+    return card
 
 
 def _resolve_address(session: SessionDep, user_id: int, address_id: int | None) -> Address | None:

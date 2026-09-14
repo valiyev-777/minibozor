@@ -24,6 +24,7 @@ from app.models import (
     OrderEvent,
     OrderItem,
     OrderStatus,
+    PaymentCard,
     PaymentMethod,
     PickupPoint,
     Product,
@@ -693,10 +694,50 @@ def order_eta_label(o: Order) -> str:
     return i18n.label("delivered_on", date=uz_date(o.delivery_day))
 
 
+def card_out(c: PaymentCard) -> s.CardOut:
+    """One saved card, as the person who owns it recognises it.
+
+    The expiry is assembled here rather than in the client: three apps printing
+    ``12/30`` from a month and a year is three chances to print ``12/2030`` on
+    one of them.
+    """
+    return s.CardOut(
+        id=c.id,
+        brand=c.brand,
+        last4=c.last4,
+        holder=c.holder,
+        expiry=f"{c.expiry_month:02d}/{str(c.expiry_year)[-2:]}",
+        status=c.status,
+        is_default=c.is_default,
+    )
+
+
 def payment_label(session: Session, o: Order) -> str:
     if o.payment_method == PaymentMethod.CASH:
         return i18n.label("cash_courier")
     return i18n.label("card")
+
+
+def items_summary(items: list[OrderItem]) -> str:
+    """What to fetch, in one line.
+
+    The first line named in full with its variant, and a count of the rest — a
+    picker recognises an order by the thing in it, and an order of six
+    different things is a row that would wrap to four lines if it listed them.
+
+    Here rather than in a router because two queues print it now: the office's
+    order list and the bench's own board. Two copies would drift, and the whole
+    point is that the picker reads the same sentence the operator does.
+    """
+    if not items:
+        return ""
+    first = items[0]
+    head = first.title
+    if first.variant_label:
+        head = f"{head} · {first.variant_label}"
+    if first.quantity > 1:
+        head = f"{head} × {first.quantity}"
+    return head if len(items) == 1 else f"{head} +{len(items) - 1}"
 
 
 def order_summary(session: Session, o: Order) -> s.OrderSummaryOut:

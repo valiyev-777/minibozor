@@ -539,6 +539,39 @@ data class SlotDayDto(
 // the door, and neither wants a stored PAN. `me/overview` still answers
 // `cards_count`, at nought, so the profile screen keeps its shape.
 
+// -------------------------------------------------------------------- payment
+
+/**
+ * A saved card, as its owner recognises it.
+ *
+ * Four digits, a name, an expiry — and nothing that can be charged. The number
+ * never leaves the handset; what the server can charge is a token it holds and
+ * this app never sees again. See `AddCardViewModel`.
+ */
+@Immutable
+@Serializable
+data class CardDto(
+    val id: Int,
+    val brand: String,
+    val last4: String,
+    val holder: String = "",
+    val expiry: String,
+    val status: String,
+    @SerialName("is_default") val isDefault: Boolean = false,
+)
+
+@Immutable
+@Serializable
+data class CardRequest(
+    val brand: String,
+    val last4: String,
+    val holder: String = "",
+    @SerialName("expiry_month") val expiryMonth: Int,
+    @SerialName("expiry_year") val expiryYear: Int,
+    @SerialName("processor_token") val processorToken: String,
+    @SerialName("is_default") val isDefault: Boolean = false,
+)
+
 // --------------------------------------------------------------------- orders
 
 @Immutable
@@ -629,6 +662,8 @@ data class CheckoutRequest(
     @SerialName("pickup_point_id") val pickupPointId: Int? = null,
     @SerialName("slot_id") val slotId: Int? = null,
     @SerialName("payment_method") val paymentMethod: String = "card",
+    /** Which card pays for it. Required by the server when the method is `card`. */
+    @SerialName("payment_card_id") val paymentCardId: Int? = null,
     @SerialName("recipient_name") val recipientName: String = "",
     @SerialName("recipient_phone") val recipientPhone: String = "",
     @SerialName("promo_code") val promoCode: String? = null,
@@ -643,6 +678,8 @@ data class CheckoutPreviewDto(
     @SerialName("pickup_point") val pickupPoint: PickupPointDto? = null,
     val slot: SlotDto? = null,
     val totals: CartTotalsDto,
+    /** The card the order would be charged to, so the confirm screen can name it. */
+    val card: CardDto? = null,
 )
 
 @Immutable

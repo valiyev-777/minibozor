@@ -911,24 +911,6 @@ def _return_out(session: SessionDep, r: ReturnRequest) -> s.StaffReturnOut:
     )
 
 
-def _summary(items: list[OrderItem]) -> str:
-    """What to fetch, in one line.
-
-    The first line named in full with its variant, and a count of the rest —
-    a picker recognises an order by the thing in it, and an order of six
-    different things is a row that would wrap to four lines if it listed them.
-    """
-    if not items:
-        return ""
-    first = items[0]
-    head = first.title
-    if first.variant_label:
-        head = f"{head} · {first.variant_label}"
-    if first.quantity > 1:
-        head = f"{head} × {first.quantity}"
-    return head if len(items) == 1 else f"{head} +{len(items) - 1}"
-
-
 def _order_row(session: SessionDep, o: Order, reader: UserRole) -> s.StaffOrderOut:
     customer = session.get(User, o.user_id)
     courier = session.get(User, o.courier_id) if o.courier_id else None
@@ -948,7 +930,7 @@ def _order_row(session: SessionDep, o: Order, reader: UserRole) -> s.StaffOrderO
         delivery_day=o.delivery_day,
         delivery_window=window,
         items_count=sum(i.quantity for i in items),
-        items_summary=_summary(items),
+        items_summary=sv.items_summary(items),
         total=o.total,
         paid=o.paid,
         # The moves the rules allow, minus the ones that are not this

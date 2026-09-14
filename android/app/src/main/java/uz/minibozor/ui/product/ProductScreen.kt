@@ -213,7 +213,19 @@ fun ProductScreen(
     // it rather than at some threshold of their own. Light over the full-screen
     // photograph too, whose ground is black in either theme.
     val overPhoto by remember { derivedStateOf { barCover(cover) < 1f } }
-    val lightBars = overPhoto || viewerPage != null
+    // White icons over the hero only where the hero is dark.
+    //
+    // It used to be white icons over the photograph always, with a black wash
+    // under them to make them readable. But the hero's ground is
+    // `photoStudio` — white on the light theme, because the catalogue is
+    // cut-outs rather than scenes — so forcing light icons there meant a
+    // permanent grey band across the top of every product page, holding a white
+    // clock up on a white picture. Over the photograph the bar now follows the
+    // ground it is drawn on, which is the theme; see the wash in [ProductBar].
+    //
+    // The full-screen viewer is the exception and keeps its own answer: that
+    // one really is black, whichever theme is on.
+    val lightBars = (overPhoto && darkTheme) || viewerPage != null
 
     /**
      * The window's bar icons, set only while this page is the resumed one.
@@ -316,6 +328,30 @@ fun ProductScreen(
     val selectedSize = state.selectedVariant?.takeIf { it.size.isNotBlank() }
     val buyableLeft = selectedSize?.stockLeft ?: shelfLeft
     val buyable = shelfInStock && (selectedSize?.inStock ?: true)
+
+    // Which colours have nothing left **in the size being asked about**.
+    //
+    // A cell is a colour and a size, so "is the blue sold out" has no answer
+    // until a size is named. The strip of photographs was answering the other
+    // question — has this colour sold out in every size — which is almost
+    // always no, so a customer after a 41 saw five bright tiles and had to tap
+    // each one to find the single colour that had one. This is the set the
+    // strip greys out, and it is recomputed as the size changes: pick 41 and
+    // the colours without a 41 go dim, pick 43 and they come back.
+    val soldOutColours = remember(product, selectedSize?.size) {
+        val size = selectedSize?.size
+        val cells = product?.variants.orEmpty()
+        productColors
+            .filter { colour ->
+                if (size == null) {
+                    !colour.inStock
+                } else {
+                    cells.none { it.colour == colour.colour && it.size == size && it.inStock }
+                }
+            }
+            .map { it.colour }
+            .toSet()
+    }
 
     Box(
         Modifier
@@ -445,17 +481,13 @@ fun ProductScreen(
                                     // task and the rating is the context, and
                                     // that is also the order of interest.
                                     Spacer(Modifier.height(14.dp))
-                                    // The count of what is actually chosen,
-                                    // which is what the buy bar counts too.
-                                    // These were two figures on one screen —
-                                    // the colour's whole shelf here and the
-                                    // cell's own share at the bottom — so the
-                                    // page said "6 dona qoldi" over a bar
-                                    // saying "2 dona qoldi", and one of them
-                                    // had to be wrong to a customer reading
-                                    // both.
+                                    // How many have gone, and whether the
+                                    // cell chosen above is empty. Not how many
+                                    // are left: the page quoted the shelf in
+                                    // two places and now quotes it in none —
+                                    // the ceiling on the stepper is where a
+                                    // customer meets the figure.
                                     ShelfLine(
-                                        stockLeft = buyableLeft,
                                         soldCount = product.soldCount,
                                         inStock = buyable,
                                     )
@@ -480,6 +512,7 @@ fun ProductScreen(
                                                 colors = colors,
                                                 selected = state.selectedColour,
                                                 onSelect = viewModel::selectColour,
+                                                soldOut = soldOutColours,
                                                 productImages = gallery,
                                             )
                                         }
@@ -508,11 +541,23 @@ fun ProductScreen(
                         // suddenly has no rating at all reads as a regression.
                         // What goes is the tap: without `Features.REVIEWS`
                         // there is nothing behind it. See Features.kt.
-                        item(key = "rating") {
+                        //
+                        // But nought is not a rating, it is the absence of one,
+                        // and with reviews off it is what every product in the
+                        // shop answers. Drawn anyway it was an empty bordered
+                        // panel reading "0.0" over five grey stars — a page
+                        // saying nobody liked this, on goods nobody has been
+                        // able to rate. So the block is emitted only once there
+                        // is a number behind it, which is the same rule the rest
+                        // of this page follows: a block whose field is empty is
+                        // not drawn, and the card reads sparse rather than
+                        // broken.
+                        val rating = state.summary?.rating ?: product.rating
+                        if (rating > 0.0) item(key = "rating") {
                             MbReveal(reveal, "rating", BlockRating, modifier = SectionGap) {
                                 MbCard(shape = RectangleShape) {
                                     RatingPanel(
-                                        rating = state.summary?.rating ?: product.rating,
+                                        rating = rating,
                                         reviewsCount = if (Features.REVIEWS) {
                                             state.summary?.total ?: product.reviewsCount
                                         } else {

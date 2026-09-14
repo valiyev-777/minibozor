@@ -52,6 +52,8 @@ import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.util.grouped
 import uz.minibozor.core.util.mediaUrl
 import uz.minibozor.core.util.sum
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.drawWithContent
 
 /** The soft ink wash a pressed tile is highlighted with. */
 @Composable
@@ -130,6 +132,34 @@ private fun Modifier.productCard(
 }
 
 /**
+ * How far a photograph is taken down on the dark theme.
+ *
+ * The catalogue is cut-outs on a white studio backdrop, so on the dark theme
+ * every tile was a sheet of pure white — eight of them in a grid, each the
+ * brightest thing on a near-black page by a wide margin, and the page read as a
+ * page of lamps rather than a page of goods. The palette had already been
+ * inverted underneath them, which did nothing at all: what glares is inside the
+ * photograph, not behind it.
+ *
+ * A sixth is what it takes to bring a white backdrop down to a paper tone that
+ * still reads as white against `surface` while no longer out-shining the price
+ * beside it. Little enough that a photograph shot on a colour keeps its colour
+ * and a dark product stays dark — this dims the picture, it does not tint it.
+ */
+private const val DarkPhotoDim = 0.16f
+
+/** The dim above, applied to whatever this modifier is on, and only in the dark. */
+@Composable
+private fun Modifier.dimOnDark(): Modifier {
+    if (!MbTheme.colors.isDark) return this
+    val ground = MbTheme.colors.canvas
+    return this.drawWithContent {
+        drawContent()
+        drawRect(ground, alpha = DarkPhotoDim)
+    }
+}
+
+/**
  * Photo with the design's warm neutral backdrop showing through while it loads.
  *
  * Fit, not Crop: catalogue photos are cut-outs of a whole product in mixed
@@ -162,7 +192,7 @@ fun MbProductImage(
                 // ground around a photograph that came with its own backdrop,
                 // which on the dark theme is a bright block with a dark border.
                 contentScale = contentScale,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().dimOnDark(),
             )
         } else {
             // No photo yet. A muted glyph reads as "none supplied" where an
@@ -300,26 +330,40 @@ private fun BoxScope.SoldOutVeil(shape: Shape) {
 /** Under this many left, the count stops being a fact and becomes a reason. */
 const val MbLowStock = 5
 
+// `StockLine` stood here: "4 dona qoldi" under the buy button on the product
+// page. The shelf is no longer quoted to a customer at all — the stepper stops
+// at the last one and says the figure *there*, which is the only moment it
+// answers a question somebody is asking. What survives is the half of it that
+// is a reason rather than a fact, on the tile: see [LowStockBadge].
+
 /**
- * How many are left, on the card.
+ * "3 dona qoldi", on the corner of the photograph.
  *
- * Quiet by default and urgent when there are few: the same line, louder only
- * when the number has something to say. Twenty-five of something is a fact
- * nobody acts on; two of it is a reason to decide now, and the difference has
- * to be visible without reading the number.
+ * Only when there are few. A count is a fact until it is small, at which point
+ * it becomes the reason to decide now — so the tile carries the reason, and the
+ * fact is not printed anywhere: the product page stopped quoting the shelf.
  *
- * Nothing at all when the count is zero — the veil over the photograph has
- * already said the only thing that matters about a product with none left.
+ * On the picture rather than under the price, which is where
+ * `design/screens/07` puts a card's badge, and for the room: the text block
+ * under a 148 dp photograph has four lines to give and a name that has to be
+ * read needs two of them. Solid danger with white on it rather than the pale
+ * pink of the discount pill — this one sits on a photograph, where a tinted
+ * ground is whatever the photographer shot against.
  */
 @Composable
-fun StockLine(stockLeft: Int) {
-    if (stockLeft <= 0) return
-    val low = stockLeft <= MbLowStock
+private fun BoxScope.LowStockBadge(stockLeft: Int) {
+    if (stockLeft !in 1..MbLowStock) return
     MbText(
         stringResource(R.string.n_dona_qoldi, stockLeft),
         MbTheme.type.micro,
-        if (low) MbTheme.colors.danger else MbTheme.colors.textQuaternary,
+        Color.White,
         maxLines = 1,
+        modifier = Modifier
+            .align(Alignment.BottomStart)
+            .padding(6.dp)
+            .clip(MbTheme.shapes.badge)
+            .background(MbTheme.colors.danger)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
 
@@ -356,16 +400,25 @@ fun MbDiscountPill(
 }
 
 /**
- * What it costs, and what that is off: `1 090 000` on its own line, then
- * `1 540 000  −29%` under it.
+ * What it costs: `1 090 000  −29%` on one line, `1 540 000` struck through on
+ * the thin line under it.
  *
- * Two lines, not one. Beside the number the pill did not fit: a card in a
- * two-per-row grid has about 150 dp of text width, `168 000 000` takes 110 of
- * them at price weight, and the pill needs 40 more — so the two were pressed
- * against each other and on the longest prices the number itself was clipped.
- * They are also two different kinds of fact. What the thing costs is the
- * headline; what it used to cost and how much is off are the footnote, and a
- * footnote belongs under the line it annotates, at footnote size.
+ * The saving used to sit under the price in the pink pill, next to the old
+ * price, on a row 20 dp tall that was held open on every card whether or not it
+ * had anything to put in it — so a shelf of full-price goods was a shelf of
+ * cards with a blank band across the middle. Two facts and only one of them is
+ * ever missing, so they are no longer on the same line: the saving joins the
+ * price it applies to, in red, at label size, and what is left to reserve is
+ * one 13 dp line for a struck-through number.
+ *
+ * This is also how `design/screens/07` draws it — `−{off}` beside the price and
+ * the was-price on its own 10 px line — which the pill had drifted away from.
+ *
+ * Still reserved, though: a grid lays two cards side by side and neither
+ * stretches to the other, so a discounted product next to a full-price one
+ * would leave one card's bottom edge a line higher than its neighbour's.
+ * A minimum rather than a fixed height, so the number still has somewhere to go
+ * when the customer has turned their font size up.
  */
 @Composable
 fun MbPriceRow(
@@ -377,20 +430,39 @@ fun MbPriceRow(
 ) {
     val was = oldPrice?.takeIf { it > price }
     Column(modifier) {
-        MbText(price.grouped(), priceStyle, maxLines = 1)
-        Spacer(Modifier.height(3.dp))
-        // The footnote line is always there, even with nothing to say.
-        //
-        // A grid lays two cards side by side and neither stretches to the
-        // other, so a discounted product next to a full-price one left one
-        // card's bottom edge a line higher than its neighbour's. Holding the
-        // room keeps every card in a row the same height. A minimum rather
-        // than a fixed height, so the pill still has somewhere to go when the
-        // customer has turned their font size up.
-        Row(
-            Modifier.defaultMinSize(minHeight = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Baselines, not box edges: the saving is two type steps smaller
+            // than the price and centring the two boxes would hang it above the
+            // number's foot.
+            MbText(
+                price.grouped(),
+                priceStyle,
+                maxLines = 1,
+                modifier = Modifier.alignByBaseline(),
+            )
+            if (discountPercent != null) {
+                MbText(
+                    "−$discountPercent%",
+                    // The label style's own tracking taken out: on a
+                    // four-glyph token 1.4 sp spaced `−9%` into `− 9 %`.
+                    MbTheme.type.label.copy(letterSpacing = 0.sp),
+                    MbTheme.colors.danger,
+                    maxLines = 1,
+                    // Unweighted price, weighted saving: the number is the one
+                    // thing on the card that must never be clipped, so it is
+                    // measured first and the saving takes what is left. Only a
+                    // nine-figure price on a narrow phone runs the two
+                    // together, and it is the saving that gives way.
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .alignByBaseline(),
+                )
+            }
+        }
+        Spacer(Modifier.height(2.dp))
+        Box(
+            Modifier.defaultMinSize(minHeight = 13.dp),
+            contentAlignment = Alignment.CenterStart,
         ) {
             if (was != null) {
                 MbText(
@@ -401,9 +473,6 @@ fun MbPriceRow(
                     maxLines = 1,
                 )
             }
-            // A pill rather than 9.5sp of red text: the saving is the reason
-            // someone stops on the card, and it was the smallest thing on it.
-            if (discountPercent != null) MbDiscountPill(discountPercent)
         }
     }
 }
@@ -505,10 +574,17 @@ fun MbHeroPrice(
         }
         if (oldPrice != null && oldPrice > price) {
             Spacer(Modifier.height(if (compact) 1.dp else 3.dp))
+            // Caption in both, where the full-size one used to be sectionHead.
+            //
+            // What it used to cost is a footnote, and 15.5 sp of ExtraBold is
+            // not a footnote — struck through at that weight the line is as
+            // thick as the digits and the number reads as defaced rather than
+            // superseded, directly under a price it is nearly the size of.
+            // `design/screens/14` sets it at 11.5 px in the muted grey, which
+            // is a caption; the compact bar had it right all along.
             MbText(
                 oldPrice.grouped(),
-                (if (compact) MbTheme.type.caption else MbTheme.type.sectionHead)
-                    .copy(textDecoration = TextDecoration.LineThrough),
+                MbTheme.type.caption.copy(textDecoration = TextDecoration.LineThrough),
                 MbTheme.colors.textQuaternary,
                 maxLines = 1,
             )
@@ -717,6 +793,10 @@ private fun ProductTileBody(
                     .aspectRatio(1f),
             )
             if (!inStock) SoldOutVeil(MbTheme.shapes.tileSmall)
+            // Under the veil in the chain but drawn over it: a product with
+            // none left has nothing to say about how few are left, and
+            // [LowStockBadge] draws nothing at zero, so the two never meet.
+            LowStockBadge(stockLeft)
             if (onToggleFavorite != null) {
                 FavoriteBubble(
                     isFavorite = isFavorite,
@@ -732,7 +812,6 @@ private fun ProductTileBody(
         // Full width, always: the price is the one line on the card that must
         // never be squeezed, so nothing shares its row.
         MbPriceRow(price, oldPrice, discountPercent)
-        StockLine(stockLeft)
         Spacer(Modifier.height(6.dp))
         // Two lines always, so every tile in a row is the same height and no
         // title ends up pressed against the card edge. Longer than that is cut
@@ -842,8 +921,9 @@ fun FavoriteBubble(
 ) {
     // Nothing on the dark theme: the palette's ink is a near-white there, so a
     // shadow drawn in it is a pale halo around the disc rather than a lift under
-    // it — and a white disc on a dark page needs no help being seen.
-    val lift = if (MbTheme.colors.isDark) 0.dp else 2.dp
+    // it. What the disc gets there instead is an edge — see below.
+    val dark = MbTheme.colors.isDark
+    val lift = if (dark) 0.dp else 2.dp
     Box(
         modifier
             .size(size + margin * 2)
@@ -857,7 +937,26 @@ fun FavoriteBubble(
                 // Under the clip, so the lift is a disc and not a square.
                 .shadow(lift, CircleShape, clip = false, spotColor = MbTheme.colors.ink)
                 .clip(CircleShape)
-                .background(Color.White),
+                // The card's own surface, not a fixed white.
+                //
+                // Fixed white was invisible on the dark theme, and not because
+                // the page is dark — because the photograph it sits on is
+                // white, this catalogue being cut-outs on a studio backdrop. A
+                // white disc on a white shirt is nothing at all. `surface`
+                // inverts with the palette, so the disc is white on the light
+                // theme exactly as the design draws it and near-black on the
+                // dark one, where it reads against the same photograph.
+                .background(MbTheme.colors.surface)
+                // And an edge on the dark theme, where there is no shadow to do
+                // the work: a dark disc has to hold its own against a dark
+                // product as well as a white one.
+                .then(
+                    if (dark) {
+                        Modifier.border(1.dp, MbTheme.colors.hairline, CircleShape)
+                    } else {
+                        Modifier
+                    }
+                ),
             contentAlignment = Alignment.Center,
         ) {
             MbIcon(

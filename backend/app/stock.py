@@ -33,8 +33,10 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from fastapi import HTTPException, status
 from sqlmodel import Session, col, func, select
 
+from app import i18n
 from app import locations as loc
 from app.models import (
     SELLABLE_KINDS,
@@ -65,7 +67,90 @@ LIVE_ORDERS = (OrderStatus.PLACED, OrderStatus.PACKING, OrderStatus.SHIPPED)
 
 
 class StockError(RuntimeError):
-    """A move the room cannot make — usually taking more than is there."""
+    """A move the room cannot make — usually taking more than is there.
+
+    Carries the three things the sentence is made of — which place, how many
+    were asked for, how many are there — as well as the sentence itself. The
+    routers used to put ``str(error)`` in the response detail, which shipped
+    "A-02-03 holds 2 of SHIRT-BLK-M, not 5" to a warehouse that reads Uzbek;
+    with the numbers on the exception the door can say the same thing in the
+    language the request asked for. ``where`` is empty when the shortfall is
+    not about one place — "not enough on the shelves" is about all of them.
+
+    ``retired`` is the one refusal here that is not about a shortfall: the
+    destination has been taken out of the room. It rides on the same exception
+    because every door that moves goods already catches this one, and a second
+    exception type would be a second thing each of them had to remember.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        where: str = "",
+        wanted: int = 0,
+        held: int = 0,
+        retired: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.where = where
+        self.wanted = wanted
+        self.held = held
+        self.retired = retired
+
+
+def refusal(error: StockError) -> HTTPException:
+    """A shortfall, said in the language the request asked for.
+
+    Here rather than in one of the routers because four doors across three
+    files catch the same exception, and for a while each decided for itself
+    what to do with it: ``/warehouse/move`` translated the sentence and
+    ``/warehouse/stock/damage`` and ``/picking`` put ``str(error)`` in the
+    detail, so the same shortfall reached the same warehouse in Uzbek or in
+    English depending on which button they pressed. One place to catch it is
+    one answer.
+
+    **Two shortfalls, two sentences.** A cell that holds less is about *that
+    cell*, and the person is standing at it — the code is what they need to
+    check. Not enough on the shelves is about the whole room: there is no code
+    to name, the goods are spread across cells and the damaged corner, and a
+    sentence naming a cell would send somebody to the wrong shelf. Naming one
+    of them anyway would be the more precise-looking of two answers and the
+    wrong one.
+
+    A retired destination is tried first because it is not a shortfall at all:
+    the cell may be perfectly empty and still refuse the goods, and "A-02-03
+    holds 0, not 4" would send somebody to count a shelf that is not there any
+    more.
+
+    The last case is neither: a move of nothing, and a move from nowhere to
+    nowhere. Both are programming errors rather than things a warehouse did,
+    neither is reachable through any door — every schema requires a positive
+    quantity and both ends — and a label for them would be a translated
+    sentence nobody will ever read. They keep the English, which is who it is
+    for.
+    """
+    if error.retired:
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("cell_retired_destination", code=error.where),
+        )
+    if error.where:
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label(
+                "cell_holds_less",
+                code=error.where,
+                held=error.held,
+                wanted=error.wanted,
+            ),
+        )
+    if error.wanted:
+        return HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("shelves_hold_less", held=error.held, wanted=error.wanted),
+        )
+    return HTTPException(status.HTTP_409_CONFLICT, str(error))
 
 
 # --------------------------------------------------------------------------- moving
@@ -84,6 +169,7 @@ def move(
     supply_id: int | None = None,
     order_id: int | None = None,
     return_request_id: int | None = None,
+    unit_cost: int = 0,
     allow_negative: bool = False,
 ) -> StockMovement:
     """Move ``qty`` of ``variant`` from one place to another.
@@ -98,6 +184,23 @@ def move(
     exception is a stocktake correction, which is allowed to say the shelf was
     already wrong.
 
+    **Refuses to put anything into a retired place.** A retired cell is off
+    the map — off ``loc.cells``, off the dashboard's figures, off the label
+    sheet — so goods in one are goods the count still includes and no picker
+    can be sent to. The doors that take a typed code refuse earlier and more
+    helpfully, before anything is written; this is the backstop, so a door
+    written next year cannot quietly reopen the hole. Taking goods *out* of a
+    retired place is never refused: that is the way back out of exactly this
+    mess.
+
+    ``unit_cost`` is what one of them cost at the market, and it is read on a
+    ``receipt`` and ignored on every other kind. A receipt is the one move
+    where a cost is a fact — somebody is standing over the sack with the price
+    they paid — and every other move is the same goods going somewhere else.
+    Putting it here rather than in the two receiving endpoints is what stops a
+    third one appearing later that books goods in without recording what they
+    cost: the ledger's own door is where the cost is remembered.
+
     Does not commit. The caller commits along with whatever made the move
     necessary, so the ledger cannot end up describing something that rolled
     back.
@@ -106,12 +209,21 @@ def move(
         raise StockError("a move of nothing is not a move")
     if frm is None and to is None:
         raise StockError("a move needs somewhere to come from or go to")
+    if to is not None and not to.is_active:
+        raise StockError(
+            f"{to.code} is retired and cannot be put into",
+            where=to.code,
+            retired=True,
+        )
 
     if frm is not None:
         held = at(session, frm.id, variant.id)
         if held < qty and not allow_negative:
             raise StockError(
-                f"{frm.code} holds {held} of {variant.sku or variant.id}, not {qty}"
+                f"{frm.code} holds {held} of {variant.sku or variant.id}, not {qty}",
+                where=frm.code,
+                wanted=qty,
+                held=held,
             )
         _shift(session, frm, variant, -qty)
     if to is not None:
@@ -137,6 +249,15 @@ def move(
     if change:
         variant.stock_left = max(0, variant.stock_left + change)
     variant.in_stock = variant.stock_left > 0
+
+    # The newest lot wins, and only a stated cost counts. A receipt booked in
+    # without a price — which the sorting form does not allow but a script
+    # might — must not overwrite a cost that is known with a nought that means
+    # "unknown", because the next order placed would then freeze a nought and
+    # a real margin would be lost for good.
+    if kind is StockMovementKind.RECEIPT and unit_cost > 0:
+        variant.last_cost = unit_cost
+
     session.add(variant)
 
     return movement
@@ -219,6 +340,58 @@ def placements(session: Session, variant_id: int) -> list[tuple[Location, int]]:
     )
 
 
+def units_in(session: Session, location_id: int) -> int:
+    """Everything one place holds, of everything, off the placements."""
+    total = session.exec(
+        select(func.coalesce(func.sum(StockPlacement.qty), 0)).where(
+            StockPlacement.location_id == location_id, StockPlacement.qty > 0
+        )
+    ).one()
+    return int(total)
+
+
+def units_by_place(session: Session) -> dict[int, int]:
+    """The same for the whole room, in one grouped query.
+
+    One query and not one per cell: anything that reasons about room — the
+    map, the putaway plan — reasons about fifty-odd places at once, and a
+    query each is what makes a picture of a room take a second to load. A
+    place holding nothing is absent from the answer rather than present as a
+    nought, so callers read it with ``.get(id, 0)``.
+    """
+    rows = session.exec(
+        select(
+            StockPlacement.location_id,
+            func.coalesce(func.sum(StockPlacement.qty), 0),
+        )
+        .where(StockPlacement.qty > 0)
+        .group_by(col(StockPlacement.location_id))
+    ).all()
+    return {int(location_id): int(units) for location_id, units in rows}
+
+
+def free_room(place: Location, units: int) -> int | None:
+    """How many more units this place is meant to take. ``None`` if unstated.
+
+    Arithmetic and not a query: the caller has just read ``units`` — off
+    ``units_in`` for one place or ``units_by_place`` for the room — and this
+    is the subtraction it was read for.
+
+    **``None`` is not a big number.** A capacity of nought means nobody has
+    said what this place holds, which is true of every staging area and of a
+    cell somebody built in a hurry; answering "unlimited" would let a putaway
+    plan tip a whole van into QABUL and call it a fit. Each caller decides
+    what an unstated limit means for it — the plan treats such a cell as able
+    to take what is left, the map draws no bar — and the type makes them.
+
+    Never negative. A cell can be over-full, and how far over is
+    ``units - capacity``; "minus four of room" is not a thing anybody says.
+    """
+    if not place.capacity:
+        return None
+    return max(0, place.capacity - units)
+
+
 def sellable_places(session: Session, variant_id: int) -> list[tuple[Location, int]]:
     """The same, less the places goods cannot be sold from."""
     return [
@@ -270,7 +443,9 @@ def take_from_shelf(
         left -= step
     if left > 0:
         raise StockError(
-            f"only {qty - left} of {variant.sku or variant.id} on the shelves, not {qty}"
+            f"only {qty - left} of {variant.sku or variant.id} on the shelves, not {qty}",
+            wanted=qty,
+            held=qty - left,
         )
     return made
 

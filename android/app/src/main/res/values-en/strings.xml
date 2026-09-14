@@ -68,6 +68,7 @@
     <string name="hisobdan_chiqasizmi">Sign out?</string>
     <string name="hisobdan_chiqish">Sign out</string>
     <string name="hisobingiz_bormi">"Already have an account? "</string>
+    <string name="hozir_tolanadi">Paid now</string>
     <string name="hozircha_mavjud_emas">Not available yet</string>
     <string name="hududni_tanlang">Choose a region</string>
     <string name="hujjat">Document</string>
@@ -96,6 +97,7 @@
     <string name="kirish">Sign in</string>
     <string name="kirish_kodi">Sign-in code</string>
     <string name="kirish_orqali">"By signing in you "</string>
+    <string name="kirish_shartlariga_rozilik">By signing in you agree to the terms of %1$s</string>
     <string name="kocha_va_uy_raqami">Street and house number</string>
     <string name="kod_avtomatik_oqiladi_sms_kelishi_bilan">The code is read automatically — we\'ll continue as soon as the SMS arrives</string>
     <string name="kod_kelmadimi_1150_raqamiga_qongiroq_qiling">No code? Call 1150 — it\'s free</string>
@@ -422,4 +424,5 @@
     </plurals>
     <string name="kartadagi_narx">Shown price</string>
     <string name="qaytarilgan_summa">Refunded</string>
+    <string name="omborda_n_ta_bor">%1$d in stock</string>
 </resources>

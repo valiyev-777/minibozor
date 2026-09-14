@@ -142,7 +142,9 @@ fun HomeScreen(
     var picking by remember { mutableStateOf<ProductCardDto?>(null) }
     var refreshing by remember { mutableStateOf(false) }
 
-    MbScreen { padding ->
+    // The tab's header is a band of surface, so that is what goes behind the
+    // clock rather than a step of grey canvas. See [MbScreen.statusBand].
+    MbScreen(statusBand = MbTheme.colors.surface) { padding ->
         Box(Modifier.fillMaxSize()) {
             UiStateContent(
                 state = state,
@@ -425,7 +427,18 @@ private fun BannerCarousel(
     Column {
         HorizontalPager(
             state = pager,
-            pageSpacing = 10.dp,
+            // Spacing equal to the page's own edge, which is what makes the
+            // next banner start exactly where the screen ends.
+            //
+            // It was 10 dp, and the 6 dp of difference showed the neighbour: a
+            // sliver of solid banner running up the side of the phone, cut off
+            // flat because 6 dp is far inside the card's 20 dp corner. A peek
+            // has to be wider than the radius to read as the edge of a card
+            // rather than as a bar of colour, and it cannot be, because what it
+            // would take comes off the banner being read. So there is no peek,
+            // and the dots underneath say there is more — which is how
+            // `design/screens/07` draws the block.
+            pageSpacing = MbTheme.dimens.homeEdge,
             contentPadding = PaddingValues(horizontal = MbTheme.dimens.homeEdge),
         ) { page ->
             BannerCard(
@@ -510,7 +523,15 @@ private fun BannerCard(banner: BannerDto, drift: () -> Float, onClick: () -> Uni
                 .fillMaxSize()
                 .graphicsLayer { translationX = drift() * 40.dp.toPx() },
             shape = MbTheme.shapes.tile,
-            background = Color.White.copy(alpha = 0.08f),
+            // Solid white, not an eighth of it.
+            //
+            // The banner artwork is the same cut-out-on-white the tiles carry,
+            // so a translucent ground put a pale frame around an opaque white
+            // square and the tile read as two mismatched boxes. One white plate
+            // holding the product is one shape. A scene photograph would fill
+            // this frame and never show the plate at all, which is what the
+            // block was drawn for — see `design/screens/07`.
+            background = Color.White,
             // Whole, not cropped to the panel's shape: this box is narrower
             // than the photographs are, so cropping took the sides off them.
             contentScale = ContentScale.Fit,

@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom"
 
 import { App } from "@/App"
 import { SessionProvider } from "@/lib/session"
+import { ThemeProvider } from "@/lib/theme"
 import "./index.css"
 
 // Server state is TanStack Query's and nothing else's: a warehouse screen is
@@ -24,12 +25,14 @@ const queries = new QueryClient({
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={queries}>
-      <SessionProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </SessionProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queries}>
+        <SessionProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </SessionProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   </StrictMode>,
 )

@@ -68,6 +68,7 @@
     <string name="hisobdan_chiqasizmi">Выйти из аккаунта?</string>
     <string name="hisobdan_chiqish">Выйти из аккаунта</string>
     <string name="hisobingiz_bormi">"Уже есть аккаунт? "</string>
+    <string name="hozir_tolanadi">Оплата сейчас</string>
     <string name="hozircha_mavjud_emas">Пока недоступно</string>
     <string name="hududni_tanlang">Выберите регион</string>
     <string name="hujjat">Документ</string>
@@ -96,6 +97,7 @@
     <string name="kirish">Вход</string>
     <string name="kirish_kodi">Код входа</string>
     <string name="kirish_orqali">"Входя, вы "</string>
+    <string name="kirish_shartlariga_rozilik">Входя, вы соглашаетесь с условиями %1$s</string>
     <string name="kocha_va_uy_raqami">Улица и номер дома</string>
     <string name="kod_avtomatik_oqiladi_sms_kelishi_bilan">Код прочитается автоматически — продолжим, как только придёт SMS</string>
     <string name="kod_kelmadimi_1150_raqamiga_qongiroq_qiling">Код не пришёл? Позвоните на 1150 — бесплатно</string>
@@ -438,4 +440,5 @@
     </plurals>
     <string name="kartadagi_narx">Цена на карточке</string>
     <string name="qaytarilgan_summa">Возвращено</string>
+    <string name="omborda_n_ta_bor">На складе %1$d шт.</string>
 </resources>

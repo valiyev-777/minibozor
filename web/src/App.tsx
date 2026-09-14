@@ -15,7 +15,13 @@ import { CountsPage } from "@/pages/counts"
 import { CourierHistoryPage, EarningsPage, MyWorkPage } from "@/pages/courier"
 import { DashboardPage } from "@/pages/dashboard"
 import { OrdersPage } from "@/pages/orders"
-import { CategoriesPage, CouriersPage, StaffPage } from "@/pages/people"
+import { PickupsPage } from "@/pages/pickups"
+import { ReturnsPage } from "@/pages/returns"
+import { SlotsPage } from "@/pages/delivery"
+import { AuditPage } from "@/pages/audit"
+import { CustomersPage } from "@/pages/customers"
+import { CategoriesPage, CouriersPage } from "@/pages/people"
+import { StaffPage } from "@/pages/staff"
 import { ProductsPage } from "@/pages/products"
 import { PublishPage } from "@/pages/publish"
 import { ReportsPage } from "@/pages/reports"
@@ -23,7 +29,7 @@ import { LabelsPage } from "@/pages/labels"
 import { PickingPage } from "@/pages/picking"
 import { QabulPage } from "@/pages/qabul"
 import { ShelfMapPage } from "@/pages/shelf-map"
-import { homeFor, navFor } from "@/lib/nav"
+import { canReach, homeFor } from "@/lib/nav"
 import { useSession } from "@/lib/session"
 
 export function App() {
@@ -36,71 +42,82 @@ export function App() {
   }
   if (!staff || staff.role === "customer") return <LoginPage />
 
-  const allowed = new Set(navFor(staff.role).map((item) => item.to))
   const home = homeFor(staff.role)
+  // `canReach` and nothing else: the menu nests one level now, so "is it in
+  // the top-level list" stopped being the same question as "may this person
+  // open it", and every screen filed under a drawer had its route quietly
+  // not built. It walks the tree, and it still answers for the screens that
+  // are reachable without being in a menu at all.
+  const may = (to: string) => canReach(staff.role, to)
 
   return (
     <Routes>
       <Route element={<Shell />}>
-        {allowed.has("/") ? (
+        {may("/") ? (
           <Route index element={<DashboardPage />} />
         ) : (
           <Route index element={<Navigate to={home} replace />} />
         )}
 
         {/* ------------------------------------------------------------ ombor */}
-        {allowed.has("/ombor") ? (
+        {may("/ombor") ? (
           <Route path="/ombor" element={<ShelfMapPage />} />
         ) : null}
-        {allowed.has("/qabul") ? (
-          <Route path="/qabul" element={<QabulPage />} />
-        ) : null}
-        {allowed.has("/terish") ? (
+        {may("/qabul") ? <Route path="/qabul" element={<QabulPage />} /> : null}
+        {may("/terish") ? (
           <Route path="/terish" element={<PickingPage />} />
         ) : null}
-        {allowed.has("/sanash") ? (
+        {may("/sanash") ? (
           <Route path="/sanash" element={<CountsPage />} />
         ) : null}
-        {allowed.has("/yorliqlar") ? (
+        {may("/yorliqlar") ? (
           <Route path="/yorliqlar" element={<LabelsPage />} />
         ) : null}
 
         {/* ------------------------------------------------------------ admin */}
-        {allowed.has("/mahsulotlar") ? (
+        {may("/mahsulotlar") ? (
           <Route path="/mahsulotlar" element={<ProductsPage />} />
         ) : null}
-        {/* The seller's job, and the seller's menu — but the office's
-            dashboard links here, because what is in this queue is money
-            standing still and the owner is the person who cares. So the route
-            exists for an admin without the menu item that says it is theirs
-            to do. */}
-        {allowed.has("/sotuvga-chiqarish") || staff.role === "admin" ? (
+        {may("/sotuvga-chiqarish") ? (
           <Route path="/sotuvga-chiqarish" element={<PublishPage />} />
         ) : null}
-        {allowed.has("/kategoriyalar") ? (
+        {may("/kategoriyalar") ? (
           <Route path="/kategoriyalar" element={<CategoriesPage />} />
         ) : null}
-        {allowed.has("/buyurtmalar") ? (
+        {may("/qaytarishlar") ? (
+          <Route path="/qaytarishlar" element={<ReturnsPage />} />
+        ) : null}
+        {may("/olib-kelish") ? (
+          <Route path="/olib-kelish" element={<PickupsPage />} />
+        ) : null}
+        {may("/yetkazish-oynalari") ? (
+          <Route path="/yetkazish-oynalari" element={<SlotsPage />} />
+        ) : null}
+        {may("/buyurtmalar") ? (
           <Route path="/buyurtmalar" element={<OrdersPage />} />
         ) : null}
-        {allowed.has("/kuryerlar") ? (
+        {may("/kuryerlar") ? (
           <Route path="/kuryerlar" element={<CouriersPage />} />
         ) : null}
-        {allowed.has("/xodimlar") ? (
+        {may("/xodimlar") ? (
           <Route path="/xodimlar" element={<StaffPage />} />
         ) : null}
-        {allowed.has("/hisobotlar") ? (
+        {may("/mijozlar") ? (
+          <Route path="/mijozlar" element={<CustomersPage />} />
+        ) : null}
+        {may("/hisobotlar") ? (
           <Route path="/hisobotlar" element={<ReportsPage />} />
         ) : null}
+        {may("/jurnal") ? <Route path="/jurnal" element={<AuditPage />} /> : null}
 
         {/* ---------------------------------------------------------- kuryer */}
-        {allowed.has("/ishlarim") ? (
+        {may("/ishlarim") ? (
           <Route path="/ishlarim" element={<MyWorkPage />} />
         ) : null}
-        {allowed.has("/tarix") ? (
+        {may("/tarix") ? (
           <Route path="/tarix" element={<CourierHistoryPage />} />
         ) : null}
-        {allowed.has("/daromad") ? (
+        {may("/daromad") ? (
           <Route path="/daromad" element={<EarningsPage />} />
         ) : null}
 

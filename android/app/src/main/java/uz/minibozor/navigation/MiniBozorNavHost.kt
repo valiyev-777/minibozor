@@ -52,7 +52,9 @@ import uz.minibozor.ui.orders.ReasonScreen
 import uz.minibozor.ui.product.ProductScreen
 import uz.minibozor.ui.product.ReviewsScreen
 import uz.minibozor.ui.product.WriteReviewScreen
+import uz.minibozor.ui.profile.AddCardScreen
 import uz.minibozor.ui.profile.AddressesScreen
+import uz.minibozor.ui.profile.CardsScreen
 import uz.minibozor.ui.profile.FavoritesScreen
 import uz.minibozor.ui.profile.MyReviewsScreen
 import uz.minibozor.ui.profile.PersonalScreen
@@ -359,6 +361,7 @@ fun MiniBozorNavHost(
                     onBack = { navController.popBackStack() },
                     onEditAddress = { navController.navigate(Routes.ADDRESS_PICKER) },
                     onEditTime = { navController.navigate(Routes.DELIVERY_TIME) },
+                    onAddCard = { navController.navigate(Routes.ADD_CARD) },
                     onOpenCart = { navController.popBackStack() },
                     onConfirm = { navController.navigate(Routes.CONFIRM) },
                 )
@@ -461,6 +464,24 @@ fun MiniBozorNavHost(
 
         composable(Routes.PERSONAL) {
             PersonalScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.CARDS) {
+            CardsScreen(
+                onBack = { navController.popBackStack() },
+                onAddCard = { navController.navigate(Routes.ADD_CARD) },
+            )
+        }
+
+        composable(Routes.ADD_CARD) {
+            AddCardScreen(
+                onBack = { navController.popBackStack() },
+                // Back to whichever screen asked for a card — the list, or
+                // checkout. The list re-reads on resume and checkout's own
+                // `reloadCards` runs on the same signal, so the new card is
+                // selected by the time the customer is looking at it again.
+                onSaved = { navController.popBackStack() },
+            )
         }
 
         composable(Routes.ADDRESSES) {

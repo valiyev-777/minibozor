@@ -92,7 +92,13 @@ def seed_locations(session: Session) -> int:
     Idempotent on the code, so running it again after a fourth rack is added
     to ``RACKS`` adds that rack and touches nothing else. Deliberately does
     not delete: a cell that disappeared from the list may still be holding
-    something, and the honest way to retire one is ``is_active``.
+    something, and the honest way to retire one is ``POST
+    /warehouse/cells/{code}/active``, which switches ``is_active`` off and
+    leaves the row and its history where they are.
+
+    A retired cell is not resurrected by a seed run either: its code is in
+    ``existing``, so the loop steps over it. Being taken out of the room is a
+    decision somebody made and it survives a deployment.
     """
     existing = {
         code
@@ -129,6 +135,17 @@ def seed_locations(session: Session) -> int:
 
 
 def by_code(session: Session, code: str) -> Location | None:
+    """The place with this code, retired or not.
+
+    Deliberately blind to ``is_active``: a code is a name and a retired cell
+    still owns its name — the movements that named it have to resolve, the
+    detail screen has to open it so somebody can decide to bring it back, and
+    building a rack over the top of it has to see that the code is taken.
+
+    It follows that a caller putting goods *somewhere* cannot use this alone.
+    Arriving goods go through ``_open_cell`` in ``app.routers.warehouse``, and
+    ``st.move`` refuses a retired destination whatever the caller checked.
+    """
     return session.exec(
         select(Location).where(Location.code == code.strip().upper())
     ).first()
@@ -167,7 +184,14 @@ def for_courier(session: Session, user_id: int) -> Location:
 
 
 def cells(session: Session) -> list[Location]:
-    """Every shelf cell, in walk order."""
+    """Every shelf cell the room still has, in walk order.
+
+    Retired ones are left out, which is the whole point of the flag: a cell
+    that was taken out of the building should not be planned into, printed a
+    label for, or walked past by a picker. Whoever wants to *see* them — the
+    map, drawing the hole and offering the way back — asks ``GET
+    /warehouse/cells/retired``.
+    """
     rows = session.exec(
         select(Location).where(
             Location.kind == LocationKind.BIN, col(Location.is_active).is_(True)

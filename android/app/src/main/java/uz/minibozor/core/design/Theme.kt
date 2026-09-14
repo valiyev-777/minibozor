@@ -105,6 +105,38 @@ fun MiniBozorTheme(
     }
 }
 
+/**
+ * The same, for a sentence with a styled span inside it.
+ *
+ * A link in the middle of a line used to be three [MbText]s in a [Row] — a
+ * lead-in, the link, and a tail. That cannot be translated: Uzbek puts the
+ * postposition after the link and English puts a verb before it, so the English
+ * build read "By signing in you the public offer terms". It also cannot wrap,
+ * being a Row, so the longer the language the further the sentence ran off the
+ * side of the phone. One string with the link marked inside it fixes both.
+ */
+@Composable
+fun MbText(
+    text: androidx.compose.ui.text.AnnotatedString,
+    style: TextStyle,
+    color: Color = MbTheme.colors.ink,
+    maxLines: Int = Int.MAX_VALUE,
+    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
+    overflow: androidx.compose.ui.text.style.TextOverflow =
+        androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+    textAlign: androidx.compose.ui.text.style.TextAlign? = null,
+) {
+    Text(
+        text = text,
+        style = style,
+        color = color,
+        maxLines = maxLines,
+        overflow = overflow,
+        textAlign = textAlign,
+        modifier = modifier,
+    )
+}
+
 /** Text with the design's styles, so screens never touch MaterialTheme.typography. */
 @Composable
 fun MbText(

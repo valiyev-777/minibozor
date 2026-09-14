@@ -182,10 +182,23 @@ interface MiniBozorApi {
 
     // ----------------------------------------------------------- 32 cards
     //
-    // Gone with the marketplace. There is no card vault behind this API any
-    // more: a shopper pays by card at checkout or in cash at the door, and
-    // neither needs a saved PAN. `me/overview` still answers `cards_count`,
-    // at nought, so the profile screen keeps its shape.
+    // Back, and never a PAN. The card is entered and validated on the handset;
+    // what these four calls carry is the description its owner recognises it
+    // by and the token the server charges. Until Click or Payme is wired up
+    // the token is a stand-in and the charge is decided by a test processor —
+    // see `app/payments.py` on the server and `AddCardViewModel` here.
+
+    @GET("payment-cards")
+    suspend fun cards(): List<CardDto>
+
+    @POST("payment-cards")
+    suspend fun addCard(@Body body: CardRequest): CardDto
+
+    @POST("payment-cards/{id}/default")
+    suspend fun makeCardDefault(@Path("id") id: Int): CardDto
+
+    @DELETE("payment-cards/{id}")
+    suspend fun deleteCard(@Path("id") id: Int): MessageDto
 
     // -------------------------------------------------------- 19, 23-29 orders
 

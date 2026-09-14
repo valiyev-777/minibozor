@@ -59,6 +59,8 @@ object Routes {
 
     // Account
     const val PERSONAL = "personal"                        // 31
+    const val CARDS = "cards"                              // 32
+    const val ADD_CARD = "add_card"
     const val ADDRESSES = "addresses"                      // 33
     const val MY_REVIEWS = "my_reviews"                    // 34
     const val FAVORITES = "favorites"                      // 35

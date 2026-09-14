@@ -66,73 +66,120 @@ export function LoginPage() {
   }
 
   return (
-    <div className="density-cozy grid min-h-full place-items-center bg-canvas p-6">
-      <form
-        onSubmit={sent ? verify : ask}
-        className="w-full max-w-sm space-y-5 rounded-panel border border-line bg-surface shadow-panel p-6">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-control bg-brand text-brand-ink">
-              MB
-            </span>
-            <span className="text-lg font-semibold tracking-tight">Mini Bozor</span>
-          </div>
-          <p className="text-small text-ink-soft">
-            {sent ? "SMS kodini kiriting" : "Telefon raqamingiz bilan kiring"}
+    <div className="density-cozy grid min-h-full md:grid-cols-2">
+      {/* ------------------------------------------------------------- the wall
+       *
+       * The half of the screen that is not the form. It is the same near-black
+       * as the rail with the same blurred wash of the accent behind the mark,
+       * so signing in is recognisably the front door of *this* building — and
+       * so the first thing anybody sees each morning is not a white page with
+       * a box floating in the middle of it.
+       *
+       * Hidden on a phone. A decorative half-screen on a 5" display is the
+       * form pushed below the fold. */}
+      <aside className="relative hidden flex-col justify-between overflow-hidden bg-rail p-10 text-rail-ink md:flex">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -left-24 -top-24 size-96 rounded-full bg-brand opacity-50 blur-[120px]"
+        />
+        <div className="relative z-10 flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-control bg-brand text-body font-bold text-brand-ink">
+            MB
+          </span>
+          <span className="text-body font-semibold tracking-tight text-rail-ink">
+            Mini Bozor
+          </span>
+        </div>
+        <div className="relative z-10 max-w-sm">
+          <p className="display text-rail-ink">Ombor. Do'kon. Yo'l.</p>
+          <p className="mt-3 text-small text-rail-ink/70">
+            Bitta hisob — uchala ish uchun. Nima qila olishingizni rolingiz
+            hal qiladi.
           </p>
         </div>
+        <p className="relative z-10 text-micro text-rail-ink/50">
+          Xodimlar uchun. Xarid uchun Mini Bozor ilovasi bor.
+        </p>
+      </aside>
 
-        <div className="space-y-2">
-          <Label htmlFor="phone">Telefon</Label>
-          <Input
-            id="phone"
-            name="phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            value={phone}
-            disabled={sent}
-            onChange={(event) => setPhone(event.target.value)}
-            placeholder="+998901234567"
-            className="h-control" />
-        </div>
+      {/* ------------------------------------------------------------- the form */}
+      <div className="grid place-items-center bg-canvas p-6">
+        <form
+          onSubmit={sent ? verify : ask}
+          className="w-full max-w-sm space-y-5 rounded-panel border border-panel-edge bg-surface p-6"
+        >
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 md:hidden">
+              <span className="grid size-8 place-items-center rounded-control bg-brand text-brand-ink">
+                MB
+              </span>
+              <span className="text-body font-semibold tracking-tight">Mini Bozor</span>
+            </div>
+            <h1 className="text-figure font-bold leading-tight tracking-tight">
+              {sent ? "SMS kod" : "Kirish"}
+            </h1>
+            <p className="text-small text-ink-soft">
+              {sent ? "Yuborilgan kodni kiriting" : "Telefon raqamingiz bilan kiring"}
+            </p>
+          </div>
 
-        {sent ? (
-          <div className="space-y-2">
-            <Label htmlFor="code">SMS kod</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="phone">Telefon</Label>
             <Input
-              id="code"
-              name="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              placeholder="123456"
-              className="h-control tabular tracking-widest" />
-            <button
-              type="button"
-              className="text-micro text-ink-soft underline underline-offset-2"
-              onClick={() => {
-                setSent(false)
-                setCode("")
-                setError("")
-              }}
-            >
-              Raqamni o'zgartirish
-            </button>
+              id="phone"
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              disabled={sent}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="+998901234567"
+              className="tabular"
+            />
           </div>
-        ) : null}
 
-        {error ? (
-          <p role="alert" className="rounded-control bg-danger-soft p-3 text-small text-danger">
-            {error}
-          </p>
-        ) : null}
+          {sent ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="code">SMS kod</Label>
+              <Input
+                id="code"
+                name="code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                placeholder="123456"
+                className="tabular tracking-widest"
+              />
+              <button
+                type="button"
+                className="text-micro text-ink-soft underline underline-offset-2 hover:text-ink"
+                onClick={() => {
+                  setSent(false)
+                  setCode("")
+                  setError("")
+                }}
+              >
+                Raqamni o'zgartirish
+              </button>
+            </div>
+          ) : null}
 
-        <Button type="submit" disabled={busy} className="w-full">
-          {busy ? "..." : sent ? "Kirish" : "Kod olish"}
-        </Button>
-      </form>
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-control border border-danger/25 bg-danger-soft p-3 text-small text-danger"
+            >
+              {error}
+            </p>
+          ) : null}
+
+          <Button type="submit" size="lg" disabled={busy} className="w-full">
+            {busy ? "..." : sent ? "Kirish" : "Kod olish"}
+          </Button>
+        </form>
+      </div>
     </div>
   )
 }

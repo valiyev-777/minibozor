@@ -30,6 +30,7 @@ from app.models import (
     Location,
     LocationKind,
     Order,
+    OrderEvent,
     OrderStatus,
     Product,
     ProductStatus,
@@ -41,6 +42,13 @@ from app.models import (
     SupplyStatus,
     utcnow,
 )
+
+# The comparison arithmetic, borrowed rather than written again. `figure`
+# decides what "the period before" means and what a percentage against nought
+# reports; `day_of` is the one answer to `func.date` returning a string on
+# SQLite and a date on Postgres. Two copies of either is two screens quietly
+# disagreeing about the shop's own revenue.
+from app.routers.reports import day_of, figure
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -65,6 +73,10 @@ LOW_STOCK = pr.LOW_STOCK
 
 SALES_DAYS = 14
 MOVERS = 8
+
+# How far back the headline windows reach: a month, and the month before it to
+# compare against. One query covers all three windows and their twins.
+HEADLINE_DAYS = 60
 
 
 @router.get(
@@ -96,16 +108,26 @@ def dashboard(user: DashboardViewer, session: SessionDep) -> s.DashboardOut:
     )
 
     # ---------------------------------------------------------- today's orders
-    todays = session.exec(
-        select(Order).where(col(Order.created_at) >= _midnight(today))
-    ).all()
+    # Cancelled orders are not today's takings.
+    #
+    # This tile counted every row created today, with no status filter, while
+    # the fourteen-day chart two panels down excludes cancellations. So the
+    # tile and the last point of the chart disagreed by exactly the number of
+    # orders somebody had called off — two figures for the same question, on
+    # the same screen, one of which counted money the shop was never going to
+    # see. The chart was the right one, so the tile now asks what the chart
+    # asks.
+    trade = _trade(session, today, HEADLINE_DAYS)
+    orders_today, takings_today = trade.get(today, (0, 0))
+    yesterday = today - timedelta(days=1)
     tiles.append(
         s.DashboardTileOut(
             key="orders_today",
             label=i18n.label("tile_orders_today"),
-            value=len(todays),
-            hint=f"{sv.money(sum(order.total for order in todays))} so'm",
+            value=orders_today,
+            hint=f"{sv.money(takings_today)} so'm",
             href="/buyurtmalar",
+            previous=trade.get(yesterday, (0, 0))[0],
         )
     )
 
@@ -240,15 +262,46 @@ def dashboard(user: DashboardViewer, session: SessionDep) -> s.DashboardOut:
 
     return s.DashboardOut(
         tiles=tiles,
-        sales=_sales(session, today),
+        sales=_sales(trade, today),
         movers=_movers(session, now),
+        headlines=_headlines(session, trade, today),
     )
 
 
 # --------------------------------------------------------------------------- pieces
 
 
-def _sales(session: SessionDep, today: date) -> list[s.SalesPointOut]:
+def _trade(session: SessionDep, today: date, days: int) -> dict[date, tuple[int, int]]:
+    """Orders placed per day and what they came to, grouped in the database.
+
+    This used to load every order of the window as a row object and bucket
+    them in Python. Fourteen days of a small shop is nothing, which is why it
+    survived — but the same shape at report scale is every order the shop has
+    ever taken passing through a loop to produce thirty numbers. Grouped here
+    so nothing copies it.
+
+    Cancelled orders are left out. Nothing was sold, nothing was taken, and
+    the goods went back on the shelf.
+    """
+    start = today - timedelta(days=days - 1)
+    rows = session.exec(
+        select(
+            func.date(Order.created_at),
+            func.count(),
+            func.coalesce(func.sum(Order.total), 0),
+        )
+        .where(
+            col(Order.created_at) >= _midnight(start),
+            col(Order.status).not_in([OrderStatus.CANCELLED]),
+        )
+        .group_by(func.date(Order.created_at))
+    ).all()
+    return {
+        day_of(day): (int(orders), int(total)) for day, orders, total in rows
+    }
+
+
+def _sales(trade: dict[date, tuple[int, int]], today: date) -> list[s.SalesPointOut]:
     """Fourteen days, including the quiet ones.
 
     Every day is present whether or not anything was sold: a chart that skips
@@ -256,25 +309,78 @@ def _sales(session: SessionDep, today: date) -> list[s.SalesPointOut]:
     the opposite of what somebody is looking for.
     """
     start = today - timedelta(days=SALES_DAYS - 1)
-    rows = session.exec(
-        select(Order).where(
-            col(Order.created_at) >= _midnight(start),
-            col(Order.status).not_in([OrderStatus.CANCELLED]),
-        )
-    ).all()
-
-    by_day: dict[date, tuple[int, int]] = {}
-    for order in rows:
-        day = order.created_at.date()
-        orders, total = by_day.get(day, (0, 0))
-        by_day[day] = (orders + 1, total + order.total)
-
     out = []
     for offset in range(SALES_DAYS):
         day = start + timedelta(days=offset)
-        orders, total = by_day.get(day, (0, 0))
+        orders, total = trade.get(day, (0, 0))
         out.append(s.SalesPointOut(day=day, orders=orders, total=total))
     return out
+
+
+def _headlines(
+    session: SessionDep, trade: dict[date, tuple[int, int]], today: date
+) -> list[s.FigureOut]:
+    """Orders and revenue over three windows, each against the one before it.
+
+    Every trend on this screen was being differenced in the browser off the
+    last two points of the chart — which can only ever answer "today against
+    yesterday", answers it wrong at eleven in the morning when today is a third
+    over, and leaves the definition of the shop's revenue in a React component
+    where nobody can test it. The windows are here instead, and the same
+    ``_figure`` the reports use makes them, so the two screens cannot drift
+    into two answers.
+
+    Revenue is **delivered orders, bucketed by the day they were delivered** —
+    the reports' definition, and the only honest one. The tile above counts
+    orders *placed* today, which is a different question and keeps its own
+    figure; a tile and a headline saying different things is fine as long as
+    each says which it is.
+    """
+    revenue = _delivered(session, today, HEADLINE_DAYS)
+
+    def window(end: date, length: int) -> tuple[int, int]:
+        days = [end - timedelta(days=n) for n in range(length)]
+        return (
+            sum(trade.get(day, (0, 0))[0] for day in days),
+            sum(revenue.get(day, 0) for day in days),
+        )
+
+    out: list[s.FigureOut] = []
+    for key, length in (("today", 1), ("week", 7), ("month", 30)):
+        orders, taken = window(today, length)
+        was_orders, was_taken = window(today - timedelta(days=length), length)
+        out.append(
+            figure(f"orders_{key}", "fig_orders", [was_orders, orders])
+        )
+        out.append(
+            figure(f"revenue_{key}", "fig_revenue", [was_taken, taken], money=True)
+        )
+    return out
+
+
+def _delivered(session: SessionDep, today: date, days: int) -> dict[date, int]:
+    """Delivered revenue per day, by the day it was delivered.
+
+    Off ``order_events`` and not off ``orders.updated_at``, which is the last
+    status change of any kind and moves again every time anything touches the
+    row — using it as a delivered-at is the mistake this whole schema makes
+    easy to make.
+    """
+    start = today - timedelta(days=days - 1)
+    rows = session.exec(
+        select(
+            func.date(OrderEvent.happened_at),
+            func.coalesce(func.sum(Order.total), 0),
+        )
+        .join(OrderEvent, col(OrderEvent.order_id) == col(Order.id))
+        .where(
+            Order.status == OrderStatus.DELIVERED,
+            OrderEvent.status == OrderStatus.DELIVERED,
+            col(OrderEvent.happened_at) >= _midnight(start),
+        )
+        .group_by(func.date(OrderEvent.happened_at))
+    ).all()
+    return {day_of(day): int(total) for day, total in rows}
 
 
 def _movers(session: SessionDep, now) -> list[s.MoverOut]:

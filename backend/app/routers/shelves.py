@@ -15,6 +15,18 @@ later, because a gun types the code and presses Enter.
 nobody has; a cell is what one person can count without stopping the shop, and
 what it finds becomes an ``adjust`` movement with the counter's name on it.
 
+**The shape of the room** is data and has three doors, on purpose. Building a
+rack refuses a letter that is taken, because "A, 6 columns" against an
+existing A of four cannot be told from a typo; bolting cells onto a rack that
+is standing is the second door, takes the shape the rack should have, and
+never removes anything. Removing is the third, and it is one cell at a time,
+by somebody who has looked in it: a rack grown to 6×4 by a typo carried two
+dead columns for ever, because nothing anywhere wrote ``is_active`` and the
+two doors above both said "retiring one is ``is_active``" as though a door
+existed. A retired cell keeps its code and its history and leaves the room —
+it cannot be put into, and the map fetches it back from ``GET
+/warehouse/cells/retired`` in order to offer the way back.
+
 And the label sheet, because we generate the barcodes: market goods arrive
 unlabelled, so the only code a pile will ever have is the one we print.
 """
@@ -33,7 +45,7 @@ from app import products as pr
 from app import schemas as s
 from app import services as sv
 from app import stock as st
-from app.deps import SessionDep, StockViewer, WarehouseUser
+from app.deps import AdminUser, SessionDep, StockViewer, WarehouseUser
 from app.models import (
     CountStatus,
     Location,
@@ -71,6 +83,14 @@ def shelf_map(user: StockViewer, session: SessionDep) -> s.ShelfMapOut:
     a room is not paged. Three lists because the screen has three shapes — a
     grid of racks, a row of staging tiles above them, and a courier's bag,
     which exists only while somebody is carrying something.
+
+    **Live places only, and ``cells`` keeps meaning what it has always meant.**
+    Everything that reads this list counts it — how many cells are full, how
+    many are empty, which ones a pile may be sent to, how many labels to
+    print — so a retired cell arriving in it would make every one of those
+    quietly wrong in arithmetic. The cells somebody took out of the room come
+    back from ``GET /warehouse/cells/retired``, which is one more request on
+    the one screen that wants to draw the hole.
     """
     places = session.exec(select(Location).where(col(Location.is_active).is_(True))).all()
     summary = _fill(session)
@@ -191,8 +211,467 @@ def suggest_cell(
 
     A suggestion and not a rule — the cell may be full, and the person can see
     that on the same screen.
+
+    **For a whole pile, ask ``GET /warehouse/putaway-plan`` instead.** This
+    answers "where does this model live", which is one cell and one cheap
+    query, and it is the right question for a form filling in a default field
+    while somebody types. It says nothing about whether eighty pairs fit in
+    that cell; the plan is the question with the quantity in it.
     """
     return s.SuggestedCellOut(code=_suggest_cell(session, 0, product_id))
+
+
+@router.get(
+    "/putaway-plan",
+    response_model=s.PutawayPlanOut,
+    summary="Where these N pieces would go if nobody thought about it",
+)
+def putaway_plan(
+    user: StockViewer,
+    session: SessionDep,
+    product_id: int,
+    quantity: int = Query(gt=0, le=100_000, description="How many pieces are arriving"),
+) -> s.PutawayPlanOut:
+    """The whole answer the receiving screen needs, in one request.
+
+    ``suggest-cell`` offers one code and says nothing about room, so a person
+    holding eighty pairs got a cell with space for four and worked the other
+    seventy-six out by eye — against a shelf map on a different screen. This
+    is the same judgement, made once, with the quantity in the question.
+
+    The rule, in this order:
+
+    * the cells that already hold this model, in walk order, each filled to
+      its free room — one model per cell is the discipline and the goods want
+      to be together;
+    * then the emptiest cells, nearest those in walk order, until the
+      quantity is placed. Emptiest means holding least, which is how a cell
+      with nothing in it always comes before one with somebody else's shirts
+      in it; nearest keeps the pile in one aisle instead of at both ends of
+      the room.
+
+    A cell with no stated capacity takes whatever is left rather than being
+    treated as holding nothing: nobody has measured it, and refusing to use
+    it would leave the plan short of a cell that is plainly there.
+
+    **If the building has no room the plan says so and over-fills the last
+    cell anyway.** The goods are standing on the floor. A plan that stops at
+    seventy of eighty does not say where the other ten went, and somebody
+    puts them somewhere without telling anyone; an honest 130% is a cell
+    people walk past and tidy.
+
+    A suggestion throughout. Nothing here writes anything, and the receiving
+    screen is free to type over every line of it.
+    """
+    product = session.get(Product, product_id)
+    if product is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
+
+    cells = loc.cells(session)
+    if not cells:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("putaway_plan_needs_cells")
+        )
+
+    units = st.units_by_place(session)
+    holders = _cells_holding(session, product_id)
+    where = {cell.id: position for position, cell in enumerate(cells)}
+
+    own = [cell for cell in cells if cell.id in holders]
+    rest = [cell for cell in cells if cell.id not in holders]
+    # The model's own cells anchor the rest: a pile that outgrows A-02-01
+    # should carry on into A-02-02 rather than start again in C.
+    anchor = where[own[0].id] if own else 0
+    rest.sort(key=lambda cell: (units.get(cell.id, 0), abs(where[cell.id] - anchor)))
+
+    left = quantity
+    lines: list[s.PutawayPlanLineOut] = []
+    for cell in own + rest:
+        if left <= 0:
+            break
+        held = units.get(cell.id, 0)
+        free = st.free_room(cell, held)
+        take = left if free is None else min(left, free)
+        if take <= 0:
+            continue
+        lines.append(
+            s.PutawayPlanLineOut(
+                code=cell.code,
+                quantity=take,
+                free=free,
+                units=held,
+                holds_this_model=cell.id in holders,
+            )
+        )
+        left -= take
+
+    over = ""
+    if left > 0:
+        # Every cell in the building is full and the van is still outside.
+        last = (own + rest)[-1]
+        if lines and lines[-1].code == last.code:
+            lines[-1].quantity += left
+        else:
+            lines.append(
+                s.PutawayPlanLineOut(
+                    code=last.code,
+                    quantity=left,
+                    free=st.free_room(last, units.get(last.id, 0)),
+                    units=units.get(last.id, 0),
+                    holds_this_model=last.id in holders,
+                )
+            )
+        over = i18n.label("putaway_plan_over_capacity", code=last.code, over=left)
+
+    return s.PutawayPlanOut(
+        quantity=quantity,
+        lines=lines,
+        over_capacity=bool(over),
+        message=over,
+    )
+
+
+# ------------------------------------------------------------------ the room's shape
+
+
+@router.post(
+    "/racks",
+    response_model=s.RackOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Build a shelf unit — a letter, and a grid of cells",
+)
+def add_rack(
+    payload: s.RackWriteIn,
+    # The office's. A rack is the shape of the building: everybody else in here
+    # moves goods between places that exist, and inventing a place is a decision
+    # about the room rather than about a sack.
+    user: AdminUser,
+    session: SessionDep,
+) -> s.RackOut:
+    """A new unit of shelving, as cells with codes on them.
+
+    The racks were always data — ``locations.RACKS`` is a list the seed reads,
+    and nothing anywhere writes 3, 4 or 48 as a number — but the only way to
+    add a fourth was to edit that list and run the seed, which is a deployment
+    for a job that is really a Saturday afternoon with a screwdriver. This is
+    the same write, through a door.
+
+    Columns times rows cells, coded ``B-03-02`` by `locations.cell_code`, row 1
+    at the floor. The capacity is per cell and is shown rather than enforced,
+    exactly as the seeded ones are.
+
+    **Refused where the letter is taken**, rather than quietly filling in the
+    cells a smaller rack is missing: "A, 6 columns" against an existing A of 4
+    reads as a correction, and this cannot tell that from a typo. Retiring a
+    cell is `is_active`, and growing a rack is a job for the day somebody asks
+    for it.
+    """
+    rack = payload.rack.strip().upper()
+    taken = session.exec(
+        select(Location).where(Location.rack == rack).limit(1)
+    ).first()
+    if taken:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("rack_exists"))
+
+    made = 0
+    for column_no in range(1, payload.columns + 1):
+        for row_no in range(1, payload.rows + 1):
+            code = loc.cell_code(rack, column_no, row_no)
+            # A code is unique across the building, and a staging area or an
+            # old retired cell could already hold this one.
+            if loc.by_code(session, code) is not None:
+                continue
+            session.add(
+                Location(
+                    code=code,
+                    kind=LocationKind.BIN,
+                    rack=rack,
+                    column_no=column_no,
+                    row_no=row_no,
+                    capacity=payload.capacity,
+                )
+            )
+            made += 1
+    session.commit()
+
+    audit.record(
+        session,
+        actor=user,
+        action="location.rack_added",
+        entity="location",
+        entity_id=0,
+        field="rack",
+        old=None,
+        new=rack,
+        note=f"{made} ta yacheyka",
+    )
+    session.commit()
+    return s.RackOut(
+        rack=rack,
+        cells=made,
+        message=i18n.label("rack_added", rack=rack, cells=made),
+    )
+
+
+@router.post(
+    "/racks/{rack}/cells",
+    response_model=s.RackOut,
+    summary="Bolt cells onto a rack that is already standing",
+)
+def extend_rack(
+    rack: str,
+    payload: s.RackExtendIn,
+    # The office's, like building one. A column added to A is the shape of
+    # the building changing, and everybody else in here moves goods between
+    # places that already exist.
+    user: AdminUser,
+    session: SessionDep,
+) -> s.RackOut:
+    """A fifth column on A, without the rack having to be built again.
+
+    ``POST /warehouse/racks`` refuses a letter that is taken, and it is right
+    to: "A, 6 columns" against an existing A of 4 reads as a correction and
+    that door cannot tell a correction from a typo. But a shelf unit does
+    grow — somebody bolts a column on, or a fifth row where the ceiling
+    allows — and the only way to record it was to edit ``locations.RACKS``
+    and run the seed, which is a deployment for a Saturday with a
+    screwdriver.
+
+    So: two doors, not one door with a mode. This one is about a rack that is
+    there, and **404 when it is not** — a letter that does not exist is
+    somebody meaning to build one, and they should be told so rather than
+    quietly given a rack they did not ask to create.
+
+    The body is the shape the rack should **have**, not the difference. The
+    person is standing in front of it counting columns, and "add one" asks
+    them to know what the system thinks is there. Every missing code inside
+    that rectangle is written and **nothing is ever removed**: a smaller
+    shape than the rack already has adds nothing and says so, because
+    demolishing a cell that is holding forty pairs is not something a typo in
+    a number box should be able to do. Retiring one is ``POST
+    /warehouse/cells/{code}/active``, one cell at a time, by somebody who has
+    looked in it.
+
+    **A retired cell is not brought back by this.** Its code still exists, so
+    the skip above steps over it and the count says nothing was written — the
+    rack looks as though it is already that big. That is deliberate: a cell
+    was taken out of the room by a decision somebody made and recorded, and
+    re-typing the rack's shape is not that decision being reversed. Restoring
+    it is the same door that retired it.
+
+    **Ragged is fine.** A five-row column beside four four-row ones is a real
+    shelf and the map draws a blank where a code is missing, so nothing here
+    insists on a rectangle.
+    """
+    wanted = rack.strip().upper()
+    standing = session.exec(
+        select(Location).where(Location.rack == wanted, Location.kind == LocationKind.BIN)
+    ).all()
+    if not standing:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, i18n.label("rack_not_found", rack=wanted)
+        )
+
+    capacity = (
+        payload.capacity if payload.capacity is not None else _house_capacity(standing)
+    )
+    have = {place.code for place in standing}
+
+    made = 0
+    for column_no in range(1, payload.columns + 1):
+        for row_no in range(1, payload.rows + 1):
+            code = loc.cell_code(wanted, column_no, row_no)
+            # Against the whole building and not only against this rack: a
+            # code is unique everywhere, and a retired cell still owns its.
+            if code in have or loc.by_code(session, code) is not None:
+                continue
+            session.add(
+                Location(
+                    code=code,
+                    kind=LocationKind.BIN,
+                    rack=wanted,
+                    column_no=column_no,
+                    row_no=row_no,
+                    capacity=capacity,
+                )
+            )
+            made += 1
+    session.commit()
+
+    if made:
+        audit.record(
+            session,
+            actor=user,
+            action="location.rack_extended",
+            entity="location",
+            # As with building a rack: the thing that changed is a rack, and
+            # a rack is not a row. Naming one of its cells here would read as
+            # a change to that cell, which is the one thing this did not do.
+            entity_id=0,
+            field="rack",
+            old=len(standing),
+            new=len(standing) + made,
+            note=f"{wanted} · {made} ta yacheyka qo'shildi",
+        )
+        session.commit()
+
+    return s.RackOut(
+        rack=wanted,
+        cells=made,
+        message=(
+            i18n.label("rack_extended", rack=wanted, cells=made)
+            if made
+            else i18n.label("rack_already_that_big", rack=wanted)
+        ),
+    )
+
+
+def _house_capacity(cells: list[Location]) -> int:
+    """What this rack's cells hold, as the commonest figure among them.
+
+    A shelf unit is one piece of furniture: a column bolted onto it holds
+    what the other columns hold, so the default for a new cell is the rack's
+    own answer rather than the schema's 60 — which is A's number being
+    applied to a rack of shoeboxes half the size. Commonest rather than the
+    largest or the mean, because one cell someone corrected by hand should
+    not drag every new cell with it.
+    """
+    counts: dict[int, int] = {}
+    for cell in cells:
+        counts[cell.capacity] = counts.get(cell.capacity, 0) + 1
+    # Ties go to the bigger figure, which is the one already written on more
+    # of the building than any accident would be.
+    return max(counts, key=lambda capacity: (counts[capacity], capacity))
+
+
+@router.get(
+    "/cells/retired",
+    response_model=list[s.LocationOut],
+    summary="The cells that were taken out of the room, and can be put back",
+)
+def retired_cells(user: StockViewer, session: SessionDep) -> list[s.LocationOut]:
+    """The short list the map needs to draw the holes in itself.
+
+    Its own door rather than a flag on ``GET /warehouse/locations``, and this
+    is the whole design decision about retiring a cell.
+
+    ``cells`` in the shelf map means *the cells of this room*, and half a
+    dozen things read it that way: the screen counts how many are full and how
+    many are empty, the receiving screen builds its destination grid out of
+    it, the label sheet prints one label per entry. Slipping dead cells into
+    that list would leave every one of those quietly wrong — a full/empty
+    figure counting shelves that are not there, a grid offering a cell that
+    refuses the goods — and wrong in arithmetic, which is the kind of wrong
+    nobody notices for a month. The fix would have to be remembered in every
+    reader, including the ones in the web app, on the same day.
+
+    So the main answer keeps its meaning exactly and the dead cells come back
+    on a door of their own. The map can still draw the hole, and still offer
+    the way back on the tile where somebody is looking for it: it is one more
+    request, on the one screen that wants it, instead of a condition in
+    everything that has ever read a cell.
+
+    In walk order and carrying ``is_active: false``, so the screen can draw
+    them struck through in the grid position they used to occupy — which is
+    what tells a gap that was retired apart from a gap that was never built.
+    """
+    summary = _fill(session)
+    rows = session.exec(
+        select(Location).where(
+            Location.kind == LocationKind.BIN, col(Location.is_active).is_(False)
+        )
+    ).all()
+    return [_location_out(place, summary) for place in sorted(rows, key=loc.walk_order)]
+
+
+@router.post(
+    "/cells/{code}/active",
+    response_model=s.LocationOut,
+    summary="Take a cell out of the room, or bolt it back in",
+)
+def set_cell_active(
+    code: str,
+    payload: s.CellActiveIn,
+    # The office's, like building a rack and like growing one. Retiring a cell
+    # is the shape of the building changing, and not a wider guard: everybody
+    # else in here moves goods between places that exist, and the warehouse
+    # hand who finds a cell inconvenient at nine in the evening is exactly the
+    # person this should not be a way out for.
+    user: AdminUser,
+    session: SessionDep,
+) -> s.LocationOut:
+    """A rack extended to 6×4 by mistake carries two dead columns for ever.
+
+    That was the hole. ``is_active`` has been on ``locations`` since the first
+    migration, three readers filter on it, two docstrings promise it is "the
+    honest way to retire a cell" — and nothing anywhere ever wrote it. Cells
+    were built and never removed.
+
+    One door with a boolean, like ``POST /admin/users/{id}/active``: retiring
+    and restoring are the same decision read from opposite sides, and two
+    endpoints would be two places for the rule and the audit row to drift.
+
+    **Not a delete, and never a delete.** The row keeps its code, its capacity
+    and every movement that ever named it; a stocktake from March still points
+    at a cell that still exists. What changes is that the room stops offering
+    it — off the shelf map, off the label sheet, off the putaway plan — and
+    that nothing may be put into it.
+
+    **Refused while it is holding anything.** A retired cell disappears from
+    the map, and goods in a place nobody can see are goods nobody can find:
+    the shop's count would still include them and no picker could be sent.
+    The sentence says what to do instead — carry them somewhere with ``POST
+    /warehouse/move`` or ``POST /warehouse/move-cell``, or write them off with
+    ``POST /warehouse/stock/empty`` — because a refusal a warehouse cannot act
+    on is a refusal somebody works around.
+
+    **Cells only.** ``QABUL``, ``YIGIM``, ``BRAK`` and ``QAYTGAN`` are not
+    shelves, they are places with a job: being in ``QABUL`` *is* the unplaced
+    state, ``locations.staging`` raises rather than conjuring one up, and the
+    seed writes them by name — so a retired ``QABUL`` is a receiving desk the
+    next seed run silently puts back while every count written into it was
+    invisible to the map in between. A courier's bag is the same story from
+    the other end: it is made on demand and the map draws it only while it
+    holds something, so there is nothing to retire. Neither is refused for
+    safety's sake; there is simply no such decision to take.
+
+    Restoring is unconditional. A cell that is standing there again is a cell
+    the room can use, and nothing about it can have gone wrong while it was
+    empty and closed.
+    """
+    cell = _place(session, code)
+    if cell.kind is not LocationKind.BIN:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("cell_retire_needs_a_cell", code=cell.code),
+        )
+
+    if cell.is_active and not payload.active:
+        held = st.units_in(session, cell.id)
+        if held:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                i18n.label("cell_retire_not_empty", code=cell.code, units=held),
+            )
+
+    if cell.is_active is not payload.active:
+        audit.record(
+            session,
+            actor=user,
+            action="location.active",
+            entity="location",
+            entity_id=cell.id,
+            field="is_active",
+            old=cell.is_active,
+            new=payload.active,
+            note=payload.note or cell.code,
+        )
+        cell.is_active = payload.active
+        session.add(cell)
+        session.commit()
+        session.refresh(cell)
+
+    return _location_out(cell, _fill(session))
 
 
 # --------------------------------------------------------------------------- moving
@@ -255,7 +734,7 @@ def move_goods(
             reason=f"{frm.code} → {cell.code}",
         )
     except st.StockError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from None
+        raise st.refusal(error) from None
 
     out = s.LocationDetailOut(
         **_location_out(cell, _fill(session)).model_dump(),
@@ -263,6 +742,106 @@ def move_goods(
     )
     idem.keep(session, user, idempotency_key, "move", payload, out)
     replayed = idem.commit(session, user, idempotency_key, "move")
+    return s.LocationDetailOut(**replayed) if replayed else out
+
+
+@router.post(
+    "/move-cell",
+    response_model=s.LocationDetailOut,
+    summary="Carry everything in one cell over to another, in one action",
+)
+def move_cell(
+    payload: s.MoveCellIn,
+    user: WarehouseUser,
+    session: SessionDep,
+    idempotency_key: IdempotencyKey,
+) -> s.LocationDetailOut:
+    """Tidying a shelf, as one request rather than one per size.
+
+    A cell holds one model in four sizes, and moving it with ``/move`` was
+    four requests: four keys, four chances to be interrupted, and a model
+    left in two cells if anything went wrong in the middle — which is the
+    exact mess the move existed to clear up. One transaction, so a
+    half-moved cell is not a state this door can produce.
+
+    ``/move`` stays as it is and is not deprecated. A partial move of one
+    size — three of the eight 42s to the front of the shop — is a real thing
+    somebody does, and it needs a quantity in the request.
+
+    **This one takes no quantities.** What moves is what is standing there,
+    read inside the transaction doing the moving. A list of lines with counts
+    on them is a snapshot the screen took some seconds ago, and a picker who
+    took two out of the cell in between turns the whole batch into a refusal
+    over goods nobody is arguing about. ``variant_ids`` narrows it to some of
+    what is there; empty means all of it.
+
+    Answers with the destination, like ``/move``, because the person who just
+    carried a shelf across the room is about to want to see it.
+    """
+    done = idem.replay(session, user, idempotency_key, "move.cell", payload)
+    if done is not None:
+        return s.LocationDetailOut(**done)
+
+    frm = _place(session, payload.from_code)
+    cell = _place(session, payload.to_code)
+    if cell.kind is not LocationKind.BIN:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("putaway_needs_a_cell"))
+    if frm.id == cell.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("move_nowhere"))
+
+    standing = session.exec(
+        select(StockPlacement).where(
+            StockPlacement.location_id == frm.id, StockPlacement.qty > 0
+        )
+    ).all()
+    if payload.variant_ids:
+        wanted = set(payload.variant_ids)
+        standing = [row for row in standing if row.variant_id in wanted]
+    if not standing:
+        # A cell with nothing in it is almost always a mistyped code, and
+        # answering "done" would leave somebody looking at the wrong shelf
+        # wondering why it is empty.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("cell_is_empty", code=frm.code)
+        )
+
+    kind = (
+        StockMovementKind.PUTAWAY
+        if frm.kind is LocationKind.RECEIVING
+        else StockMovementKind.MOVE
+    )
+    touched: set[int] = set()
+    for row in standing:
+        variant = _variant(session, row.variant_id)
+        try:
+            st.move(
+                session,
+                variant=variant,
+                qty=row.qty,
+                kind=kind,
+                frm=frm,
+                to=cell,
+                actor=user,
+                reason=f"{frm.code} → {cell.code}",
+            )
+        except st.StockError as error:
+            raise st.refusal(error) from None
+        touched.add(variant.product_id)
+
+    # What a card advertises can change when goods move: the damaged corner
+    # and the uninspected returns are in the building but not for sale, so a
+    # shelf-ward move out of either puts a card back in the shop. ``/move``
+    # does not do this and should; it is left alone here because its shape
+    # was not mine to change.
+    for product_id in sorted(touched):
+        pr.refresh(session, product_id)
+
+    out = s.LocationDetailOut(
+        **_location_out(cell, _fill(session)).model_dump(),
+        contents=_contents(session, cell),
+    )
+    idem.keep(session, user, idempotency_key, "move.cell", payload, out)
+    replayed = idem.commit(session, user, idempotency_key, "move.cell")
     return s.LocationDetailOut(**replayed) if replayed else out
 
 
@@ -282,8 +861,21 @@ def start_count(
 
     One count per cell at a time. Two people counting the same shelf are two
     answers about one moment, and the second to submit would silently win.
+
+    **Not a retired cell.** It holds nothing — it could not have been retired
+    otherwise — so there is nothing to count, and the one thing a count can do
+    that nothing else can is book in a surplus: a line for something that
+    turned up. That would put goods into a place that is off the map, which is
+    the one outcome retiring a cell is not allowed to produce. Refused here
+    rather than at the submit, because the person has walked to the shelf by
+    then.
     """
     cell = _place(session, payload.code)
+    if not cell.is_active:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("cell_retired_count", code=cell.code),
+        )
     open_already = session.exec(
         select(StockCount).where(
             StockCount.location_id == cell.id, StockCount.status == CountStatus.OPEN
@@ -560,9 +1152,13 @@ def _location_out(place: Location, summary: dict) -> s.LocationOut:
         note=place.note,
         products=products,
         units=units,
-        fill_percent=(
-            min(100, round(units / place.capacity * 100)) if place.capacity else 0
-        ),
+        free=st.free_room(place, units),
+        # Uncapped. Capped at a hundred, a cell holding sixty-five of a
+        # stated sixty read exactly like one holding sixty, and an over-full
+        # cell — the one thing this figure is on the screen to show — was
+        # invisible. The bar on the map clamps its own width, so 130 draws
+        # full and red where it already drew full and red at 100.
+        fill_percent=round(units / place.capacity * 100) if place.capacity else 0,
         oldest_minutes=_minutes(oldest) if units else 0,
     )
 
@@ -608,6 +1204,12 @@ def _suggest_cell(session: SessionDep, variant_id: int, product_id: int) -> str:
     rest of the model already lives — every colour and every size of it
     together, which is what leaves a picker choosing between sizes instead of
     hunting the room.
+
+    Live cells only, like ``_cells_holding`` beside it. A retired cell cannot
+    be holding anything today, so the filter changes no answer this year; it
+    is here because this is a *suggestion typed into a form*, and the one way
+    it could ever be wrong is by offering a cell that the door it feeds would
+    then refuse.
     """
     siblings = session.exec(
         select(ProductVariant.id).where(ProductVariant.product_id == product_id)
@@ -619,12 +1221,38 @@ def _suggest_cell(session: SessionDep, variant_id: int, product_id: int) -> str:
             col(StockPlacement.variant_id).in_(list(siblings) or [-1]),
             StockPlacement.qty > 0,
             Location.kind == LocationKind.BIN,
+            col(Location.is_active).is_(True),
         )
     ).all()
     if not rows:
         return ""
     best = sorted(rows, key=lambda pair: loc.walk_order(pair[1]))[0]
     return best[1].code
+
+
+def _cells_holding(session: SessionDep, product_id: int) -> set[int]:
+    """The ids of every cell holding any variant of one card.
+
+    Ids and not codes, and a set and not a list: the plan asks this of every
+    cell in the room while it sorts them, and it asks by id because that is
+    what the units are keyed by. One query for the whole card — a model in
+    four colours and five sizes is twenty variants, and twenty queries to
+    answer "which cells is this in" is the shape that made the map slow.
+    """
+    siblings = session.exec(
+        select(ProductVariant.id).where(ProductVariant.product_id == product_id)
+    ).all()
+    rows = session.exec(
+        select(StockPlacement.location_id)
+        .join(Location, col(Location.id) == col(StockPlacement.location_id))
+        .where(
+            col(StockPlacement.variant_id).in_(list(siblings) or [-1]),
+            StockPlacement.qty > 0,
+            Location.kind == LocationKind.BIN,
+            col(Location.is_active).is_(True),
+        )
+    ).all()
+    return {int(location_id) for location_id in rows}
 
 
 def _count(session: SessionDep, count_id: int) -> StockCount:

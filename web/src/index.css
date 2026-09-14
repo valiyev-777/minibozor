@@ -1,5 +1,14 @@
 @import "tailwindcss";
+@import "./fonts.css";
 @import "../../shared/theme.css";
+
+/* --------------------------------------------------------------- dark by class
+ *
+ * Tailwind's `dark:` normally keys off the operating system. Here it keys off
+ * the `.dark` class that `lib/theme.tsx` puts on `<html>`, so `dark:` and the
+ * palette in `shared/theme.css` are switched by the same thing rather than
+ * disagreeing whenever somebody's laptop decides it is evening. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* --------------------------------------------------------------- two vocabularies
  *
@@ -78,14 +87,18 @@
   width: var(--control-lg);
 }
 
+/* The vertical padding of a table cell, which is the one number that decides
+ * how many rows a desk sees at once. It moves with density like everything
+ * else, so a courier's list is not the office's list with bigger text. */
+@utility py-cell {
+  padding-block: var(--cell-y);
+}
+
 @layer base {
   * {
     border-color: var(--color-line);
   }
 
-  /* Uzbek reads perfectly well in the system stack, and a webfont is a
-   * download a warehouse phone on a bad connection pays for before it can
-   * show a pick list. */
   html {
     font-family: var(--font-sans);
   }
@@ -100,5 +113,52 @@
     body {
       background: white;
     }
+  }
+}
+
+@layer components {
+  /* ------------------------------------------------------------- the table
+   *
+   * Rows carry **no bottom border**. A striped table with rules as well is a
+   * grid of boxes: two devices doing one job, and the eye ends up tracking
+   * neither. The stripe is the row separator, the hover is the row under the
+   * cursor, and the only hairline in the whole table is under its header.
+   *
+   * Written as a component class rather than as classes on every `<tr>`
+   * because the striping is `:nth-child`, which a utility cannot say, and
+   * because every table in the app then gets it by putting one word on the
+   * `<table>` — which is the difference between one table and eleven. */
+  .table-striped tbody tr {
+    border-bottom: none;
+  }
+
+  .table-striped tbody tr:nth-child(odd) {
+    background: color-mix(in oklab, var(--color-line-soft) 60%, transparent);
+  }
+
+  .table-striped tbody tr:hover {
+    background: var(--color-line-soft);
+  }
+
+  /* A thin, brand-coloured horizontal scrollbar for a wide table. The default
+   * one is a 15px grey slab that eats a row's worth of height and reads as a
+   * piece of furniture; this reads as an indicator, which is all it is. */
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-brand) transparent;
+  }
+
+  .scroll-slim::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+
+  .scroll-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scroll-slim::-webkit-scrollbar-thumb {
+    background-color: var(--color-brand);
+    border-radius: 999px;
   }
 }

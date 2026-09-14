@@ -8,16 +8,26 @@
  * decision on that.
  *
  * `Panel` and `Pill` were the pieces every page was writing out by hand:
- * `rounded-panel border border-line bg-surface shadow-panel p-3` in eleven files, and a status chip
- * with its own three colours in four of them. Not a preference — the same
- * object drawn eleven times drifts eleven ways, and the app read like eleven
- * screens rather than one.
+ * `rounded-panel border border-line bg-surface shadow-panel p-3` in eleven
+ * files, and a status chip with its own three colours in four of them. Not a
+ * preference — the same object drawn eleven times drifts eleven ways, and the
+ * app read like eleven screens rather than one.
  */
 
 import { AlertCircle, Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/cn"
 
+/**
+ * The head of a screen, and it is a **card** rather than bare text on the
+ * page.
+ *
+ * That is the one structural thing the house system does differently, and it
+ * is worth the pixels: the title, the filters and the primary action are one
+ * object with an edge round it, so the band across the top of every screen is
+ * the same band and the eye stops re-finding it per page. A heading floating
+ * over a grid of cards reads as a caption for the first card.
+ */
 export function PageHeader({
   title,
   subtitle,
@@ -28,9 +38,16 @@ export function PageHeader({
   children?: React.ReactNode
 }) {
   return (
-    <header className="mb-(--gap-page) flex flex-wrap items-end justify-between gap-3">
+    <header className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-panel border border-panel-edge bg-surface px-4 py-3">
       <div className="min-w-0">
-        <h1 className="truncate text-xl font-semibold tracking-tight">{title}</h1>
+        {/* Capped, unlike the figure token it borrows from. A courier's
+            density triples every size on the screen, which is right for a
+            pick count read in daylight and wrong for a page title — at
+            40px it is the loudest thing on a screen whose job is the list
+            underneath it. */}
+        <h1 className="truncate text-[clamp(1.25rem,var(--text-figure),1.75rem)] font-bold leading-tight tracking-tight">
+          {title}
+        </h1>
         {subtitle ? (
           <p className="mt-0.5 text-small text-ink-soft">{subtitle}</p>
         ) : null}
@@ -68,18 +85,85 @@ export function Panel({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-panel border border-line bg-surface shadow-panel",
+        "overflow-hidden rounded-panel border border-panel-edge bg-surface",
         className,
       )}
     >
       {title || aside ? (
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-2">
+        <header className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
           <h2 className="text-small font-semibold tracking-tight">{title}</h2>
           {aside ? <div className="flex items-center gap-2">{aside}</div> : null}
         </header>
       ) : null}
-      <div className={cn(bare ? "" : "p-3")}>{children}</div>
+      <div className={cn(bare ? "" : "p-4")}>{children}</div>
     </section>
+  )
+}
+
+/**
+ * One control with a position in it, not five boxes with one of them tinted.
+ *
+ * Every screen that filters a list was drawing this by hand — `orders` as a
+ * segmented control, `reports` as a row of outlined buttons, and the two did
+ * not look like the same act. Five bordered rectangles in a row read as five
+ * things to decide; a segment reads as one thing whose answer is currently
+ * over there.
+ *
+ * A `<button>` per option rather than a `<select>`: the options are three to
+ * six words and the point is that all of them are visible, which is what
+ * makes it a filter somebody uses rather than a menu somebody opens.
+ */
+export function Segmented<T extends string>({
+  value,
+  onChange,
+  options,
+  label,
+  tone = "neutral",
+  className,
+}: {
+  /** `null` when the list is filtered by something else and none of these
+   *  answers is the current one — a control that always shows a selection it
+   *  is not responsible for is a control that lies. */
+  value: T | null | undefined
+  onChange: (next: T) => void
+  options: Array<{ key: T; label: React.ReactNode }>
+  /** What the row of options is choosing between, for a screen reader. */
+  label: string
+  /** The colour of the selected chip. `neutral` — a white chip on the fill —
+   *  unless the answer itself is a warning ("Tugagan"), which is the one
+   *  case where the filter's own state is the news. */
+  tone?: Tone
+  className?: string
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      className={cn(
+        "inline-flex flex-wrap gap-0.5 rounded-control bg-line-soft p-1",
+        className,
+      )}
+    >
+      {options.map((option) => (
+        <button
+          key={option.key}
+          type="button"
+          role="tab"
+          aria-selected={option.key === value}
+          onClick={() => onChange(option.key)}
+          className={cn(
+            "h-control-sm rounded-[calc(var(--radius-control)-2px)] px-3 text-small transition-colors",
+            option.key === value
+              ? tone === "neutral"
+                ? "bg-surface font-medium text-ink shadow-panel"
+                : cn("font-medium", TONES[tone])
+              : "text-ink-soft hover:text-ink",
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -93,6 +177,16 @@ const TONES: Record<Tone, string> = {
   warn: "bg-warn-soft text-warn-ink",
   danger: "bg-danger-soft text-danger",
   brand: "bg-brand-soft text-brand-deep",
+}
+
+/** The same five meanings as a solid block, for the icon square on a `Stat`
+ *  — a tint behind a coloured glyph disappears at 40px. */
+const TONES_SOLID: Record<Tone, string> = {
+  neutral: "bg-line-soft text-ink-soft",
+  good: "bg-good text-good-ink",
+  warn: "bg-warn text-white",
+  danger: "bg-danger text-danger-ink",
+  brand: "bg-brand text-brand-ink",
 }
 
 /** One word about the state of the row it sits in. */
@@ -119,49 +213,69 @@ export function Pill({
 }
 
 /**
- * A figure with its name under it, and a hint under that.
+ * A figure, an icon square beside it, and the name of the thing underneath.
  *
  * The dashboard was a grid of these written inline, all the same weight, so
  * seven counters shouted equally and the one that needed acting on did not
- * stand out at all. `tone` is what makes one of them urgent, and it is
- * carried by the border and the figure rather than by a wash of colour over
- * the whole card: a card that is entirely pink is harder to read, not easier.
+ * stand out at all. Two things separate them now: the coloured square, which
+ * is what the eye finds first in a row of six cards, and the figure's own
+ * colour. Neither is a wash over the whole card — a card that is entirely
+ * pink is harder to read, not easier.
+ *
+ * `icon` is optional because half the places that want a figure (a report
+ * total, a count line) have no sensible glyph, and an invented one is noise.
  */
 export function Stat({
   label,
   value,
   hint,
+  icon: Icon,
   tone = "neutral",
   className,
 }: {
   label: string
   value: React.ReactNode
   hint?: React.ReactNode
+  icon?: React.ComponentType<{ className?: string }>
   tone?: Tone
   className?: string
 }) {
   return (
     <div
       className={cn(
-        "rounded-panel border border-line bg-surface shadow-panel p-3 shadow-panel transition-colors",
-        tone === "danger" ? "border-danger/35" : "border-line",
+        "flex flex-col gap-3 rounded-panel border bg-surface p-4 transition-colors",
+        tone === "danger" ? "border-danger/35" : "border-panel-edge",
         className,
       )}
     >
-      <div className="truncate text-micro font-medium text-ink-soft">{label}</div>
-      <div
-        className={cn(
-          "figure mt-1",
-          tone === "danger" && "text-danger",
-          tone === "good" && "text-good",
-          tone === "warn" && "text-warn-ink",
-        )}
-      >
-        {value}
+      <div className="flex items-start gap-3">
+        {Icon ? (
+          <span
+            className={cn(
+              "grid size-10 shrink-0 place-items-center rounded-panel",
+              TONES_SOLID[tone],
+            )}
+          >
+            <Icon className="size-5" />
+          </span>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <div
+            className={cn(
+              "figure truncate",
+              tone === "danger" && "text-danger",
+              tone === "good" && "text-good",
+              tone === "warn" && "text-warn-ink",
+            )}
+          >
+            {value}
+          </div>
+          {hint ? (
+            <div className="truncate text-micro text-ink-faint">{hint}</div>
+          ) : null}
+        </div>
       </div>
-      {hint ? (
-        <div className="mt-0.5 truncate text-micro text-ink-faint">{hint}</div>
-      ) : null}
+      <div className="truncate text-micro font-medium text-ink-soft">{label}</div>
     </div>
   )
 }
@@ -170,8 +284,9 @@ export function Waiting({ what = "Yuklanmoqda" }: { what?: string }) {
   return (
     <div
       role="status"
-      className="flex items-center gap-2 rounded-panel border border-line bg-surface p-8 text-small text-ink-soft">
-      <Loader2 className="size-4 animate-spin" />
+      className="flex items-center justify-center gap-2 rounded-panel border border-panel-edge bg-surface p-8 text-small text-ink-soft"
+    >
+      <Loader2 className="size-4 animate-spin text-brand" />
       {what}…
     </div>
   )
@@ -183,19 +298,47 @@ export function Waiting({ what = "Yuklanmoqda" }: { what?: string }) {
  * An empty list is a dead end unless it says where the things come from. The
  * warehouse screens all have an answer to that ("qop ochilganda yoziladi"),
  * and a sentence is cheaper than somebody asking.
+ *
+ * The shape is the house one: a tinted brand circle holding a glyph, a bold
+ * line naming what is missing, and a quieter line saying where it comes
+ * from. The glyph is the table's own — a list with no orders and a list with
+ * no shelves are different absences, and one generic box drawn for both is
+ * what makes an empty screen feel like a failure instead of a state.
  */
 export function Empty({
   what,
+  title,
+  icon: Icon,
   children,
+  bare = false,
 }: {
+  /** The sentence: where the things come from, or what to do now. */
   what: string
+  /** The headline. Without one this is the old one-line empty. */
+  title?: string
+  icon?: React.ComponentType<{ className?: string }>
   children?: React.ReactNode
+  /** Already inside a card — draw no edge of my own. */
+  bare?: boolean
 }) {
   return (
-    <div className="rounded-panel border border-dashed border-line bg-surface px-6 py-10 text-center">
-      <p className="text-small text-ink-soft">{what}</p>
+    <div
+      role="status"
+      className={cn(
+        "flex flex-col items-center justify-center px-4 text-center",
+        title || Icon ? "py-16" : "py-10",
+        bare ? "" : "rounded-panel border border-panel-edge bg-surface",
+      )}
+    >
+      {Icon ? (
+        <span className="mb-4 grid size-22 shrink-0 place-items-center rounded-full bg-brand/10">
+          <Icon className="size-8 text-brand" />
+        </span>
+      ) : null}
+      {title ? <p className="mb-0.5 font-semibold">{title}</p> : null}
+      <p className="max-w-md text-small text-ink-soft">{what}</p>
       {children ? (
-        <div className="mt-3 flex justify-center gap-2">{children}</div>
+        <div className="mt-4 flex justify-center gap-2">{children}</div>
       ) : null}
     </div>
   )
@@ -207,7 +350,8 @@ export function Problem({ error }: { error: unknown }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-2 rounded-control border border-danger/25 bg-danger-soft p-3 text-small text-danger">
+      className="flex items-start gap-2 rounded-control border border-danger/25 bg-danger-soft p-3 text-small text-danger"
+    >
       <AlertCircle className="mt-0.5 size-4 shrink-0" />
       <span>{text}</span>
     </div>
@@ -222,7 +366,7 @@ export function Problem({ error }: { error: unknown }) {
 export function Fill({ percent }: { percent: number }) {
   const level = percent >= 90 ? "full" : percent >= 60 ? "busy" : "roomy"
   return (
-    <div className="h-1 w-full overflow-hidden rounded-full bg-line-soft">
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-line-soft">
       <div
         className={cn(
           "h-full rounded-full transition-[width]",

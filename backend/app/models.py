@@ -77,6 +77,11 @@ class PaymentMethod(StrEnum):
     CASH = "cash"
 
 
+class CardStatus(StrEnum):
+    ACTIVE = "active"
+    EXPIRED = "expired"
+
+
 class DeliveryKind(StrEnum):
     COURIER = "courier"
     PICKUP = "pickup"
@@ -275,6 +280,33 @@ class Brand(SQLModel, table=True):
     name: str
 
 
+class BrandAlias(SQLModel, table=True):
+    """A spelling of a make, and which row it means.
+
+    The receiving desk types the brand as free text, so the same make arrives
+    written five ways. Matching on ``brands.name`` alone made a second row of
+    every spelling nobody had used yet — and worse, made the *name* the only
+    thing the desk could find a row by, so renaming a brand in the admin panel
+    detached it from every sack that would be typed the old way.
+
+    So the name column is what a brand is *called* and this table is what it
+    **answers to**: the current name, the names it has been renamed away from,
+    and every spelling of every brand folded into it. ``key`` is the name with
+    case and punctuation flattened, and is unique across the whole table — one
+    spelling means one make, or the desk is back to choosing between two right
+    answers. See ``app.brands``.
+    """
+
+    __tablename__ = "brand_aliases"
+
+    id: int | None = Field(default=None, primary_key=True)
+    brand_id: int = Field(foreign_key="brands.id", index=True)
+    # As somebody typed it, tidied. Shown on the merge screen, because "which
+    # spellings does this row swallow" is the question being asked there.
+    name: str = Field(max_length=120)
+    key: str = Field(index=True, unique=True, max_length=120)
+
+
 class Product(SQLModel, table=True):
     __tablename__ = "products"
 
@@ -417,6 +449,21 @@ class ProductVariant(SQLModel, table=True):
     # apart, and a single figure on the product would have to lie about one of
     # them. ``Product.price`` is the cheapest of these, for the listings.
     price: int = 0
+
+    # What the newest lot of *this cell* cost at the market, in so'm.
+    #
+    # Kept by ``app.stock.move`` on every ``receipt``, which is the one moment
+    # a cost is known: a supply line names a variant and a unit cost together.
+    # Per cell and not per card, because a 43 is bought at a different price
+    # from a 41 — ``app.products.last_cost`` answers the whole card and is a
+    # pricing aid for the card editor, and a margin built on it would be a
+    # margin of the wrong shoe.
+    #
+    # **Nought means unknown, never free.** Every cell received before this
+    # column existed has nought here, and a report that treated that as a cost
+    # of zero would print a hundred per cent margin on the shop's whole
+    # history. Callers render it as unknown and say from when it is real.
+    last_cost: int = 0
 
     # How many of these are in the building, over every location holding any.
     # A running total of ``stock_movements`` and never assigned — see
@@ -594,6 +641,40 @@ class DeliverySlot(SQLModel, table=True):
     capacity_left: int = 20
 
 
+# --------------------------------------------------------------------------- payment
+
+
+class PaymentCard(SQLModel, table=True):
+    """A card a customer may pay with, as the processor describes it.
+
+    **There is no PAN here and there never was.** The app collects the number,
+    validates it on the device and sends the four facts a person needs to
+    recognise their own card — the scheme, the last four digits, the name and
+    the expiry — plus the processor's token, which is the only thing that can
+    actually be charged. The number itself never leaves the handset.
+
+    That is also why the row survives a provider swap: Click, Payme and Stripe
+    all hand back a token and a masked description, and the column that holds
+    it does not care which of them wrote it. What changes is
+    ``app.payments``.
+    """
+
+    __tablename__ = "payment_cards"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id", index=True)
+    brand: str = "Humo"             # Humo | UzCard | Visa | Mastercard
+    last4: str = Field(max_length=4)
+    holder: str = ""
+    expiry_month: int = 12
+    expiry_year: int = 2030
+    status: CardStatus = Field(default=CardStatus.ACTIVE)
+    is_default: bool = False
+    # Never store a PAN. A real integration keeps only the processor's token.
+    processor_token: str | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 # --------------------------------------------------------------------------- orders
 
 
@@ -620,6 +701,14 @@ class Order(SQLModel, table=True):
 
     payment_method: PaymentMethod = Field(default=PaymentMethod.CARD)
     paid: bool = False
+    # What the processor called the charge.
+    #
+    # A payment is a row on an order rather than a table of its own — see the
+    # top of ``app.inventory`` — but a row that only says "true" cannot be
+    # reconciled against a bank statement or refunded through anybody's API.
+    # This is the charge's own name, empty on a cash order because nothing has
+    # been charged yet at the point one is placed.
+    payment_reference: str = ""
 
     recipient_name: str = ""
     recipient_phone: str = ""
@@ -674,12 +763,28 @@ class OrderItem(SQLModel, table=True):
     size: str = Field(default="", max_length=40)
     variant_label: str = ""
     unit_price: int = 0
+    # What the shop paid for one of these, frozen beside what it charged.
+    #
+    # Snapshotted at checkout from the variant's ``last_cost``, for the same
+    # reason ``unit_price`` is snapshotted: the next market run moves the cost
+    # and an order must not change when the shelf does. Without it a sold unit
+    # cannot be traced to a lot at all — the ``delivered`` movement carries no
+    # supply id — so margin was not a figure this system could produce.
+    #
+    # **Nought means unknown.** Every line written before this column existed
+    # has nought, and margin on those orders is unknowable rather than total.
+    unit_cost: int = 0
     quantity: int = 1
     reviewed: bool = False
 
     @property
     def line_total(self) -> int:
         return self.unit_price * self.quantity
+
+    @property
+    def line_cost(self) -> int:
+        """Nought when the cost is unknown, which is not the same as free."""
+        return self.unit_cost * self.quantity
 
 
 class OrderEvent(SQLModel, table=True):

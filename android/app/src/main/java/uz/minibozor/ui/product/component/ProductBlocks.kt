@@ -127,37 +127,33 @@ fun RatingPanel(
     }
 }
 
-/** Under this many left, the count stops being a fact and becomes a reason. */
-private const val LowStock = 5
-
 /**
- * How many are left and how many have gone, in one line under the rating.
+ * How many have gone, in one line under the price.
  *
- * The same fact the tile in the grid prints, at the same weight and in the same
- * words — a caption with the box beside it, quiet by default and red once the
- * number has something to say. It was a bordered panel for a while, with a
- * meter across it and the two figures set at title size; that is a great deal
- * of page for "six left, three hundred sold", and the meter was drawing a
- * proportion of a denominator nobody had. What it says fits on a line, so it
- * takes a line.
+ * **How many are left is not on this page.** It used to lead the line — "4 dona
+ * qoldi · 4 dona sotilgan" — and a shop telling a customer how much of it is in
+ * the room is answering a question nobody asked with a figure that helps a
+ * competitor more than a buyer. What is left is still enforced, at the only
+ * moment it is a real answer: the stepper in the buy bar stops at the last one
+ * and says the number there. What goes here is the half a customer does read —
+ * how many other people bought it, which is the only fact on the page that is
+ * about them rather than about us.
  *
- * The pill only appears when there is a reason for it. A product that is simply
- * in stock says so by not saying anything.
+ * The pill stays. A shelf with none left has to say so before somebody picks a
+ * size and finds a dead button, and [inStock] is about the cell chosen above,
+ * not about the product as a whole.
  *
- * [stockLeft] and [inStock] are about the colour on show above, not about the
- * product as a whole — the photograph is of one colour, and the count under it
- * has to be the count of the thing being looked at.
+ * Nothing at all when there is nothing to say — a product in stock that nobody
+ * has bought yet gets a line of silence rather than an empty box glyph.
  */
 @Composable
 fun ShelfLine(
-    stockLeft: Int,
     soldCount: Int,
     inStock: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val gone = !inStock || stockLeft <= 0
-    val low = !gone && stockLeft <= LowStock
-    val urgent = gone || low
+    val gone = !inStock
+    if (!gone && soldCount <= 0) return
     Row(
         modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -166,21 +162,9 @@ fun ShelfLine(
         MbIcon(
             "box",
             size = 14.dp,
-            tint = if (urgent) MbTheme.colors.danger else MbTheme.colors.icon,
+            tint = if (gone) MbTheme.colors.danger else MbTheme.colors.icon,
         )
-        // Nothing to count when there are none: the pill on the right is the
-        // whole of what a sold-out shelf has to say, and "0 dona qoldi" beside
-        // it would be the same sentence twice.
-        if (!gone) {
-            MbText(
-                stringResource(R.string.n_dona_qoldi, stockLeft),
-                MbTheme.type.caption,
-                if (low) MbTheme.colors.danger else MbTheme.colors.inkMuted,
-                maxLines = 1,
-            )
-        }
         if (soldCount > 0) {
-            if (!gone) MbText("·", MbTheme.type.caption, MbTheme.colors.hairlineStrong)
             MbText(
                 pluralStringResource(R.plurals.n_sotilgan, soldCount, soldCount.grouped()),
                 MbTheme.type.caption,
@@ -188,10 +172,10 @@ fun ShelfLine(
                 maxLines = 1,
             )
         }
-        if (urgent) {
+        if (gone) {
             Spacer(Modifier.weight(1f))
             MbStatusPill(
-                stringResource(if (gone) R.string.tugadi else R.string.kam_qoldi),
+                stringResource(R.string.tugadi),
                 background = MbTheme.colors.dangerBg,
                 contentColor = MbTheme.colors.danger,
             )
@@ -242,6 +226,15 @@ private fun PickerLabel(
  * A hex circle asks the customer to imagine what "#0E0F12" looks like on a shoe;
  * the photograph shows them. Where the shop supplied no photo for a colour the
  * tile falls back to the swatch, so a half-photographed catalogue still picks.
+ *
+ * **A colour is sold out *in the size being asked about*.** The tile used to go
+ * grey only when every size of that colour had gone, so a customer who wanted a
+ * 41 was shown five bright photographs of which one actually had a 41 — they
+ * found out by tapping each in turn and watching the size row underneath.
+ * [soldOut] is the set the caller works out from the chosen size, and changing
+ * the size changes the set: the photographs light back up as the question
+ * changes. Both halves stay pressable ([MbSizeChip] does the same), because
+ * colour and size are one question asked from two ends.
  */
 @Composable
 fun ColorPicker(
@@ -249,6 +242,8 @@ fun ColorPicker(
     selected: String?,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Colour names with nothing left in the size currently chosen. */
+    soldOut: Set<String> = emptySet(),
     /** Used for the fallback when a lone colour has no photo of its own. */
     productImages: List<String> = emptyList(),
 ) {
@@ -264,6 +259,7 @@ fun ColorPicker(
         ) {
             colors.forEachIndexed { index, color ->
                 val isSelected = color.colour == chosen?.colour
+                val gone = color.colour in soldOut || !color.inStock
                 // One colour and no photo of its own: the product's own first
                 // photograph is a picture of it in that colour.
                 val photo = color.imageUrl
@@ -281,13 +277,15 @@ fun ColorPicker(
                             },
                             shape = MbTheme.shapes.tile,
                         )
-                        .mbClickable(MbTheme.shapes.tile, enabled = color.inStock) {
-                            onSelect(color.colour)
-                        }
+                        // Pressable whether or not this colour has the size in
+                        // hand. Tapping a struck-out one is how a customer asks
+                        // "what sizes does the blue come in?", and refusing the
+                        // tap leaves them no way to ask it.
+                        .mbClickable(MbTheme.shapes.tile) { onSelect(color.colour) }
                         // Room for the ring to read as a ring rather than as a
                         // dark edge on the photograph.
                         .padding(if (isSelected) 4.dp else 3.dp)
-                        .alpha(if (color.inStock) 1f else 0.4f),
+                        .alpha(if (gone) 0.4f else 1f),
                 ) {
                     if (photo != null) {
                         MbProductImage(
@@ -308,7 +306,7 @@ fun ColorPicker(
                     // badly, and the customer taps it again. The sizes say so
                     // with a line through them; a photograph cannot be struck
                     // through, so it is said.
-                    if (!color.inStock) {
+                    if (gone) {
                         MbText(
                             stringResource(R.string.tugagan),
                             MbTheme.type.caption,
@@ -371,7 +369,10 @@ fun SizePicker(
                 MbSizeChip(
                     label = variant.size,
                     selected = variant.id == selected?.id,
-                    enabled = variant.inStock,
+                    // Struck through, not switched off. A size this colour has
+                    // run out of is still the size the customer came for, and
+                    // pressing it re-reads the colours above against it.
+                    soldOut = !variant.inStock,
                     onClick = { onSelect(variant.id) },
                 )
             }

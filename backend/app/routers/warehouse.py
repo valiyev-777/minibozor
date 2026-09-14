@@ -25,13 +25,12 @@ the first rather than erasing it.
 
 from __future__ import annotations
 
-import re
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import audit, i18n
+from app import audit, brands, i18n
 from app import idempotency as idem
 from app import locations as loc
 from app import products as pr
@@ -216,10 +215,22 @@ def book_in_pile(
     goods in *and* shelves them, in one submit, with the cell typed on the same
     form.
 
-    ``location_code`` empty is not an error. It means the goods are going no
-    further than the receiving area for now, and the putaway queue will offer
-    them to whoever has time — the physical work never waits for the
-    paperwork, and QABUL is a place rather than a state of not being anywhere.
+    **One cell, or several.** ``location_code`` is the ordinary sack and is
+    unchanged. ``placements`` is the other answer: eighty pairs do not fit in
+    a cell that holds sixty, and the person is standing in front of four
+    cells with the pile at their feet. The cells are filled in the order they
+    are given — the first to its quantity, then the next — and a size may
+    straddle two of them, because that is what physically happens when a pile
+    is split and the movements are per variant and cell anyway. Exactly one
+    of the two ways has to be used: neither is the old homeless state coming
+    back, and both is two answers to one question.
+
+    **Capacity is not enforced, here least of all.** A cell that refuses the
+    last pair at nine in the evening is a cell somebody works around, and the
+    goods are already in the building by the time this request is made. The
+    map draws an over-full cell as over-full — that is what the warning is
+    for — and ``GET /warehouse/putaway-plan`` is what suggests a split that
+    fits before anybody types one.
 
     The card this writes is a **stub**: a name, a colour, sizes and counts. It
     has no category, no selling price and no catalogue photograph, so it stays
@@ -230,6 +241,11 @@ def book_in_pile(
     done = idem.replay(session, user, idempotency_key, "pile", payload)
     if done is not None:
         return s.PileOut(**done)
+
+    # Checked before a card is written: a stub product left behind by a
+    # request that was refused on its cells is a card nobody asked for, in a
+    # catalogue somebody has to tidy.
+    spread = _pile_spread(session, payload)
 
     product = _pile_card(session, user, payload)
     colour = pr.tidy_label(payload.colour)
@@ -281,7 +297,6 @@ def book_in_pile(
         sizes=wanted,
         price=product.price,
     )
-    where = _pile_cell(session, payload.location_code)
 
     run = Supply(
         code=_next_code(session, Supply, "SUP"),
@@ -297,8 +312,19 @@ def book_in_pile(
     session.commit()
     session.refresh(run)
 
+    # The cells, and how much is still to go in each. Walked in step with the
+    # sizes below: a size fills what is left of the cell in hand and spills
+    # into the next one, which is the pile being put away as it comes out of
+    # the sack.
+    filling = [[place, units] for place, units in spread]
+    into = 0
+
     quantity = 0
     for line, variant in zip(payload.sizes, cells, strict=True):
+        # One supply line per size, whatever the goods were split across. The
+        # line is what came off the van and what it cost; where it ended up
+        # is the ledger's business, and splitting the cost across cells would
+        # invent an arithmetic nobody asked for.
         session.add(
             SupplyLine(
                 supply_id=run.id,
@@ -307,21 +333,37 @@ def book_in_pile(
                 unit_cost=payload.unit_cost,
             )
         )
-        # One movement, from the outside world straight to where the goods
-        # actually are. Not two — a receipt into QABUL followed by a putaway
-        # out of it would put a leg in the ledger for a journey nobody made.
-        st.move(
-            session,
-            variant=variant,
-            qty=line.quantity,
-            kind=StockMovementKind.RECEIPT,
-            frm=None,
-            to=where,
-            actor=user,
-            reason=f"{run.code} · {where.code}",
-            supply_id=run.id,
-        )
+        left = line.quantity
+        while left > 0:
+            place, room = filling[into]
+            step = min(left, room)
+            # One movement per size and cell, from the outside world straight
+            # to where the goods actually are. Not a receipt into QABUL and a
+            # putaway out of it — that is a leg in the ledger for a journey
+            # nobody made.
+            st.move(
+                session,
+                variant=variant,
+                qty=step,
+                kind=StockMovementKind.RECEIPT,
+                frm=None,
+                to=place,
+                actor=user,
+                reason=f"{run.code} · {place.code}",
+                supply_id=run.id,
+                # What this cell's newest lot cost, remembered on the cell.
+                # The pile form makes a unit cost mandatory, so every card
+                # booked in this way can be sold at a margin somebody can
+                # actually read afterwards.
+                unit_cost=payload.unit_cost,
+            )
+            filling[into][1] = room - step
+            if filling[into][1] == 0:
+                into += 1
+            left -= step
         quantity += line.quantity
+
+    went = ", ".join(place.code for place, _ in spread)
 
     # The identification photograph belongs to the card, and the first one
     # wins: a second pile of the same goods should not quietly replace the
@@ -338,7 +380,7 @@ def book_in_pile(
         entity_id=product.id,
         field="location",
         old=None,
-        new=where.code,
+        new=went,
         note=f"{run.code} · {quantity} dona · {product.title}",
     )
     session.commit()
@@ -350,7 +392,11 @@ def book_in_pile(
         product=sv.admin_product_out(session, product),
         run_id=run.id,
         run_code=run.code,
-        location_code=where.code,
+        location_code=went,
+        placements=[
+            s.PilePlacedOut(code=place.code, quantity=units)
+            for place, units in spread
+        ],
         quantity=quantity,
         total_cost=quantity * payload.unit_cost + run.transport_cost,
         labels=[
@@ -451,127 +497,6 @@ def list_supplies(
 @router.get("/supplies/{supply_id}", response_model=s.SupplyOut)
 def get_supply(supply_id: int, user: StockViewer, session: SessionDep) -> s.SupplyOut:
     return _supply_out(session, _supply(session, supply_id))
-
-
-@router.put(
-    "/supplies/{supply_id}/lines",
-    response_model=s.SupplyOut,
-    summary="What was in the sack — written while sorting",
-)
-def sort_run(
-    supply_id: int,
-    payload: s.SupplySortIn,
-    user: WarehouseUser,
-    session: SessionDep,
-) -> s.SupplyOut:
-    """The sorting itself: pile by pile, what it is and how many.
-
-    Replaces the lines rather than adding to them, because sorting is a table
-    somebody is filling in and leaving it half-saved between two shapes is how
-    a pile gets counted twice. Nothing moves yet — the run is still a draft,
-    and the goods are still a sack.
-    """
-    run = _draft(session, supply_id)
-
-    for line in payload.lines:
-        _variant(session, line.variant_id)
-
-    for old in session.exec(
-        select(SupplyLine).where(SupplyLine.supply_id == run.id)
-    ).all():
-        session.delete(old)
-    for line in payload.lines:
-        session.add(
-            SupplyLine(
-                supply_id=run.id,
-                variant_id=line.variant_id,
-                quantity=line.quantity,
-                unit_cost=line.unit_cost,
-            )
-        )
-    if payload.place is not None:
-        run.place = payload.place.strip()
-    if payload.transport_cost is not None:
-        run.transport_cost = payload.transport_cost
-    if payload.note is not None:
-        run.note = payload.note
-    session.add(run)
-    session.commit()
-    session.refresh(run)
-    return _supply_out(session, run)
-
-
-@router.post(
-    "/supplies/{supply_id}/receive",
-    response_model=s.SupplyOut,
-    summary="Close a run — this is where goods reach the shelf",
-)
-def receive_supply(
-    supply_id: int, user: WarehouseUser, session: SessionDep
-) -> s.SupplyOut:
-    """Closing the draft is what brings the goods into existence.
-
-    Every line has to name a real variant, and a run with no lines cannot be
-    closed: an empty receipt is a sack somebody ticked off without opening.
-
-    A closed run is not reopened. Correct it with an adjustment, so the ledger
-    keeps the truth about what was believed at the time rather than being
-    edited into agreement with what was found later.
-    """
-    run = _draft(session, supply_id)
-    lines = session.exec(
-        select(SupplyLine).where(SupplyLine.supply_id == run.id)
-    ).all()
-    if not lines:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, i18n.label("supply_nothing_sorted")
-        )
-
-    receiving = loc.staging(session, loc.QABUL)
-    touched: set[int] = set()
-    for line in lines:
-        variant = _variant(session, line.variant_id)
-        # Into the receiving area and not onto a shelf. Somebody carries it
-        # to a cell afterwards and records which — until they do, the goods
-        # are in QABUL, which is a place and not a state of not being
-        # anywhere. They are sellable from there: the pick list simply sends
-        # the picker to the desk instead of to a rack.
-        st.move(
-            session,
-            variant=variant,
-            qty=line.quantity,
-            kind=StockMovementKind.RECEIPT,
-            frm=None,
-            to=receiving,
-            actor=user,
-            reason=run.note or f"{run.code} qabul qilindi",
-            supply_id=run.id,
-        )
-        touched.add(variant.product_id)
-
-    run.status = SupplyStatus.RECEIVED
-    run.received_at = utcnow()
-    run.received_by_id = user.id
-    session.add(run)
-
-    audit.record(
-        session,
-        actor=user,
-        action="supply.receive",
-        entity="supply",
-        entity_id=run.id,
-        field="status",
-        old=SupplyStatus.DRAFT,
-        new=SupplyStatus.RECEIVED,
-        note=run.place,
-    )
-    session.commit()
-    for product_id in sorted(touched):
-        pr.refresh(session, product_id)
-    session.commit()
-
-    session.refresh(run)
-    return _supply_out(session, run)
 
 
 @router.post(
@@ -745,6 +670,12 @@ def damage(
     countable, and somebody will eventually decide whether it goes back to the
     market or into a bin — none of which is sayable if the ledger's answer to
     "damaged" is that the goods stopped existing.
+
+    Asking for more than the building holds is refused in the reader's
+    language. It used to arrive as ``str(error)`` — "only 4 of
+    MB-000001-QORA-M on the shelves, not 999", English, with an internal code
+    in it — on a form whose every other refusal is Uzbek. See
+    ``app.stock.refusal``.
     """
     variant = _variant(session, payload.variant_id)
     corner = loc.staging(session, loc.BRAK)
@@ -760,7 +691,7 @@ def damage(
             reason=payload.reason,
         )
     except st.StockError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from None
+        raise st.refusal(error) from None
 
     audit.record(
         session,
@@ -837,43 +768,6 @@ def _one_spelling(rows: list) -> list[str]:
     return sorted(tally, key=lambda label: -tally[label])[:40]
 
 
-def _brand_named(session: SessionDep, name: str) -> Brand:
-    """The brand by the name somebody typed, made if it is new.
-
-    Two black trainers of different makes are two cards, so the make is part of
-    the goods' identity and not a detail — which means the receiving desk has
-    to be able to name one that has never been seen before, without leaving the
-    form. "On Cloud" is typed once and is a chip from then on.
-    """
-    wanted = pr.tidy_label(name)
-    found = session.exec(
-        select(Brand).where(func.lower(col(Brand.name)) == wanted.lower())
-    ).first()
-    if found is not None:
-        # And tidied in place. A row written as `nike` before the tidying
-        # existed goes on lending its spelling to every card titled from it,
-        # so the chip reads `Nike` and the card reads `nike`. One row, one
-        # write, and the catalogue agrees with itself from here on.
-        if found.name != wanted:
-            found.name = wanted
-            session.add(found)
-            session.commit()
-            session.refresh(found)
-        return found
-
-    stem = re.sub(r"[^a-z0-9]+", "-", wanted.lower()).strip("-") or "brend"
-    slug = stem
-    n = 2
-    while session.exec(select(Brand).where(Brand.slug == slug)).first() is not None:
-        slug = f"{stem}-{n}"
-        n += 1
-    row = Brand(slug=slug, name=wanted)
-    session.add(row)
-    session.commit()
-    session.refresh(row)
-    return row
-
-
 def _pile_cell(session: SessionDep, code: str) -> Location:
     """Where the pile is going, which is always a cell.
 
@@ -881,6 +775,12 @@ def _pile_cell(session: SessionDep, code: str) -> Location:
     trusted, because there is no scanner yet and ``A-03-11`` is one keystroke
     away from ``A-03-01``. A code for a cell that is not there is refused; a
     code for the wrong *cell* is caught by the form showing what is in it.
+
+    Says nothing about whether the cell is retired, because the two callers
+    want opposite answers: a pile is *arriving* and must not go into a cell
+    that is off the map, while emptying one is the way goods get out of
+    exactly that mess and must keep working. ``_open_cell`` below is the
+    arriving half.
     """
     wanted = code.strip().upper()
     cell = loc.by_code(session, wanted)
@@ -893,6 +793,77 @@ def _pile_cell(session: SessionDep, code: str) -> Location:
             status.HTTP_409_CONFLICT, i18n.label("putaway_needs_a_cell")
         )
     return cell
+
+
+def _open_cell(session: SessionDep, code: str) -> Location:
+    """The same, and standing in the room: goods may actually go in here.
+
+    ``loc.by_code`` finds a cell by its code and says nothing about whether it
+    is still part of the building, so a pile could be shelved into a cell
+    somebody retired last month — where the count would include it and the map
+    would not show it, which is the one thing retiring a cell is not allowed
+    to produce.
+
+    Refused here rather than left to ``st.move``, which refuses it too: this
+    runs before a stub card is written, and a request turned away at the
+    ledger would leave a product nobody asked for in the catalogue. The
+    sentence names the cell and says to bring it back or pick another one.
+    """
+    cell = _pile_cell(session, code)
+    if not cell.is_active:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("cell_retired_destination", code=cell.code),
+        )
+    return cell
+
+
+def _pile_spread(session: SessionDep, payload: s.PileIn) -> list[tuple[Location, int]]:
+    """Where the pile is going and how much of it goes to each cell.
+
+    One cell or several, and exactly one of the two ways of saying so.
+    Neither is the old "empty means the receiving area" state, which is a
+    putaway queue nobody used; both is two answers to one question, and
+    picking one of them silently is how goods end up on a shelf nobody was
+    told about.
+
+    The split has to **add up to the pile**. The sizes are the count of what
+    came off the van and the cells are where it went, so a disagreement is
+    somebody having mistyped one of the two — and there is no way to tell
+    which, so neither is guessed at. The sentence says both numbers, because
+    "does not add up" without them is a person recounting a sack.
+
+    Every cell is checked the way a single one always was: a ``BIN`` that
+    exists and has not been retired, because ``A-03-11`` is one keystroke from
+    ``A-03-01`` and a cell that left the room a month ago still answers to its
+    code.
+
+    **Capacity is not checked.** Deliberately, and not an omission — see the
+    endpoint.
+    """
+    total = sum(line.quantity for line in payload.sizes)
+    one = payload.location_code.strip()
+
+    if one and payload.placements:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, i18n.label("pile_one_place_or_the_other")
+        )
+    if not one and not payload.placements:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, i18n.label("pile_needs_a_place")
+        )
+    if one:
+        return [(_open_cell(session, one), total)]
+
+    placed = sum(line.quantity for line in payload.placements)
+    if placed != total:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            i18n.label("pile_split_does_not_add_up", placed=placed, total=total),
+        )
+    return [
+        (_open_cell(session, line.code), line.quantity) for line in payload.placements
+    ]
 
 
 def _pile_card(session: SessionDep, user: User, payload: s.PileIn) -> Product:
@@ -912,7 +883,7 @@ def _pile_card(session: SessionDep, user: User, payload: s.PileIn) -> Product:
         return product
 
     kind = pr.tidy_label(payload.kind)
-    brand = _brand_named(session, payload.brand) if payload.brand.strip() else None
+    brand = brands.named(session, payload.brand) if payload.brand.strip() else None
     title = payload.title.strip() or " · ".join(
         part
         for part in (kind, brand.name if brand else "", pr.tidy_label(payload.colour))

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.minibozor.core.util.Outcome
 import uz.minibozor.data.remote.dto.AddressDto
+import uz.minibozor.data.remote.dto.CardDto
 import uz.minibozor.data.remote.dto.NotificationGroupDto
 import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.ReviewDto
@@ -19,6 +20,34 @@ import uz.minibozor.data.repository.CatalogRepository
 import uz.minibozor.data.repository.OrderRepository
 import uz.minibozor.data.repository.ProfileRepository
 import javax.inject.Inject
+
+/** Screen 32 — To'lov kartalari. */
+@HiltViewModel
+class CardsViewModel @Inject constructor(
+    private val repo: OrderRepository,
+) : ViewModel() {
+
+    private val _cards = MutableStateFlow<List<CardDto>>(emptyList())
+    val cards = _cards.asStateFlow()
+
+    init {
+        load()
+    }
+
+    fun load() = viewModelScope.launch {
+        (repo.cards() as? Outcome.Success)?.let { _cards.value = it.data }
+    }
+
+    fun makeDefault(id: Int) = viewModelScope.launch {
+        repo.makeCardDefault(id)
+        load()
+    }
+
+    fun delete(id: Int) = viewModelScope.launch {
+        repo.deleteCard(id)
+        load()
+    }
+}
 
 /** Screen 33 — Manzillarim. */
 @HiltViewModel

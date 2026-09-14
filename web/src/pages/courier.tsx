@@ -20,22 +20,38 @@
  */
 
 import { Banknote, MapPin, Phone } from "lucide-react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 
-import { Empty, PageHeader, Problem, Waiting } from "@/components/page"
+import { Empty, PageHeader, Panel, Pill, Problem, Stat, Waiting } from "@/components/page"
+import type { Tone } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/cn"
 import { groups, money } from "@/lib/format"
 import {
   useAvailableOrders,
   useDeliver,
   useEarnings,
   useFailed,
+  useMyHistory,
   useMyRound,
   useTakeOrder,
 } from "@/lib/queries"
-import type { CourierOrder } from "@/lib/types"
+import type { CourierOrder, OrderStatus } from "@/lib/types"
+
+// A finished stop, in the reader's language. The screen printed the server's
+// own word for anything that was not `delivered`, so a parcel the customer
+// sent back said `returned` to somebody who reads Uzbek.
+const STATUS_WORD: Partial<Record<OrderStatus, string>> = {
+  delivered: "yetkazildi",
+  returned: "qaytarildi",
+  cancelled: "bekor qilindi",
+}
+
+const STATUS_TONE: Partial<Record<OrderStatus, Tone>> = {
+  delivered: "good",
+  returned: "warn",
+  cancelled: "danger",
+}
 
 // ------------------------------------------------------------------- my work
 
@@ -69,24 +85,24 @@ export function MyWorkPage() {
           <Empty what="Tayyor buyurtma yo'q — yig'ilmoqda." />
         ) : null}
         {(board.data ?? []).map((order) => (
-          <div
-            key={order.id}
-            className="flex items-center gap-3 rounded-panel border border-line bg-surface shadow-panel p-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-body font-semibold tabular">{order.code}</div>
-              <div className="truncate text-small text-ink-soft">
-                {order.address_line}
+          <Panel key={order.id}>
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-body font-semibold tabular">{order.code}</div>
+                <div className="truncate text-small text-ink-soft">
+                  {order.address_line}
+                </div>
+                <div className="text-micro text-ink-faint">
+                  {order.items_count} dona · {money(order.total)}
+                  {order.cash_due ? ` · naqd ${money(order.cash_due)}` : ""}
+                </div>
               </div>
-              <div className="text-micro text-ink-faint">
-                {order.items_count} dona · {money(order.total)}
-                {order.cash_due ? ` · naqd ${money(order.cash_due)}` : ""}
-              </div>
+              <Button size="lg" disabled={take.isPending} onClick={() => take.mutate(order.id)}
+              >
+                Olish
+              </Button>
             </div>
-            <Button size="lg" disabled={take.isPending} onClick={() => take.mutate(order.id)}
-            >
-              Olish
-            </Button>
-          </div>
+          </Panel>
         ))}
       </section>
     </div>
@@ -101,7 +117,7 @@ function Parcel({ order }: { order: CourierOrder }) {
   const [cash, setCash] = useState(String(order.cash_due || 0))
 
   return (
-    <div className="rounded-panel border border-line bg-surface shadow-panel p-3">
+    <Panel>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="text-body font-semibold tabular">{order.code}</div>
@@ -195,44 +211,66 @@ function Parcel({ order }: { order: CourierOrder }) {
           </Button>
         </div>
       )}
-    </div>
+    </Panel>
   )
 }
 
 // -------------------------------------------------------------------- history
 
+/**
+ * What this courier has finished, which is not what is in their van.
+ *
+ * It used to read the round — the door that answers with the stops still open
+ * — and filter it for "not shipped". A delivered parcel leaves that list, so
+ * the only thing the filter could ever catch was a parcel taken and not yet
+ * on the road, and a courier who had delivered thirteen was told there were
+ * none while the earnings screen next to it counted all thirteen.
+ *
+ * Newest first, and the subtitle finally means it: the round comes back in
+ * the order the promises were made, which is right for driving and backwards
+ * for reading back.
+ */
 export function CourierHistoryPage() {
-  const round = useMyRound()
-  const done = (round.data ?? []).filter((order) => order.status !== "shipped")
+  const round = useMyHistory()
+  const done = useMemo(
+    () =>
+      (round.data ?? [])
+        .filter(
+          (order) => order.status !== "packing" && order.status !== "shipped",
+        )
+        .sort((a, b) => b.id - a.id),
+    [round.data],
+  )
 
   return (
     <div className="space-y-4">
       <PageHeader title="Tarix" subtitle="Eng yangisi yuqorida" />
       <Problem error={round.error} />
       {round.isLoading ? <Waiting /> : null}
-      {done.length === 0 ? <Empty what="Hali yetkazilgan buyurtma yo'q." /> : null}
+      {!round.isLoading && done.length === 0 ? (
+        <Empty what="Hali yetkazilgan buyurtma yo'q." />
+      ) : null}
 
       <ul className="space-y-2">
         {done.map((order) => (
-          <li
-            key={order.id}
-            className="flex items-center gap-3 rounded-panel border border-line bg-surface shadow-panel p-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-small font-semibold tabular">{order.code}</div>
-              <div className="truncate text-micro text-ink-faint">
-                {order.address_line}
+          <li key={order.id}>
+            <Panel>
+              <div className="flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-small font-semibold tabular">{order.code}</div>
+                  <div className="truncate text-micro text-ink-faint">
+                    {order.address_line}
+                  </div>
+                </div>
+                {/* A parcel that came back is not a parcel that failed to
+                    arrive: it arrived, and then the customer sent it back.
+                    Printing the raw English status for everything that is not
+                    `delivered` said `returned` to somebody who reads Uzbek. */}
+                <Pill tone={STATUS_TONE[order.status] ?? "neutral"}>
+                  {STATUS_WORD[order.status] ?? order.status}
+                </Pill>
               </div>
-            </div>
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-micro",
-                order.status === "delivered"
-                  ? "bg-good-soft text-good"
-                  : "bg-line-soft text-ink-soft",
-              )}
-            >
-              {order.status === "delivered" ? "yetkazildi" : order.status}
-            </span>
+            </Panel>
           </li>
         ))}
       </ul>
@@ -254,13 +292,13 @@ export function EarningsPage() {
       {earnings.data ? (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <Figure label="Bugun" value={money(earnings.data.earned_today)} />
-            <Figure label="Shu oy" value={money(earnings.data.earned_month)} />
-            <Figure
+            <Stat label="Bugun" value={money(earnings.data.earned_today)} />
+            <Stat label="Shu oy" value={money(earnings.data.earned_month)} />
+            <Stat
               label="Bugun yetkazildi"
               value={`${groups(earnings.data.delivered_today)} ta`}
             />
-            <Figure
+            <Stat
               label="Bitta parcel"
               value={money(earnings.data.fee_per_delivery)}
             />
@@ -278,21 +316,12 @@ export function EarningsPage() {
             </div>
           ) : null}
 
-          <div className="rounded-panel border border-line bg-surface shadow-panel p-3 text-small text-ink-soft">
+          <Panel className="text-small text-ink-soft">
             Jami {groups(earnings.data.delivered_total)} ta yetkazilgan ·{" "}
             {groups(earnings.data.failed_attempts)} marta bo'lmagan
-          </div>
+          </Panel>
         </>
       ) : null}
-    </div>
-  )
-}
-
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-panel border border-line bg-surface shadow-panel p-3">
-      <div className="text-micro text-ink-soft">{label}</div>
-      <div className="figure">{value}</div>
     </div>
   )
 }

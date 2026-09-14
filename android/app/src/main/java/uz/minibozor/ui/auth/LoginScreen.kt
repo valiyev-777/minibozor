@@ -42,6 +42,10 @@ import uz.minibozor.core.design.MbTheme
 import uz.minibozor.core.design.component.MbPrimaryButton
 import uz.minibozor.core.design.component.MbScreen
 import uz.minibozor.ui.onboarding.BrandMark
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 
 /**
  * Screen 05. Phone entry with a fixed +998 prefix — the field only ever holds
@@ -124,22 +128,7 @@ fun LoginScreen(
 
             Spacer(Modifier.weight(1f))
             Spacer(Modifier.height(32.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                MbText(stringResource(R.string.kirish_orqali), MbTheme.type.caption, MbTheme.colors.textQuaternary)
-                MbText(
-                    stringResource(R.string.ommaviy_oferta),
-                    MbTheme.type.caption,
-                    MbTheme.colors.accent,
-                    modifier = Modifier
-                        .clip(MbTheme.shapes.chip)
-                        .clickable(onClick = onOpenTerms)
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
-                )
-                MbText(stringResource(R.string.shartlariga_rozilik_bildirasiz), MbTheme.type.caption, MbTheme.colors.textQuaternary)
-            }
+            TermsLine(onOpenTerms)
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -180,6 +169,49 @@ private fun PhoneField(digits: String, onChange: (String) -> Unit, error: String
             MbText(error, MbTheme.type.caption, MbTheme.colors.danger)
         }
     }
+}
+
+/**
+ * "Kirish orqali siz ommaviy oferta shartlariga rozilik bildirasiz", with the
+ * offer part carrying the tap.
+ *
+ * One sentence, one string, and the link marked inside it — see the
+ * [uz.minibozor.core.design.MbText] overload for why it is not three pieces in
+ * a row any more. Centred and free to wrap, so a language that needs two lines
+ * gets two lines instead of running off the edge.
+ */
+@Composable
+private fun TermsLine(onOpenTerms: () -> Unit) {
+    val link = stringResource(R.string.ommaviy_oferta)
+    val sentence = stringResource(R.string.kirish_shartlariga_rozilik, link)
+    val accent = MbTheme.colors.accent
+    val sentenceText = remember(sentence, link, accent) {
+        val at = sentence.indexOf(link)
+        buildAnnotatedString {
+            append(sentence)
+            if (at >= 0) {
+                addStyle(
+                    SpanStyle(color = accent, fontWeight = FontWeight.Bold),
+                    at,
+                    at + link.length,
+                )
+            }
+        }
+    }
+    MbText(
+        sentenceText,
+        MbTheme.type.caption,
+        MbTheme.colors.textQuaternary,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MbTheme.shapes.field)
+            // The whole line rather than the coloured words alone: the line is
+            // one sentence with one destination, and a caption-sized span is
+            // under a fingertip's worth of target.
+            .clickable(onClick = onOpenTerms)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    )
 }
 
 @Composable

@@ -11,6 +11,20 @@
  *
  * None of that was a decision. It was three starting points.
  *
+ * -------------------------------------------------------------- where it came from
+ *
+ * The *values* below are no longer ours either, and that is the point. They
+ * are the house back-office system — the palette, the Roboto scale, the
+ * 36px control, the near-black rail, the striped table — lifted from
+ * `react-backoffice-boilerplate` so this application looks like the other
+ * ones the same people use all day rather than like a thing built beside
+ * them. The token **names** are unchanged, which is why porting a whole
+ * design was a change to one file and not to thirteen screens: nothing in
+ * `web/src` names a colour, so every screen repainted itself.
+ *
+ * The written-down version of the system is the `backoffice-design` skill in
+ * `.claude/skills/`; this file is its implementation.
+ *
  * ---------------------------------------------------------------- how it works
  *
  * This file holds the tokens. Each panel imports it right after Tailwind and
@@ -33,7 +47,7 @@
  * and it is kept — as a **named variant of one system** rather than as three
  * systems that happen to differ.
  *
- * One class on `<html>` sets it, and every shared component reads its size
+ * One class on the shell sets it, and every shared component reads its size
  * from these variables rather than hard-coding a height:
  *
  *     .density-compact       back office   — hundreds of rows at a desk
@@ -44,52 +58,113 @@
  */
 
 @theme {
-  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  /* Roboto, self-hosted — see `web/src/fonts.css`. The system stack behind it
+   * is not decoration: a warehouse phone on a bad connection renders the
+   * screen in it while 50KB of webfont is still in the air, and the metrics
+   * are close enough that the swap does not reflow a table. */
+  --font-sans:
+    "Roboto", ui-sans-serif, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
 
-  /* Text. Three weights of grey and no more: a fourth invites a decision
-   * nobody can defend, and two of them ten per cent apart are one colour. */
-  --color-ink: oklch(0.21 0.012 265);
-  --color-ink-soft: oklch(0.48 0.012 265);
-  --color-ink-faint: oklch(0.63 0.01 265);
+  /* ------------------------------------------------------------------ type
+   *
+   * The scale lives *here* rather than in `:root` below, and that is the
+   * whole reason the app had no typography.
+   *
+   * Tailwind only writes a `text-small` rule for names it can see in a
+   * `@theme` block. These four sat in plain `:root`, so the variables existed
+   * — `--text-small` resolved perfectly well — and the two hundred and forty
+   * `text-small` / `text-micro` / `text-body` classes written against them
+   * compiled to nothing at all. Every label, every hint and every figure on
+   * every screen came out at one size: the body's. A dashboard where the
+   * caption over a number is the same size as the number is not a dashboard
+   * with a weak hierarchy, it is a dashboard with none, and it reads exactly
+   * as flat as it was.
+   *
+   * Line heights are unitless on purpose, so a density that changes the size
+   * gets a proportional leading rather than a fixed one that stops fitting. */
+  --text-body: 15px;
+  --text-body--line-height: 1.45;
+  --text-small: 13px;
+  --text-small--line-height: 1.4;
+  --text-micro: 12px;
+  --text-micro--line-height: 1.35;
 
-  /* Structure. */
-  --color-line: oklch(0.91 0.005 265);
-  --color-line-soft: oklch(0.955 0.003 265);
-  --color-surface: oklch(1 0 0);
-  --color-canvas: oklch(0.985 0.002 265);
+  /* The one figure a screen exists to show, and the one a *page* exists to
+   * show. `figure` is a tile's number; `display` is the takings at the top of
+   * the dashboard, which is the question the owner opened it to ask and needs
+   * to be bigger than the six answers below it. */
+  --text-figure: 1.5rem;
+  --text-figure--line-height: 1.15;
+  --text-display: 2rem;
+  --text-display--line-height: 1.1;
 
-  /* The back office's dark sidebar. Only one panel has a rail, and it is
-   * still part of this system rather than a local invention. */
-  --color-rail: oklch(0.205 0.012 265);
-  --color-rail-ink: oklch(0.78 0.01 265);
+  /* Text. Three weights and no more: a fourth invites a decision nobody can
+   * defend, and two of them ten per cent apart are one colour. */
+  --color-ink: #121c25;
+  --color-ink-soft: #4b5c76;
+  --color-ink-faint: #8e9ba8;
+
+  /* Structure. `line` draws a card, a divider, a table's outline; `line-soft`
+   * fills one — an input, a table stripe, a row under the cursor. Keeping
+   * those two jobs in two tokens is what stops an input from looking like a
+   * disabled card. */
+  --color-line: #e2e5e8;
+  --color-line-soft: #f3f5f4;
+  --color-surface: #ffffff;
+  --color-canvas: #f1f3f6;
+
+  /* The rail. Near-black rather than the dark navy it was: against the
+   * brand blue, a navy sidebar reads as a *lighter shade of the accent* and
+   * the accent stops being the loudest thing on the screen. */
+  --color-rail: #090e14;
+  --color-rail-ink: #f3f4f6;
+
+  /* One step up from the rail, for the only thing that floats above it: the
+   * menu search's results. A dropdown painted in `rail` on a `rail` column
+   * is not a dropdown, it is the rail with different words in it — and this
+   * is the one place in the app where a surface has to separate itself from
+   * a near-black background rather than from a white one. */
+  --color-rail-raised: #131c28;
+
+  /* The edge of a card, which in the house system is **not there**.
+   *
+   * The boilerplate's card is a 12px radius, 16px of padding, a transparent
+   * border and no shadow: the card is told apart from the page by being
+   * lighter than it, and by nothing else. Ours had a hairline and a shadow
+   * as well, which is three devices doing one job — and with six panels on a
+   * dashboard it read as a form full of boxes rather than as content on a
+   * page. Kept as a token rather than deleted so the one place that does
+   * want an outline (a dark surface that has drifted too close to its own
+   * background) can be given one here, in one line, rather than per screen. */
+  --color-panel-edge: transparent;
 
   /* The accent. One hue across all three panels — this is the substance of
    * "make them the same". The seller's cabinet used green for warmth, which
    * then collided with green-means-succeeded everywhere else; green is now
    * reserved for that meaning alone. */
-  --color-brand: oklch(0.53 0.19 258);
-  --color-brand-soft: oklch(0.96 0.02 258);
-  --color-brand-ink: oklch(1 0 0);
-  --color-brand-deep: oklch(0.38 0.15 258);
+  --color-brand: #2585ff;
+  --color-brand-soft: #e8f0fe;
+  --color-brand-ink: #ffffff;
+  --color-brand-deep: #0653c9;
 
   /* The three meanings, each with a tint to sit on and an ink to sit in.
    * Same three everywhere: green happened, red did not, amber not yet. */
-  --color-good: oklch(0.53 0.14 155);
-  --color-good-soft: oklch(0.96 0.04 155);
-  --color-good-ink: oklch(1 0 0);
+  --color-good: #35c04c;
+  --color-good-soft: #e8f8ea;
+  --color-good-ink: #ffffff;
 
-  --color-warn: oklch(0.62 0.14 75);
-  --color-warn-soft: oklch(0.97 0.05 75);
-  --color-warn-ink: oklch(0.28 0.08 75);
+  --color-warn: #f39c12;
+  --color-warn-soft: #fef4e3;
+  --color-warn-ink: #7a4e06;
 
-  --color-danger: oklch(0.54 0.21 25);
-  --color-danger-soft: oklch(0.97 0.03 25);
-  --color-danger-ink: oklch(1 0 0);
+  --color-danger: #d0413a;
+  --color-danger-soft: #fdeceb;
+  --color-danger-ink: #ffffff;
 
   /* Radii, named for what they wrap rather than by size, so "the same
    * roundness as the other panel" is a token and not a guess. */
-  --radius-control: 0.5rem;
-  --radius-panel: 0.875rem;
+  --radius-control: 8px;
+  --radius-panel: 12px;
 
   /* Elevation, and only two steps of it.
    *
@@ -100,9 +175,9 @@
    * is *acting* — the primary button, an open menu, a row being dragged.
    * Both are grey rather than black: a shadow with hue in it reads as a
    * colour cast on a white shop screen. */
-  --shadow-panel: 0 1px 2px oklch(0.21 0.012 265 / 0.05);
+  --shadow-panel: 0 1px 2px rgb(18 28 37 / 0.06);
   --shadow-raised:
-    0 1px 2px oklch(0.21 0.012 265 / 0.1), 0 4px 12px oklch(0.21 0.012 265 / 0.08);
+    0 1px 2px rgb(18 28 37 / 0.08), 0 6px 16px rgb(18 28 37 / 0.08);
 }
 
 :root {
@@ -110,32 +185,32 @@
 
   /* The density variables. These are the defaults — `cozy` — so a panel that
    * forgets its class still gets a coherent set rather than zero-height
-   * controls. */
-  --text-body: 15px;
-  --text-small: 13px;
-  --text-micro: 12px;
-  --text-figure: 1.75rem;
-
-  --control-sm: 2rem; /* 32px */
+   * controls. The type scale itself is declared in `@theme` above; only the
+   * sizes that change with density are restated in the classes below. */
+  --control-sm: 1.75rem; /* 28px — the pagination step */
   --control-md: 2.5rem; /* 40px */
   --control-lg: 3rem; /* 48px */
 
   --cell-y: 0.5rem;
-  --gap-page: 1.25rem;
+  --gap-page: 1.5rem;
 }
 
 /* Hundreds of rows a day, at a desk, at arm's length. Small type is correct
- * here: the row is the unit, and a taller row means fewer of them on screen. */
+ * here: the row is the unit, and a taller row means fewer of them on screen.
+ * 14px body and a 36px control are the house numbers — the same ones every
+ * other back office in the building is read at, so somebody moving between
+ * two of them is not re-learning a size. */
 .density-compact {
-  --text-body: 13px;
-  --text-small: 12px;
-  --text-micro: 11px;
+  --text-body: 14px;
+  --text-small: 13px;
+  --text-micro: 12px;
   --text-figure: 1.5rem;
-  --control-sm: 1.75rem;
-  --control-md: 2rem;
-  --control-lg: 2.75rem;
-  --cell-y: 0.375rem;
-  --gap-page: 1rem;
+  --text-display: 1.875rem;
+  --control-sm: 1.75rem; /* 28px */
+  --control-md: 2.25rem; /* 36px */
+  --control-lg: 2.75rem; /* 44px — the rail's menu item */
+  --cell-y: 0.75rem;
+  --gap-page: 1.5rem;
 }
 
 .density-cozy {
@@ -143,10 +218,11 @@
   --text-small: 13px;
   --text-micro: 12px;
   --text-figure: 1.75rem;
+  --text-display: 2.25rem;
   --control-sm: 2rem;
   --control-md: 2.5rem;
   --control-lg: 3rem;
-  --cell-y: 0.5rem;
+  --cell-y: 0.625rem;
   --gap-page: 1.25rem;
 }
 
@@ -161,6 +237,7 @@
   --text-small: 16px;
   --text-micro: 14px;
   --text-figure: 2.5rem;
+  --text-display: 3rem;
   --control-sm: 3rem;
   --control-md: 3.5rem;
   --control-lg: 4rem; /* 64px */
@@ -180,6 +257,7 @@ body {
   font-size: var(--text-body);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Numbers in a column line up or they cannot be compared down it — a shelf
@@ -193,52 +271,85 @@ body {
   font-variant-numeric: tabular-nums;
   font-size: var(--text-figure);
   line-height: 1.15;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
-/* ---------------------------------------------------------------- dark, opt-in
+/* And the one the *page* exists to show — a page has at most one of these.
+ * Tighter tracking than `.figure` because a seven-digit sum set large sits
+ * loose at default spacing and reads as a row of digits rather than a sum. */
+.display {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-display);
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+/* A caption over a figure. Small, spaced and quiet — the label is not
+ * competing with the number, it is naming it. */
+.caption {
+  font-size: var(--text-micro);
+  line-height: 1.35;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+/* ------------------------------------------------------------- dark, by class
  *
- * Only the courier's app asks for this, and not as a preference: under a dark
- * sky the phone switches and it is usually right, because its light sensor is
- * looking at the same sky the courier is. The other two panels are read
- * indoors and are light-only, so the palette is behind a class rather than
- * behind the media query alone — otherwise a desk at night would silently
- * repaint the back office.
+ * Class-based rather than by media query alone, and that is the whole reason
+ * it is safe to give the office a dark mode at all: `prefers-color-scheme`
+ * on a desktop follows the operating system's clock, so a media-only palette
+ * silently repaints the back office at six in the evening whether or not
+ * anybody asked. `web/src/lib/theme.tsx` owns the class — light, dark, or
+ * follow the system if you actually want that — and remembers the answer.
  *
- * The values are lifted, not inverted: the same three meanings, each holding
- * its contrast against a near-black page. */
-@media (prefers-color-scheme: dark) {
-  :root.allow-dark {
-    --color-ink: oklch(0.97 0.005 265);
-    --color-ink-soft: oklch(0.76 0.012 265);
-    --color-ink-faint: oklch(0.6 0.01 265);
+ * The neutrals flip to a cool navy ramp rather than to grey: against a
+ * near-black rail and a blue accent, neutral grey reads as a colour cast.
+ * The brand hue and the three meanings keep their identity; only their
+ * lightness moves enough to hold contrast against a near-black page.
+ *
+ * Elevation, darkest → lightest: rail #090E14, canvas #0C1017, surface
+ * #141D2A, fill #1B2636, border #283549. Four steps, each one small, and the
+ * rail is the darkest of them on purpose — a rail the same value as the page
+ * behind it is not a rail, it is a column of icons floating on the left, and
+ * that is exactly what the first attempt at this looked like. Borders still
+ * do most of the work: a dark UI that separates surfaces by lightness alone
+ * turns into a stack of grey rectangles the moment there are three of
+ * them. */
+.dark {
+  color-scheme: dark;
 
-    --color-line: oklch(0.35 0.012 265);
-    --color-line-soft: oklch(0.26 0.01 265);
-    --color-surface: oklch(0.19 0.012 265);
-    --color-canvas: oklch(0.14 0.01 265);
+  --color-ink: #e6ebf2;
+  --color-ink-soft: #a6b3c9;
+  --color-ink-faint: #6b7785;
 
-    --color-brand: oklch(0.75 0.13 258);
-    --color-brand-soft: oklch(0.28 0.06 258);
-    --color-brand-ink: oklch(0.16 0.04 258);
-    --color-brand-deep: oklch(0.86 0.08 258);
+  --color-line: #283549;
+  --color-line-soft: #1b2636;
+  --color-surface: #141d2a;
+  --color-canvas: #0c1017;
 
-    --color-good: oklch(0.78 0.15 155);
-    --color-good-soft: oklch(0.26 0.06 155);
-    --color-good-ink: oklch(0.15 0.05 155);
+  --color-brand: #2585ff;
+  --color-brand-soft: rgb(37 133 255 / 0.16);
+  --color-brand-ink: #ffffff;
+  --color-brand-deep: #7db6ff;
 
-    --color-warn: oklch(0.82 0.14 75);
-    --color-warn-soft: oklch(0.28 0.06 75);
-    --color-warn-ink: oklch(0.18 0.05 75);
+  --color-good: #4cd03a;
+  --color-good-soft: rgb(76 208 58 / 0.16);
+  --color-good-ink: #06180a;
 
-    --color-danger: oklch(0.75 0.16 25);
-    --color-danger-soft: oklch(0.28 0.07 25);
-    --color-danger-ink: oklch(0.16 0.05 25);
+  --color-warn: #f39c12;
+  --color-warn-soft: rgb(243 156 18 / 0.16);
+  --color-warn-ink: #f5c377;
 
-    --color-rail: oklch(0.19 0.012 265);
-    --color-rail-ink: oklch(0.76 0.012 265);
-  }
+  --color-danger: #e7395b;
+  --color-danger-soft: rgb(231 57 91 / 0.16);
+  --color-danger-ink: #ffffff;
+
+  --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.5), 0 6px 16px rgb(0 0 0 / 0.45);
 }
 
 /* --------------------------------------------------------------- touch tools

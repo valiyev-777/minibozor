@@ -72,6 +72,22 @@ export function age(minutes: number): string {
   return `${rest} daqiqa`
 }
 
+/**
+ * `17 soat`, `3 kun`, `12 daqiqa` — the same age in one unit.
+ *
+ * For a row too narrow to hold two. "17 soat 3 daqiqa" in a queue row is
+ * three words of precision nobody acts on differently, and it pushed the
+ * figure it was explaining off the end of the line.
+ */
+export function ageBrief(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes))
+  const days = Math.floor(total / 1440)
+  if (days) return `${days} kun`
+  const hours = Math.floor(total / 60)
+  if (hours) return `${hours} soat`
+  return `${total} daqiqa`
+}
+
 /** `3 dona` — a count with its unit, which every warehouse screen shows. */
 export function units(count: number): string {
   return `${groups(count)} dona`

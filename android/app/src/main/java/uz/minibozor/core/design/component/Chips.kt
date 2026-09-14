@@ -90,6 +90,14 @@ fun MbChip(
  * asked. Eight of these plus their 5 dp gaps come to 339 dp, inside the 343 dp a
  * card leaves on the narrowest phone the design is drawn for; a longer label
  * ("41 mm", "XXL") grows its own chip and the row scrolls instead of wrapping.
+ *
+ * **[soldOut] is not [enabled].** A size with none left is struck through and
+ * still answers to a tap: colour and size are two halves of one question, and a
+ * chip that cannot be pressed is a half of it the customer is not allowed to
+ * ask. Pressing 41 when this colour has no 41 moves the strip of photographs
+ * above to say which colours do — which is the whole point of striking it
+ * through rather than deleting it. [enabled] stays for a chip there is genuinely
+ * nothing behind.
  */
 @Composable
 fun MbSizeChip(
@@ -97,18 +105,20 @@ fun MbSizeChip(
     selected: Boolean,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    soldOut: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val struck = soldOut || !enabled
     Box(
         modifier
             .defaultMinSize(minWidth = 38.dp, minHeight = 40.dp)
             .clip(MbTheme.shapes.field)
-            .background(if (enabled) MbTheme.colors.surface else MbTheme.colors.fill)
+            .background(if (struck) MbTheme.colors.fill else MbTheme.colors.surface)
             .border(
                 width = if (selected) 2.dp else 1.dp,
                 color = when {
                     selected -> MbTheme.colors.ink
-                    !enabled -> MbTheme.colors.border
+                    struck -> MbTheme.colors.border
                     else -> MbTheme.colors.hairline
                 },
                 shape = MbTheme.shapes.field,
@@ -131,11 +141,11 @@ fun MbSizeChip(
             label,
             MbTheme.type.label.copy(
                 fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Bold,
-                textDecoration = if (enabled) null else TextDecoration.LineThrough,
+                textDecoration = if (struck) TextDecoration.LineThrough else null,
             ),
             when {
-                !enabled -> MbTheme.colors.disabled
                 selected -> MbTheme.colors.ink
+                struck -> MbTheme.colors.disabled
                 else -> MbTheme.colors.inkMuted
             },
             maxLines = 1,

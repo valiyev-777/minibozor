@@ -15,6 +15,7 @@ from app.images import MEDIA_DIR
 from app.routers import (
     admin,
     auth,
+    cards,
     cart,
     catalog,
     content,
@@ -29,6 +30,7 @@ from app.routers import (
     orders,
     picking,
     profile,
+    reports,
     search,
     shelves,
     staff,
@@ -110,6 +112,7 @@ for router in (
     cart.router,
     favorites.router,
     delivery.router,
+    cards.router,
     orders.router,
     notifications.router,
     profile.router,
@@ -124,6 +127,7 @@ for router in (
     picking.router,
     admin.router,
     dashboard.router,
+    reports.router,
     courier.router,
 ):
     app.include_router(router, prefix=API)

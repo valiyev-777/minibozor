@@ -1,33 +1,49 @@
+/**
+ * The badge, speaking the same five meanings as `Pill` in
+ * `components/page.tsx` — green happened, red did not, amber not yet, blue is
+ * where the thing is now, grey is nothing in particular.
+ *
+ * `Pill` is what a screen reaches for. This is the shadcn-shaped one, kept in
+ * step so that a component pasted in from anywhere lands in the same palette
+ * instead of arriving with `bg-primary` and a radius of its own.
+ */
+
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
 import { Slot } from "radix-ui"
 
+import { cn } from "@/lib/cn"
+
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3",
+  [
+    "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden",
+    "rounded-full border border-transparent px-2 py-0.5",
+    "text-micro font-medium whitespace-nowrap",
+    "transition-colors focus-visible:ring-2 focus-visible:ring-brand/40",
+    "[&>svg]:pointer-events-none [&>svg]:size-3",
+  ].join(" "),
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-        secondary:
-          "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
-        destructive:
-          "bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
-        outline:
-          "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 [a&]:hover:underline",
+        neutral: "bg-line-soft text-ink-soft",
+        brand: "bg-brand-soft text-brand-deep",
+        good: "bg-good-soft text-good",
+        warn: "bg-warn-soft text-warn-ink",
+        danger: "bg-danger-soft text-danger",
+        /** Filled — for the one badge that has to be seen across a room. */
+        solid: "bg-brand text-brand-ink",
+        outline: "border-line text-ink-soft",
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "neutral",
     },
-  }
+  },
 )
 
 function Badge({
   className,
-  variant = "default",
+  variant,
   asChild = false,
   ...props
 }: React.ComponentProps<"span"> &

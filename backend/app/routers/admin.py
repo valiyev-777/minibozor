@@ -30,7 +30,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import audit, i18n
+from app import audit, brands, i18n
 from app import products as pr
 from app import schemas as s
 from app import services as sv
@@ -39,6 +39,7 @@ from app import transitions as tr
 from app.deps import AdminUser, CatalogReader, CatalogWriter, SessionDep
 from app.models import (
     Brand,
+    BrandAlias,
     Category,
     OrderItem,
     Product,
@@ -1008,11 +1009,27 @@ def delete_category(slug: str, user: AdminUser, session: SessionDep) -> s.Messag
     summary="Every brand, with how many cards carry it",
 )
 def list_brands(user: CatalogReader, session: SessionDep) -> list[s.AdminBrandOut]:
+    """Every brand, with what it holds and what it answers to.
+
+    Both figures are here for the merge screen. ``product_count`` says whether
+    a row can simply be deleted; ``aliases`` says which rows look like each
+    other, in the words people typed at the desk rather than in a similarity
+    score nobody can check.
+    """
     counts = dict(
         session.exec(
             select(Product.brand_id, func.count()).group_by(col(Product.brand_id))
         ).all()
     )
+    # One query for the whole alias table rather than one per brand: the
+    # brand list is drawn in full on one screen, and a lookup per row is the
+    # shape that turns forty makes into forty-one queries.
+    words: dict[int, list[str]] = {}
+    for alias in session.exec(
+        select(BrandAlias).order_by(col(BrandAlias.id))
+    ).all():
+        words.setdefault(alias.brand_id, []).append(alias.name)
+
     rows = session.exec(select(Brand).order_by(col(Brand.name))).all()
     return [
         s.AdminBrandOut(
@@ -1020,6 +1037,7 @@ def list_brands(user: CatalogReader, session: SessionDep) -> list[s.AdminBrandOu
             slug=row.slug,
             name=row.name,
             product_count=int(counts.get(row.id, 0)),
+            aliases=words.get(row.id, []),
         )
         for row in rows
     ]
@@ -1031,12 +1049,22 @@ def list_brands(user: CatalogReader, session: SessionDep) -> list[s.AdminBrandOu
 def create_brand(
     payload: s.BrandWriteIn, user: AdminUser, session: SessionDep
 ) -> s.BrandOut:
+    """A make written in the panel rather than typed at the desk.
+
+    Refused when some other row already answers to the name, because the row
+    written here would be the duplicate the receiving desk can no longer make
+    — the desk matches on the spelling and would keep landing on the first
+    one, leaving this one with a name, no cards and no way to get any.
+    """
     if session.exec(select(Brand).where(Brand.slug == payload.slug)).first():
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("slug_exists"))
+    _ensure_name_is_free(session, payload.name, mine=None)
+
     row = Brand(slug=payload.slug, name=payload.name)
     session.add(row)
     session.commit()
     session.refresh(row)
+    brands.remember(session, row, payload.name)
     i18n.write(session, "brand", row.id, _texts(payload.translations))
     session.commit()
     session.refresh(row)
@@ -1047,8 +1075,31 @@ def create_brand(
 def update_brand(
     slug: str, payload: s.BrandWriteIn, user: AdminUser, session: SessionDep
 ) -> s.BrandOut:
+    """Correct a brand's name, its slug, or its translations.
+
+    **The slug is applied.** It used to be read off the payload and then
+    ignored, so a slug generated from a misspelling — ``on-clod`` — was
+    permanent: it is in the catalogue's filter URLs and on every brand link,
+    and the only way to change it was to make a second brand and move the
+    cards by hand, which is the very thing the merge door exists for.
+
+    **The old name goes on working.** A rename adds the new spelling to the
+    ones this row answers to rather than replacing them, because the receiving
+    desk matches on the spelling somebody types. Renaming ``On Cloud`` to
+    ``On Running`` used to mean the next sack typed as "On Cloud" wrote a
+    second row — the correction lasted until the next van.
+    """
     row = _brand(session, slug)
+
+    if payload.slug != row.slug:
+        if session.exec(select(Brand).where(Brand.slug == payload.slug)).first():
+            raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("slug_exists"))
+        row.slug = payload.slug
+
+    _ensure_name_is_free(session, payload.name, mine=row)
     row.name = payload.name
+    brands.remember(session, row, payload.name)
+
     i18n.write(session, "brand", row.id, _texts(payload.translations))
     session.add(row)
     session.commit()
@@ -1056,15 +1107,90 @@ def update_brand(
     return s.BrandOut(id=row.id, slug=row.slug, name=row.name)
 
 
+@router.post(
+    "/brands/{slug}/merge",
+    response_model=s.BrandMergeOut,
+    summary="Two rows were one make — fold this one into another",
+)
+def merge_brand(
+    slug: str, payload: s.BrandMergeIn, user: AdminUser, session: SessionDep
+) -> s.BrandMergeOut:
+    """Move every card off ``slug`` onto ``into``, then delete ``slug``.
+
+    **It could not be composed from the doors that already existed.**
+    ``DELETE /admin/brands/{slug}`` refuses while any card names the brand,
+    and nothing repoints a card's brand in bulk — so joining ``on-cloud`` and
+    ``on-clod`` meant opening every card, changing its brand, and only then
+    deleting. Forty cards is forty chances to stop halfway, and half a merge
+    is the duplicate it was supposed to remove plus a brand nobody trusts.
+
+    **One transaction, and nothing downstream to repair.** ``Product`` carries
+    the foreign key and no denormalised brand name; ``OrderItem`` snapshots
+    the product title rather than the brand. So no order, receipt or report is
+    rewritten here, and none of them is wrong afterwards. ``GET
+    /warehouse/vocab``, the catalogue's brand filters and the brand index all
+    read the ``brands`` table live, so they answer correctly on the next
+    request with nothing to clear.
+
+    **The loser's spellings move to the winner**, which is the half that makes
+    the merge hold: they are the words that made the duplicate, and the
+    receiving desk matches on them. Without that, the next sack typed the old
+    way writes the row back.
+
+    **Admin only.** Merging deletes a row and moves other people's cards onto
+    another one; the receiving desk creates brands because it must in order to
+    book goods in at all, and this is not that.
+    """
+    loser = _brand(session, slug)
+    winner = _brand(session, payload.into)
+    if loser.id == winner.id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("brand_merge_itself")
+        )
+
+    moved = brands.merge(session, actor=user, loser=loser, winner=winner)
+    session.commit()
+    session.refresh(winner)
+    return s.BrandMergeOut(
+        brand=s.BrandOut(id=winner.id, slug=winner.slug, name=winner.name),
+        products_moved=moved,
+        aliases=brands.spellings(session, winner.id),
+    )
+
+
 @router.delete("/brands/{slug}", response_model=s.Message)
 def delete_brand(slug: str, user: AdminUser, session: SessionDep) -> s.Message:
+    """Only a brand nothing carries. A brand with cards is merged, not deleted."""
     row = _brand(session, slug)
     if session.exec(select(Product).where(Product.brand_id == row.id)).first():
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("brand_in_use"))
+    for alias in session.exec(
+        select(BrandAlias).where(BrandAlias.brand_id == row.id)
+    ).all():
+        session.delete(alias)
     i18n.forget(session, "brand", row.id)
     session.delete(row)
     session.commit()
     return s.Message(message=i18n.label("deleted"))
+
+
+def _ensure_name_is_free(
+    session: SessionDep, name: str, *, mine: Brand | None
+) -> None:
+    """Refuse a name some other row already answers to.
+
+    Two brands called "Nike" is the state this whole file is trying to get out
+    of: the desk can only land on one of them, so the other collects no cards
+    and the catalogue offers the customer two filters for one make. The
+    refusal names the row that holds the spelling and says to merge, because
+    that is the thing the admin was about to do by hand.
+    """
+    held = brands.by_spelling(session, name)
+    if held is not None and (mine is None or held.id != mine.id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("brand_name_taken", name=name, slug=held.slug),
+        )
 
 
 # --------------------------------------------------------------------------- what a card is made of
