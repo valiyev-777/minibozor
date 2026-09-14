@@ -81,6 +81,11 @@ def delete_address(address_id: int, user: CurrentUser, session: SessionDep) -> s
 def delivery_slots(session: SessionDep, days: int = Query(3, ge=1, le=14)) -> list[s.SlotDayOut]:
     today = date.today()
     window = [today + timedelta(days=n) for n in range(days)]
+    # The standard windows, for any day in this range that has none. Nothing
+    # seeded them and the office's door for opening them is a door somebody has
+    # to walk through — so until they did, the checkout could not be completed
+    # at all. See ``services.ensure_slots``.
+    sv.ensure_slots(session, window)
     rows = session.exec(
         select(DeliverySlot)
         .where(col(DeliverySlot.day).in_(window))

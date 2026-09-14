@@ -1,10 +1,13 @@
 """Running the shop: the endpoints that move a status along.
 
-Four flows had a status column the data model was happy to move and no way to
-move it. A return request was submitted and never answered; a review sat in
-moderation for ever; an order was placed and stayed placed however long ago
-that was; a delivery window's capacity only ever went down. Each of those is
-one operator decision away from working, and this is where the decisions live.
+Several flows had a status column the data model was happy to move and no way
+to move it. A return request was submitted and never answered; an order was
+placed and stayed placed however long ago that was; a delivery window's
+capacity only ever went down. Each of those is one decision away from working,
+and this is where the decisions live.
+
+The returns half of the file is read by two: the office decides the money and
+the warehouse says what arrived in the parcel. See ``app.returns``.
 
 Two rules hold throughout:
 
@@ -29,17 +32,20 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
 from app import audit, i18n, inventory
+from app import returns as rt
 from app import schemas as s
 from app import services as sv
 from app import transitions as tr
 from app.deps import (
     OperatorUser,
+    OrderMover,
+    OrderViewer,
     PickupHandler,
+    ReturnViewer,
     SessionDep,
     WarehouseUser,
 )
 from app.models import (
-    CourierShift,
     DeliverySlot,
     Notification,
     NotificationKind,
@@ -50,21 +56,25 @@ from app.models import (
     PickupRun,
     PickupRunStatus,
     Product,
+    ReturnInspection,
     ReturnRequest,
     ReturnStatus,
-    Review,
-    ReviewStatus,
-    ShiftStatus,
     User,
     UserRole,
 )
 
 # The courier's own shapes are rendered by the courier router. Imported rather
-# than duplicated: two renderings of one shift would be two things to keep in
-# step, and the operator is looking at exactly what the courier reported.
+# than duplicated: two renderings of one collection run would be two things to
+# keep in step, and the operator is looking at exactly what the courier
+# reported.
 from app.routers import courier as courier_router
 
-router = APIRouter(prefix="/staff", tags=["staff"])
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+# The one door in this file the warehouse walks through rather than the
+# office: opening a parcel that came back and saying what was in it. It is
+# grouped by who calls it, not by which file it happens to live in.
+bench = APIRouter(prefix="/warehouse", tags=["warehouse"])
 
 
 # --------------------------------------------------------------------------- returns
@@ -73,25 +83,121 @@ router = APIRouter(prefix="/staff", tags=["staff"])
 @router.get(
     "/returns",
     response_model=list[s.StaffReturnOut],
-    summary="Return requests waiting for a decision",
+    summary="Return requests waiting for somebody",
 )
 def list_returns(
-    user: OperatorUser,
+    user: ReturnViewer,
     session: SessionDep,
     status_filter: ReturnStatus | None = Query(
         None, alias="status", description="default: everything, oldest first"
     ),
+    awaiting: str | None = Query(
+        None, description="'inspection' — arrived, nobody has looked"
+    ),
 ) -> list[s.StaffReturnOut]:
+    """One list, read by two roles, filtered by whose turn it is.
+
+    ``awaiting`` rather than a screen per role, because the question every
+    screen asks is the same one — what is waiting for me — and it is a
+    property of the row, not of the reader.
+    """
     stmt = select(ReturnRequest)
     if status_filter is not None:
         stmt = stmt.where(ReturnRequest.status == status_filter)
-    rows = session.exec(stmt.order_by(col(ReturnRequest.created_at))).all()
+    if awaiting == "inspection":
+        stmt = stmt.where(
+            col(ReturnRequest.status).in_(
+                [ReturnStatus.APPROVED, ReturnStatus.REFUNDED]
+            ),
+            col(ReturnRequest.inspection).is_(None),
+        )
+    # The same rule as the order queue: the two states somebody is working
+    # oldest-first, everything else newest-first. `submitted` is a decision
+    # waiting to be made and `approved` is a van waiting to be sent; anybody
+    # reading the rest wants the one that came back today.
+    queue = status_filter in (ReturnStatus.SUBMITTED, ReturnStatus.APPROVED)
+    rows = session.exec(
+        stmt.order_by(
+            col(ReturnRequest.created_at) if queue
+            else col(ReturnRequest.created_at).desc(),
+            col(ReturnRequest.id) if queue else col(ReturnRequest.id).desc(),
+        )
+    ).all()
     return [_return_out(session, r) for r in rows]
 
 
 @router.get("/returns/{return_id}", response_model=s.StaffReturnOut)
-def get_return(return_id: int, user: OperatorUser, session: SessionDep) -> s.StaffReturnOut:
-    return _return_out(session, _return(session, return_id))
+def get_return(
+    return_id: int, user: ReturnViewer, session: SessionDep
+) -> s.StaffReturnOut:
+    request = _return(session, return_id)
+    return _return_out(session, request)
+
+
+@bench.post(
+    "/returns/{return_id}/inspect",
+    response_model=s.StaffReturnOut,
+    summary="What the warehouse found in the parcel",
+)
+def inspect_return(
+    return_id: int,
+    payload: s.ReturnInspectIn,
+    user: WarehouseUser,
+    session: SessionDep,
+) -> s.StaffReturnOut:
+    """Whole or damaged, and the shelf follows from it.
+
+    Only once. A second verdict on the same parcel is two people disagreeing
+    about a shirt one of them is holding, and the way to settle that is a
+    conversation rather than an overwrite.
+
+    Either way the parcel is booked into the building here, through
+    ``app.returns.book_in``, which is guarded: a refund with ``restock: true``
+    may already have done it, and one shirt back is one shirt back. Whole
+    goods land in the receiving area and are for sale again; damaged ones land
+    in the damaged corner, counted and not sold — because a parcel nobody
+    recorded arriving is a parcel the room cannot find.
+    """
+    request = _return(session, return_id)
+    if request.status not in (ReturnStatus.APPROVED, ReturnStatus.REFUNDED):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("return_not_here_yet")
+        )
+    if request.inspection is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("return_already_inspected")
+        )
+
+    request.inspection = payload.result
+    request.inspection_note = payload.note.strip()
+    request.inspected_at = sv.utcnow()
+    request.inspected_by_id = user.id
+    session.add(request)
+
+    audit.record(
+        session,
+        actor=user,
+        action="return.inspect",
+        entity="return_request",
+        entity_id=request.id,
+        field="inspection",
+        old=None,
+        new=payload.result,
+        note=request.inspection_note,
+    )
+
+    rt.book_in(
+        session,
+        request,
+        actor=user,
+        note=request.inspection_note
+        or i18n.label(f"inspection_{payload.result.value}"),
+        damaged=payload.result is not ReturnInspection.OK,
+    )
+
+    session.commit()
+    session.refresh(request)
+    return _return_out(session, request)
 
 
 @router.post(
@@ -205,13 +311,10 @@ def _decide_return(
             note=payload.note or payload.reason,
         )
         if restock:
-            inventory.restock_returned(
-                session,
-                lines,
-                actor=actor,
-                action="return.restock",
-                note=payload.note,
-            )
+            # Through ``app.returns`` rather than straight at the inventory:
+            # an inspection that passes relists the same parcel, and the guard
+            # in there is what keeps one shirt from coming back twice.
+            rt.book_in(session, request, actor=actor, note=payload.note)
 
     request.status = target
     if target is ReturnStatus.REJECTED:
@@ -248,15 +351,13 @@ def _decide_return(
 def _returned_lines(
     session: SessionDep, request: ReturnRequest, order: Order | None
 ) -> list[OrderItem]:
-    """What is coming back: the line the request named, or the whole order.
+    """What is coming back — see ``app.returns.returned_lines``.
 
-    The lines rather than a figure, because the same answer settles both
-    questions a refund asks — how much money goes back, and which counts do.
+    Kept as a name here because three things in this file ask the question and
+    the answer moved to ``app.returns`` when the warehouse started asking it
+    too.
     """
-    if request.order_item_id:
-        item = session.get(OrderItem, request.order_item_id)
-        return [item] if item is not None else []
-    return inventory.order_items(session, order) if order else []
+    return rt.returned_lines(session, request, order)
 
 
 def _refund_amount(
@@ -276,105 +377,6 @@ def _refund_amount(
     return order.total if order else 0
 
 
-# --------------------------------------------------------------------------- reviews
-
-
-@router.get(
-    "/reviews",
-    response_model=list[s.StaffReviewOut],
-    summary="The moderation queue",
-)
-def list_reviews_for_moderation(
-    user: OperatorUser,
-    session: SessionDep,
-    status_filter: ReviewStatus | None = Query(
-        ReviewStatus.MODERATING, alias="status", description="default: awaiting moderation"
-    ),
-) -> list[s.StaffReviewOut]:
-    stmt = select(Review)
-    if status_filter is not None:
-        stmt = stmt.where(Review.status == status_filter)
-    rows = session.exec(stmt.order_by(col(Review.created_at))).all()
-    return [_review_out(session, r) for r in rows]
-
-
-@router.post("/reviews/{review_id}/publish", response_model=s.StaffReviewOut)
-def publish_review(
-    review_id: int, payload: s.DecisionIn, user: OperatorUser, session: SessionDep
-) -> s.StaffReviewOut:
-    return _moderate(session, user, review_id, ReviewStatus.PUBLISHED, payload)
-
-
-@router.post(
-    "/reviews/{review_id}/reject",
-    response_model=s.StaffReviewOut,
-    summary="Keep a review off the product page, with a reason",
-)
-def reject_review(
-    review_id: int, payload: s.DecisionIn, user: OperatorUser, session: SessionDep
-) -> s.StaffReviewOut:
-    if not payload.reason.strip():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("reason_required"))
-    return _moderate(session, user, review_id, ReviewStatus.REJECTED, payload)
-
-
-def _moderate(
-    session: SessionDep,
-    actor: User,
-    review_id: int,
-    target: ReviewStatus,
-    payload: s.DecisionIn,
-) -> s.StaffReviewOut:
-    review = session.get(Review, review_id)
-    if review is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("review_not_found"))
-    tr.ensure(tr.REVIEW_TRANSITIONS, review.status, target)
-
-    audit.record(
-        session,
-        actor=actor,
-        action="review.status",
-        entity="review",
-        entity_id=review.id,
-        field="status",
-        old=review.status,
-        new=target,
-        note=payload.note or payload.reason,
-    )
-    review.status = target
-    session.add(review)
-    session.commit()
-
-    # The product's rating counts published reviews only, so moderating one is
-    # what makes it count — or stop counting.
-    sv.recalc_product_rating(session, review.product_id)
-
-    product = session.get(Product, review.product_id)
-    title = "review_published" if target is ReviewStatus.PUBLISHED else "review_rejected"
-    text = (
-        i18n.label("review_published_note", product=product.title if product else "")
-        if target is ReviewStatus.PUBLISHED
-        else i18n.label(
-            "review_rejected_note",
-            product=product.title if product else "",
-            reason=payload.reason.strip(),
-        )
-    )
-    session.add(
-        Notification(
-            user_id=review.user_id,
-            kind=NotificationKind.REVIEW,
-            icon="star",
-            title=i18n.label(title),
-            text=text,
-            deep_link=f"minibozor://products/{review.product_id}",
-        )
-    )
-    session.commit()
-    session.refresh(review)
-    return _review_out(session, review)
-
-
 # --------------------------------------------------------------------------- orders
 
 
@@ -384,7 +386,7 @@ def _moderate(
     summary="The order queue",
 )
 def order_queue(
-    user: OperatorUser,
+    user: OrderViewer,
     session: SessionDep,
     status_filter: OrderStatus | None = Query(
         None, alias="status", description="default: everything, oldest first"
@@ -392,19 +394,35 @@ def order_queue(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> s.Page[s.StaffOrderOut]:
+    """One queue, read by the office and by the warehouse.
+
+    The office runs it and the warehouse picks from it — two jobs on one list,
+    which is why it is one endpoint with a status filter rather than two
+    renderings of the same orders.
+    """
     stmt = select(Order)
     if status_filter is not None:
         stmt = stmt.where(Order.status == status_filter)
     total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
-    # Oldest first: a queue is worked from the front, which is the opposite of
-    # how the customer's own list is sorted.
+    # A queue is worked from the front; a history is read from the top.
+    #
+    # Which this is depends on what was asked for. The warehouse asks for
+    # `placed` and wants the oldest first — that is a bench queue, and serving
+    # the newest order first is how the first one waits all day. Anybody
+    # asking for everything is reading rather than working: they want this
+    # morning at the top, and used to get an order from three weeks ago and
+    # page forward looking for today.
+    working = status_filter in (OrderStatus.PLACED, OrderStatus.PACKING)
     rows = session.exec(
-        stmt.order_by(col(Order.created_at))
+        stmt.order_by(
+            col(Order.created_at) if working else col(Order.created_at).desc(),
+            col(Order.id) if working else col(Order.id).desc(),
+        )
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
     return s.Page[s.StaffOrderOut](
-        items=[_order_row(session, o) for o in rows],
+        items=[_order_row(session, o, user.role) for o in rows],
         page=page,
         page_size=page_size,
         total=total,
@@ -417,11 +435,17 @@ def order_queue(
     response_model=s.OrderOut,
     summary="One order in full — the customer's own view of it",
 )
-def get_order(order_id: int, user: OperatorUser, session: SessionDep) -> s.OrderOut:
+def get_order(
+    order_id: int, user: OrderViewer, session: SessionDep
+) -> s.OrderOut:
     # Deliberately the customer's shape: an operator on the phone is being
     # asked about what the customer is looking at, and a second rendering of
     # the same order is a second thing to keep in step.
-    return sv.order_out(session, _order(session, order_id))
+    order = _order(session, order_id)
+    # With the knocks on it. A courier who has been turned away three times
+    # does not decide to give up — the office does, and this list is what it
+    # decides on.
+    return sv.order_out(session, order, with_attempts=True)
 
 
 @router.post(
@@ -430,10 +454,34 @@ def get_order(order_id: int, user: OperatorUser, session: SessionDep) -> s.Order
     summary="Move an order along",
 )
 def set_order_status(
-    order_id: int, payload: s.OrderStatusIn, user: OperatorUser, session: SessionDep
+    order_id: int, payload: s.OrderStatusIn, user: OrderMover, session: SessionDep
 ) -> s.OrderOut:
+    """The queue's one write, and not every role may make every move.
+
+    Picking is the warehouse's — ``placed → packing → shipped`` is what a
+    person at a bench does — and cancelling is not. A picker who could call
+    off a sale would be deciding, from the packing bench, that a customer is
+    not getting their order; the person who can phone them and see how many
+    times a courier has tried is the operator. So the *door* admits both and
+    the *move* is checked here, which is the same shape as
+    ``transitions.ensure`` immediately below: a rule per transition rather
+    than a rule per endpoint.
+    """
     order = _order(session, order_id)
+    if user.role is not UserRole.ADMIN and payload.status is OrderStatus.CANCELLED:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("cancel_is_operators"))
     tr.ensure(tr.ORDER_TRANSITIONS, order.status, payload.status)
+    # Shipped to whom? `GET /courier/orders` is filtered by `courier_id`, so
+    # an order that goes out with none is on nobody's round: it reads as "on
+    # its way" to the customer and to the office, and no courier can see it.
+    # Four orders in the development database left that way before this
+    # existed, which is exactly how far a bench can get without being told.
+    #
+    # 409 rather than 400: the request is well formed and the move is legal —
+    # what is wrong is that this order is not ready to make it, which is what
+    # a conflict is.
+    if payload.status is OrderStatus.SHIPPED:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("shipping_is_couriers"))
     was = order.status
 
     audit.record(
@@ -459,15 +507,13 @@ def set_order_status(
             actor=user,
             action="order.cancel",
             note=payload.note,
-            shelf=order.paid,
         )
-    if payload.status is OrderStatus.DELIVERED and not order.paid:
-        # Cash at the door. The goods were held for this order from the moment
-        # it was placed; this is the moment they actually leave, because this
-        # is the moment it becomes a sale.
+    if payload.status is OrderStatus.DELIVERED:
+        # The one moment goods actually leave the building. Cash at the door
+        # settles the money at the same time; the two are recorded apart
+        # because they are two facts, and only one of them is a move.
         order.paid = True
-        for line in inventory.order_items(session, order):
-            inventory.sell(session, line)
+        inventory.hand_over(session, order, actor=user, note=payload.note)
 
     # Returning an order does not restock it here: whether the goods go back on
     # the shelf is decided when the refund is made, and doing it in both places
@@ -528,150 +574,14 @@ def list_couriers(user: OperatorUser, session: SessionDep) -> list[s.StaffUserOu
     ]
 
 
-@router.post(
-    "/orders/{order_id}/courier",
-    response_model=s.OrderOut,
-    summary="Put an order on somebody's round",
-)
-def assign_courier(
-    order_id: int,
-    payload: s.CourierAssignIn,
-    user: OperatorUser,
-    session: SessionDep,
-) -> s.OrderOut:
-    """The operator plans the round; the courier drives it.
-
-    Allowed while the order has not finished — a round is usually planned
-    before anything is packed, and reassigning a stop mid-afternoon is
-    ordinary work rather than an exception. Refused once the order is
-    delivered, cancelled or returned: there is nothing left to carry, and
-    changing the name on a finished delivery would rewrite who did it.
-
-    Logged, because "who was carrying it" is the first question asked about a
-    delivery that went wrong.
-    """
-    order = _order(session, order_id)
-    if order.status in (
-        OrderStatus.DELIVERED,
-        OrderStatus.CANCELLED,
-        OrderStatus.RETURNED,
-    ):
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("order_finished"))
-
-    courier = session.get(User, payload.courier_id)
-    if courier is None or courier.role is not UserRole.COURIER:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("courier_not_found"))
-    if not courier.is_active:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("courier_inactive"))
-
-    audit.record(
-        session,
-        actor=user,
-        action="order.courier",
-        entity="order",
-        entity_id=order.id,
-        field="courier_id",
-        old=order.courier_id,
-        new=courier.id,
-        note=payload.note or (courier.full_name or courier.phone),
-    )
-    order.courier_id = courier.id
-    order.courier_sequence = payload.sequence
-    order.updated_at = sv.utcnow()
-    session.add(order)
-    session.commit()
-    session.refresh(order)
-    return sv.order_out(session, order)
-
-
-@router.get(
-    "/shifts",
-    response_model=list[s.ShiftOut],
-    summary="Rounds, and whether the cash added up",
-)
-def list_shifts(
-    user: OperatorUser,
-    session: SessionDep,
-    courier_id: int | None = Query(None),
-    status_filter: ShiftStatus | None = Query(None, alias="status"),
-) -> list[s.ShiftOut]:
-    stmt = select(CourierShift)
-    if courier_id is not None:
-        stmt = stmt.where(CourierShift.courier_id == courier_id)
-    if status_filter is not None:
-        stmt = stmt.where(CourierShift.status == status_filter)
-    rows = session.exec(stmt.order_by(col(CourierShift.id).desc())).all()
-    return [courier_router._shift_out(session, row) for row in rows]
-
-
-@router.get(
-    "/shifts/{shift_id}",
-    response_model=s.ShiftDetailOut,
-    summary="One round, door by door",
-)
-def get_shift(
-    shift_id: int, user: OperatorUser, session: SessionDep
-) -> s.ShiftDetailOut:
-    """Every attempt on the shift, so the cash total is followable.
-
-    The same reason a statement carries its lines: a courier told they are
-    30 000 short has a number to argue with, and a list of doors with a figure
-    against each one is something to check.
-    """
-    shift = session.get(CourierShift, shift_id)
-    if shift is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("shift_not_found"))
-    return courier_router._shift_detail(session, shift)
-
-
-@router.post(
-    "/shifts/{shift_id}/count",
-    response_model=s.ShiftDetailOut,
-    summary="What the office counted",
-)
-def count_shift(
-    shift_id: int,
-    payload: s.ShiftCountIn,
-    user: OperatorUser,
-    session: SessionDep,
-) -> s.ShiftDetailOut:
-    """The third figure, and the only one that settles anything.
-
-    Counted against ``cash_expected`` rather than against what the courier
-    declared: the declaration is one of the claims being checked, so checking
-    it against itself would always agree. A difference is recorded as it is
-    and never reconciled away — an unexplained shortfall is a fact about a
-    day, and the audit row is what makes it findable a month later.
-    """
-    shift = session.get(CourierShift, shift_id)
-    if shift is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("shift_not_found"))
-    if shift.status is not ShiftStatus.CLOSED:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("shift_open"))
-    if shift.cash_counted is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("shift_counted"))
-
-    gap = payload.cash_counted - shift.cash_expected
-    audit.record(
-        session,
-        actor=user,
-        action="shift.count",
-        entity="courier_shift",
-        entity_id=shift.id,
-        field="cash_counted",
-        old=shift.cash_expected,
-        new=payload.cash_counted,
-        note=payload.note or (f"farq {gap}" if gap else "farq yo'q"),
-    )
-    shift.cash_counted = payload.cash_counted
-    shift.counted_by_id = user.id
-    shift.counted_at = sv.utcnow()
-    if payload.note:
-        shift.note = payload.note.strip()
-    session.add(shift)
-    session.commit()
-    session.refresh(shift)
-    return courier_router._shift_detail(session, shift)
+# The operator used to put orders on rounds here, and does not any more.
+#
+# Assignment was the step that made a packed parcel wait: a courier standing
+# in the warehouse could see the box in front of them and not the order, and
+# nothing moved until somebody in an office remembered to name them. Couriers
+# take their own work now — `POST /courier/orders/{id}/take` — so the handover
+# is the person picking the parcel up rather than a plan somebody made about
+# them. `GET /courier/orders/available` is the board they take it from.
 
 
 # --------------------------------------------------------------------- collection runs
@@ -967,6 +877,14 @@ def _order(session: SessionDep, order_id: int) -> Order:
 def _return_out(session: SessionDep, r: ReturnRequest) -> s.StaffReturnOut:
     order = session.get(Order, r.order_id)
     customer = session.get(User, r.user_id)
+    lines = rt.returned_lines(session, r, order)
+    product = None
+    for line in lines:
+        if line.product_id:
+            product = session.get(Product, line.product_id)
+            if product is not None:
+                break
+
     return s.StaffReturnOut(
         id=r.id,
         order_id=r.order_id,
@@ -982,31 +900,20 @@ def _return_out(session: SessionDep, r: ReturnRequest) -> s.StaffReturnOut:
         refund_amount=r.refund_amount,
         next_statuses=tr.next_states(tr.RETURN_TRANSITIONS, r.status),
         created_at=r.created_at,
-    )
-
-
-def _review_out(session: SessionDep, r: Review) -> s.StaffReviewOut:
-    product = session.get(Product, r.product_id)
-    author = session.get(User, r.user_id)
-    return s.StaffReviewOut(
-        id=r.id,
-        product_id=r.product_id,
         product_title=product.title if product else "",
-        # The full name, not the initial the product page shows: moderation is
-        # about the person as much as the words.
-        author_name=author.full_name if author else "",
-        author_phone=author.phone if author else "",
-        rating=r.rating,
-        text=r.text,
-        photos=[u for u in (sv.media_url(p) for p in (r.photos or [])) if u],
-        status=r.status,
-        next_statuses=tr.next_states(tr.REVIEW_TRANSITIONS, r.status),
-        created_at=r.created_at,
+        inspection=r.inspection,
+        inspection_label=(
+            i18n.label(f"inspection_{r.inspection.value}") if r.inspection else ""
+        ),
+        inspection_note=r.inspection_note,
+        inspected_at=r.inspected_at,
+        relisted=r.relisted_at is not None,
     )
 
 
-def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:
+def _order_row(session: SessionDep, o: Order, reader: UserRole) -> s.StaffOrderOut:
     customer = session.get(User, o.user_id)
+    courier = session.get(User, o.courier_id) if o.courier_id else None
     items = session.exec(select(OrderItem).where(OrderItem.order_id == o.id)).all()
     window = (
         f"{o.delivery_start}–{o.delivery_end}" if o.delivery_start and o.delivery_end else ""
@@ -1023,9 +930,25 @@ def _order_row(session: SessionDep, o: Order) -> s.StaffOrderOut:
         delivery_day=o.delivery_day,
         delivery_window=window,
         items_count=sum(i.quantity for i in items),
+        items_summary=sv.items_summary(items),
         total=o.total,
         paid=o.paid,
-        next_statuses=tr.next_states(tr.ORDER_TRANSITIONS, o.status),
+        # The moves the rules allow, minus the ones that are not this
+        # reader's to make. `shipped` happens when a courier takes the parcel
+        # off the shelf, so nobody at a desk is offered it; cancelling is the
+        # owner's, so nobody else is. The panel builds its buttons from this
+        # list, which is why the rule lives here rather than in the panel: a
+        # button for somebody else's act is a button that either lies or is
+        # refused after the tap.
+        next_statuses=[
+            move
+            for move in tr.next_states(tr.ORDER_TRANSITIONS, o.status)
+            if move is not OrderStatus.SHIPPED
+            and (move is not OrderStatus.CANCELLED or reader is UserRole.ADMIN)
+        ],
+        courier_id=o.courier_id,
+        courier_name=courier.full_name if courier else "",
+        courier_sequence=o.courier_sequence,
         created_at=o.created_at,
     )
 

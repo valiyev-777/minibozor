@@ -56,6 +56,14 @@ data class CardFormState(
  * [PROCESSOR_TOKEN_PREFIX] marks the one line to replace with the payment
  * provider's SDK result before this goes live — the app must never be the thing
  * that holds a PAN.
+ *
+ * **Until then the server decides the outcome from the last four digits**, the
+ * way every sandbox in the trade does, because a token this app invents cannot
+ * carry a decision. `app/payments.py` holds the table; the short version is
+ * that a card ending `0000` is always declined, `0001` never has the money and
+ * `0002` has expired, and anything else pays. All four pass Luhn, so every
+ * outcome is reachable from this form — which is the point of a test
+ * processor: the failures have to be as easy to get to as the success.
  */
 @HiltViewModel
 class AddCardViewModel @Inject constructor(

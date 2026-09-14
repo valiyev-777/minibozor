@@ -22,10 +22,29 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     otp_dev_code: str = "123456"
 
+    # What a courier earns for one delivery, in so'm.
+    #
+    # A flat rate rather than a share of the order: a courier carrying a
+    # 4 000 000 so'm television up three flights is doing the same work as one
+    # carrying a t-shirt, and paying by the basket would make the cheap stops
+    # nobody's first choice — which is exactly the wrong incentive in a shop
+    # where couriers pick their own work.
+    #
+    # Here rather than in a table because it is one number today. The day it
+    # differs by distance or by hour it wants a tariff of its own, and this is
+    # the line that moves into it.
+    courier_fee_per_delivery: int = 15_000
+
     # Named origins, not a wildcard. The API answers with credentials — the
     # backoffice's refresh cookie rides on them — and a browser refuses
     # ``Access-Control-Allow-Origin: *`` together with credentials outright.
-    # Comma-separated; the dev backoffice runs on Vite's default port.
+    #
+    # One staff application now, on 5173, where there were three. It is named
+    # on both hostnames because ``localhost`` and ``127.0.0.1`` are different
+    # origins to a browser and people type both.
+    #
+    # Comma-separated, and a deployment overrides the lot with MB_CORS_ORIGINS:
+    # these are development ports and belong nowhere else.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     @property

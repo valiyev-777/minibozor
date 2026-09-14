@@ -1,0 +1,49 @@
+/**
+ * Roboto v30 subset (cyrillic, cyrillic-ext, latin, latin-ext) — the same
+ * files the other back offices in the building serve, so the panels render
+ * identically at every weight.
+ *
+ * Four weights and no italics. A back office sets labels at 500 and figures
+ * at 700 and never sets a sentence in italic Roboto, and each face is 50KB a
+ * warehouse phone pays for on a bad connection before it can show a pick
+ * list. `font-display: swap` means it pays for them *after* the screen, in
+ * the system stack — see `--font-sans` in `shared/theme.css`.
+ *
+ * Files live in `public/fonts/roboto-v30/` and are served from there.
+ */
+
+@font-face {
+  font-display: swap;
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 300;
+  src: url("/fonts/roboto-v30/roboto-v30-cyrillic_cyrillic-ext_latin_latin-ext-300.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 400;
+  src: url("/fonts/roboto-v30/roboto-v30-cyrillic_cyrillic-ext_latin_latin-ext-regular.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 500;
+  src: url("/fonts/roboto-v30/roboto-v30-cyrillic_cyrillic-ext_latin_latin-ext-500.woff2")
+    format("woff2");
+}
+
+@font-face {
+  font-display: swap;
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 700;
+  src: url("/fonts/roboto-v30/roboto-v30-cyrillic_cyrillic-ext_latin_latin-ext-700.woff2")
+    format("woff2");
+}

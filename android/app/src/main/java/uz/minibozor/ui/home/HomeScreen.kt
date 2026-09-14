@@ -81,7 +81,6 @@ import uz.minibozor.core.design.component.SectionHeader
 import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.util.toColor
 import uz.minibozor.data.remote.dto.BannerDto
-import uz.minibozor.data.remote.dto.CategoryDto
 import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.SectionDto
 import uz.minibozor.ui.product.VariantSheet
@@ -128,7 +127,6 @@ private val SectionGap = 22.dp
 @Composable
 fun HomeScreen(
     onOpenSearch: () -> Unit,
-    onOpenCategory: (CategoryDto) -> Unit,
     onOpenBanner: (BannerDto) -> Unit,
     onOpenProduct: (Int) -> Unit,
     onOpenListing: (category: String?, title: String) -> Unit,
@@ -144,7 +142,9 @@ fun HomeScreen(
     var picking by remember { mutableStateOf<ProductCardDto?>(null) }
     var refreshing by remember { mutableStateOf(false) }
 
-    MbScreen { padding ->
+    // The tab's header is a band of surface, so that is what goes behind the
+    // clock rather than a step of grey canvas. See [MbScreen.statusBand].
+    MbScreen(statusBand = MbTheme.colors.surface) { padding ->
         Box(Modifier.fillMaxSize()) {
             UiStateContent(
                 state = state,
@@ -226,7 +226,12 @@ fun HomeScreen(
                         }
                     }
 
-                    categoryGrid(home.categories, onOpenCategory)
+                    // A grid of category tiles stood here, under the
+                    // banners. It was the same list the Katalog tab holds —
+                    // with the drill-down into subcategories that this could
+                    // not do — so the home screen was spending its best space
+                    // on a second way to the same place. What the space is for
+                    // now is goods.
 
                     home.sections.forEach { section ->
                         homeSection(
@@ -422,7 +427,18 @@ private fun BannerCarousel(
     Column {
         HorizontalPager(
             state = pager,
-            pageSpacing = 10.dp,
+            // Spacing equal to the page's own edge, which is what makes the
+            // next banner start exactly where the screen ends.
+            //
+            // It was 10 dp, and the 6 dp of difference showed the neighbour: a
+            // sliver of solid banner running up the side of the phone, cut off
+            // flat because 6 dp is far inside the card's 20 dp corner. A peek
+            // has to be wider than the radius to read as the edge of a card
+            // rather than as a bar of colour, and it cannot be, because what it
+            // would take comes off the banner being read. So there is no peek,
+            // and the dots underneath say there is more — which is how
+            // `design/screens/07` draws the block.
+            pageSpacing = MbTheme.dimens.homeEdge,
             contentPadding = PaddingValues(horizontal = MbTheme.dimens.homeEdge),
         ) { page ->
             BannerCard(
@@ -507,108 +523,18 @@ private fun BannerCard(banner: BannerDto, drift: () -> Float, onClick: () -> Uni
                 .fillMaxSize()
                 .graphicsLayer { translationX = drift() * 40.dp.toPx() },
             shape = MbTheme.shapes.tile,
-            background = Color.White.copy(alpha = 0.08f),
+            // Solid white, not an eighth of it.
+            //
+            // The banner artwork is the same cut-out-on-white the tiles carry,
+            // so a translucent ground put a pale frame around an opaque white
+            // square and the tile read as two mismatched boxes. One white plate
+            // holding the product is one shape. A scene photograph would fill
+            // this frame and never show the plate at all, which is what the
+            // block was drawn for — see `design/screens/07`.
+            background = Color.White,
             // Whole, not cropped to the panel's shape: this box is narrower
             // than the photographs are, so cropping took the sides off them.
             contentScale = ContentScale.Fit,
-        )
-    }
-}
-
-/** The 5x2 quick-link grid, one lazy item per row of five. */
-private fun LazyListScope.categoryGrid(
-    categories: List<CategoryDto>,
-    onClick: (CategoryDto) -> Unit,
-) {
-    val rows = categories.chunked(5)
-    rows.forEachIndexed { index, row ->
-        item(key = "categories:$index", contentType = "category-row") {
-            val first = index == 0
-            val last = index == rows.lastIndex
-            val shape = when {
-                first && last -> MbTheme.shapes.card
-                first -> CardTopShape
-                last -> CardBottomShape
-                else -> RectangleShape
-            }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = MbTheme.dimens.homeEdge,
-                        end = MbTheme.dimens.homeEdge,
-                        top = if (first) 16.dp else 0.dp,
-                    )
-                    .background(MbTheme.colors.surface, shape)
-                    .padding(
-                        start = 14.dp,
-                        end = 14.dp,
-                        // 14 dp card padding on the outer rows, plus the 7 dp
-                        // every row keeps around itself.
-                        top = if (first) 21.dp else 7.dp,
-                        bottom = if (last) 21.dp else 7.dp,
-                    ),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                row.forEach { category ->
-                    CategoryCell(category, onClick, Modifier.weight(1f))
-                }
-                repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CategoryCell(
-    category: CategoryDto,
-    onClick: (CategoryDto) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        // A bare `clickable` presses in a hard rectangle the full width of the
-        // cell and the full height of tile plus label — a corner-to-corner slab
-        // under a 44 dp rounded tile. The highlight is drawn over the content
-        // rather than clipping it, which is what keeps the two-line names off
-        // the corner arcs.
-        modifier
-            .mbPressable(
-                MbTheme.shapes.tile,
-                MbTheme.colors.ink.copy(alpha = MbPressAlpha),
-            ) { onClick(category) }
-            .padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            Modifier
-                .size(MbTheme.dimens.categoryTile)
-                .clip(MbTheme.shapes.tile)
-                .background(MbTheme.colors.fill),
-            contentAlignment = Alignment.Center,
-        ) {
-            // A photograph where the shop supplied one, the line glyph where
-            // it did not — the grid holds both without looking mixed because
-            // the tile behind them is the same.
-            val image = category.imageUrl
-            if (image != null) {
-                AsyncImage(
-                    model = image.mediaUrl(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(MbTheme.dimens.categoryTile * 0.72f),
-                )
-            } else {
-                MbIcon(category.icon, size = 20.dp)
-            }
-        }
-        MbText(
-            category.name,
-            MbTheme.type.micro.copy(
-                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-            MbTheme.colors.inkSoft,
-            maxLines = 2,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
 }

@@ -137,61 +137,49 @@ struct BrandDTO: Decodable, Identifiable, Hashable {
     let productCount: Int
 }
 
-struct VariantDTO: Decodable, Identifiable, Hashable {
-    let id: Int
-    let kind: String
-    let label: String
-    let value: String
-    /// The product photographed in this colour, so the picker can show the
-    /// thing rather than ask the customer to imagine what `#0E0F12` looks like
-    /// on a shoe. None for sizes, and for a colour nobody photographed.
-    ///
-    /// Optional rather than defaulted: a synthesised `Decodable` only falls
-    /// back for optionals, so this is also what keeps an older backend from
-    /// failing the whole product page over one missing key.
+/// One colour the card comes in, with the photograph of it.
+///
+/// A colour is chosen by looking at the thing rather than at a hex circle, so
+/// the picker draws `imageUrl` and falls back to `hex` only for a colour with
+/// no picture — which only a draft can have, and a draft never reaches this
+/// app.
+struct ColourDTO: Decodable, Identifiable, Hashable {
+    var id: String { colour }
+    let colour: String
+    let hex: String
     let imageUrl: String?
     let inStock: Bool
-    /// How many of this colour are on the shelf.
-    ///
-    /// The product's own count is the whole shelf; this is the share of it
-    /// wearing one colour. The page asks the colour rather than the product,
-    /// because the photograph above is of one colour and the count under it has
-    /// to be about the thing being looked at. Nil on a size, and on a colour the
-    /// shop does not count apart — then the product's own count answers.
-    let stockLeft: Int?
+}
+
+/// One cell of the colour × size grid — the thing that is actually bought.
+///
+/// **Flat, where this used to be a tree.** A colour was a row and its sizes
+/// hung off it by `parentId`, which meant every count existed at two depths
+/// and a basket line named two ids that could disagree with each other. A
+/// variant is now the pair itself: "qora / 42", with its own barcode, its own
+/// price and its own count, and a basket line names one id.
+///
+/// The picker's job changed with it: choose a colour from `ProductDTO.colours`,
+/// then a size among the variants of that colour, and send that variant's `id`.
+struct VariantDTO: Decodable, Identifiable, Hashable {
+    let id: Int
+    let colour: String
+    let size: String
+    /// "Qora · 42", assembled by the server so three clients cannot spell it
+    /// three ways.
+    let label: String
+    let sku: String
+    /// Ours, printed by us. Market goods arrive with no usable code of their own.
+    let barcode: String
+    let price: Int
+    let inStock: Bool
+    /// What can still be bought: on a sellable shelf, less what is promised.
+    let stockLeft: Int
 }
 
 struct SpecDTO: Decodable, Hashable {
     let key: String
     let value: String
-}
-
-// MARK: - Offers
-
-struct SellerDTO: Decodable, Identifiable, Hashable {
-    let id: Int
-    let name: String
-}
-
-/// One seller's price for a product.
-///
-/// The card carries one price because one offer wins it; this is the list
-/// behind that number. Several sellers put the same thing on the same card, so
-/// "who am I buying from" is a question the page has to be able to answer, and
-/// until this was fetched it could not.
-struct OfferDTO: Decodable, Identifiable, Hashable {
-    let id: Int
-    let seller: SellerDTO
-    let price: Int
-    let oldPrice: Int?
-    let discountPercent: Int?
-    let stockLeft: Int
-    let inStock: Bool
-    /// Whose price the card is showing. Exactly one offer has it, or none.
-    let isWinner: Bool
-
-    /// Nothing to sell, whichever way the server says so.
-    var gone: Bool { !inStock || stockLeft <= 0 }
 }
 
 struct ProductCardDTO: Decodable, Identifiable, Hashable {
@@ -230,9 +218,10 @@ struct ProductDTO: Decodable, Identifiable {
     var isFavorite: Bool
     let category: CategoryDTO
     let brand: BrandDTO?
+    /// The colours first, because that is the order a person chooses in.
+    let colours: [ColourDTO]
     let variants: [VariantDTO]
     let specs: [SpecDTO]
-    let seller: String
     let warranty: String?
     let stockLeft: Int
     let isOriginal: Bool
@@ -391,9 +380,9 @@ struct CartDTO: Decodable {
 
 struct CartAddRequest: Encodable {
     let productId: Int
-    /// The size. A cart line carries a size *and* a colour.
+    /// One id, not two. It names a cell of the colour × size grid; a card with
+    /// no variation has exactly one and it may be left out.
     let variantId: Int?
-    let colorVariantId: Int?
     let quantity: Int
 }
 
@@ -470,29 +459,11 @@ struct SlotDayDTO: Decodable, Identifiable, Hashable {
 }
 
 // MARK: - Payment
-
-struct CardDTO: Decodable, Identifiable, Hashable {
-    let id: Int
-    let brand: String
-    let last4: String
-    let holder: String
-    let expiry: String
-    let status: String
-    let isDefault: Bool
-
-    var isExpired: Bool { status == "expired" }
-}
-
-struct CardRequest: Encodable {
-    let brand: String
-    let last4: String
-    let holder: String
-    let expiryMonth: Int
-    let expiryYear: Int
-    /// The app never sends a card number — only the processor's token.
-    let processorToken: String
-    let isDefault: Bool
-}
+//
+// There is no card vault behind this API any more. `CardDTO` and `CardRequest`
+// went with the marketplace: a shopper pays by card at checkout or in cash at
+// the door, and neither wants a stored PAN. `me/overview` still answers
+// `cardsCount`, at nought, so the profile screen keeps its shape.
 
 // MARK: - Orders
 
@@ -566,7 +537,6 @@ struct CheckoutRequest: Encodable {
     var pickupPointId: Int?
     var slotId: Int?
     var paymentMethod: String = "card"
-    var paymentCardId: Int?
     var recipientName: String = ""
     var recipientPhone: String = ""
     var promoCode: String?
@@ -578,7 +548,6 @@ struct CheckoutPreviewDTO: Decodable {
     let address: AddressDTO?
     let pickupPoint: PickupPointDTO?
     let slot: SlotDTO?
-    let card: CardDTO?
     let totals: CartTotalsDTO
 }
 

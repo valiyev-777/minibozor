@@ -1,5 +1,6 @@
 package uz.minibozor.ui.product
 
+import uz.minibozor.core.util.Features
 import uz.minibozor.core.util.AppStrings
 import uz.minibozor.R
 import androidx.lifecycle.ViewModel
@@ -16,9 +17,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.minibozor.core.util.Outcome
 import uz.minibozor.data.remote.dto.CartItemDto
-import uz.minibozor.data.remote.dto.OfferDto
 import uz.minibozor.data.remote.dto.ProductCardDto
 import uz.minibozor.data.remote.dto.ProductDto
+import uz.minibozor.data.remote.dto.VariantDto
 import uz.minibozor.data.remote.dto.ReviewDto
 import uz.minibozor.data.remote.dto.ReviewSummaryDto
 import uz.minibozor.data.repository.CartRepository
@@ -33,17 +34,26 @@ data class ProductState(
     val topReviews: List<ReviewDto> = emptyList(),
     val similar: List<ProductCardDto> = emptyList(),
     /**
-     * Every seller offering this product, cheapest first.
+     * The colour chosen, by name.
      *
-     * Empty while it is being fetched and on a product only the house sells, so
-     * the page shows the section when there is more than one of them and says
-     * nothing otherwise.
+     * A colour has no id any more and does not need one: it is a property of
+     * the cells, and the cells are what get bought. `colours` on the product
+     * carries the photograph and the swatch for each one.
      */
-    val offers: List<OfferDto> = emptyList(),
-    val selectedSizeId: Int? = null,
-    val selectedColorId: Int? = null,
+    val selectedColour: String? = null,
+    /** The cell chosen — one colour, one size, and the thing added to a cart. */
+    val selectedVariantId: Int? = null,
     val adding: Boolean = false,
-)
+) {
+    /** The sizes of the colour chosen, in the order the server sent them. */
+    val sizes: List<VariantDto>
+        get() = product?.variants.orEmpty().filter {
+            selectedColour == null || it.colour == selectedColour
+        }
+
+    val selectedVariant: VariantDto?
+        get() = product?.variants.orEmpty().firstOrNull { it.id == selectedVariantId }
+}
 
 /** Screen 14. */
 @HiltViewModel
@@ -69,20 +79,20 @@ class ProductViewModel @Inject constructor(
             when (val result = catalog.product(id)) {
                 is Outcome.Success -> {
                     val product = result.data
-                    // The colour first, then a size *of that colour*: sizes
-                    // are counted per colour, so preselecting the product's
-                    // first in-stock size could land on a size belonging to a
-                    // colour the page is not showing.
-                    val color = product.variants.firstOrNull { v -> v.kind == "color" }
+                    // The colour first, then a cell *of that colour*: a cell
+                    // carries its own count, so preselecting the product's
+                    // first in-stock cell could land on a colour the page is
+                    // not showing.
+                    val colour = product.colours.firstOrNull { it.inStock }
+                        ?: product.colours.firstOrNull()
                     _state.update {
                         it.copy(
                             loading = false,
                             product = product,
-                            selectedColorId = color?.id,
-                            selectedSizeId = product.variants
+                            selectedColour = colour?.colour,
+                            selectedVariantId = product.variants
                                 .firstOrNull { v ->
-                                    v.kind == "size" && v.inStock &&
-                                        (v.parentId == null || v.parentId == color?.id)
+                                    v.inStock && (colour == null || v.colour == colour.colour)
                                 }?.id,
                         )
                     }
@@ -92,46 +102,51 @@ class ProductViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            (catalog.reviewSummary(id) as? Outcome.Success)?.let { r ->
-                _state.update { it.copy(summary = r.data) }
-            }
-            (catalog.reviews(id, null, 1) as? Outcome.Success)?.let { r ->
-                _state.update { it.copy(topReviews = r.data.items.take(2)) }
+            // Both of these answer 404 while reviews are off, and the failure
+            // was already being swallowed — but a 404 swallowed on every
+            // product page open is still two round-trips and two lines of
+            // noise in the server's log. See core/util/Features.kt.
+            if (Features.REVIEWS) {
+                (catalog.reviewSummary(id) as? Outcome.Success)?.let { r ->
+                    _state.update { it.copy(summary = r.data) }
+                }
+                (catalog.reviews(id, null, 1) as? Outcome.Success)?.let { r ->
+                    _state.update { it.copy(topReviews = r.data.items.take(2)) }
+                }
             }
             (catalog.similar(id) as? Outcome.Success)?.let { r ->
                 _state.update { it.copy(similar = r.data) }
-            }
-            // Alongside the rest of the page rather than gating it: a product
-            // page whose price and photographs have arrived should draw, and
-            // the list of sellers is an addition to it, not a precondition.
-            (catalog.offers(id) as? Outcome.Success)?.let { r ->
-                _state.update { it.copy(offers = r.data) }
             }
         }
     }
 
     fun retry() = load(productId)
 
-    fun selectSize(id: Int) = _state.update { it.copy(selectedSizeId = id) }
+    fun selectSize(id: Int) = _state.update { it.copy(selectedVariantId = id) }
 
     /**
-     * A colour, and the size that goes with it.
+     * A colour, and the cell that goes with it.
      *
-     * Sizes belong to colours, so the size chosen a moment ago was a size of
-     * the colour being left behind — held on to, it would buy a cell of the
-     * grid the page is no longer showing. The same label is kept where the new
-     * colour has it in stock, which is what a customer switching between two
-     * colours of the same shirt means to happen; otherwise the first size the
-     * new colour actually has.
+     * A cell is a colour *and* a size, so the one chosen a moment ago belongs
+     * to the colour being left behind — kept, it would buy the wrong thing.
+     *
+     * **The size survives the change of colour even where it has sold out.** It
+     * used to be kept only while the new colour had it in stock and to fall
+     * back to whatever that colour did have, which quietly moved the customer
+     * off the size they came for: pick 41, tap through the colours, and you end
+     * up holding a 44 without being told. Now 41 stays 41, the chip is struck
+     * through, and the strip of photographs says which colours have it — that
+     * is the answer the tapping was trying to get at. Only a colour that does
+     * not come in this size at all forces a different one.
      */
-    fun selectColor(id: Int) = _state.update { s ->
-        val ofColor = s.product?.variants.orEmpty()
-            .filter { it.kind == "size" && it.parentId == id }
-        if (ofColor.isEmpty()) return@update s.copy(selectedColorId = id)
-        val kept = s.product?.variants?.firstOrNull { it.id == s.selectedSizeId }?.label
-        val next = ofColor.firstOrNull { it.label == kept && it.inStock }
-            ?: ofColor.firstOrNull { it.inStock }
-        s.copy(selectedColorId = id, selectedSizeId = next?.id)
+    fun selectColour(colour: String) = _state.update { s ->
+        val cells = s.product?.variants.orEmpty().filter { it.colour == colour }
+        if (cells.isEmpty()) return@update s.copy(selectedColour = colour)
+        val kept = s.selectedVariant?.size
+        val next = cells.firstOrNull { it.size == kept }
+            ?: cells.firstOrNull { it.inStock }
+            ?: cells.first()
+        s.copy(selectedColour = colour, selectedVariantId = next.id)
     }
 
     fun toggleFavorite() {
@@ -158,9 +173,7 @@ class ProductViewModel @Inject constructor(
     val cartLine: StateFlow<CartItemDto?> =
         combine(cart.cart, _state) { c, s ->
             c?.items?.lastOrNull {
-                it.productId == productId &&
-                    it.variantId == s.selectedSizeId &&
-                    it.colorVariantId == s.selectedColorId
+                it.productId == productId && it.variantId == s.selectedVariantId
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -172,14 +185,11 @@ class ProductViewModel @Inject constructor(
         if (current.adding) return
         _state.update { it.copy(adding = true) }
         viewModelScope.launch {
-            // Both, not one of the two: a cart line carries a size *and* a
-            // colour, and the picker sheet already sends both. Sending only the
-            // size here made the same shirt land as a second line with its
-            // colour lost.
+            // One id, because one cell is one colour and one size. It used to
+            // be two that could disagree with each other.
             val result = cart.add(
                 productId = product.id,
-                variantId = current.selectedSizeId,
-                colorVariantId = current.selectedColorId,
+                variantId = current.selectedVariantId,
             )
             _state.update { it.copy(adding = false) }
             onDone(

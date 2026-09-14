@@ -1,19 +1,24 @@
 """The last mile, from the phone in the courier's hand.
 
 ``UserRole.COURIER`` existed from the first stage and no router ever asked
-about it. An order did not record who was carrying it; there was no shift; a
-delivery left no evidence beyond a status; and cash — which a courier
-physically holds all day — was counted nowhere. This file is the whole of the
-courier's side, and every door in it is scoped to the caller: a courier reads
-their own round, their own shift, their own collections and nobody else's.
+about it: an order did not record who was carrying it, and a delivery left no
+evidence beyond a status. This file is the whole of the courier's side, and
+every door in it is scoped to the caller — a courier reads their own round,
+their own collections and nobody else's.
+
+**There is no shift.** There was one, with a cash total to open and close and
+count against; it went with the panels rebuild because it is not in this
+shop's flow — a courier's day is a list of doors, and what they took at each
+one is on the attempt. Cash reconciliation is a separate job for whoever
+wants it back, and it wants a screen before it wants a table.
 
 **Every write is keyed.** The app queues what it cannot send and retries, so
 the same request arrives twice as a matter of course. The header
 ``Idempotency-Key`` is required on all of them and the repeat replays the
 first answer rather than doing the thing again — see ``app.idempotency``. The
 sentence that design exists for is "delivered, 240 000 so'm at the door":
-without a key, a retry is a second sale off the shelf and a second 240 000 on
-the shift, and nobody notices until the courier is accused of being short.
+without a key, a retry is a second sale off the shelf, and nobody notices
+until the shelf is short.
 
 **A courier never decides to give up.** They record what happened at one door;
 an operator who can see three failures and phone the customer decides what
@@ -27,6 +32,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
+from sqlalchemy import update
 from sqlmodel import col, func, select
 
 from app import audit, i18n, inventory
@@ -34,10 +40,10 @@ from app import idempotency as idem
 from app import schemas as s
 from app import services as sv
 from app import transitions as tr
+from app.core.config import settings
 from app.deps import CourierUser, SessionDep
 from app.models import (
     AttemptResult,
-    CourierShift,
     DeliveryAttempt,
     Notification,
     NotificationKind,
@@ -49,7 +55,6 @@ from app.models import (
     PickupRun,
     PickupRunStatus,
     ReturnRequest,
-    ShiftStatus,
     User,
     utcnow,
 )
@@ -70,7 +75,7 @@ IdempotencyKey = Annotated[
 @router.get(
     "/orders",
     response_model=list[s.CourierOrderOut],
-    summary="My deliveries, in the order somebody planned",
+    summary="The ones I took, oldest promise first",
 )
 def my_orders(
     user: CourierUser,
@@ -81,9 +86,12 @@ def my_orders(
     """Mine and nobody else's — not a filter the caller chose but the only
     rows that exist for them.
 
-    Sorted by the sequence an operator set, then the delivery window, then the
-    code. An unsequenced round still comes back in a sensible order rather
-    than in whatever order the ids happen to fall.
+    Ordered by when the customer was promised it, then by code. Nobody plans
+    this round: a courier builds it themselves off the board, so the only
+    honest order is the one the promises are in. ``courier_sequence`` is still
+    read first and is nought on everything now that no operator sets it — the
+    column stays because dropping it is a migration for nothing, and a stop
+    somebody does want moved has a place to say so.
     """
     stmt = select(Order).where(Order.courier_id == user.id)
     if day is not None:
@@ -103,118 +111,162 @@ def my_orders(
     return [_order_out(session, order) for order in rows]
 
 
-# --------------------------------------------------------------------------- the shift
+# ------------------------------------------------------------------ the free board
 
 
 @router.get(
-    "/shifts/current",
-    response_model=s.ShiftDetailOut | None,
-    summary="My open shift, if I am out",
+    "/orders/available",
+    response_model=list[s.CourierOrderOut],
+    summary="Packed and waiting — anybody's to take",
 )
-def current_shift(user: CourierUser, session: SessionDep) -> s.ShiftDetailOut | None:
-    shift = _open_shift(session, user)
-    return _shift_detail(session, shift) if shift else None
+def available_orders(user: CourierUser, session: SessionDep) -> list[s.CourierOrderOut]:
+    """Every order the warehouse has packed and nobody has taken.
+
+    Nobody hands these out. An operator choosing who carries what meant a
+    packed order sat until somebody remembered to assign it, and a courier
+    standing in the warehouse could not pick up the parcel in front of them.
+    So the board is open: the warehouse says a parcel is ready, every courier
+    sees it, and the one who wants it takes it.
+
+    Oldest first, and that is the only order there is. A board sorted by value
+    would have couriers skimming the expensive stops and leaving the rest,
+    which is the incentive a flat delivery fee exists to avoid.
+    """
+    rows = session.exec(
+        select(Order)
+        .where(Order.status == OrderStatus.PACKING)
+        .where(col(Order.courier_id).is_(None))
+        .order_by(col(Order.delivery_day), col(Order.delivery_start), col(Order.created_at))
+    ).all()
+    return [_order_out(session, order) for order in rows]
 
 
 @router.post(
-    "/shifts",
-    response_model=s.ShiftDetailOut,
-    status_code=status.HTTP_201_CREATED,
-    summary="Start a round",
+    "/orders/{order_id}/take",
+    response_model=s.CourierOrderOut,
+    summary="I am carrying this one",
 )
-def open_shift(
+def take_order(
+    order_id: int,
     user: CourierUser,
     session: SessionDep,
     idempotency_key: IdempotencyKey,
-) -> s.ShiftDetailOut:
-    """One open shift at a time.
+) -> s.CourierOrderOut:
+    """Claim a packed order and walk out with it.
 
-    Two would mean cash landing on whichever one a request happened to find,
-    and no way afterwards to say which round a note came from. A courier who
-    already has one open gets it back rather than an error: the app is
-    probably retrying, and the answer to "start my shift" when it is already
-    started is the shift.
+    This is the handover, and it is one act rather than two: the courier
+    picking the parcel up off the warehouse shelf is what puts the order on
+    the road, so taking it moves ``packing → shipped``. There is no separate
+    "handed over" for somebody else to remember to press.
+
+    **Two couriers reaching for the same parcel is the case this has to get
+    right.** The claim writes ``courier_id`` only while it is still null and
+    checks that the write took, so the second one is told the parcel is gone
+    rather than quietly overwriting the first. That is also why the same
+    courier repeating the call is not an error — a queued retry from a phone
+    in a lift is the ordinary case, and it replays through the key.
     """
-    done = idem.replay(session, user, idempotency_key, "shift.open", None)
+    done = idem.replay(session, user, idempotency_key, "order.take", None)
     if done is not None:
-        return s.ShiftDetailOut(**done)
+        return s.CourierOrderOut(**done)
 
-    existing = _open_shift(session, user)
-    if existing is not None:
-        return _shift_detail(session, existing)
+    order = session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("order_not_found"))
+    if order.courier_id == user.id:
+        # Already mine. Not an error and not a second claim: the app queues
+        # and retries, and "I have it" is still true.
+        return _order_out(session, order)
+    if order.courier_id is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("order_taken"))
+    if order.status is not OrderStatus.PACKING:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("order_not_ready"))
 
-    shift = CourierShift(courier_id=user.id)
-    session.add(shift)
-    session.commit()
-    session.refresh(shift)
+    # Claim it where it is still unclaimed, and read back how many rows that
+    # touched. Nought means somebody else got there between the check above
+    # and this line, which is a race a check alone cannot close.
+    taken = session.exec(
+        update(Order)
+        .where(col(Order.id) == order.id)
+        .where(col(Order.courier_id).is_(None))
+        .values(courier_id=user.id, status=OrderStatus.SHIPPED, updated_at=sv.utcnow())
+    )
+    if taken.rowcount == 0:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("order_taken"))
 
-    out = _shift_detail(session, shift)
-    idem.keep(session, user, idempotency_key, "shift.open", None, out)
-    replayed = idem.commit(session, user, idempotency_key, "shift.open")
-    return s.ShiftDetailOut(**replayed) if replayed else out
-
-
-@router.post(
-    "/shifts/{shift_id}/close",
-    response_model=s.ShiftDetailOut,
-    summary="Come back, and hand the cash over",
-)
-def close_shift(
-    shift_id: int,
-    payload: s.ShiftCloseIn,
-    user: CourierUser,
-    session: SessionDep,
-    idempotency_key: IdempotencyKey,
-) -> s.ShiftDetailOut:
-    """The courier's claim about the money, recorded against ours.
-
-    ``cash_expected`` is the sum of the doors and is not editable here.
-    ``cash_declared`` is what the courier says they are handing over. The
-    office counts later, and the three figures are kept apart so a difference
-    is a fact rather than an argument. Closing writes an audit row whether
-    they agree or not — money moving is the thing that always gets a name
-    against it.
-    """
-    done = idem.replay(session, user, idempotency_key, "shift.close", payload)
-    if done is not None:
-        return s.ShiftDetailOut(**done)
-
-    shift = _own_shift(session, user, shift_id)
-    if shift.status is not ShiftStatus.OPEN:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("shift_closed"))
-
+    session.refresh(order)
     audit.record(
         session,
         actor=user,
-        action="shift.close",
-        entity="courier_shift",
-        entity_id=shift.id,
-        field="cash_declared",
-        old=shift.cash_expected,
-        new=payload.cash_declared,
-        note=(
-            payload.note
-            or (
-                ""
-                if payload.cash_declared == shift.cash_expected
-                else f"farq {payload.cash_declared - shift.cash_expected}"
-            )
-        ),
+        action="order.taken",
+        entity="order",
+        entity_id=order.id,
+        field="courier_id",
+        old=None,
+        new=user.id,
     )
-    shift.status = ShiftStatus.CLOSED
-    shift.cash_declared = payload.cash_declared
-    shift.closed_at = utcnow()
-    if payload.note:
-        shift.note = payload.note.strip()
-    session.add(shift)
-
-    out = _shift_detail(session, shift)
-    idem.keep(session, user, idempotency_key, "shift.close", payload, out)
-    replayed = idem.commit(session, user, idempotency_key, "shift.close")
+    sv.stamp_order_event(session, order)
+    session.add(
+        Notification(
+            user_id=order.user_id,
+            kind=NotificationKind.ORDER,
+            icon="truck",
+            title=i18n.label("event_shipped"),
+            text=i18n.label("order_shipped_note", code=order.code),
+            deep_link=f"minibozor://orders/{order.id}",
+        )
+    )
+    out = _order_out(session, order)
+    idem.keep(session, user, idempotency_key, "order.take", None, out)
+    replayed = idem.commit(session, user, idempotency_key, "order.take")
     if replayed:
-        return s.ShiftDetailOut(**replayed)
-    session.refresh(shift)
-    return _shift_detail(session, shift)
+        return s.CourierOrderOut(**replayed)
+    session.refresh(order)
+    return _order_out(session, order)
+
+
+# --------------------------------------------------------------------------- my worth
+
+
+@router.get(
+    "/earnings",
+    response_model=s.CourierEarningsOut,
+    summary="What I have delivered and what it came to",
+)
+def earnings(user: CourierUser, session: SessionDep) -> s.CourierEarningsOut:
+    """Counted off the attempts, not off the orders.
+
+    A delivery is an event with a time on it, and pay is a question about a
+    period — "what did I earn today" cannot be answered by an order's status,
+    which only says where the order ended up. The attempt rows are the day's
+    work, in order, with the cash on them.
+    """
+    fee = settings.courier_fee_per_delivery
+    mine = select(DeliveryAttempt).where(DeliveryAttempt.courier_id == user.id)
+
+    done = session.exec(mine.where(DeliveryAttempt.result == AttemptResult.DELIVERED)).all()
+    failed = session.exec(mine.where(DeliveryAttempt.result == AttemptResult.FAILED)).all()
+
+    today = utcnow().date()
+    day = [row for row in done if row.happened_at.date() == today]
+    month = [
+        row
+        for row in done
+        if (row.happened_at.year, row.happened_at.month) == (today.year, today.month)
+    ]
+
+    return s.CourierEarningsOut(
+        delivered_today=len(day),
+        delivered_month=len(month),
+        delivered_total=len(done),
+        fee_per_delivery=fee,
+        earned_today=len(day) * fee,
+        earned_month=len(month) * fee,
+        earned_total=len(done) * fee,
+        cash_on_hand=sum(row.cash_collected for row in done),
+        failed_attempts=len(failed),
+    )
 
 
 # --------------------------------------------------------------------------- the door
@@ -237,13 +289,15 @@ def deliver(
     A cash order becomes a sale here and not before: the goods were held for
     it from the moment it was placed and this is the moment they leave, which
     is the rule the rest of the system already keeps. Doing that twice would
-    take the same shirt off the shelf twice and put the same cash on the shift
-    twice — so this is keyed like everything else, and the key is the reason
-    the second arrival is free.
+    take the same shirt off the shelf twice — so this is keyed like everything
+    else, and the key is the reason the second arrival is free.
 
-    The cash figure has to match what is owed. A courier who mistypes it is
-    short at the end of the day with nothing to point at, and a mismatch is
-    far more likely to be a typo than a part payment we want to record.
+    The cash figure has to match what is owed. A courier who mistypes it has
+    nothing to point at afterwards, and a mismatch is far more likely to be a
+    typo than a part payment we want to record. The figure is kept on the
+    attempt: there is no shift to add it up on any more, so what a courier
+    took at the door is answered by their attempts rather than by a running
+    total somebody has to close.
     """
     done = idem.replay(session, user, idempotency_key, "order.deliver", payload)
     if done is not None:
@@ -251,10 +305,6 @@ def deliver(
 
     order = _own_order(session, user, order_id)
     tr.ensure(tr.ORDER_TRANSITIONS, order.status, OrderStatus.DELIVERED)
-
-    shift = _open_shift(session, user)
-    if shift is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("shift_required"))
 
     owed = _cash_due(order)
     if payload.cash_collected != owed:
@@ -267,7 +317,6 @@ def deliver(
         DeliveryAttempt(
             order_id=order.id,
             courier_id=user.id,
-            shift_id=shift.id,
             result=AttemptResult.DELIVERED,
             recipient_name=payload.recipient_name.strip(),
             photo_url=payload.photo_url.strip(),
@@ -291,22 +340,18 @@ def deliver(
         ),
     )
 
-    if not order.paid:
-        # Cash at the door. The goods leave the shelf now, because now is when
-        # it becomes a sale — the same two-step the operator's own status door
-        # keeps, and the reason ``inventory.sell`` is separate from ``take``.
-        order.paid = True
-        for line in inventory.order_items(session, order):
-            inventory.sell(session, line)
+    # The goods leave the building here, out of this courier's own bag: this
+    # is the door, and handing them over is the only thing that empties the
+    # room. Cash settles the money at the same moment and is a separate fact.
+    order.paid = True
+    inventory.hand_over(
+        session, order, actor=user, note=payload.recipient_name.strip()
+    )
 
     order.status = OrderStatus.DELIVERED
     order.updated_at = utcnow()
     session.add(order)
     sv.stamp_order_event(session, order, note=payload.note)
-
-    shift.cash_expected += owed
-    shift.orders_delivered += 1
-    session.add(shift)
 
     session.add(
         Notification(
@@ -356,12 +401,10 @@ def failed(
     if order.status is not OrderStatus.SHIPPED:
         raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("not_out_for_delivery"))
 
-    shift = _open_shift(session, user)
     session.add(
         DeliveryAttempt(
             order_id=order.id,
             courier_id=user.id,
-            shift_id=shift.id if shift else None,
             result=AttemptResult.FAILED,
             reason=payload.reason.strip(),
             photo_url=payload.photo_url.strip(),
@@ -378,10 +421,6 @@ def failed(
         new=_attempts(session, order.id),
         note=payload.reason.strip(),
     )
-    if shift is not None:
-        shift.orders_failed += 1
-        session.add(shift)
-
     # The timeline is not touched: an attempt is not a step the customer's
     # order took, and writing one would put "delivered" in their history
     # before it was true.
@@ -508,16 +547,6 @@ def _own_order(session: SessionDep, user: User, order_id: int) -> Order:
         raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("not_your_delivery"))
     return order
 
-
-def _own_shift(session: SessionDep, user: User, shift_id: int) -> CourierShift:
-    shift = session.get(CourierShift, shift_id)
-    if shift is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("shift_not_found"))
-    if shift.courier_id != user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("not_your_shift"))
-    return shift
-
-
 def _own_run(session: SessionDep, user: User, run_id: int) -> PickupRun:
     run = session.get(PickupRun, run_id)
     if run is None:
@@ -525,16 +554,6 @@ def _own_run(session: SessionDep, user: User, run_id: int) -> PickupRun:
     if run.courier_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("not_your_pickup"))
     return run
-
-
-def _open_shift(session: SessionDep, user: User) -> CourierShift | None:
-    return session.exec(
-        select(CourierShift).where(
-            CourierShift.courier_id == user.id,
-            CourierShift.status == ShiftStatus.OPEN,
-        )
-    ).first()
-
 
 def _cash_due(order: Order) -> int:
     """What to ask for at the door.
@@ -594,65 +613,6 @@ def _order_out(session: SessionDep, order: Order) -> s.CourierOrderOut:
         attempts=len(tried),
         last_failure=last.reason if last else "",
     )
-
-
-def _shift_detail(session: SessionDep, shift: CourierShift) -> s.ShiftDetailOut:
-    courier = session.get(User, shift.courier_id)
-    rows = session.exec(
-        select(DeliveryAttempt)
-        .where(DeliveryAttempt.shift_id == shift.id)
-        .order_by(col(DeliveryAttempt.happened_at))
-    ).all()
-    codes = {
-        order.id: order.code
-        for order in session.exec(
-            select(Order).where(col(Order.id).in_([a.order_id for a in rows] or [-1]))
-        ).all()
-    }
-    return s.ShiftDetailOut(
-        **_shift_out(session, shift, courier).model_dump(),
-        attempts=[
-            s.DeliveryAttemptOut(
-                id=a.id,
-                order_id=a.order_id,
-                order_code=codes.get(a.order_id, f"#{a.order_id}"),
-                result=a.result,
-                reason=a.reason,
-                recipient_name=a.recipient_name,
-                photo_url=sv.media_url(a.photo_url),
-                cash_collected=a.cash_collected,
-                happened_at=a.happened_at,
-            )
-            for a in rows
-        ],
-    )
-
-
-def _shift_out(
-    session: SessionDep, shift: CourierShift, courier: User | None = None
-) -> s.ShiftOut:
-    who = courier or session.get(User, shift.courier_id)
-    return s.ShiftOut(
-        id=shift.id,
-        courier_id=shift.courier_id,
-        courier_name=(who.full_name or who.phone) if who else f"#{shift.courier_id}",
-        status=shift.status,
-        opened_at=shift.opened_at,
-        closed_at=shift.closed_at,
-        cash_expected=shift.cash_expected,
-        cash_declared=shift.cash_declared,
-        cash_counted=shift.cash_counted,
-        # Against what the doors add up to, not against what the courier
-        # said: the courier's word is one of the claims being checked.
-        difference=(
-            None if shift.cash_counted is None else shift.cash_counted - shift.cash_expected
-        ),
-        counted_at=shift.counted_at,
-        orders_delivered=shift.orders_delivered,
-        orders_failed=shift.orders_failed,
-        note=shift.note,
-    )
-
 
 def _run_out(session: SessionDep, run: PickupRun) -> s.PickupRunOut:
     courier = session.get(User, run.courier_id)

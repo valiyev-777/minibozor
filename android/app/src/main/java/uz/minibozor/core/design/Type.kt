@@ -2,18 +2,39 @@ package uz.minibozor.core.design
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.sp
+import uz.minibozor.R
 
 /**
- * The design is set in Plus Jakarta Sans. Drop the five TTFs into
- * `res/font/` (plus_jakarta_sans_regular.ttf, _medium, _semibold, _bold,
- * _extrabold) and swap [JakartaSans] for a real [FontFamily] — every style
- * below already asks for the right weight, so nothing else changes.
+ * The design is set in Plus Jakarta Sans, and now so is the app.
+ *
+ * It used to be [FontFamily.SansSerif], which on Android is Roboto — so every
+ * style below was asking Roboto for weights and tracking that were measured on
+ * a different face. The negative letter-spacing is the tell: it is there
+ * because Jakarta's counters are open and its ExtraBold is wide, and applied to
+ * Roboto it just made a tight face tighter.
+ *
+ * Five weights, static instances rather than the variable font: `Font(…,
+ * variationSettings)` needs API 26 anyway and a static per weight is one
+ * `Typeface` each with nothing to interpolate at draw time.
+ *
+ * The face covers Latin, Latin Extended and the punctuation this app sets —
+ * `−` for a discount and `★` for a rating, both of which were checked rather
+ * than assumed. It has no Cyrillic, so the Russian locale falls back to the
+ * system face for its own alphabet; the numerals and the punctuation around
+ * them stay Jakarta.
  */
-val JakartaSans: FontFamily = FontFamily.SansSerif
+val JakartaSans: FontFamily = FontFamily(
+    Font(R.font.plus_jakarta_sans_regular, FontWeight.Normal),
+    Font(R.font.plus_jakarta_sans_medium, FontWeight.Medium),
+    Font(R.font.plus_jakarta_sans_semibold, FontWeight.SemiBold),
+    Font(R.font.plus_jakarta_sans_bold, FontWeight.Bold),
+    Font(R.font.plus_jakarta_sans_extrabold, FontWeight.ExtraBold),
+)
 
 private fun mb(
     size: Double,

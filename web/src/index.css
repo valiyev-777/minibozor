@@ -1,0 +1,164 @@
+@import "tailwindcss";
+@import "./fonts.css";
+@import "../../shared/theme.css";
+
+/* --------------------------------------------------------------- dark by class
+ *
+ * Tailwind's `dark:` normally keys off the operating system. Here it keys off
+ * the `.dark` class that `lib/theme.tsx` puts on `<html>`, so `dark:` and the
+ * palette in `shared/theme.css` are switched by the same thing rather than
+ * disagreeing whenever somebody's laptop decides it is evening. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* --------------------------------------------------------------- two vocabularies
+ *
+ * `shared/theme.css` is the design system: `ink`, `line`, `surface`, `brand`,
+ * `good`, `warn`, `danger`, and a radius named for what it wraps. Everything
+ * written here uses those names, and no screen invents a colour.
+ *
+ * shadcn's components arrive speaking a different vocabulary — `background`,
+ * `foreground`, `primary`, `muted`, `destructive` — because they are written
+ * to be dropped into any project. Rather than rewrite each one by hand (which
+ * is how a component drifts from the next copy somebody pastes in), the two
+ * vocabularies are bound together **here, once**. These are aliases, not a
+ * second palette: every value on the right is a token from the file above.
+ */
+@theme inline {
+  --color-background: var(--color-canvas);
+  --color-foreground: var(--color-ink);
+
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-ink);
+
+  --color-primary: var(--color-brand);
+  --color-primary-foreground: var(--color-brand-ink);
+  --color-secondary: var(--color-line-soft);
+  --color-secondary-foreground: var(--color-ink);
+
+  --color-muted: var(--color-line-soft);
+  --color-muted-foreground: var(--color-ink-soft);
+  --color-accent: var(--color-brand-soft);
+  --color-accent-foreground: var(--color-brand-deep);
+
+  --color-destructive: var(--color-danger);
+  --color-destructive-foreground: var(--color-danger-ink);
+
+  --color-border: var(--color-line);
+  --color-input: var(--color-line);
+  --color-ring: var(--color-brand);
+
+  --radius-sm: var(--radius-control);
+  --radius-md: var(--radius-control);
+  --radius-lg: var(--radius-panel);
+  --radius-xl: var(--radius-panel);
+}
+
+/* The one thing the app adds on its own: a control height that follows the
+ * density class rather than a fixed number, so the same button is a desk
+ * button in the office and a glove-sized one in the warehouse. */
+@utility h-control {
+  height: var(--control-md);
+}
+
+@utility h-control-lg {
+  height: var(--control-lg);
+}
+
+@utility h-control-sm {
+  height: var(--control-sm);
+}
+
+/* Square, for a button that is only an icon: one token, so the icon button in
+ * a row is exactly as tall as the text button beside it. */
+@utility size-control {
+  height: var(--control-md);
+  width: var(--control-md);
+}
+
+@utility size-control-sm {
+  height: var(--control-sm);
+  width: var(--control-sm);
+}
+
+@utility size-control-lg {
+  height: var(--control-lg);
+  width: var(--control-lg);
+}
+
+/* The vertical padding of a table cell, which is the one number that decides
+ * how many rows a desk sees at once. It moves with density like everything
+ * else, so a courier's list is not the office's list with bigger text. */
+@utility py-cell {
+  padding-block: var(--cell-y);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    font-family: var(--font-sans);
+  }
+
+  /* Printing is a real output here — label sheets and cell labels — so the
+   * page furniture gets out of the way rather than being screenshotted. */
+  @media print {
+    .no-print {
+      display: none !important;
+    }
+
+    body {
+      background: white;
+    }
+  }
+}
+
+@layer components {
+  /* ------------------------------------------------------------- the table
+   *
+   * Rows carry **no bottom border**. A striped table with rules as well is a
+   * grid of boxes: two devices doing one job, and the eye ends up tracking
+   * neither. The stripe is the row separator, the hover is the row under the
+   * cursor, and the only hairline in the whole table is under its header.
+   *
+   * Written as a component class rather than as classes on every `<tr>`
+   * because the striping is `:nth-child`, which a utility cannot say, and
+   * because every table in the app then gets it by putting one word on the
+   * `<table>` — which is the difference between one table and eleven. */
+  .table-striped tbody tr {
+    border-bottom: none;
+  }
+
+  .table-striped tbody tr:nth-child(odd) {
+    background: color-mix(in oklab, var(--color-line-soft) 60%, transparent);
+  }
+
+  .table-striped tbody tr:hover {
+    background: var(--color-line-soft);
+  }
+
+  /* A thin, brand-coloured horizontal scrollbar for a wide table. The default
+   * one is a 15px grey slab that eats a row's worth of height and reads as a
+   * piece of furniture; this reads as an indicator, which is all it is. */
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-brand) transparent;
+  }
+
+  .scroll-slim::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+
+  .scroll-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scroll-slim::-webkit-scrollbar-thumb {
+    background-color: var(--color-brand);
+    border-radius: 999px;
+  }
+}

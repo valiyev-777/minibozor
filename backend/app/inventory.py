@@ -1,27 +1,27 @@
-"""What comes off the shelf, and what goes back on it.
+"""What an order does to the room.
 
-Placing an order moved four counts — the product's stock, each chosen
-variant's stock, the product's sold count, and a seat in the delivery window —
-and cancelling one moved none of them back. The goods vanished, the order
-stayed "sold", and the freed window was never offered to anybody else. The
-cause was not a missing line in the cancel handler so much as the shape of the
-code: taking was thirty lines inlined in ``create_order`` and giving back was
-nowhere, so there was nothing for the two halves to be checked against.
+Placing an order used to move four counts and cancelling one moved none of
+them back: the goods vanished, the order stayed "sold", and the freed delivery
+window was never offered to anybody else. So both halves live here, they read
+the same snapshot, and every count that moves writes an audit row in the
+caller's transaction.
 
-So both halves live here, they read the same snapshot, and every count that
-moves writes an audit row in the caller's transaction. Two rules:
+**Money does not move goods.** That is the change this file exists to carry.
+An order being paid for used to take the goods off the shelf; now it holds
+them, and they physically leave when a courier hands them over at a door. The
+two are different events with different evidence — a payment is a row on an
+order, a delivery is a move in the ledger — and the shop was only ever able to
+answer "where is it" for one of them.
 
-* **The order line is the record.** ``take`` and the ``restore``/``restock``
-  pair work from ``OrderItem``, which carries the offer, the product and both
-  variant ids. The cart line it came from is deleted when the order is placed,
-  so anything not snapshotted there cannot be given back.
-* **The shelf belongs to an offer, and it is a ledger.** The counts that move
-  are the seller's, and they move by writing a row in ``stock_movements``
-  through ``app.stock.move`` — never by assignment. ``Offer.stock_left`` is a
-  running total of that ledger, and the figures on ``Product`` and
-  ``ProductVariant`` are a cache of whichever offer is winning, recomputed by
-  ``app.offers.refresh`` after every movement. What the advertised figures did
-  as a result is logged beside what the shelf did.
+Three rules:
+
+* **The order line is the record.** ``take`` and the giving-back pair work
+  from ``OrderItem``, which carries the product and the variant. The cart line
+  it came from is deleted when the order is placed, so anything not
+  snapshotted there cannot be given back.
+* **Every move names two places.** Goods leave the shelves through
+  ``app.stock.take_from_shelf``, which draws from the nearest place first and
+  splits across two cells when one does not hold enough.
 * **Nothing is restored twice.** Both entry points are guarded by a status
   that can only be reached once — cancelled from placed or packing, refunded
   from approved — so the counts move exactly as often as the decision is made.
@@ -32,12 +32,12 @@ from __future__ import annotations
 from sqlmodel import Session, select
 
 from app import audit
-from app import offers as of
+from app import locations as loc
+from app import products as pr
 from app import stock as st
 from app.models import (
     DeliverySlot,
-    Offer,
-    OfferVariant,
+    Location,
     Order,
     OrderItem,
     Product,
@@ -53,83 +53,101 @@ def order_items(session: Session, order: Order) -> list[OrderItem]:
     )
 
 
-def _leaves(session: Session, item: OrderItem) -> list[int]:
-    """The one count this line sits on, if it sits on one.
+def _variant(session: Session, item: OrderItem) -> ProductVariant | None:
+    """The cell of the grid this line was bought from.
 
-    The size where a size was chosen, the colour otherwise, and neither where
-    the customer named no variant at all — there the offer's own total is the
-    whole answer. One leaf, not both: a size and its colour are the same goods
-    counted at two depths, and moving both would take the same shirt off the
-    shelf twice.
+    ``None`` on a line written before every card had variants, which is a line
+    with no shelf to move: there is no telling which colour or size it was,
+    and inventing one would be worse than leaving it.
     """
-    if item.offer_id is None:
-        return []
-    for variant_id in (item.variant_id, item.color_variant_id):
-        if variant_id is None:
-            continue
-        row = session.exec(
-            select(OfferVariant).where(
-                OfferVariant.offer_id == item.offer_id,
-                OfferVariant.variant_id == variant_id,
-            )
-        ).first()
-        if row is not None:
-            return [variant_id]
-    return []
+    if item.variant_id is None:
+        return None
+    return session.get(ProductVariant, item.variant_id)
 
 
 # --------------------------------------------------------------------------- taking
 
 
 def take(session: Session, item: OrderItem) -> None:
-    """One line of a new order: off the seller's shelf, onto the sold count.
+    """One line of a new order.
 
-    A colour and a size are each counted apart from the shelf they stand on,
-    so buying two blue 42s comes off the blue and off the 42 as well as off
-    the total — otherwise the page keeps offering a colour or a size that has
-    gone while the product itself looks fine.
+    Nothing moves. The goods are held for the order — which
+    ``app.stock.reserved`` reads off the order itself — and they stand where
+    they stood until somebody picks them.
 
-    No audit row: nothing here is a decision. The order is the record of it,
-    and it is one ``select`` away.
+    The sold count is a fact about the card's popularity rather than about the
+    shelf, so it moves here, where the buying happened.
     """
     product = session.get(Product, item.product_id) if item.product_id else None
     if product is None:
         return
-
-    # Sold is a fact about the thing, whoever sold it, so it stays on the
-    # product rather than on one seller's offer.
     product.sold_count += item.quantity
     session.add(product)
-    sell(session, item)
+    pr.refresh(session, product.id)
 
 
-def sell(session: Session, item: OrderItem) -> None:
-    """The goods leaving the shelf, and nothing else.
+def hand_over(
+    session: Session,
+    order: Order,
+    *,
+    actor: User | None,
+    note: str = "",
+) -> None:
+    """The goods leave the building, which is what a delivery is.
 
-    Apart from ``take`` because the two halves happen at different moments for
-    a cash order: it is counted as sold when it is placed, and the goods only
-    actually leave when the courier is paid at the door. Until then they are
-    held for it rather than gone from it.
+    Taken from wherever they actually are: the courier's own bag if the parcel
+    was handed to them, then the packing area if it was picked but never
+    loaded, and the shelves if neither — which is the ordinary case until
+    there are pick tasks to walk. Nothing here is a status: the order's own
+    status is moved by the caller, and this is only the room emptying.
     """
-    product = session.get(Product, item.product_id) if item.product_id else None
-    offer = session.get(Offer, item.offer_id) if item.offer_id else None
-    if product is None:
-        return
-    if offer is not None:
-        for variant_id in _leaves(session, item) or [None]:
+    bag = (
+        loc.for_courier(session, order.courier_id)
+        if order.courier_id is not None
+        else None
+    )
+    packing = loc.staging(session, loc.YIGIM)
+
+    touched: set[int] = set()
+    for item in order_items(session, order):
+        variant = _variant(session, item)
+        if variant is None:
+            continue
+        left = item.quantity
+        for place in (bag, packing):
+            if left <= 0 or place is None:
+                continue
+            here = min(left, st.at(session, place.id, variant.id))
+            if here <= 0:
+                continue
             st.move(
                 session,
-                offer=offer,
-                kind=StockMovementKind.SALE,
-                quantity=item.quantity,
-                variant_id=variant_id,
-                order_id=item.order_id,
-                reason=f"{item.title} × {item.quantity}",
+                variant=variant,
+                qty=here,
+                kind=StockMovementKind.DELIVERED,
+                frm=place,
+                to=None,
+                actor=actor,
+                reason=note or item.title,
+                order_id=order.id,
             )
-    # The card's price and stock follow from whose offer is now winning, which
-    # this may just have changed — a seller selling out hands the card to the
-    # next cheapest.
-    of.refresh(session, product.id)
+            left -= here
+        if left > 0:
+            st.take_from_shelf(
+                session,
+                variant,
+                left,
+                kind=StockMovementKind.DELIVERED,
+                to=None,
+                actor=actor,
+                reason=note or item.title,
+                order_id=order.id,
+            )
+        if item.product_id is not None:
+            touched.add(item.product_id)
+
+    for product_id in sorted(touched):
+        pr.refresh(session, product_id)
 
 
 # --------------------------------------------------------------------------- giving back
@@ -142,178 +160,163 @@ def restore_order(
     actor: User | None,
     action: str,
     note: str = "",
-    shelf: bool = True,
 ) -> None:
     """Everything a cancelled order took, back where it came from.
 
-    All four counts, because none of it happened: the goods never left, so
-    they are on the shelf and were never sold, and the window is free for
-    somebody else.
-
-    ``shelf=False`` for an order that was never paid: its goods were only ever
-    held for it, not taken off the shelf, and the hold ends when the order
-    does. Putting them "back" would create stock out of nothing.
+    Which is less than it used to be. The goods never left — being sold
+    stopped moving them — so what is owed is the sold count, the delivery
+    window, and putting back anything already fetched for this order that is
+    standing in the packing area or in a courier's bag.
     """
     for item in order_items(session, order):
-        _give_back_line(
-            session,
-            item,
-            actor=actor,
-            action=action,
-            note=note,
-            unsell=True,
-            shelf=shelf,
-            # Nothing about a cancelled order happened, so the goods come back
-            # as goods that never left.
-            kind=StockMovementKind.CANCEL_RETURN,
-        )
+        _unpick(session, item, order, actor=actor, note=note)
+        _unsell(session, item, actor=actor, action=action, note=note)
     _give_back_seat(session, order, actor=actor, action=action, note=note)
 
 
-def restock_returned(
+def came_back(
     session: Session,
     items: list[OrderItem],
     *,
     actor: User | None,
-    action: str,
     note: str = "",
+    damaged: bool = False,
 ) -> None:
-    """Goods that came back and passed inspection, back on the shelf.
+    """A customer's parcel, arriving back in the building.
 
-    The shelf and the variants only. This was a real sale that a real customer
-    took delivery of, and the sold count is the record of that having happened
-    rather than of the money having stayed — a refund does not un-sell it. The
-    delivery window is not given back either: it was used.
+    Two moves and not one, because they are two different facts: the goods
+    came back — from outside, into the returns corner — and then somebody
+    decided what they were. Whole goods go on to the receiving area and are
+    for sale again; damaged ones go to the damaged corner, where they are
+    still in the building, still counted, and not for sale.
+
+    Recording only the second would leave the room unable to say a parcel had
+    arrived until somebody had judged it.
     """
+    returns = loc.staging(session, loc.QAYTGAN)
+    onward = loc.staging(session, loc.BRAK if damaged else loc.QABUL)
+    kind = StockMovementKind.DAMAGE if damaged else StockMovementKind.RELIST
+
+    touched: set[int] = set()
     for item in items:
-        _give_back_line(
+        variant = _variant(session, item)
+        if variant is None:
+            continue
+        st.move(
             session,
-            item,
+            variant=variant,
+            qty=item.quantity,
+            kind=StockMovementKind.RETURN,
+            frm=None,
+            to=returns,
             actor=actor,
-            action=action,
-            note=note,
-            unsell=False,
-            # This one did happen: it was bought, delivered, and came back.
-            kind=StockMovementKind.CUSTOMER_RETURN,
+            reason=note or item.title,
+            order_id=item.order_id,
+        )
+        st.move(
+            session,
+            variant=variant,
+            qty=item.quantity,
+            kind=kind,
+            frm=returns,
+            to=onward,
+            actor=actor,
+            reason=note or item.title,
+            order_id=item.order_id,
+        )
+        if item.product_id is not None:
+            touched.add(item.product_id)
+
+    for product_id in sorted(touched):
+        pr.refresh(session, product_id)
+
+
+def _unpick(
+    session: Session,
+    item: OrderItem,
+    order: Order,
+    *,
+    actor: User | None,
+    note: str,
+) -> None:
+    """Anything already fetched for this order, back into the receiving area.
+
+    Not back into the cell it came from. The cell is known — the ledger says
+    so — but the goods are in somebody's hands by the door, and telling them
+    to walk it back to A-02-03 is a rule that gets ignored. ``QABUL`` is where
+    unplaced goods live, and the putaway queue is what gets them home.
+    """
+    variant = _variant(session, item)
+    if variant is None:
+        return
+    receiving = loc.staging(session, loc.QABUL)
+    places: list[Location] = [loc.staging(session, loc.YIGIM)]
+    if order.courier_id is not None:
+        places.append(loc.for_courier(session, order.courier_id))
+
+    for place in places:
+        here = min(item.quantity, st.at(session, place.id, variant.id))
+        if here <= 0:
+            continue
+        st.move(
+            session,
+            variant=variant,
+            qty=here,
+            kind=StockMovementKind.MOVE,
+            frm=place,
+            to=receiving,
+            actor=actor,
+            reason=note or item.title,
+            order_id=order.id,
         )
 
 
-def _give_back_line(
+def _unsell(
     session: Session,
     item: OrderItem,
     *,
     actor: User | None,
     action: str,
     note: str,
-    unsell: bool,
-    kind: StockMovementKind,
-    shelf: bool = True,
 ) -> None:
+    """The sold count, and what the card is advertising as a result.
+
+    Both logged, and logged as what they are: one is a decision somebody made
+    and the other is a consequence of it.
+    """
     product = session.get(Product, item.product_id) if item.product_id else None
     if product is None:
         return
+    before = pr.on_shelf(session, product.id)
 
-    offer = session.get(Offer, item.offer_id) if item.offer_id else None
-    before = _cache_snapshot(session, product)
+    audit.record(
+        session,
+        actor=actor,
+        action=action,
+        entity="product",
+        entity_id=product.id,
+        field="sold_count",
+        old=product.sold_count,
+        new=max(0, product.sold_count - item.quantity),
+        note=note,
+    )
+    product.sold_count = max(0, product.sold_count - item.quantity)
+    session.add(product)
 
-    if offer is not None and shelf:
-        # The ledger, not an audit row: the movement carries who did it and
-        # why, which is what an audit row was standing in for while the shelf
-        # was a number somebody assigned.
-        for variant_id in _leaves(session, item) or [None]:
-            st.move(
-                session,
-                offer=offer,
-                kind=kind,
-                quantity=item.quantity,
-                variant_id=variant_id,
-                actor=actor,
-                reason=note or item.title,
-                order_id=item.order_id,
-            )
-    # A line with no offer has no shelf to put anything back onto: the seller
-    # it was bought from cannot be named, so inventing a count for one of them
-    # would be worse than leaving it. Every line written since offers exist
-    # carries one, and the migration filled the older ones in.
-
-    if unsell:
-        _log(
+    pr.refresh(session, product.id)
+    now = pr.on_shelf(session, product.id)
+    if now != before:
+        audit.record(
             session,
             actor=actor,
             action=action,
             entity="product",
             entity_id=product.id,
-            field="sold_count",
-            old=product.sold_count,
-            new=max(0, product.sold_count - item.quantity),
+            field="stock_left",
+            old=before,
+            new=now,
             note=note,
         )
-        product.sold_count = max(0, product.sold_count - item.quantity)
-        session.add(product)
-
-    # The advertised figures follow the shelf, and are logged as what they are:
-    # a consequence. With one seller they move by the same amount; with
-    # several, giving stock back to the dearer seller may not move the card at
-    # all, and that is worth being able to read afterwards.
-    of.refresh(session, product.id)
-    _log_cache_moves(
-        session, product, before, actor=actor, action=action, note=note
-    )
-
-
-def _cache_snapshot(session: Session, product: Product) -> dict:
-    """The figures the shop is advertising, before the shelf moves under them."""
-    return {
-        "stock_left": product.stock_left,
-        "price": product.price,
-        "variants": {
-            v.id: v.stock_left
-            for v in session.exec(
-                select(ProductVariant).where(ProductVariant.product_id == product.id)
-            ).all()
-        },
-    }
-
-
-def _log_cache_moves(
-    session: Session,
-    product: Product,
-    before: dict,
-    *,
-    actor: User | None,
-    action: str,
-    note: str,
-) -> None:
-    for field in ("stock_left", "price"):
-        now = getattr(product, field)
-        if now != before[field]:
-            _log(
-                session,
-                actor=actor,
-                action=action,
-                entity="product",
-                entity_id=product.id,
-                field=field,
-                old=before[field],
-                new=now,
-                note=note,
-            )
-    for variant in session.exec(
-        select(ProductVariant).where(ProductVariant.product_id == product.id)
-    ).all():
-        was = before["variants"].get(variant.id)
-        if variant.stock_left != was:
-            _log(
-                session,
-                actor=actor,
-                action=action,
-                entity="product_variant",
-                entity_id=variant.id,
-                field="stock_left",
-                old=was,
-                new=variant.stock_left,
-                note=note or variant.label,
-            )
 
 
 def _give_back_seat(
@@ -329,7 +332,7 @@ def _give_back_seat(
     slot = session.get(DeliverySlot, order.slot_id)
     if slot is None:
         return
-    _log(
+    audit.record(
         session,
         actor=actor,
         action=action,
@@ -342,12 +345,3 @@ def _give_back_seat(
     )
     slot.capacity_left += 1
     session.add(slot)
-
-
-def _log(session: Session, **kwargs) -> None:
-    """Every count that moves, in the caller's transaction.
-
-    Written here rather than in the endpoints so that there is no way to put
-    stock back without saying who did it and what the figure was before.
-    """
-    audit.record(session, **kwargs)

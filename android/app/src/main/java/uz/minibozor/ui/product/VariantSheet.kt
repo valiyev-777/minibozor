@@ -26,10 +26,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -50,6 +52,7 @@ import uz.minibozor.core.util.grouped
 import uz.minibozor.core.util.sum
 import uz.minibozor.core.util.toColor
 import uz.minibozor.data.remote.dto.ProductCardDto
+import uz.minibozor.data.remote.dto.ColourDto
 import uz.minibozor.data.remote.dto.VariantDto
 
 /**
@@ -93,7 +96,7 @@ fun VariantSheet(
                     stringResource(
                         // Nothing to choose on a product without variants, so
                         // it does not ask the customer to choose anything.
-                        if (state.colors.isEmpty() && state.sizes.isEmpty()) {
+                        if (state.colours.isEmpty() && state.sizes.isEmpty()) {
                             R.string.savatga_qoshish
                         } else {
                             R.string.xususiyatlarni_tanlang
@@ -126,39 +129,48 @@ fun VariantSheet(
                 if (state.loading) {
                     Box(Modifier.fillMaxWidth().height(140.dp)) { MbLoading() }
                 } else {
-                    if (state.colors.isNotEmpty()) {
+                    if (state.colours.isNotEmpty()) {
                         Spacer(Modifier.height(20.dp))
-                        Label(
-                            stringResource(R.string.rang),
-                            state.selectedColor?.label.orEmpty(),
-                        )
+                        Label(stringResource(R.string.rang), state.colour.orEmpty())
                         Spacer(Modifier.height(10.dp))
-                        ColorRow(state.colors, state.colorId, viewModel::selectColor)
+                        // Sold out *in the size in hand*, the same question the
+                        // product page's strip answers. See [ProductScreen].
+                        val wanted = state.selected?.size?.takeIf { it.isNotBlank() }
+                        val cells = state.product?.variants.orEmpty()
+                        ColorRow(
+                            colors = state.colours,
+                            selected = state.colour,
+                            soldOut = state.colours
+                                .filter { colour ->
+                                    if (wanted == null) {
+                                        !colour.inStock
+                                    } else {
+                                        cells.none {
+                                            it.colour == colour.colour &&
+                                                it.size == wanted &&
+                                                it.inStock
+                                        }
+                                    }
+                                }
+                                .map { it.colour }
+                                .toSet(),
+                            onSelect = viewModel::selectColour,
+                        )
                     }
                     if (state.sizes.isNotEmpty()) {
                         Spacer(Modifier.height(20.dp))
                         Label(
                             stringResource(R.string.olcham),
-                            state.selectedSize?.label.orEmpty(),
+                            state.selected?.size.orEmpty(),
                         )
                         Spacer(Modifier.height(10.dp))
-                        SizeRow(state.sizes, state.sizeId, viewModel::selectSize)
-                        // The same note the product page puts under its size
-                        // row: how many of the one in hand.
-                        val left = state.selectedSize?.stockLeft
-                        if (left != null && left > 0) {
-                            Spacer(Modifier.height(9.dp))
-                            MbText(
-                                stringResource(R.string.n_dona_qoldi, left),
-                                MbTheme.type.caption,
-                                if (left <= SheetLowStock) {
-                                    MbTheme.colors.danger
-                                } else {
-                                    MbTheme.colors.textTertiary
-                                },
-                                maxLines = 1,
-                            )
-                        }
+                        SizeRow(state.sizes, state.variantId, viewModel::selectSize)
+                        // No count under the row. The shelf is not quoted to a
+                        // customer anywhere any more; the stepper below stops
+                        // at the last one and says the figure there, which is
+                        // the only moment the number answers anything. Same
+                        // rule as the product page.
+
                     }
                 }
 
@@ -253,26 +265,33 @@ private fun Label(name: String, value: String) {
  * actually made. A colour with no photograph keeps its swatch.
  */
 @Composable
-private fun ColorRow(colors: List<VariantDto>, selectedId: Int?, onSelect: (Int) -> Unit) {
+private fun ColorRow(
+    colors: List<ColourDto>,
+    selected: String?,
+    soldOut: Set<String>,
+    onSelect: (String) -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         colors.forEach { color ->
-            val selected = color.id == selectedId
+            val isSelected = color.colour == selected
+            val gone = color.colour in soldOut || !color.inStock
             Box(
                 Modifier
                     .size(62.dp)
                     .clip(MbTheme.shapes.tile)
                     .border(
-                        width = if (selected) 2.dp else 1.dp,
-                        color = if (selected) MbTheme.colors.ink else MbTheme.colors.border,
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) MbTheme.colors.ink else MbTheme.colors.border,
                         shape = MbTheme.shapes.tile,
                     )
-                    .mbClickable(MbTheme.shapes.tile, enabled = color.inStock) {
-                        onSelect(color.id)
-                    }
-                    .padding(if (selected) 4.dp else 3.dp),
+                    // Pressable even where it has nothing in this size: that is
+                    // how the customer asks what sizes this colour does have.
+                    .mbClickable(MbTheme.shapes.tile) { onSelect(color.colour) }
+                    .padding(if (isSelected) 4.dp else 3.dp)
+                    .alpha(if (gone) 0.4f else 1f),
             ) {
                 if (color.imageUrl != null) {
                     MbProductImage(
@@ -285,16 +304,29 @@ private fun ColorRow(colors: List<VariantDto>, selectedId: Int?, onSelect: (Int)
                         Modifier
                             .fillMaxSize()
                             .clip(MbTheme.shapes.tileSmall)
-                            .background(color.value.toColor(MbTheme.colors.fill))
+                            .background(color.hex.toColor(MbTheme.colors.fill))
+                    )
+                }
+                // A dimmed photograph reads as a photograph that came out
+                // badly. Said in a word, as on the product page.
+                if (gone) {
+                    MbText(
+                        stringResource(R.string.tugagan),
+                        MbTheme.type.micro,
+                        MbTheme.colors.surface,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .clip(MbTheme.shapes.tileSmall)
+                            .background(MbTheme.colors.ink.copy(alpha = 0.66f))
+                            .padding(vertical = 1.dp),
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
         }
     }
 }
-
-/** Under this many left, the count stops being a fact and becomes a reason. */
-private const val SheetLowStock = 5
 
 @Composable
 private fun SizeRow(sizes: List<VariantDto>, selectedId: Int?, onSelect: (Int) -> Unit) {
@@ -315,13 +347,13 @@ private fun SizeRow(sizes: List<VariantDto>, selectedId: Int?, onSelect: (Int) -
                         color = if (selected) MbTheme.colors.inverse else MbTheme.colors.border,
                         shape = MbTheme.shapes.field,
                     )
-                    .mbClickable(MbTheme.shapes.field, enabled = size.inStock) {
-                        onSelect(size.id)
-                    }
+                    // Struck through, not switched off — pressing a size this
+                    // colour has run out of re-reads the colours above it.
+                    .mbClickable(MbTheme.shapes.field) { onSelect(size.id) }
                     .padding(horizontal = 18.dp, vertical = 12.dp),
             ) {
                 MbText(
-                    size.label,
+                    size.size,
                     MbTheme.type.label.copy(
                         // Out of stock reads as struck through, the way the
                         // design marks a size it cannot sell.
@@ -361,6 +393,15 @@ private fun BottomBar(
             // without it the sheet would be a confirmation with no question on
             // it. For the rest it saves adding one and immediately reaching for
             // the stepper.
+            if (state.quantity >= state.shelfLeft && state.shelfLeft > 0) {
+                MbText(
+                    stringResource(R.string.omborda_n_ta_bor, state.shelfLeft),
+                    MbTheme.type.micro,
+                    MbTheme.colors.danger,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 MbQuantityStepper(
                     quantity = state.quantity,
@@ -379,6 +420,15 @@ private fun BottomBar(
                 )
             }
         } else {
+            if (state.quantity >= state.shelfLeft && state.shelfLeft > 0) {
+                MbText(
+                    stringResource(R.string.omborda_n_ta_bor, state.shelfLeft),
+                    MbTheme.type.micro,
+                    MbTheme.colors.danger,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 MbQuantityStepper(
                     quantity = state.quantity,

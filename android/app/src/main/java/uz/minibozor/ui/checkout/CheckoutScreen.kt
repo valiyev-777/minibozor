@@ -46,6 +46,7 @@ import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.core.design.mbClickable
 import uz.minibozor.core.util.grouped
 import uz.minibozor.core.util.sum
+import uz.minibozor.core.design.component.MbRadioRow
 
 /**
  * Screen 19 — Rasmiylashtirish.
@@ -71,8 +72,7 @@ fun CheckoutScreen(
     onBack: () -> Unit,
     onEditAddress: () -> Unit,
     onEditTime: () -> Unit,
-    onEditPayment: () -> Unit,
-    /** The card form, for a customer who has none saved yet. */
+    /** The card form, reached straight from here — there is no list in between. */
     onAddCard: () -> Unit,
     onOpenCart: () -> Unit,
     onConfirm: () -> Unit,
@@ -81,9 +81,9 @@ fun CheckoutScreen(
     val preview = state.preview
     val courier = state.delivery == DeliveryMethod.Courier
 
-    // The card form is reached straight from here now, so this screen is the
-    // one that has to notice a card was added. The payment list did its own
-    // reload; going around it left the tile still saying "Karta qo'shish".
+    // The form is reached straight from here, so this is the screen that has
+    // to notice a card was added: re-read on every return and the new card is
+    // selected by the time the customer is looking at this again.
     LifecycleResumeEffect(Unit) {
         viewModel.reloadCards()
         onPauseOrDispose {}
@@ -136,15 +136,7 @@ fun CheckoutScreen(
                             when (state.nextStep) {
                                 CheckoutStep.Address -> onEditAddress()
                                 CheckoutStep.Time -> onEditTime()
-                                // The button says "Karta qo'shish", so it had
-                                // better add a card: the list of saved cards is
-                                // no answer to a customer who has none.
-                                CheckoutStep.Payment ->
-                                    if (state.cards.none { it.status == "active" }) {
-                                        onAddCard()
-                                    } else {
-                                        onEditPayment()
-                                    }
+                                CheckoutStep.Payment -> onAddCard()
                                 null -> onConfirm()
                             }
                         },
@@ -232,21 +224,36 @@ fun CheckoutScreen(
                 MbCard {
                     SectionHeader(stringResource(R.string.yetkazish_usuli))
                     Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Collection only where there is somewhere to collect
+                    // from. With no pickup point on the shop's books the tile
+                    // led to a screen with nothing on it and an order that
+                    // could not be completed — a choice offered and then
+                    // refused is worse than a choice not offered.
+                    if (state.pickupPoints.isEmpty()) {
                         MethodTile(
                             title = stringResource(R.string.kuryer),
                             note = stringResource(R.string.kuryer_izoh),
-                            selected = courier,
+                            selected = true,
                             onClick = { viewModel.selectDelivery(DeliveryMethod.Courier) },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        MethodTile(
-                            title = stringResource(R.string.punktdan_olish),
-                            note = stringResource(R.string.punktdan_olish_izoh),
-                            selected = !courier,
-                            onClick = { viewModel.selectDelivery(DeliveryMethod.Pickup) },
-                            modifier = Modifier.weight(1f),
-                        )
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MethodTile(
+                                title = stringResource(R.string.kuryer),
+                                note = stringResource(R.string.kuryer_izoh),
+                                selected = courier,
+                                onClick = { viewModel.selectDelivery(DeliveryMethod.Courier) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            MethodTile(
+                                title = stringResource(R.string.punktdan_olish),
+                                note = stringResource(R.string.punktdan_olish_izoh),
+                                selected = !courier,
+                                onClick = { viewModel.selectDelivery(DeliveryMethod.Pickup) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(14.dp))
@@ -329,7 +336,6 @@ fun CheckoutScreen(
                     } else {
                         stringResource(R.string.punktda_tolash)
                     }
-                    val card = preview.card
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         MethodTile(
                             title = stringResource(R.string.naqd_pul),
@@ -340,43 +346,57 @@ fun CheckoutScreen(
                         )
                         MethodTile(
                             title = stringResource(R.string.karta),
-                            note = card?.let {
-                                stringResource(R.string.karta_niqob, it.last4)
-                            } ?: stringResource(R.string.karta_qoshish),
+                            // Charged when the order is placed, not at the
+                            // door — so what this tile promises is "now", and
+                            // the row underneath says which card.
+                            note = stringResource(R.string.hozir_tolanadi),
                             selected = !cash,
-                            onClick = {
-                                // A card to pay with, or the screen that adds
-                                // one. Selecting "Karta" with no card saved
-                                // used to leave the order needing a step it
-                                // did not offer from here.
-                                val usable = state.cards.firstOrNull { it.status == "active" }
-                                if (usable != null) viewModel.selectCard(usable.id) else onAddCard()
-                            },
+                            onClick = { viewModel.selectCard() },
                             modifier = Modifier.weight(1f),
                         )
                     }
 
-                    // Which card, once it is a card being paid with. Cash needs
-                    // no second line — the tile has already said where the money
-                    // changes hands.
+                    // Which card pays for it. Cash needs no second line — the
+                    // tile has already said where the money changes hands.
+                    //
+                    // The cards are listed here rather than behind a screen of
+                    // their own. There used to be one, and it was a tap deeper
+                    // for a choice most customers make once: a shopper with a
+                    // single saved card was sent to a list to select the only
+                    // thing in it. With none saved this is a single row leading
+                    // to the form, which is the only case that needs a journey.
                     if (!cash) {
                         Spacer(Modifier.height(14.dp))
-                        StepRow(
-                            glyph = "card",
-                            title = card?.let {
-                                stringResource(R.string.karta_niqob, it.last4)
-                            } ?: stringResource(R.string.karta_qoshilmagan),
-                            subtitle = card?.brand
-                                ?: stringResource(R.string.karta_yoki_naqd),
-                            action = if (card == null) {
-                                stringResource(R.string.karta_qoshish)
-                            } else {
-                                null
-                            },
-                            // Straight to the form when there is nothing to
-                            // choose between, and to the list when there is.
-                            onClick = if (card == null) onAddCard else onEditPayment,
-                        )
+                        val usable = state.usableCards
+                        if (usable.isEmpty()) {
+                            StepRow(
+                                glyph = "card",
+                                title = stringResource(R.string.karta_qoshilmagan),
+                                subtitle = stringResource(R.string.humo_uzcard_visa),
+                                action = stringResource(R.string.karta_qoshish),
+                                onClick = onAddCard,
+                            )
+                        } else {
+                            usable.forEachIndexed { index, card ->
+                                if (index > 0) MbDivider()
+                                MbRadioRow(
+                                    label = stringResource(R.string.karta_niqob, card.last4),
+                                    subtitle = card.brand,
+                                    trailingLabel = card.expiry,
+                                    trailingColor = MbTheme.colors.textQuaternary,
+                                    selected = card.id == state.cardId,
+                                    onSelect = { viewModel.selectCard(card.id) },
+                                    contentPadding = 2.dp,
+                                )
+                            }
+                            MbDivider()
+                            StepRow(
+                                glyph = "card",
+                                title = stringResource(R.string.yangi_karta_qoshish),
+                                subtitle = stringResource(R.string.humo_uzcard_visa),
+                                onClick = onAddCard,
+                            )
+                        }
                     }
                 }
             }

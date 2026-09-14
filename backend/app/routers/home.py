@@ -7,7 +7,7 @@ from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import OptionalUser, SessionDep
-from app.models import Banner, Category, HomeSection, Product
+from app.models import Banner, Category, HomeSection, Product, ProductImage
 
 router = APIRouter(tags=["home"])
 
@@ -57,7 +57,7 @@ def home(
                 title=i18n.t(session, "banner", b.id, "title", b.title),
                 subtitle=i18n.t(session, "banner", b.id, "subtitle", b.subtitle),
                 cta=i18n.t(session, "banner", b.id, "cta", b.cta),
-                image_url=sv.media_url(b.image_url) or "",
+                image_url=_banner_shot(session, b),
                 gradient_from=b.gradient_from,
                 gradient_to=b.gradient_to,
                 target_type=b.target_type,
@@ -70,8 +70,47 @@ def home(
     )
 
 
+def _banner_shot(session: SessionDep, banner: Banner) -> str:
+    """The photograph beside a banner's text, from what the banner points at.
+
+    A banner is a gradient, four lines of type and a chip; the picture is 110dp
+    of product shot on the right. Requiring artwork for it meant every banner
+    needed a designer before it could exist, and there is nobody here to draw
+    one — so a banner with no `image_url` of its own borrows the newest thing
+    in the shop it sends people to.
+
+    Which also means it never goes stale. The window shows what came off the
+    van, not what somebody exported to PNG last spring.
+    """
+    if banner.image_url:
+        return sv.media_url(banner.image_url) or ""
+
+    stmt = sv.in_the_shop(select(Product)).where(Product.in_stock.is_(True))
+    if banner.target_type == "category" and banner.target_value:
+        category = session.exec(
+            select(Category).where(Category.slug == banner.target_value)
+        ).first()
+        if category:
+            stmt = stmt.where(Product.category_id == category.id)
+    newest = session.exec(
+        stmt.order_by(col(Product.created_at).desc(), col(Product.id).desc()).limit(1)
+    ).first()
+    if newest is None:
+        return ""
+    shot = session.exec(
+        select(ProductImage)
+        .where(ProductImage.product_id == newest.id)
+        .order_by(col(ProductImage.sort), col(ProductImage.id))
+        .limit(1)
+    ).first()
+    return sv.media_url(shot.url) if shot else ""
+
+
 def _section_products(session: SessionDep, section: HomeSection) -> list[Product]:
-    limit = {"deals": 2, "grid": 4, "rail": 8}.get(section.layout, 8)
+    # A grid of four was two rows and looked like the end of the page. The
+    # home screen is the shop's window and there is nothing else in it now that
+    # the category tiles have gone, so a rail runs and a grid keeps going.
+    limit = {"deals": 4, "grid": 12, "rail": 10}.get(section.layout, 10)
     # The home screen is the shop's own window. Nothing sold out goes in it,
     # and nothing that is not in the shop at all.
     stmt = sv.in_the_shop(select(Product)).where(Product.in_stock.is_(True))
@@ -86,10 +125,16 @@ def _section_products(session: SessionDep, section: HomeSection) -> list[Product
             ).all()
             stmt = stmt.where(col(Product.category_id).in_([category.id, *child_ids]))
 
-    if section.layout == "deals":
+    # What to show, from the section's own rule rather than from how it is
+    # drawn. Three answers the catalogue already holds, so a rail needs nobody
+    # to curate it: a shop with four products has a full window and a shop with
+    # four hundred has a better one.
+    if section.pick == "deals":
         stmt = stmt.where(col(Product.old_price).is_not(None)).order_by(
             (col(Product.old_price) - col(Product.price)).desc()
         )
+    elif section.pick == "new":
+        stmt = stmt.order_by(col(Product.created_at).desc(), col(Product.id).desc())
     else:
         stmt = stmt.order_by(col(Product.sold_count).desc(), col(Product.rating).desc())
 

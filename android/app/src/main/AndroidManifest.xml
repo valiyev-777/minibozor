@@ -26,9 +26,18 @@
           the process, the back stack and the scroll position, and Compose
           re-reads every string against the new configuration.
         -->
+        <!--
+          Portrait, and only portrait. A shop is a column of photographs with a
+          buy bar under it: turned on its side the hero fills the screen and the
+          price is off the bottom of it, and nobody turns a phone sideways to
+          buy a shirt. Locking it here rather than per screen keeps the whole
+          app to one shape — the alternative is a sideways checkout nobody has
+          drawn and nobody would test.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:configChanges="locale|layoutDirection"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.MiniBozor">

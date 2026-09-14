@@ -6,11 +6,10 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, or_, select
 
 from app import i18n
-from app import offers as of
 from app import schemas as s
 from app import services as sv
 from app.deps import OptionalUser, SessionDep
-from app.models import Brand, Category, Product, ProductVariant, Review, ReviewStatus, VariantKind
+from app.models import Brand, Category, Product, ProductVariant
 
 router = APIRouter(tags=["catalog"])
 
@@ -82,10 +81,9 @@ def list_products(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=60),
 ) -> s.Page[s.ProductCardOut]:
-    # Only what is in the shop. A draft, a proposal waiting on moderation, a
-    # refused card and a withdrawn one are all invisible here — the apps see
-    # exactly the catalogue they saw before, because everything in it is
-    # published.
+    # Only what is in the shop. A card still waiting on a photograph and a
+    # withdrawn one are both invisible here — the apps see exactly the
+    # catalogue they saw before, because everything in it is active.
     stmt = sv.in_the_shop(select(Product))
 
     # What cannot be bought is not on the shelf. A sold-out product used to sit
@@ -125,9 +123,7 @@ def list_products(
         stmt = stmt.where(col(Product.old_price).is_not(None), Product.old_price > Product.price)
     if size:
         sized = session.exec(
-            select(ProductVariant.product_id).where(
-                ProductVariant.kind == VariantKind.SIZE, col(ProductVariant.label).in_(size)
-            )
+            select(ProductVariant.product_id).where(col(ProductVariant.size).in_(size))
         ).all()
         stmt = stmt.where(col(Product.id).in_(sized or [-1]))
 
@@ -168,12 +164,11 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
 
     sizes = sorted(
         {
-            v.label
+            v.size
             for v in session.exec(
-                select(ProductVariant).where(
-                    col(ProductVariant.product_id).in_(ids), ProductVariant.kind == VariantKind.SIZE
-                )
+                select(ProductVariant).where(col(ProductVariant.product_id).in_(ids))
             ).all()
+            if v.size
         },
         key=lambda x: (len(x), x),
     )
@@ -206,33 +201,12 @@ def product_filters(session: SessionDep, category: str | None = None) -> s.Filte
 @router.get("/products/{product_id}", response_model=s.ProductOut, summary="Screen 14 — product")
 def get_product(product_id: int, session: SessionDep, user: OptionalUser) -> s.ProductOut:
     product = session.get(Product, product_id)
-    # Not in the shop is not found. A card in moderation has a real id, and
-    # answering with its contents would publish it by the back door.
+    # Not in the shop is not found. A card held back for want of a photograph
+    # has a real id, and answering with its contents would publish it by the
+    # back door.
     if not sv.is_in_the_shop(product):
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
     return sv.product_out(session, product, sv.favorite_ids(session, user))
-
-
-@router.get(
-    "/products/{product_id}/offers",
-    response_model=list[s.OfferOut],
-    summary="Every seller offering this product, cheapest first",
-)
-def product_offers(product_id: int, session: SessionDep) -> list[s.OfferOut]:
-    """The list behind the one price on the card.
-
-    Sold-out offers are included and marked: a shopper comparing sellers is
-    entitled to see that the cheapest one has run out, which is why the price
-    on the card is the one it is. Withdrawn offers are not — an inactive offer
-    is not on sale, and listing it would invite a question nobody can answer.
-    """
-    if not sv.is_in_the_shop(session.get(Product, product_id)):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("product_not_found"))
-    winner = of.winning_offer(session, product_id)
-    return [
-        sv.offer_out(session, offer, winner_id=winner.id if winner else None)
-        for offer in of.offers_for(session, product_id)
-    ]
 
 
 @router.get("/products/{product_id}/similar", response_model=list[s.ProductCardOut])
@@ -255,51 +229,6 @@ def similar_products(
         .limit(limit)
     ).all()
     return sv.product_cards(session, rows, sv.favorite_ids(session, user))
-
-
-@router.get(
-    "/products/{product_id}/reviews/summary",
-    response_model=s.ReviewSummaryOut,
-    summary="Screen 15 — rating breakdown",
-)
-def product_review_summary(product_id: int, session: SessionDep) -> s.ReviewSummaryOut:
-    return sv.review_summary(session, product_id)
-
-
-@router.get(
-    "/products/{product_id}/reviews",
-    response_model=s.Page[s.ReviewOut],
-    summary="Screen 15 — reviews",
-)
-def product_reviews(
-    product_id: int,
-    session: SessionDep,
-    user: OptionalUser,
-    stars: int | None = Query(None, ge=1, le=5),
-    with_photos: bool = False,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=50),
-) -> s.Page[s.ReviewOut]:
-    stmt = select(Review).where(
-        Review.product_id == product_id, Review.status == ReviewStatus.PUBLISHED
-    )
-    if stars:
-        stmt = stmt.where(Review.rating == stars)
-    total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
-    rows = session.exec(
-        stmt.order_by(col(Review.likes).desc(), col(Review.created_at).desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    ).all()
-    if with_photos:
-        rows = [r for r in rows if r.photos]
-    return s.Page[s.ReviewOut](
-        items=[sv.review_out(session, r, viewer=user) for r in rows],
-        page=page,
-        page_size=page_size,
-        total=total,
-        has_more=page * page_size < total,
-    )
 
 
 @router.get("/brands", response_model=list[s.BrandOut])

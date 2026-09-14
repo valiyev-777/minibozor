@@ -62,7 +62,6 @@ import uz.minibozor.core.design.component.MbChip
 import uz.minibozor.core.design.component.MbPrimaryButton
 import uz.minibozor.core.design.component.MbProductImage
 import uz.minibozor.core.design.component.MbQuantityStepper
-import uz.minibozor.core.design.component.StockLine
 import uz.minibozor.core.design.component.MbRailTile
 import uz.minibozor.core.design.component.MbSkeleton
 import uz.minibozor.core.design.component.SectionHeader
@@ -301,6 +300,7 @@ fun ProductChrome(
     onShare: () -> Unit,
 ) {
     val surface = MbTheme.colors.surface
+    val studio = MbTheme.colors.photoStudio
 
     Column(
         Modifier
@@ -317,15 +317,27 @@ fun ProductChrome(
                 // behind the system's own clock and battery is whatever the
                 // seller photographed. The wash is what makes them readable on
                 // any of it — strongest at the very edge and gone by the row of
-                // buttons, so it reads as the picture darkening rather than as
-                // a band laid across it. It belongs here, on the bar, which is
-                // pinned to the top of the screen: put on the frame instead it
-                // hung back with the picture and scrolled off, leaving the
-                // clock bare on whatever was underneath.
+                // buttons, so it reads as the picture fading into its own
+                // ground rather than as a band laid across it. It belongs here,
+                // on the bar, which is pinned to the top of the screen: put on
+                // the frame instead it hung back with the picture and scrolled
+                // off, leaving the clock bare on whatever was underneath.
+                //
+                // The hero's own ground, not black. Black was written for a
+                // shop whose photographs are scenes; this catalogue is cut-outs
+                // on a white studio backdrop, and 55% black over white is a
+                // grey smear across the top of every product page — the clock
+                // sitting in a dirty band rather than on a photograph. Washing
+                // towards [MbColors.photoStudio] instead is right whichever way
+                // the picture goes: on the light theme it lifts a dark
+                // photograph to white under dark icons, on the dark theme it
+                // drops a light one to near-black under light ones. Where the
+                // photograph is already the studio's own white it does nothing
+                // at all, which is the case nearly every time.
                 drawRect(
                     Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.55f),
-                        0.55f to Color.Black.copy(alpha = 0.18f),
+                        0f to studio.copy(alpha = 0.92f),
+                        0.55f to studio.copy(alpha = 0.45f),
                         1f to Color.Transparent,
                     )
                 )
@@ -463,28 +475,25 @@ fun BuyBar(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
-        // One line of facts above the button: how many are left, and when it
-        // arrives. Both used to be somewhere worse — the count was a clause in
-        // the seller's row a third of the way down the page, and the delivery
-        // note was the second line inside the button, which is what made the
-        // button two heights. Here they are the same line whichever shape the
-        // bar is in, so the button below them never moves.
-        val note = product.deliveryNote.takeIf { it.isNotBlank() && inStock }
-        if (stockLeft > 0 || note != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                StockLine(stockLeft)
-                if (note != null) {
-                    if (stockLeft > 0) {
-                        MbText(" · ", MbTheme.type.micro, MbTheme.colors.textQuaternary)
-                    }
-                    MbText(
-                        note,
-                        MbTheme.type.micro,
-                        MbTheme.colors.textQuaternary,
-                        maxLines = 1,
-                    )
-                }
-            }
+        // The shelf is not advertised here any more.
+        //
+        // There was a line of facts above the button — "4 dona qoldi · Ertaga
+        // yetkaziladi · bepul" — and it was three claims in six point type over
+        // the one control on the screen anybody came for. The count is the
+        // shop's business and not the customer's: what they need is to be
+        // stopped at the last one, which the stepper's ceiling does. So the
+        // number appears at the ceiling and not before it — somebody who wants
+        // eight and is held at five is told why, and nobody else is told
+        // anything. The delivery promise went with it: it belongs on the
+        // checkout screen, where the choice it describes is actually made.
+        val ceiling = line != null && line.quantity >= stockLeft && stockLeft > 0
+        if (ceiling) {
+            MbText(
+                stringResource(R.string.omborda_n_ta_bor, stockLeft),
+                MbTheme.type.micro,
+                MbTheme.colors.danger,
+                maxLines = 1,
+            )
             Spacer(Modifier.height(8.dp))
         }
         Row(verticalAlignment = Alignment.CenterVertically) {

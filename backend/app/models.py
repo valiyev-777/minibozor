@@ -29,19 +29,31 @@ class Language(StrEnum):
 
 
 class UserRole(StrEnum):
-    """What a person is allowed to do, and which backoffice they see.
+    """What a person is allowed to do, and which part of the app they see.
 
     One account, one role. Staff sign in through the same OTP flow customers
     use — the role is the only difference, so there is no second password
     store, no second login screen, and no way for the two to drift apart.
+
+    ``operator`` went because there is nobody to be an operator: the owner
+    takes the calls and cancels the orders, and a role that only ever names one
+    person who is already an admin is a second name for admin.
+
+    ``seller`` is **not** the seller that went with the marketplace. That one
+    was an outside merchant with their own stock, their own prices and their
+    own payout. This one is somebody who works here, and their job is the shop
+    window: they take the catalogue photographs, write what the thing is,
+    price it and put it on sale. The warehouse gets goods onto a shelf, which
+    is a different job done at a different time by somebody with a sack in
+    front of them — and the two were one screen for a while, which is why
+    neither got done properly.
     """
 
     CUSTOMER = "customer"      # the app
     ADMIN = "admin"            # everything
-    OPERATOR = "operator"      # orders, calls, cancellations
-    WAREHOUSE = "warehouse"    # picking, stock counts
+    WAREHOUSE = "warehouse"    # receiving, putaway, picking, counts
+    SELLER = "seller"          # the shop window: photographs, prices, listings
     COURIER = "courier"        # a delivery round
-    SELLER = "seller"          # one seller's own products and payouts
 
 
 # Everyone who works here. Handy as the default guard on a backoffice
@@ -65,20 +77,14 @@ class PaymentMethod(StrEnum):
     CASH = "cash"
 
 
-class DeliveryKind(StrEnum):
-    COURIER = "courier"
-    PICKUP = "pickup"
-
-
-class ReviewStatus(StrEnum):
-    MODERATING = "moderating"  # Tekshirilmoqda
-    PUBLISHED = "published"    # E'lon qilindi
-    REJECTED = "rejected"
-
-
 class CardStatus(StrEnum):
     ACTIVE = "active"
     EXPIRED = "expired"
+
+
+class DeliveryKind(StrEnum):
+    COURIER = "courier"
+    PICKUP = "pickup"
 
 
 class NotificationKind(StrEnum):
@@ -97,71 +103,99 @@ class ReturnStatus(StrEnum):
     REFUNDED = "refunded"
 
 
-class VariantKind(StrEnum):
-    SIZE = "size"
-    COLOR = "color"
+class ReturnInspection(StrEnum):
+    """What the warehouse found when it opened the parcel.
+
+    A returned shirt is not one thing: it is either a shirt that can be sold
+    again or a shirt that cannot, and until somebody has looked at it the
+    shelf cannot be told which. That is why this is nullable on the request —
+    ``None`` is not a third outcome, it is "nobody has looked yet".
+    """
+
+    OK = "ok"              # whole, sellable again
+    DAMAGED = "damaged"    # came back unsellable
 
 
 class ProductStatus(StrEnum):
     """Whether a card is in the shop.
 
-    The catalogue belongs to the platform: a seller attaches an offer to a card
-    that already exists rather than opening their own copy of it. That is the
-    whole point of one card with several offers — a copy per seller would
-    duplicate the catalogue and leave the warehouse holding the same goods in
-    two places under two names.
+    Three states, not five: with nobody outside the company writing cards
+    there is nothing to moderate and nobody to refuse. What is left is the one
+    question a customer endpoint asks — is this thing for sale — and the
+    archive that keeps old orders readable.
 
-    So a seller may *propose* a card and an admin decides. Until somebody
-    decides, it is not in the shop, and the customer endpoints show nothing but
-    ``published``.
+    A card stays in ``draft`` while any colour it has is without a
+    photograph. Goods sorted at the receiving desk are on a shelf and counted
+    from the moment they are booked in; being in ``draft`` says only that the
+    shop cannot show them yet.
     """
 
-    DRAFT = "draft"            # being written, ours
-    MODERATING = "moderating"  # proposed by a seller, waiting on us
-    PUBLISHED = "published"    # in the shop
-    REJECTED = "rejected"      # refused, with a reason the seller reads
+    DRAFT = "draft"            # being written, or waiting on a photograph
+    ACTIVE = "active"          # in the shop
     ARCHIVED = "archived"      # withdrawn; the orders that named it survive
 
 
-class StockMovementKind(StrEnum):
-    """Why a count moved. Every movement has one; there is no other kind.
+class LocationKind(StrEnum):
+    """What a place in the building is for.
 
-    A shelf figure used to be a number somebody wrote. Now it is the sum of
-    these, which means a disputed count is not an opinion — it is a list.
+    The staging areas are places, not statuses. There is no "unplaced" flag on
+    anything: being in ``QABUL`` *is* the unplaced state, and a place can be
+    counted, listed and alerted on in a way a flag cannot.
     """
 
-    OPENING = "opening"                    # what was there when the ledger began
-    INTAKE = "intake"                      # received from a seller
-    SALE = "sale"                          # bought and paid for
-    CANCEL_RETURN = "cancel_return"        # an order called off, never left
-    CUSTOMER_RETURN = "customer_return"    # came back and passed inspection
-    WRITE_OFF = "write_off"                # damaged, lost, unsellable
-    COUNT_ADJUSTMENT = "count_adjustment"  # a stocktake found something else
-    SELLER_RETURN = "seller_return"        # handed back to the seller
+    BIN = "bin"              # a real shelf cell, A-01-01
+    RECEIVING = "receiving"  # QABUL — off the van, not yet shelved
+    PACKING = "packing"      # YIGIM — picked for an order, waiting for a courier
+    COURIER = "courier"      # KURYER-7 — in one courier's bag
+    DAMAGED = "damaged"      # BRAK — broken, not sellable
+    RETURNS = "returns"      # QAYTGAN — came back, not yet inspected
+
+
+# Where goods may be sold from. A shelf cell, and the receiving area — sorted
+# goods standing in QABUL are in the building and the pick list simply sends
+# the picker there instead of to a shelf. Not the damaged corner, not the
+# uninspected returns, and not a parcel already picked or already in a bag.
+SELLABLE_KINDS: frozenset[LocationKind] = frozenset(
+    {LocationKind.BIN, LocationKind.RECEIVING}
+)
+
+
+class StockMovementKind(StrEnum):
+    """Why goods moved from one place to another.
+
+    A shelf figure used to be a number somebody wrote, then a signed row with
+    a reason on it, and now a *move*: from somewhere to somewhere, both of
+    which may be the outside world. The kinds below are the moves the
+    warehouse actually makes, which is why there is no ``sale`` among them —
+    money does not move goods. Goods leave the building when a courier hands
+    them over at a door.
+    """
+
+    RECEIPT = "receipt"        # van → QABUL, a market run closed
+    PUTAWAY = "putaway"        # QABUL → a cell
+    MOVE = "move"              # cell → cell, tidying up
+    PICK = "pick"              # cell → YIGIM, for an order
+    HANDOVER = "handover"      # YIGIM → a courier's bag
+    DELIVERED = "delivered"    # a courier's bag → out of the building
+    RETURN = "return"          # a customer's hands → QAYTGAN
+    RELIST = "relist"          # QAYTGAN → back on sale
+    DAMAGE = "damage"          # anywhere → BRAK
+    WRITE_OFF = "write_off"    # BRAK → out; gone, and said so
+    ADJUST = "adjust"          # a count found something else
 
 
 class SupplyStatus(StrEnum):
-    DECLARED = "declared"    # the seller says it is coming
-    RECEIVED = "received"    # the warehouse counted it in
-    CANCELLED = "cancelled"
+    """A sack standing unopened, or goods that are now on the books.
 
+    ``draft`` is a real sack in the receiving area that nobody has opened
+    yet: nothing in it is in the catalogue and nothing in it can be sold,
+    because nobody knows what it is. Sorting it *is* filling in its lines,
+    and closing it is what brings the goods into existence.
+    """
 
-class StockCountStatus(StrEnum):
-    OPEN = "open"
-    CLOSED = "closed"
-    CANCELLED = "cancelled"
-
-
-class RemovalReason(StrEnum):
-    UNSELLABLE = "unsellable"   # damaged, expired
-    UNSOLD = "unsold"           # fine, just not selling
-
-
-class RemovalStatus(StrEnum):
-    REQUESTED = "requested"
-    READY = "ready"             # picked and set aside — and held off the shelf
-    COLLECTED = "collected"
-    CANCELLED = "cancelled"
+    DRAFT = "draft"          # a sack in QABUL, unopened
+    RECEIVED = "received"    # sorted, counted, and on the books
+    CANCELLED = "cancelled"  # the sack was not what it looked like
 
 
 # --------------------------------------------------------------------------- identity
@@ -246,38 +280,31 @@ class Brand(SQLModel, table=True):
     name: str
 
 
-class Seller(SQLModel, table=True):
-    """Somebody who sells here.
+class BrandAlias(SQLModel, table=True):
+    """A spelling of a make, and which row it means.
 
-    The goods sit in our warehouse and we deliver them, so a seller is a
-    price, a stock figure and a bank account rather than a shop with its own
-    logistics. What they are not is a column on ``Product``: that field held
-    the string "Mini Bozor" on every row, which is a shop, not a marketplace.
+    The receiving desk types the brand as free text, so the same make arrives
+    written five ways. Matching on ``brands.name`` alone made a second row of
+    every spelling nobody had used yet — and worse, made the *name* the only
+    thing the desk could find a row by, so renaming a brand in the admin panel
+    detached it from every sack that would be typed the old way.
+
+    So the name column is what a brand is *called* and this table is what it
+    **answers to**: the current name, the names it has been renamed away from,
+    and every spelling of every brand folded into it. ``key`` is the name with
+    case and punctuation flattened, and is unique across the whole table — one
+    spelling means one make, or the desk is back to choosing between two right
+    answers. See ``app.brands``.
     """
 
-    __tablename__ = "sellers"
+    __tablename__ = "brand_aliases"
 
     id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(index=True)
-    phone: str = Field(default="", max_length=20)
-    # The account that signs in as this seller. Staff come through the same OTP
-    # flow as everybody else and the role is the only difference, so a seller
-    # holding UserRole.SELLER still needs this to answer "which of these offers
-    # are mine". The house seller has nobody: it is us.
-    user_id: int | None = Field(default=None, foreign_key="users.id", index=True)
-    # When that account was pointed at this seller.
-    #
-    # Not the same as ``created_at``: a seller is taken on first and an account
-    # is attached afterwards, sometimes weeks later. The seller's own cabinet
-    # answers "since when am I selling here" from this, and it is the date
-    # their first statement can be read against. Null on a seller nobody signs
-    # in as — the house seller is us.
-    linked_at: datetime | None = None
-    # What we keep of each item sold. Per seller, because the rate is what a
-    # contract says and contracts differ; five per cent is the standard one.
-    commission_percent: int = 5
-    active: bool = True
-    created_at: datetime = Field(default_factory=utcnow)
+    brand_id: int = Field(foreign_key="brands.id", index=True)
+    # As somebody typed it, tidied. Shown on the merge screen, because "which
+    # spellings does this row swallow" is the question being asked there.
+    name: str = Field(max_length=120)
+    key: str = Field(index=True, unique=True, max_length=120)
 
 
 class Product(SQLModel, table=True):
@@ -288,45 +315,58 @@ class Product(SQLModel, table=True):
     title: str
     subtitle: str = ""
     description: str = ""
-    category_id: int = Field(foreign_key="categories.id", index=True)
+
+    # The word the receiving desk used — "Krossovka", "Futbolka". Not the
+    # category: a category is where the card is filed in the shop, and it is
+    # chosen later at a desk by somebody deciding how customers should browse.
+    # This is what the goods were called with the sack open, and it is where
+    # the receiving form's chips come from: the vocabulary is learned from what
+    # has been received rather than configured before anybody has received
+    # anything.
+    kind: str = Field(default="", index=True, max_length=60)
+
+    # **Both absent while the card is a stub.** A pile off the van has a name,
+    # a colour and a count, and nothing else that is true yet: no category, no
+    # selling price, no photograph. Making either of these required is what
+    # stops the goods reaching the shelf, and the shelf is the urgent half.
+    # ``status`` is what keeps such a card out of the shop, and
+    # ``app.products.unready`` is what names the gaps.
+    category_id: int | None = Field(
+        default=None, foreign_key="categories.id", index=True
+    )
     brand_id: int | None = Field(default=None, foreign_key="brands.id", index=True)
 
-    # How heavy one of these is, which decides what handling it costs — see
-    # ``FulfilmentTariff``. Zero means nobody has said; ``app.settlement``
-    # charges an undeclared weight at a stated default band rather than at
-    # nothing, because free is the wrong answer and would make declaring it
-    # a thing sellers avoid.
-    weight_grams: int = 0
+    # The identification photograph, taken over the open sack in two seconds.
+    # It is not a catalogue picture and is never shown to a customer: its job
+    # is to tell two black trainers apart in a search result and in the
+    # publishing queue, which no amount of naming discipline does reliably.
+    # A good one can be promoted to a catalogue image at publishing time.
+    snapshot_url: str = Field(default="", max_length=300)
 
-    # Price and stock are a CACHE of the winning offer — the cheapest active
-    # offer with something left. They are not the source of truth any more;
-    # ``offers`` is. They stay columns because every listing filters and sorts
-    # on them in SQL (``catalog.py``), and the alternative is a correlated
-    # subquery per row with paging computed over it. ``app.offers.refresh``
-    # recomputes them, and everything that changes an offer calls it.
-    price: int                       # so'm, integer
+    # The price the card is advertised at, and the one the listings sort and
+    # filter on in SQL. The money itself is on the variant — a 43 may cost
+    # more than a 41 — and this is the cheapest of them, recomputed by
+    # ``app.products.refresh`` whenever a variant's price moves. It is a
+    # display figure and nothing is ever charged from it.
+    price: int = 0                   # so'm, integer; 0 until somebody prices it
     old_price: int | None = None
     rating: float = 0.0
     reviews_count: int = 0
-    # Across every seller: how many of this thing have gone, whoever sold it.
     sold_count: int = 0
 
     # Whether this card is in the shop at all. Customer endpoints filter on it
-    # and nothing else is visible to them, whatever offers it may carry.
+    # and nothing else is visible to them, whatever is on the shelf.
     status: ProductStatus = Field(default=ProductStatus.DRAFT, index=True)
-    # The seller who suggested it, where one did. Null for a card we wrote.
-    proposed_by_id: int | None = Field(default=None, foreign_key="sellers.id", index=True)
-    # Why it was refused — the sentence the seller is owed. Who refused it and
-    # when are in ``audit_log``.
-    moderation_note: str = ""
 
     badge: str | None = None         # "Bestseller", "Yangi", "Original", "Kafolat 1 yil"
-    # The winning seller's name, cached alongside the price it won with.
-    seller: str = "Mini Bozor"
     warranty: str | None = None
 
+    # A product holds no stock of its own — every count is on a variant, which
+    # is the unit of stock. This is the one derived flag the listings need,
+    # because "has this anything at all" is a filter on every catalogue query
+    # and the alternative is a correlated subquery per row.
+    # ``app.products.refresh`` recomputes it from the variants.
     in_stock: bool = True
-    stock_left: int = 25             # cache: what the winning offer has left
     is_original: bool = True
     free_delivery: bool = True
     next_day_delivery: bool = True
@@ -341,98 +381,116 @@ class Product(SQLModel, table=True):
 
 
 class ProductImage(SQLModel, table=True):
+    """A photograph of the goods, belonging to a colour rather than to a card.
+
+    Two colours in six sizes is two pictures, not twelve: nobody photographs a
+    size, and asking them to is how a receiving desk stops photographing
+    anything. ``colour`` is the colour's own label — the same string the
+    variants carry — and an empty one is a picture of the product itself,
+    which is what a card with no colours has.
+
+    The first by ``sort`` within a colour is that colour's cover. A card
+    cannot leave ``draft`` while any colour it has is without one.
+    """
+
     __tablename__ = "product_images"
 
     id: int | None = Field(default=None, primary_key=True)
     product_id: int = Field(foreign_key="products.id", index=True)
+    colour: str = Field(default="", index=True, max_length=60)
     url: str
     sort: int = 0
 
 
 class ProductVariant(SQLModel, table=True):
+    """The unit of stock. Everything hangs off this.
+
+    One row per colour per size — "qora / 42" — and not a tree of colours with
+    sizes underneath them. The tree counted the same shoes at two depths: a
+    colour row held the sum of its sizes, so every count existed twice and one
+    of the two had to be an aggregate nobody could move. With a placement
+    keyed by (location, variant) that aggregate has nowhere to stand, and
+    "which cell is the colour in" has no answer.
+
+    So a variant is one cell of the grid, and it is the only thing the ledger,
+    the shelf map and the pick list ever name. "Krossovka — 50 dona" is a
+    sentence this system cannot express; "qora / 42 — 3 dona" is what it
+    stores.
+
+    A product with no real variation still gets one of these, with both labels
+    empty, so stock always has exactly one thing to hang off.
+    """
+
     __tablename__ = "product_variants"
-
-    id: int | None = Field(default=None, primary_key=True)
-    product_id: int = Field(foreign_key="products.id", index=True)
-    kind: VariantKind = Field(default=VariantKind.SIZE)
-    label: str                      # "42", "Qora"
-    value: str                      # "42", "#0E0F12"
-    # A colour is chosen by looking at the thing, not at a hex circle: the
-    # photograph of the product in that colour, when there is one. Sizes leave
-    # it empty, and a colour without a photo falls back to its hex.
-    image_url: str | None = None
-    in_stock: bool = True
-    # How many of *this* colour are on the shelf, when the colours are counted
-    # apart. The product's own stock_left is the whole shelf; this is the share
-    # of it wearing one colour, so picking a colour on the page answers "how
-    # many" about the thing actually being looked at rather than about the
-    # sum of every colour. None on a size, and on a colour nobody counted.
-    #
-    # A cache too, of the winning offer's ``offer_variants`` row: the variant
-    # describes the thing, and how many of it there are is a fact about whose
-    # shelf it is standing on.
-    stock_left: int | None = None
-    # Which colour this size belongs to.
-    #
-    # The shelf used to be counted twice over: the colours split the product's
-    # total between them, the sizes split the same total again, and the answer
-    # for a pair of them was whichever of the two was scarcer. It kept the
-    # arithmetic tidy and it was not true — a shop that has sold its last black
-    # 41 has sold it in black, and the page went on offering it because there
-    # were still three 41s somewhere in blue.
-    #
-    # So a size is a cell of the grid: one row per colour per size, pointing at
-    # the colour it is a size of, holding its own count. Null on a product
-    # with no colours, where the sizes are the product's own.
-    parent_id: int | None = Field(
-        default=None, foreign_key="product_variants.id", index=True
-    )
-    sort: int = 0
-
-
-class Offer(SQLModel, table=True):
-    """One seller's price for one product — where the money now lives.
-
-    Several sellers may offer the same thing. The cheapest active offer with
-    something left on the shelf wins, and the winner's figures are copied onto
-    the ``Product`` row so the listings can still sort and filter in SQL. An
-    offer with nothing left does not compete: it is not a price anyone can pay.
-    """
-
-    __tablename__ = "offers"
-    __table_args__ = (UniqueConstraint("seller_id", "product_id", name="uq_offer"),)
-
-    id: int | None = Field(default=None, primary_key=True)
-    seller_id: int = Field(foreign_key="sellers.id", index=True)
-    product_id: int = Field(foreign_key="products.id", index=True)
-
-    price: int
-    old_price: int | None = None
-    stock_left: int = 0
-    # A seller withdrawing an offer without deleting it — the price and the
-    # history stay, the offer stops competing.
-    active: bool = True
-    created_at: datetime = Field(default_factory=utcnow)
-
-
-class OfferVariant(SQLModel, table=True):
-    """How many of one colour, or one size of one colour, this seller has.
-
-    The same shape as the stock figure on ``ProductVariant``, one level down:
-    the variant says what the thing is and this says whose shelf it is on and
-    how much of it is there. Absent for a variant nobody counts apart, which
-    is what ``None`` means on the variant itself.
-    """
-
-    __tablename__ = "offer_variants"
     __table_args__ = (
-        UniqueConstraint("offer_id", "variant_id", name="uq_offer_variant"),
+        UniqueConstraint("product_id", "colour", "size", name="uq_variant_cell"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    offer_id: int = Field(foreign_key="offers.id", index=True)
-    variant_id: int = Field(foreign_key="product_variants.id", index=True)
+    product_id: int = Field(foreign_key="products.id", index=True)
+
+    colour: str = Field(default="", max_length=60)       # "Qora"
+    # The hex the picker draws when there is no photograph yet. A colour is
+    # chosen by looking at the thing, so this is the fallback and not the
+    # point — the pictures are on ``product_images``, keyed by ``colour``.
+    colour_hex: str = Field(default="", max_length=9)
+    size: str = Field(default="", max_length=40)         # "42"
+
+    # Ours, printed by us. Market goods arrive with no usable code of their
+    # own — no label, no barcode, and two sacks of the same shoe from two
+    # traders would collide if there were. A variant's barcode is permanent:
+    # when the same goods arrive again the label is reprinted, never
+    # regenerated, or the shelf ends up holding one thing under two codes.
+    sku: str = Field(default="", index=True, max_length=40)
+    barcode: str = Field(default="", index=True, max_length=40)
+
+    # What one of *these* costs. The money is here and not on the card: a 43
+    # can cost more than a 41 and two colours of the same shoe can be priced
+    # apart, and a single figure on the product would have to lie about one of
+    # them. ``Product.price`` is the cheapest of these, for the listings.
+    price: int = 0
+
+    # What the newest lot of *this cell* cost at the market, in so'm.
+    #
+    # Kept by ``app.stock.move`` on every ``receipt``, which is the one moment
+    # a cost is known: a supply line names a variant and a unit cost together.
+    # Per cell and not per card, because a 43 is bought at a different price
+    # from a 41 — ``app.products.last_cost`` answers the whole card and is a
+    # pricing aid for the card editor, and a margin built on it would be a
+    # margin of the wrong shoe.
+    #
+    # **Nought means unknown, never free.** Every cell received before this
+    # column existed has nought here, and a report that treated that as a cost
+    # of zero would print a hundred per cent margin on the shop's whole
+    # history. Callers render it as unknown and say from when it is real.
+    last_cost: int = 0
+
+    # How many of these are in the building, over every location holding any.
+    # A running total of ``stock_movements`` and never assigned — see
+    # ``app.stock.move``. What can be *sold* is less than this: goods in the
+    # damaged corner and goods that came back uninspected are in the building
+    # too.
     stock_left: int = 0
+    # A cache kept by ``app.stock.move``, and false on a cell that has never
+    # held anything. The customer-facing shapes derive availability from the
+    # shelf rather than reading this: a cell written into the grid and never
+    # received said `true` with nothing behind it, and the shop offered a size
+    # it had never owned.
+    in_stock: bool = False
+
+    # Taken out of the shop window without being erased.
+    #
+    # A cell cannot be deleted once anything has moved through it — every
+    # movement, placement and order line points at it, and deleting one would
+    # leave the room holding goods nothing can name. But a cell written by
+    # mistake, or a size this shop has stopped buying, has to be able to stop
+    # being offered: a typo received once was otherwise a size struck through
+    # on the product page for the life of the card. Retiring is allowed only
+    # when it holds nothing, because retiring a cell with goods on a shelf
+    # would hide stock the shop has paid for.
+    retired: bool = False
+
+    sort: int = 0
 
 
 class ProductSpec(SQLModel, table=True):
@@ -472,7 +530,13 @@ class HomeSection(SQLModel, table=True):
     title: str
     subtitle: str = ""
     category_slug: str | None = None
-    layout: str = "rail"            # rail | grid | deals
+    layout: str = "rail"            # rail | grid | deals — how it is drawn
+    # Which products, which is not the same question as how they are drawn. It
+    # was read off ``layout`` for a while and everything that was not ``deals``
+    # came back in sold-count order — so "Yangi keldi" and "Ko'p olinadi"
+    # answered with the same products in the same order, which reads as a
+    # broken screen rather than as two rails.
+    pick: str = "popular"           # new | popular | deals
     sort: int = 0
     # A rail taken off the home screen without being deleted. The design's
     # sections are the shop's window and a seasonal one comes back next year;
@@ -500,15 +564,11 @@ class CartItem(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id", index=True)
     product_id: int = Field(foreign_key="products.id", index=True)
-    # Two variants, not one: a shirt is a size *and* a colour, and the
-    # picker sheet lets the customer choose both before adding.
+    # One variant, not two. A shirt is a size *and* a colour, and it used to
+    # take an id for each — which meant a line could name a pair the shop does
+    # not stock, and the shelf it drew down was whichever of the two happened
+    # to be counted. A variant is now the pair itself.
     variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
-    color_variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
-    # Whose offer is in the basket. Chosen when the line is added — the
-    # cheapest one with stock at that moment — and held, so a shopper is
-    # charged the price they were shown rather than whatever is winning by the
-    # time they reach the till. Null on a line added before offers existed.
-    offer_id: int | None = Field(default=None, foreign_key="offers.id", index=True)
     quantity: int = 1
     selected: bool = True
     # How long this line holds the goods off other people's shelves.
@@ -519,17 +579,6 @@ class CartItem(SQLModel, table=True):
     # somebody still shopping has not abandoned anything.
     reserved_until: datetime | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=utcnow)
-
-
-class PromoCode(SQLModel, table=True):
-    __tablename__ = "promo_codes"
-
-    id: int | None = Field(default=None, primary_key=True)
-    code: str = Field(index=True, unique=True)
-    percent_off: int = 0
-    amount_off: int = 0
-    min_total: int = 0
-    active: bool = True
 
 
 # --------------------------------------------------------------------------- delivery
@@ -596,6 +645,20 @@ class DeliverySlot(SQLModel, table=True):
 
 
 class PaymentCard(SQLModel, table=True):
+    """A card a customer may pay with, as the processor describes it.
+
+    **There is no PAN here and there never was.** The app collects the number,
+    validates it on the device and sends the four facts a person needs to
+    recognise their own card — the scheme, the last four digits, the name and
+    the expiry — plus the processor's token, which is the only thing that can
+    actually be charged. The number itself never leaves the handset.
+
+    That is also why the row survives a provider swap: Click, Payme and Stripe
+    all hand back a token and a masked description, and the column that holds
+    it does not care which of them wrote it. What changes is
+    ``app.payments``.
+    """
+
     __tablename__ = "payment_cards"
 
     id: int | None = Field(default=None, primary_key=True)
@@ -637,8 +700,15 @@ class Order(SQLModel, table=True):
     delivery_end: str | None = None
 
     payment_method: PaymentMethod = Field(default=PaymentMethod.CARD)
-    payment_card_id: int | None = Field(default=None, foreign_key="payment_cards.id")
     paid: bool = False
+    # What the processor called the charge.
+    #
+    # A payment is a row on an order rather than a table of its own — see the
+    # top of ``app.inventory`` — but a row that only says "true" cannot be
+    # reconciled against a bank statement or refunded through anybody's API.
+    # This is the charge's own name, empty on a cash order because nothing has
+    # been charged yet at the point one is placed.
+    payment_reference: str = ""
 
     recipient_name: str = ""
     recipient_phone: str = ""
@@ -680,43 +750,41 @@ class OrderItem(SQLModel, table=True):
     # They used to live only on the cart line, which is deleted the moment the
     # order is placed — so a cancelled order knew it had taken two of
     # something blue and could not say two of what.
+    # Which cell of the grid was bought. The id is what a count goes back
+    # onto; the label beside it is for reading ("Qora · 42") and survives the
+    # variant being renamed or deleted.
     variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
-    color_variant_id: int | None = Field(
-        default=None, foreign_key="product_variants.id"
-    )
-    # Who sold it and on which offer. Without the seller there is no answering
-    # "who is owed this money", which is the whole point of a marketplace; the
-    # offer is what the counts come off and go back onto.
-    seller_id: int | None = Field(default=None, foreign_key="sellers.id", index=True)
-    offer_id: int | None = Field(default=None, foreign_key="offers.id", index=True)
-    # What we keep of this line, as the rate stood the day it was sold.
-    #
-    # Read off ``Seller.commission_percent`` at the time and then left alone.
-    # A rate is a term of a contract and contracts get renegotiated; a payout
-    # computed later against today's rate would quietly restate what a seller
-    # was owed for something they sold last year. There is no payout module
-    # yet, which is exactly why the figure has to be captured now — afterwards
-    # it is not a column to add but a number nobody can recover.
-    commission_percent: int = 0
-    # What handling one of these cost, as the tariff stood the day it sold.
-    #
-    # Snapshotted for exactly the reason above it is: a tariff is a term of a
-    # contract and gets renegotiated, and a payout computed later against
-    # today's bands would restate what a seller was owed for last year.
-    #
-    # Kept as so'm per unit rather than as a band id, so the line stays
-    # readable after the band it came from is edited or deleted. Zero on
-    # everything sold before there was a fee to charge, which is correct: we
-    # did not charge one.
-    fulfilment_fee: int = 0
+    # Apart, as well as joined. The label is one string for a line with one
+    # line to spare, and a client with only that prints "Qora · 41" as though
+    # it were the name of one thing — the customer chose a colour *and* a size.
+    # Snapshotted for the same reason the label is: the variant may be gone by
+    # the time somebody opens this order again.
+    colour: str = Field(default="", max_length=60)
+    size: str = Field(default="", max_length=40)
     variant_label: str = ""
     unit_price: int = 0
+    # What the shop paid for one of these, frozen beside what it charged.
+    #
+    # Snapshotted at checkout from the variant's ``last_cost``, for the same
+    # reason ``unit_price`` is snapshotted: the next market run moves the cost
+    # and an order must not change when the shelf does. Without it a sold unit
+    # cannot be traced to a lot at all — the ``delivered`` movement carries no
+    # supply id — so margin was not a figure this system could produce.
+    #
+    # **Nought means unknown.** Every line written before this column existed
+    # has nought, and margin on those orders is unknowable rather than total.
+    unit_cost: int = 0
     quantity: int = 1
     reviewed: bool = False
 
     @property
     def line_total(self) -> int:
         return self.unit_price * self.quantity
+
+    @property
+    def line_cost(self) -> int:
+        """Nought when the cost is unknown, which is not the same as free."""
+        return self.unit_cost * self.quantity
 
 
 class OrderEvent(SQLModel, table=True):
@@ -778,48 +846,26 @@ class ReturnRequest(SQLModel, table=True):
     # paid, so with only ``created_at`` a refund granted in February would
     # land in January's account — and January may already be closed.
     refunded_at: datetime | None = None
+
+    # ------------------------------------------------- the goods, after the money
+    #
+    # A refund answers the customer. It says nothing about the shirt, which is
+    # in a box at the warehouse and is either sellable again or is not. That
+    # used to be two answers from two parties — the warehouse inspected and
+    # the seller decided what to do about it. The goods are ours now, so the
+    # inspection is the whole of it: whoever opened the parcel says what they
+    # found, and the shelf follows from that.
+    inspection: ReturnInspection | None = Field(default=None, index=True)
+    inspection_note: str = ""
+    inspected_at: datetime | None = None
+    inspected_by_id: int | None = Field(default=None, foreign_key="users.id")
+
+    # And whether the shelf has already been moved for this request. A refund
+    # that restocked and an inspection that passed can both reach for it; one
+    # shirt back is one shirt back, and this is what stops it being two.
+    relisted_at: datetime | None = None
+
     created_at: datetime = Field(default_factory=utcnow)
-
-
-# --------------------------------------------------------------------------- reviews
-
-
-class Review(SQLModel, table=True):
-    __tablename__ = "reviews"
-
-    id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id", index=True)
-    product_id: int = Field(foreign_key="products.id", index=True)
-    order_item_id: int | None = Field(default=None, foreign_key="order_items.id")
-
-    rating: int = 5
-    text: str = ""
-    variant_label: str = ""
-    tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    photos: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-
-    likes: int = 0
-    status: ReviewStatus = Field(default=ReviewStatus.MODERATING)
-    created_at: datetime = Field(default_factory=utcnow)
-
-
-class ReviewLike(SQLModel, table=True):
-    __tablename__ = "review_likes"
-    __table_args__ = (UniqueConstraint("user_id", "review_id", name="uq_review_like"),)
-
-    id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="users.id", index=True)
-    review_id: int = Field(foreign_key="reviews.id", index=True)
-
-
-class ReviewTag(SQLModel, table=True):
-    """The suggested chips on the "write a review" screen."""
-
-    __tablename__ = "review_tags"
-
-    id: int | None = Field(default=None, primary_key=True)
-    label: str
-    sort: int = 0
 
 
 # --------------------------------------------------------------------------- misc
@@ -940,75 +986,143 @@ class AuditLog(SQLModel, table=True):
 
 # --------------------------------------------------------------------------- warehouse
 
-# The shelf figure stops being a number anybody writes.
+# Where everything is.
 #
-# ``Offer.stock_left`` and ``OfferVariant.stock_left`` are now a running total
-# of the rows below, kept as columns for the same reason the price is (the
-# listings filter and sort on them in SQL). The invariant the tests hold us to
-# is that the column equals the sum of the ledger — so a count that looks
-# wrong is not an argument, it is a list of movements with a name and a reason
-# against each one.
+# The old model knew how many of a thing there were and nothing about where
+# they stood, so "fetch two black 42s" was answered by a person who already
+# knew the room. Below is the part that was missing: a place, what is in it,
+# and every move between two places.
+
+
+class Location(SQLModel, table=True):
+    """One place goods can be: a shelf cell, or an area with a job.
+
+    **The racks are data, not constants.** Three units of four columns by four
+    rows is where the owner starts, not where they end — a fourth unit or a
+    second room is a seed change and not a code change, and nothing anywhere
+    may write 3, 4 or 48 as a number.
+
+    Cell codes read the way a person reads a shelf: ``A-01-01`` is rack A,
+    leftmost column, **bottom** row. Row 1 at the bottom because that is where
+    a person's eye starts and where the heavy things go.
+    """
+
+    __tablename__ = "locations"
+
+    id: int | None = Field(default=None, primary_key=True)
+    code: str = Field(index=True, unique=True, max_length=30)
+    kind: LocationKind = Field(index=True)
+
+    # Null on everything but a cell: QABUL is not in a rack.
+    rack: str | None = Field(default=None, max_length=4)
+    column_no: int | None = None
+    row_no: int | None = None
+
+    # How many units this cell is meant to hold. Not enforced — a cell that
+    # refuses the last pair of shoes at nine in the evening is a cell somebody
+    # works around — but shown, so the map can say which cells are full and
+    # the putaway screen can warn before it is.
+    capacity: int = 0
+    is_active: bool = True
+    note: str = ""
+
+
+class StockPlacement(SQLModel, table=True):
+    """How many of one variant are in one place.
+
+    Derived state: the sum of the movements into this pair less the movements
+    out of it. It is a table rather than a query because the shelf map reads
+    every cell at once and the pick list asks "where is this" on every line,
+    and a test holds it to equalling the ledger — a placement that has drifted
+    is a bug in ``app.stock``, not a figure to be corrected by hand.
+    """
+
+    __tablename__ = "stock_placements"
+    __table_args__ = (
+        UniqueConstraint("location_id", "variant_id", name="uq_placement"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    location_id: int = Field(foreign_key="locations.id", index=True)
+    variant_id: int = Field(foreign_key="product_variants.id", index=True)
+    qty: int = 0
 
 
 class StockMovement(SQLModel, table=True):
-    """One reason a count changed.
+    """One move: this many of this variant, from here to there.
 
-    Signed: what came in is positive and what went out is negative, so the
-    shelf is the sum and nothing has to be read twice. Which *kind* it was is
-    separate from the sign — a stocktake correction can go either way and is
-    still a stocktake correction.
+    ``from_location_id`` null means the outside world — a market run arriving,
+    a customer's parcel coming back. ``to_location_id`` null means it left the
+    building: delivered, or written off. Both null is not a movement and is
+    refused.
+
+    ``qty`` is always positive. The direction is the pair of places, not a
+    sign, which is what makes "what is in cell A-02-03" a question with one
+    answer rather than a sum somebody has to interpret.
     """
 
     __tablename__ = "stock_movements"
 
     id: int | None = Field(default=None, primary_key=True)
-    offer_id: int = Field(foreign_key="offers.id", index=True)
-    # The leaf the count sits on — a size, or a colour where there are no
-    # sizes. Null for an offer nobody counts by variant, and for the odd sale
-    # of "one of the product" where the customer named no colour.
-    variant_id: int | None = Field(
-        default=None, foreign_key="product_variants.id", index=True
+    variant_id: int = Field(foreign_key="product_variants.id", index=True)
+
+    from_location_id: int | None = Field(
+        default=None, foreign_key="locations.id", index=True
+    )
+    to_location_id: int | None = Field(
+        default=None, foreign_key="locations.id", index=True
     )
 
     kind: StockMovementKind = Field(index=True)
-    quantity: int                     # signed
+    qty: int
     reason: str = ""
 
-    # Who moved it. Null for the opening balance, which nobody decided.
+    # Who moved it. Null for a move nobody decided.
     actor_id: int | None = Field(default=None, foreign_key="users.id", index=True)
 
-    # What caused it. Exactly one of these is set on anything but an opening
-    # balance or a bare write-off, and they are what turns the ledger from a
-    # list of numbers into a story that can be followed both ways.
+    # What caused it, so the ledger reads as a story in both directions. The
+    # return is here as well as the brief's two because a parcel coming back
+    # is the one cause that arrives from outside the building and has no
+    # supply and no order line to explain it.
     supply_id: int | None = Field(default=None, foreign_key="supplies.id", index=True)
     order_id: int | None = Field(default=None, foreign_key="orders.id", index=True)
     return_request_id: int | None = Field(
         default=None, foreign_key="return_requests.id", index=True
-    )
-    count_id: int | None = Field(default=None, foreign_key="stock_counts.id", index=True)
-    removal_id: int | None = Field(
-        default=None, foreign_key="removal_orders.id", index=True
     )
 
     created_at: datetime = Field(default_factory=utcnow, index=True)
 
 
 class Supply(SQLModel, table=True):
-    """A batch a seller brings in, declared before it arrives.
+    """A market run: sacks brought back from the wholesale market.
 
-    The code is ours. A seller's own label is a label on somebody else's
-    system: it may repeat, it may be missing, and two sellers may use the same
-    one on the same day. The pallet gets a code from here and the warehouse
-    looks for that.
+    Nobody delivers to us. The owner goes to Chorsu, buys what looks worth
+    buying and brings it back in a van, so there is nothing to declare in
+    advance and nobody to declare it — the buyer is whoever is signed in.
+
+    A run in ``draft`` is sacks standing unopened in the receiving area. It
+    becomes goods only when somebody sorts it, and closing it is what writes
+    the receipt into the ledger.
     """
 
     __tablename__ = "supplies"
 
     id: int | None = Field(default=None, primary_key=True)
     code: str = Field(index=True, unique=True)       # "SUP-000123"
-    seller_id: int = Field(foreign_key="sellers.id", index=True)
-    status: SupplyStatus = Field(default=SupplyStatus.DECLARED, index=True)
+    status: SupplyStatus = Field(default=SupplyStatus.DRAFT, index=True)
     note: str = ""
+
+    # Where it was bought — "Chorsu", "Ippodrom". Free text, because a market
+    # is not an entity anybody maintains; the form autocompletes it from
+    # previous runs so it stays spelt the same way.
+    place: str = ""
+    # What the van cost, when there was one. Optional, and per run rather than
+    # per line: nobody apportions a taxi fare across six sacks of socks.
+    transport_cost: int = 0
+
+    # Who went to the market. There is no supplier to name, so this is the
+    # only party to the purchase there is.
+    buyer_id: int | None = Field(default=None, foreign_key="users.id", index=True)
 
     declared_at: datetime = Field(default_factory=utcnow)
     received_at: datetime | None = None
@@ -1016,298 +1130,129 @@ class Supply(SQLModel, table=True):
 
 
 class SupplyLine(SQLModel, table=True):
-    """What the seller says is in the batch, and what the warehouse found.
+    """One pile out of a sack: what it is, how many, and what it cost.
 
-    Both, kept side by side. A declaration is a promise and a receipt is a
-    fact, and the gap between them is the only thing either party will want to
-    talk about afterwards.
+    Written while sorting, not before. There is no declaration to compare a
+    receipt against — nobody said in advance what was in the sack — so a line
+    is a fact from the moment it exists.
     """
 
     __tablename__ = "supply_lines"
 
     id: int | None = Field(default=None, primary_key=True)
     supply_id: int = Field(foreign_key="supplies.id", index=True)
-    offer_id: int = Field(foreign_key="offers.id", index=True)
-    variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
+    variant_id: int = Field(foreign_key="product_variants.id", index=True)
 
-    declared_quantity: int = 0
-    received_quantity: int | None = None    # None until somebody counts it
+    quantity: int = 0
+    # What one of them cost at the market, in so'm. Per line because a sack
+    # holds several things bought at several prices, and the margin on each is
+    # the only reason to record any of it.
+    unit_cost: int = 0
 
     @property
-    def difference(self) -> int | None:
-        if self.received_quantity is None:
-            return None
-        return self.received_quantity - self.declared_quantity
+    def line_cost(self) -> int:
+        return self.unit_cost * self.quantity
+
+
+class PickStatus(StrEnum):
+    """Where one order's picking has got to."""
+
+    WAITING = "waiting"      # on the board, nobody has taken it
+    PICKING = "picking"      # somebody is walking the room with it
+    PICKED = "picked"        # everything is in YIGIM, waiting for a courier
+
+
+class PickTask(SQLModel, table=True):
+    """One order, to be fetched off the shelves.
+
+    Taken rather than assigned: a picker at the bench takes the oldest task on
+    the board, the same way a courier takes a round. An assigner would be a
+    person deciding something a queue already decides.
+    """
+
+    __tablename__ = "pick_tasks"
+    __table_args__ = (UniqueConstraint("order_id", name="uq_pick_task_order"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    order_id: int = Field(foreign_key="orders.id", index=True)
+    status: PickStatus = Field(default=PickStatus.WAITING, index=True)
+    picker_id: int | None = Field(default=None, foreign_key="users.id", index=True)
+
+    created_at: datetime = Field(default_factory=utcnow, index=True)
+    taken_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class PickLine(SQLModel, table=True):
+    """One variant to fetch from one place.
+
+    A line per *place*, not per order line: a model that outgrew its cell is
+    in two of them, and the picker has to be sent to both. ``walk_order`` is
+    filled in when the task is built, from the serpentine order of the room,
+    so the list comes back in the order somebody walks rather than in the
+    order the ids fall.
+    """
+
+    __tablename__ = "pick_lines"
+
+    id: int | None = Field(default=None, primary_key=True)
+    task_id: int = Field(foreign_key="pick_tasks.id", index=True)
+    order_item_id: int | None = Field(default=None, foreign_key="order_items.id")
+    variant_id: int = Field(foreign_key="product_variants.id", index=True)
+    location_id: int = Field(foreign_key="locations.id", index=True)
+
+    qty: int = 0
+    picked_qty: int = 0
+    walk_order: int = 0
+    picked_at: datetime | None = None
+
+
+class CountStatus(StrEnum):
+    OPEN = "open"          # somebody is counting
+    CLOSED = "closed"      # the differences are in the ledger
 
 
 class StockCount(SQLModel, table=True):
-    """A stocktake of one offer: what we think is there, then what is.
+    """A recount of one cell.
 
-    Opened against an offer rather than a place, because a place is not
-    modelled yet and the offer is what a figure belongs to. The expected
-    numbers are snapshotted when it opens, so a sale during the count does not
-    silently become a discrepancy.
+    Per cell rather than per room: a stocktake of the whole warehouse is a day
+    nobody has, and a cell is what one person can count without stopping the
+    shop. What it finds becomes an ``adjust`` movement with the counter's name
+    on it — never an assignment.
     """
 
     __tablename__ = "stock_counts"
 
     id: int | None = Field(default=None, primary_key=True)
-    code: str = Field(index=True, unique=True)       # "CNT-000042"
-    offer_id: int = Field(foreign_key="offers.id", index=True)
-    status: StockCountStatus = Field(default=StockCountStatus.OPEN, index=True)
+    location_id: int = Field(foreign_key="locations.id", index=True)
+    status: CountStatus = Field(default=CountStatus.OPEN, index=True)
+    counter_id: int | None = Field(default=None, foreign_key="users.id", index=True)
     note: str = ""
 
-    opened_by_id: int | None = Field(default=None, foreign_key="users.id")
-    opened_at: datetime = Field(default_factory=utcnow)
-    closed_by_id: int | None = Field(default=None, foreign_key="users.id")
+    started_at: datetime = Field(default_factory=utcnow, index=True)
     closed_at: datetime | None = None
 
 
 class StockCountLine(SQLModel, table=True):
+    """What the system thought, and what the person found.
+
+    Both are kept. The difference is the whole point of a stocktake, and a
+    line that only recorded the new figure would leave nobody able to say how
+    far out the shelf had drifted.
+    """
+
     __tablename__ = "stock_count_lines"
 
     id: int | None = Field(default=None, primary_key=True)
     count_id: int = Field(foreign_key="stock_counts.id", index=True)
-    variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
+    variant_id: int = Field(foreign_key="product_variants.id", index=True)
 
-    expected: int = 0                  # as at the moment the count opened
-    counted: int | None = None         # what was on the shelf
+    expected_qty: int = 0
+    counted_qty: int = 0
 
     @property
-    def difference(self) -> int | None:
-        if self.counted is None:
-            return None
-        return self.counted - self.expected
-
-
-class RemovalOrder(SQLModel, table=True):
-    """A seller asking for their goods back — damaged or simply unsold.
-
-    Between ``ready`` and ``collected`` the goods are held: picked, set aside,
-    and not on anybody's shelf. Selling something that is already on a pallet
-    by the door is the failure this state exists to prevent.
-    """
-
-    __tablename__ = "removal_orders"
-
-    id: int | None = Field(default=None, primary_key=True)
-    code: str = Field(index=True, unique=True)       # "RMV-000007"
-    seller_id: int = Field(foreign_key="sellers.id", index=True)
-    status: RemovalStatus = Field(default=RemovalStatus.REQUESTED, index=True)
-    reason: RemovalReason = Field(default=RemovalReason.UNSOLD)
-    note: str = ""
-
-    requested_at: datetime = Field(default_factory=utcnow)
-    ready_at: datetime | None = None
-    collected_at: datetime | None = None
-    prepared_by_id: int | None = Field(default=None, foreign_key="users.id")
-
-
-class RemovalLine(SQLModel, table=True):
-    __tablename__ = "removal_lines"
-
-    id: int | None = Field(default=None, primary_key=True)
-    removal_id: int = Field(foreign_key="removal_orders.id", index=True)
-    offer_id: int = Field(foreign_key="offers.id", index=True)
-    variant_id: int | None = Field(default=None, foreign_key="product_variants.id")
-
-    quantity: int = 0                       # what the seller asked for
-    prepared_quantity: int | None = None    # what the warehouse actually found
-
-
-# --------------------------------------------------------------------------- paying sellers
-
-# Nobody was being paid.
-#
-# The marketplace worked end to end — a seller was taken on, priced an offer,
-# the warehouse booked goods in, a customer bought them, and the commission
-# rate was snapshotted onto the order line. And then nothing. There was no
-# period, no statement, no payout, and no way to answer "what am I owed".
-#
-# Two decisions run through everything below.
-#
-# **A statement is a ledger, not a figure.** Its payable is the sum of its
-# lines and every line names what it came from — an order line, a return, an
-# offer sitting in the warehouse. A seller told "9 100 000" and nothing else
-# has been given a number to argue with rather than an account to read. This
-# is the same reason the shelf stopped being a number somebody wrote.
-#
-# **A closed statement never changes.** A seller who reads a figure and is
-# shown a different one next week has been told that the first figure meant
-# nothing. So closing freezes the lines, and anything that arrives afterwards
-# — a refund on a months-old order especially — lands in the next period
-# instead of rewriting the one already seen.
-
-
-class SettlementStatus(StrEnum):
-    """Where a period, or one seller's account within it, has got to."""
-
-    OPEN = "open"        # still gathering; may be rebuilt from the sources
-    CLOSED = "closed"    # frozen, and the seller may be shown it
-    PAID = "paid"        # the money has left, with a date and a method
-
-
-class StatementLineKind(StrEnum):
-    """What one row of a statement is.
-
-    Signed amounts, so the statement is the sum of its lines the way the shelf
-    is the sum of its movements: what is owed to the seller is positive and
-    what we keep or claw back is negative. Which *kind* it is stays separate
-    from the sign, because a refund's commission comes back and is still part
-    of the refund.
-    """
-
-    SALE = "sale"                            # goods delivered — owed
-    COMMISSION = "commission"                # our cut of that sale
-    FULFILMENT = "fulfilment"                # picking, packing, the van
-    REFUND = "refund"                        # a sale undone
-    REFUND_COMMISSION = "refund_commission"  # our cut of it, given back
-    STORAGE = "storage"                      # warehouse space, per unit-day
-    ADJUSTMENT = "adjustment"                # a correction somebody explained
-
-
-class FulfilmentTariff(SQLModel, table=True):
-    """What one unit costs us physically, by how heavy it is.
-
-    Two rates, because a weight band decides two different things: what it
-    costs to pick and carry one of these once, and what it costs to keep one
-    on a shelf for a day. Both follow the same physical fact — how big the
-    thing is — so they live on the same band rather than in two tables that
-    would have to be kept in step.
-
-    **This is the whole reason a second fee exists.** Commission is a
-    percentage, and a percentage of a cheap thing does not pay for a van. The
-    catalogue's cheapest card is 39 000 so'm: five per cent of it is 1 950,
-    against a Tashkent delivery that costs multiples of that. Thirty per cent
-    of the published catalogue loses money on every order under a flat
-    commission — and the more of it sells, the more is lost. Meanwhile five
-    per cent of a 182 000 000 so'm watch is 9 100 000 for carrying one small
-    box the same distance.
-
-    So the two are separated: commission scales with what the goods are worth,
-    and this scales with what they cost us to move. Weight bands rather than
-    measured volume because weight is one column and a seller can state it;
-    dimensions and volumetric weight are a bigger question and are deferred
-    deliberately rather than half-built.
-    """
-
-    __tablename__ = "fulfilment_tariffs"
-
-    id: int | None = Field(default=None, primary_key=True)
-    # The top of the band, inclusive. The heaviest band is given a very large
-    # number rather than a null, so "which band is this" is one comparison
-    # with no special case.
-    max_grams: int = Field(index=True)
-    # Per shipment: picking, packing and the van.
-    fee: int = 0
-    # Per unit per day on a shelf. Flat storage would charge a washing machine
-    # and a pair of earphones the same rent, which is the same mistake a flat
-    # commission makes about price — see the note above.
-    storage_per_day: int = 0
-    label: str = ""
-
-
-class SettlementPeriod(SQLModel, table=True):
-    """The calendar decision: which days one payout run covers.
-
-    Global rather than per seller. "Close January" has to mean the same dates
-    for everybody, or two sellers' accounts cannot be compared and a gap
-    between one seller's periods becomes days nobody is paid for.
-    """
-
-    __tablename__ = "settlement_periods"
-    __table_args__ = (
-        UniqueConstraint("starts_on", "ends_on", name="uq_settlement_period"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    label: str = ""                      # "2026-yil yanvar", "9-hafta"
-    starts_on: date = Field(index=True)
-    ends_on: date = Field(index=True)
-    status: SettlementStatus = Field(default=SettlementStatus.OPEN, index=True)
-    closed_at: datetime | None = None
-    closed_by_id: int | None = Field(default=None, foreign_key="users.id")
-    created_at: datetime = Field(default_factory=utcnow)
-
-
-class SellerStatement(SQLModel, table=True):
-    """One seller's account for one period.
-
-    The totals are columns as well as the sum of the lines, for the same
-    reason ``Offer.stock_left`` is a column: a list of statements is sorted
-    and filtered on them in SQL, and the alternative is summing every line of
-    every statement to draw one table. The invariant the tests hold us to is
-    that ``payable`` equals the sum of the lines — a figure that disagrees
-    with its own composition is the thing this whole model exists to prevent.
-    """
-
-    __tablename__ = "seller_statements"
-    __table_args__ = (
-        UniqueConstraint("period_id", "seller_id", name="uq_seller_statement"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    period_id: int = Field(foreign_key="settlement_periods.id", index=True)
-    seller_id: int = Field(foreign_key="sellers.id", index=True)
-    status: SettlementStatus = Field(default=SettlementStatus.OPEN, index=True)
-
-    # Each of these is a positive figure read as a heading, not a signed
-    # amount: "commission 420 000" is a deduction and reads as one. The signs
-    # live on the lines, where the arithmetic is.
-    gross_sales: int = 0
-    commission: int = 0
-    fulfilment: int = 0
-    refunds: int = 0
-    storage: int = 0
-    adjustments: int = 0     # signed: a correction can go either way
-    payable: int = 0
-
-    closed_at: datetime | None = None
-    paid_at: datetime | None = None
-    payment_method: str = ""       # "bank o'tkazmasi", "naqd"
-    payment_reference: str = ""    # a transfer number somebody can look up
-    note: str = ""
-    created_at: datetime = Field(default_factory=utcnow)
-
-
-class StatementLine(SQLModel, table=True):
-    """One row of a seller's account, and where it came from.
-
-    ``9 100 000`` is not an answer to a seller who disputes it; this is. Every
-    line carries the thing it was computed from — the order line that sold,
-    the return that came back, the offer that sat in the warehouse — so the
-    figure can be walked back to the event that caused it.
-    """
-
-    __tablename__ = "statement_lines"
-
-    id: int | None = Field(default=None, primary_key=True)
-    statement_id: int = Field(foreign_key="seller_statements.id", index=True)
-    kind: StatementLineKind = Field(index=True)
-
-    # Signed: positive is owed to the seller, negative is kept or clawed back.
-    amount: int = 0
-    quantity: int = 0
-
-    # What caused it. Exactly one is set on everything but an adjustment, and
-    # they are what makes the total followable in both directions.
-    order_item_id: int | None = Field(
-        default=None, foreign_key="order_items.id", index=True
-    )
-    return_request_id: int | None = Field(
-        default=None, foreign_key="return_requests.id", index=True
-    )
-    offer_id: int | None = Field(default=None, foreign_key="offers.id", index=True)
-
-    # Readable without joining: what sold, and the sum in words where the sum
-    # is a calculation ("4 dona × 31 kun × 60 so'm").
-    title: str = ""
-    note: str = ""
-
-    # When the thing happened, not when the line was written. This is what
-    # buckets an event into a period, and what lets a refund that arrives
-    # after its own period was closed fall into the next one instead.
-    occurred_at: datetime = Field(default_factory=utcnow, index=True)
+    def difference(self) -> int:
+        return self.counted_qty - self.expected_qty
 
 
 # --------------------------------------------------------------------------- the courier
@@ -1315,18 +1260,23 @@ class StatementLine(SQLModel, table=True):
 # The courier was a role and nothing else.
 #
 # ``UserRole.COURIER`` was added in the first stage and no router ever asked
-# about it. An order did not record who was carrying it, there was no shift, a
-# delivery left no evidence beyond a status, and cash — which a courier
-# physically holds — was counted nowhere. So the last mile was the one part of
-# the business the system could not describe.
+# about it. An order did not record who was carrying it, and a delivery left
+# no evidence beyond a status. So the last mile was the one part of the
+# business the system could not describe.
+#
+# There was a ``CourierShift`` here too, with a cash total to open and close
+# and count against. It went with the panels rebuild: a shift is a
+# reconciliation container, reconciliation is not in this shop's flow, and
+# what a courier took at a door is on the attempt where it happened. Bringing
+# it back wants a screen before it wants a table.
 #
 # Two facts about the work decide the shape of everything below.
 #
 # **The phone has no signal.** A courier works in lifts, basements and
 # stairwells. The app queues what it cannot send and sends it later, possibly
 # twice, possibly much later. So every write here is keyed: a repeat of a
-# request replays the first answer instead of doing the thing again. Counting
-# the same cash twice is the most expensive mistake available in this module,
+# request replays the first answer instead of doing the thing again. Selling
+# the same shirt twice is the most expensive mistake available in this module,
 # and it is the one the design is built to make impossible.
 #
 # **A knock at a door is an event, not a state.** An order being refused at
@@ -1334,11 +1284,6 @@ class StatementLine(SQLModel, table=True):
 # What matters is how many times somebody tried and why it failed, and that is
 # a list. So attempts accumulate as rows and the order stays ``shipped``; the
 # decision to give up belongs to an operator, not to the courier at the door.
-
-
-class ShiftStatus(StrEnum):
-    OPEN = "open"        # out on the round
-    CLOSED = "closed"    # back, cash handed over
 
 
 class AttemptResult(StrEnum):
@@ -1390,48 +1335,6 @@ class IdempotencyRecord(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow, index=True)
 
 
-class CourierShift(SQLModel, table=True):
-    """One courier's round, and the cash that came back from it.
-
-    Cash is why a shift exists at all. A courier collects money at doors all
-    day and hands it over at the end; without a container for that stretch of
-    time there is nothing to reconcile against and "did the money arrive"
-    has no answer.
-
-    Three figures rather than one, because they are three different claims.
-    ``cash_expected`` is what the deliveries add up to — ours, computed, not
-    editable. ``cash_declared`` is what the courier says they are handing
-    over. ``cash_counted`` is what the office found when it counted. Where
-    they disagree the difference is the point, so nothing here is rounded into
-    agreement.
-    """
-
-    __tablename__ = "courier_shifts"
-
-    id: int | None = Field(default=None, primary_key=True)
-    courier_id: int = Field(foreign_key="users.id", index=True)
-    status: ShiftStatus = Field(default=ShiftStatus.OPEN, index=True)
-
-    opened_at: datetime = Field(default_factory=utcnow)
-    closed_at: datetime | None = None
-
-    # The sum of the cash taken at the doors on this shift. A running total
-    # kept as a column for the same reason a shelf figure is: it is read on
-    # every screen, and the invariant the tests hold us to is that it equals
-    # the sum of the attempts.
-    cash_expected: int = 0
-    # What the courier says they handed over, and what the office counted.
-    # Null until each of those has happened — a nought would be a claim.
-    cash_declared: int | None = None
-    cash_counted: int | None = None
-    counted_by_id: int | None = Field(default=None, foreign_key="users.id")
-    counted_at: datetime | None = None
-
-    orders_delivered: int = 0
-    orders_failed: int = 0
-    note: str = ""
-
-
 class DeliveryAttempt(SQLModel, table=True):
     """One knock at one door.
 
@@ -1453,12 +1356,6 @@ class DeliveryAttempt(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     order_id: int = Field(foreign_key="orders.id", index=True)
     courier_id: int = Field(foreign_key="users.id", index=True)
-    # Null for an attempt made outside a shift, which the endpoints refuse —
-    # kept nullable so a deleted shift cannot orphan the record of a delivery.
-    shift_id: int | None = Field(
-        default=None, foreign_key="courier_shifts.id", index=True
-    )
-
     result: AttemptResult = Field(index=True)
     # Why it failed. Required on a failure: "not delivered" with no reason is
     # the row nobody can act on, and an operator deciding what to do next has
@@ -1477,10 +1374,7 @@ class DeliveryAttempt(SQLModel, table=True):
 class PickupRun(SQLModel, table=True):
     """Approved returns to collect from customers and bring to the warehouse.
 
-    Not a ``RemovalOrder``. That one carries goods *out* to a seller who wants
-    their stock back; this one brings goods *in* from customers whose returns
-    an operator has approved. Opposite direction, different paperwork, and the
-    only thing they share is a van.
+    Brings goods *in* from customers whose returns the office has approved.
 
     **Receiving a run does not put anything on a shelf.** Whether returned
     goods are sellable is decided when the refund is made — the operator

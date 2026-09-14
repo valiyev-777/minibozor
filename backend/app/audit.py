@@ -5,8 +5,10 @@ session and therefore the same transaction: if the change rolls back the log
 row goes with it, and there is no way to end up with a record of something
 that never happened — or a change nobody recorded.
 
-Nothing calls this yet. The backoffice endpoints that move money and stock are
-the next step, and this is what they will write through.
+Reading them back is ``GET /admin/audit`` in ``app.routers.staff``, and it was
+a long time coming: for a while thirty-eight places wrote rows here and
+nothing anywhere read one, which made the table a write-only log and the
+question it exists to answer a job for a database client on the server.
 """
 
 from __future__ import annotations

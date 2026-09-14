@@ -9,8 +9,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.minibozor.core.util.Outcome
 import uz.minibozor.data.remote.dto.AddressDto
-import uz.minibozor.data.remote.dto.AddressRequest
 import uz.minibozor.data.remote.dto.CardDto
+import uz.minibozor.data.remote.dto.AddressRequest
 import uz.minibozor.data.remote.dto.CheckoutPreviewDto
 import uz.minibozor.data.remote.dto.CheckoutRequest
 import uz.minibozor.data.remote.dto.PickupPointDto
@@ -37,6 +37,16 @@ enum class DeliveryMethod { Courier, Pickup }
  * with their order, and "2 qadam qoldi — manzil va to'lov" is the difference
  * between a screen that waits and a screen that asks.
  */
+/**
+ * What the checkout still needs before an order can be placed.
+ *
+ * ``Payment`` is a real step again, and it is missing in exactly one case: the
+ * customer is paying by card and has not got one saved. Cash needs nothing —
+ * it is settled at the door — and a card order with a card chosen needs
+ * nothing either, so the step appears only when there is genuinely something
+ * to go and do. A step that is never missing would be a button that says
+ * "next" and does nothing; a step that is always missing would be worse.
+ */
 enum class CheckoutStep { Address, Time, Payment }
 
 data class CheckoutState(
@@ -46,12 +56,12 @@ data class CheckoutState(
     val addresses: List<AddressDto> = emptyList(),
     val pickupPoints: List<PickupPointDto> = emptyList(),
     val slotDays: List<SlotDayDto> = emptyList(),
-    val cards: List<CardDto> = emptyList(),
     val addressId: Int? = null,
     val pickupPointId: Int? = null,
     val slotId: Int? = null,
-    val cardId: Int? = null,
     val paymentMethod: String = "card",
+    val cards: List<CardDto> = emptyList(),
+    val cardId: Int? = null,
     val delivery: DeliveryMethod = DeliveryMethod.Courier,
     val promoCode: String? = null,
     val placing: Boolean = false,
@@ -63,11 +73,15 @@ data class CheckoutState(
     val selectedAddress: AddressDto?
         get() = addresses.firstOrNull { it.id == addressId }
 
+    val selectedPickup: PickupPointDto?
+        get() = pickupPoints.firstOrNull { it.id == pickupPointId }
+
     val selectedCard: CardDto?
         get() = cards.firstOrNull { it.id == cardId }
 
-    val selectedPickup: PickupPointDto?
-        get() = pickupPoints.firstOrNull { it.id == pickupPointId }
+    /** A card that can actually be charged; an expired one cannot. */
+    val usableCards: List<CardDto>
+        get() = cards.filter { it.status == "active" }
 
     /** In order, so the first of them is the one to ask for next. */
     val missing: List<CheckoutStep>
@@ -80,6 +94,9 @@ data class CheckoutState(
                 // Nothing to schedule when the customer is coming to fetch it.
                 DeliveryMethod.Pickup -> if (pickupPointId == null) add(CheckoutStep.Address)
             }
+            // Last, because it is the last thing anybody wants to be asked
+            // about: where it goes and when comes first, and then what pays
+            // for it.
             if (paymentMethod != "cash" && cardId == null) add(CheckoutStep.Payment)
         }
 
@@ -111,9 +128,9 @@ class CheckoutViewModel @Inject constructor(
             _state.update { it.copy(loading = true, error = null) }
 
             val addresses = (orders.addresses() as? Outcome.Success)?.data.orEmpty()
-            val cards = (orders.cards() as? Outcome.Success)?.data.orEmpty()
             val slotDays = (orders.slots(3) as? Outcome.Success)?.data.orEmpty()
             val pickups = (orders.pickupPoints() as? Outcome.Success)?.data.orEmpty()
+            val cards = (orders.cards() as? Outcome.Success)?.data.orEmpty()
 
             _state.update {
                 it.copy(
@@ -125,15 +142,18 @@ class CheckoutViewModel @Inject constructor(
                     // berish" — the checkout asked for a preview with no code
                     // on it and quietly charged the full amount.
                     promoCode = it.promoCode ?: cart.promoCode.value,
-                    cards = cards,
                     slotDays = slotDays,
                     pickupPoints = pickups,
                     addressId = it.addressId ?: addresses.firstOrNull { a -> a.isDefault }?.id
                         ?: addresses.firstOrNull()?.id,
-                    cardId = it.cardId ?: cards.firstOrNull { c -> c.isDefault && c.status == "active" }?.id
-                        ?: cards.firstOrNull { c -> c.status == "active" }?.id,
                     slotId = it.slotId ?: slotDays.flatMap { d -> d.slots }
                         .firstOrNull { s -> s.available }?.id,
+                    cards = cards,
+                    // The default, or the first one that can be charged. A
+                    // shopper with one saved card should not have to choose it.
+                    cardId = it.cardId
+                        ?: cards.firstOrNull { c -> c.isDefault && c.status == "active" }?.id
+                        ?: cards.firstOrNull { c -> c.status == "active" }?.id,
                 )
             }
             refreshPreview()
@@ -183,14 +203,52 @@ class CheckoutViewModel @Inject constructor(
         refreshPreview()
     }
 
-    fun selectCard(id: Int) {
-        _state.update { it.copy(cardId = id, paymentMethod = "card") }
+    /**
+     * How the money changes hands.
+     *
+     * Online by card, charged when the order is placed, or in cash to the
+     * courier at the door. Tapping "Karta" with nothing saved selects the
+     * method and leaves [CheckoutStep.Payment] outstanding, which is what
+     * sends the customer to the form — rather than a tile that looks chosen
+     * and a button that is then refused by the server.
+     */
+    fun selectCard(id: Int? = null) {
+        _state.update {
+            it.copy(
+                paymentMethod = "card",
+                cardId = id ?: it.cardId
+                    ?: it.cards.firstOrNull { c -> c.isDefault && c.status == "active" }?.id
+                    ?: it.cards.firstOrNull { c -> c.status == "active" }?.id,
+            )
+        }
         refreshPreview()
     }
 
     fun selectCash() {
+        // The card is forgotten, not remembered: a cash order that still names
+        // one is a request the server refuses to read either way, and leaving
+        // it set meant switching back to Karta silently re-selected a card the
+        // customer may have been trying to get away from.
         _state.update { it.copy(paymentMethod = "cash", cardId = null) }
         refreshPreview()
+    }
+
+    /** Called when returning from "Karta qo'shish", so a new card shows up at once. */
+    fun reloadCards() {
+        viewModelScope.launch {
+            val cards = (orders.cards() as? Outcome.Success)?.data.orEmpty()
+            _state.update { state ->
+                val stillThere = cards.any { it.id == state.cardId }
+                state.copy(
+                    cards = cards,
+                    cardId = if (stillThere) state.cardId else {
+                        cards.firstOrNull { it.isDefault && it.status == "active" }?.id
+                            ?: cards.firstOrNull { it.status == "active" }?.id
+                    },
+                )
+            }
+            refreshPreview()
+        }
     }
 
     /** Called when returning from the address form, so a new one shows up. */
@@ -206,24 +264,6 @@ class CheckoutViewModel @Inject constructor(
                         state.pickupPointId != null -> null
                         else -> addresses.firstOrNull { it.isDefault }?.id
                             ?: addresses.firstOrNull()?.id
-                    },
-                )
-            }
-            refreshPreview()
-        }
-    }
-
-    /** Called when returning from "add card", so a new card shows up at once. */
-    fun reloadCards() {
-        viewModelScope.launch {
-            val cards = (orders.cards() as? Outcome.Success)?.data.orEmpty()
-            _state.update { state ->
-                val stillThere = cards.any { it.id == state.cardId }
-                state.copy(
-                    cards = cards,
-                    cardId = if (stillThere) state.cardId else {
-                        cards.firstOrNull { it.isDefault && it.status == "active" }?.id
-                            ?: cards.firstOrNull { it.status == "active" }?.id
                     },
                 )
             }
@@ -264,7 +304,9 @@ class CheckoutViewModel @Inject constructor(
         pickupPointId = pickupPointId,
         slotId = slotId,
         paymentMethod = paymentMethod,
-        paymentCardId = cardId,
+        // Only on a card order. The server refuses a cash order that names a
+        // card, and rightly: a client that sends both has not decided.
+        paymentCardId = cardId.takeIf { paymentMethod == "card" },
         promoCode = promoCode,
     )
 }

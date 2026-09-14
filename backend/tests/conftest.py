@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import pathlib
 
 os.environ.setdefault("MB_DATABASE_URL", "sqlite:///./test.db")
 os.environ.setdefault("MB_ENV", "dev")
@@ -11,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from app.db import engine, init_db
+from app.db import engine, init_db, stamp_head
 from app.main import app
 from app.models import User, UserRole
 from app.seed import ADMIN_PHONE, reset, seed
@@ -21,10 +22,63 @@ API = "/api/v1"
 
 @pytest.fixture(scope="session", autouse=True)
 def database() -> None:
+    """Built by ``create_all``, then stamped at head.
+
+    ``create_all`` rather than ``alembic upgrade head`` because this runs once
+    per suite and issues one CREATE TABLE per table instead of replaying the
+    migration history — the suite is slow enough already. That is only
+    defensible because ``test_schema.py`` holds the two builders to producing
+    the identical schema, so what the tests run against is what a migrated
+    database is. Without that test this shortcut would be the exact hole the
+    migration system was installed to close.
+
+    Stamped because the application refuses to start against a database with
+    no version row, and ``TestClient(app)`` runs the real lifespan. The stamp
+    is not a way round the check: this database genuinely holds what the
+    baseline builds, and the test next door is what says so.
+
+    **The file is deleted first.** ``create_all`` creates a table that is
+    missing and never alters one that exists, so a column added to a table
+    already in ``test.db`` simply never appeared — and the suite then failed
+    with ``no such column`` a hundred times over, from a stale file rather
+    than from anything in the change. Starting from nothing is a second of
+    CREATE TABLEs and removes the whole class of confusion.
+    """
+    url = os.environ["MB_DATABASE_URL"]
+    if url.startswith("sqlite:///"):
+        stale = pathlib.Path(url.removeprefix("sqlite:///"))
+        stale.unlink(missing_ok=True)
+
     init_db()
+    stamp_head()
     with Session(engine) as session:
         reset(session)
         seed(session)
+
+
+COURIER_PHONE = "+998900009009"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def a_courier(database: None) -> None:
+    """One courier the whole suite can hand an order to.
+
+    An order may not be shipped with nobody named on it — a shipped order with
+    no courier is on nobody's round, reads as "on its way" to the customer and
+    the office, and is invisible to every courier. That rule means every test
+    that ships something needs a courier to exist, and creating one per test
+    would be a fixture in fifty signatures.
+
+    Its own number, not one a test might also pick, so a test asserting one
+    courier's round cannot collide with this one.
+    """
+    with Session(engine) as session:
+        if session.exec(select(User).where(User.phone == COURIER_PHONE)).first():
+            return
+        session.add(
+            User(phone=COURIER_PHONE, full_name="Kuryer (test)", role=UserRole.COURIER)
+        )
+        session.commit()
 
 
 @pytest.fixture
@@ -63,11 +117,19 @@ def admin(sign_in: Callable[[str], dict[str, str]]) -> dict[str, str]:
 
 
 @pytest.fixture
-def operator(
+def warehouse(
     staff: Callable[[UserRole, str], dict[str, str]],
 ) -> dict[str, str]:
-    """The role that answers returns, moderates reviews and moves orders."""
-    return staff(UserRole.OPERATOR, "+998900009001")
+    """The bench: receiving, putaway, picking, counts."""
+    return staff(UserRole.WAREHOUSE, "+998900009002")
+
+
+@pytest.fixture
+def seller(
+    staff: Callable[[UserRole, str], dict[str, str]],
+) -> dict[str, str]:
+    """The shop window: catalogue photographs, the words, the price, on sale."""
+    return staff(UserRole.SELLER, "+998900009004")
 
 
 @pytest.fixture

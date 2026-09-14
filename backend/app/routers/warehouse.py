@@ -1,58 +1,82 @@
 """The warehouse: how goods arrive, get counted, and leave.
 
-Under this model the goods are ours to hold and the seller's to own. So the
-two sides of the shelf answer to different people, and these endpoints draw
-that line:
+Nobody delivers to us. The owner goes to the wholesale market, buys what looks
+worth buying and comes back with sacks — mixed, unlabelled, unphotographed —
+so there is no declaration to check a receipt against and no supplier to
+check it with. What there is instead is **two moments**, and this file is
+shaped by the gap between them:
 
-* **A seller declares and requests.** A supply is a promise that a pallet is
-  coming; a removal is a request to have goods back. Both are the seller's to
-  make and neither moves a count.
-* **The warehouse counts.** Receiving a supply, closing a stocktake, and
-  handing a removal over are the only ways a figure changes here, and each one
-  writes to ``stock_movements`` with a kind, a reason and a name against it.
+* **The sacks arrive.** Thirty seconds at the door: how many, where from, what
+  the van cost. That is a ``draft`` supply, and nothing in it is stock — it is
+  a sack standing in the receiving area that nobody has opened. It cannot be
+  sold because nobody knows what it is.
+* **Somebody sorts it.** Open the sack, separate by colour and size, count
+  each pile, price it. Closing the run is what brings the goods into
+  existence: the lines become movements and the cards go on sale.
+
+The two are apart because the van arrives at nine in the evening and sorting
+five sacks that night is not going to happen. The alternative is goods in the
+building that the system has never heard of.
 
 Nothing sets a count. Every endpoint writes a *difference*, which is what
 makes two people working the same shelf at once safe: the second save adds to
 the first rather than erasing it.
-
-The batch code is ours, not the seller's. A seller's own reference belongs to
-their system — it may repeat, it may be missing, and two sellers may use the
-same one on the same day — so the pallet gets a code from here and the
-warehouse looks for that.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
+from typing import Annotated
+
+from fastapi import APIRouter, Header, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import audit, i18n
-from app import offers as of
+from app import audit, brands, i18n
+from app import idempotency as idem
+from app import locations as loc
+from app import products as pr
 from app import schemas as s
+from app import services as sv
 from app import stock as st
-from app.deps import SellerUser, SessionDep, StockViewer, WarehouseUser
+from app.deps import (
+    AdminUser,
+    CatalogReader,
+    SessionDep,
+    StockViewer,
+    WarehouseUser,
+)
 from app.models import (
-    Offer,
+    Brand,
+    Location,
+    LocationKind,
     Product,
+    ProductSpec,
+    ProductStatus,
     ProductVariant,
-    RemovalLine,
-    RemovalOrder,
-    RemovalStatus,
-    Seller,
-    StockCount,
-    StockCountLine,
-    StockCountStatus,
     StockMovement,
     StockMovementKind,
+    StockPlacement,
     Supply,
     SupplyLine,
     SupplyStatus,
     User,
-    UserRole,
     utcnow,
 )
 
-router = APIRouter(prefix="/staff", tags=["staff"])
+router = APIRouter(prefix="/warehouse", tags=["warehouse"])
+
+IdempotencyKey = Annotated[
+    str, Header(alias="Idempotency-Key", description="A uuid per queued action")
+]
+
+# What a card of a kind nobody has described yet gets offered. Four rows that
+# fit almost anything off a market stall, and the seller deletes what does not
+# apply — which is a faster thing to do than thinking of the words.
+STARTER_SPECS: tuple[str, ...] = (
+    "Mato",
+    "Ishlab chiqarilgan",
+    "O'lcham jadvali",
+    "Parvarish",
+)
 
 
 def _next_code(session: SessionDep, model, prefix: str) -> str:
@@ -61,48 +85,392 @@ def _next_code(session: SessionDep, model, prefix: str) -> str:
     return f"{prefix}-{int(used) + 1:06d}"
 
 
-# --------------------------------------------------------------------------- supplies
+# --------------------------------------------------------------------------- a pile
+
+
+@router.get(
+    "/vocab",
+    response_model=s.VocabOut,
+    summary="The receiving desk's chips — learned, not configured",
+)
+def vocab(user: CatalogReader, session: SessionDep) -> s.VocabOut:
+    """What has come through the door before, most-used first.
+
+    Nobody sets up a list of goods before they have received any, and a market
+    brings whatever it brings — so there is no vocabulary screen and nothing to
+    maintain. The chips are the answer to "what have we called things", which
+    means the list is short and right on day thirty and empty on day one, when
+    typing is the only thing that could have worked anyway.
+    """
+    # Archived cards are not vocabulary. A card written by mistake is deleted
+    # if nothing has moved through it and archived if something has — and its
+    # kind then sat in the chip row for good. A word this shop has finished
+    # with is a word the desk should stop offering, which also means the row
+    # tidies itself: get rid of the card and the chip goes with it.
+    alive = col(Product.status) != ProductStatus.ARCHIVED
+
+    kinds = _one_spelling(
+        session.exec(
+            select(Product.kind, func.count())
+            .where(col(Product.kind) != "", alive)
+            .group_by(col(Product.kind))
+        ).all()
+    )
+    brands = _one_spelling(
+        session.exec(
+            select(Brand.name, func.count())
+            .join(Product, col(Product.brand_id) == col(Brand.id))
+            .where(alive)
+            .group_by(col(Brand.name))
+        ).all()
+    )
+    colours = _one_spelling(
+        session.exec(
+            select(ProductVariant.colour, func.count())
+            .join(Product, col(Product.id) == col(ProductVariant.product_id))
+            .where(col(ProductVariant.colour) != "", alive)
+            .group_by(col(ProductVariant.colour))
+        ).all()
+    )
+
+    # Sizes by kind: trainers were last received in 40-45 and shirts in S-XXL,
+    # and offering the right row is the difference between three taps and
+    # twelve.
+    # Some things have no size: a cap, a bag, a wristwatch. The form used to
+    # ask for sizes whatever had arrived, and a person holding a sack of caps
+    # types *something* into a box that will not go away — which is how a size
+    # called "KS" was born. So the desk is also told which kinds have never
+    # had one, and asks the right question before it is asked anything.
+    sizeless: list[str] = []
+    for kind, sized in session.exec(
+        select(Product.kind, func.max(func.length(ProductVariant.size)))
+        .join(ProductVariant, col(ProductVariant.product_id) == col(Product.id))
+        .where(col(Product.kind) != "", alive)
+        .group_by(col(Product.kind))
+    ).all():
+        if not sized:
+            tidied = pr.tidy_label(kind)
+            if tidied not in sizeless:
+                sizeless.append(tidied)
+
+    sizes: dict[str, list[str]] = {}
+    for kind, size in session.exec(
+        select(Product.kind, ProductVariant.size)
+        .join(ProductVariant, col(ProductVariant.product_id) == col(Product.id))
+        .where(col(Product.kind) != "", col(ProductVariant.size) != "", alive)
+        .distinct()
+    ).all():
+        # Keyed by the tidied kind, because that is the spelling the chips
+        # carry and the form looks the sizes up by whatever it was given.
+        row = sizes.setdefault(pr.tidy_label(kind), [])
+        if size not in row:
+            row.append(size)
+    for row in sizes.values():
+        row.sort(key=pr.size_order)
+
+    # The specification rows, by kind. A starter set until a kind has been
+    # written once, because the first card of anything would otherwise face an
+    # empty table and nobody types one of those.
+    spec_keys: dict[str, list[str]] = {}
+    for kind, key in session.exec(
+        select(Product.kind, ProductSpec.key)
+        .join(ProductSpec, col(ProductSpec.product_id) == col(Product.id))
+        .where(col(Product.kind) != "", col(ProductSpec.key) != "", alive)
+        .order_by(col(ProductSpec.sort))
+    ).all():
+        row = spec_keys.setdefault(pr.tidy_label(kind), [])
+        if key not in row:
+            row.append(key)
+    for kind in kinds:
+        spec_keys.setdefault(kind, list(STARTER_SPECS))
+
+    return s.VocabOut(
+        kinds=kinds,
+        brands=brands,
+        colours=colours,
+        sizes=sizes,
+        sizeless=sizeless,
+        spec_keys=spec_keys,
+    )
+
+
+@router.post(
+    "/piles",
+    response_model=s.PileOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="A pile off the van — booked in and shelved in one action",
+)
+def book_in_pile(
+    payload: s.PileIn,
+    user: WarehouseUser,
+    session: SessionDep,
+    idempotency_key: IdempotencyKey,
+) -> s.PileOut:
+    """Receipt and putaway together, because the person is holding the goods.
+
+    A sack from the market is usually one thing — only black trainers, only
+    white shirts — and whoever opened it is standing at the shelf with it. The
+    two-stage flow below made them walk the room twice: once to tip the sack
+    out and once to carry what they had already counted. So this books the
+    goods in *and* shelves them, in one submit, with the cell typed on the same
+    form.
+
+    **One cell, or several.** ``location_code`` is the ordinary sack and is
+    unchanged. ``placements`` is the other answer: eighty pairs do not fit in
+    a cell that holds sixty, and the person is standing in front of four
+    cells with the pile at their feet. The cells are filled in the order they
+    are given — the first to its quantity, then the next — and a size may
+    straddle two of them, because that is what physically happens when a pile
+    is split and the movements are per variant and cell anyway. Exactly one
+    of the two ways has to be used: neither is the old homeless state coming
+    back, and both is two answers to one question.
+
+    **Capacity is not enforced, here least of all.** A cell that refuses the
+    last pair at nine in the evening is a cell somebody works around, and the
+    goods are already in the building by the time this request is made. The
+    map draws an over-full cell as over-full — that is what the warning is
+    for — and ``GET /warehouse/putaway-plan`` is what suggests a split that
+    fits before anybody types one.
+
+    The card this writes is a **stub**: a name, a colour, sizes and counts. It
+    has no category, no selling price and no catalogue photograph, so it stays
+    in ``draft`` and the apps cannot see it. Somebody fills those in at a desk
+    afterwards, in the light, which is the only place that work was ever going
+    to get done properly.
+    """
+    done = idem.replay(session, user, idempotency_key, "pile", payload)
+    if done is not None:
+        return s.PileOut(**done)
+
+    # Checked before a card is written: a stub product left behind by a
+    # request that was refused on its cells is a card nobody asked for, in a
+    # catalogue somebody has to tidy.
+    spread = _pile_spread(session, payload)
+
+    product = _pile_card(session, user, payload)
+    colour = pr.tidy_label(payload.colour)
+
+    # A card that already has colours cannot take a colourless pile. Without
+    # this, an empty colour writes a cell beside the ones that exist and puts
+    # the count on a variant no picker will ever be sent to — the goods would
+    # be on the shelf under a name nobody looks for. Guarded here and not only
+    # on the form, because the form is not the only caller there will be.
+    if payload.product_id is not None and not colour:
+        known = [one for one in pr.colours(session, product.id) if one]
+        if known:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                i18n.label("pile_needs_a_colour", colours=", ".join(known)),
+            )
+
+    wanted = [pr.tidy_size(line.size) for line in payload.sizes]
+
+    # A card is one shape: either its goods have sizes or they do not. A cap
+    # arrived sizeless, then arrived again as `M` and `XL`, and the card ended
+    # up holding both — a grey cap with no size beside a grey cap in M, which
+    # nobody can tell apart, on a shelf where they are the same cap. The shop
+    # then offered a blank size chip next to a real one. Refused here rather
+    # than tidied afterwards: by the time it is on the shelf the counts have
+    # already been split between two names for one thing.
+    if payload.product_id is not None:
+        had = pr.variants(session, product.id)
+        if had:
+            was_sized = any(row.size for row in had)
+            now_sized = any(wanted)
+            if was_sized != now_sized:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    i18n.label(
+                        "pile_sized_or_not",
+                        card=product.title,
+                        shape=i18n.label(
+                            "shape_sized" if was_sized else "shape_sizeless"
+                        ),
+                    ),
+                )
+
+    cells = pr.ensure_cells(
+        session,
+        product,
+        colour=colour,
+        colour_hex=payload.colour_hex,
+        sizes=wanted,
+        price=product.price,
+    )
+
+    run = Supply(
+        code=_next_code(session, Supply, "SUP"),
+        place=payload.place.strip(),
+        transport_cost=payload.transport_cost,
+        buyer_id=user.id,
+        status=SupplyStatus.RECEIVED,
+        received_at=utcnow(),
+        received_by_id=user.id,
+        note=product.title,
+    )
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+
+    # The cells, and how much is still to go in each. Walked in step with the
+    # sizes below: a size fills what is left of the cell in hand and spills
+    # into the next one, which is the pile being put away as it comes out of
+    # the sack.
+    filling = [[place, units] for place, units in spread]
+    into = 0
+
+    quantity = 0
+    for line, variant in zip(payload.sizes, cells, strict=True):
+        # One supply line per size, whatever the goods were split across. The
+        # line is what came off the van and what it cost; where it ended up
+        # is the ledger's business, and splitting the cost across cells would
+        # invent an arithmetic nobody asked for.
+        session.add(
+            SupplyLine(
+                supply_id=run.id,
+                variant_id=variant.id,
+                quantity=line.quantity,
+                unit_cost=payload.unit_cost,
+            )
+        )
+        left = line.quantity
+        while left > 0:
+            place, room = filling[into]
+            step = min(left, room)
+            # One movement per size and cell, from the outside world straight
+            # to where the goods actually are. Not a receipt into QABUL and a
+            # putaway out of it — that is a leg in the ledger for a journey
+            # nobody made.
+            st.move(
+                session,
+                variant=variant,
+                qty=step,
+                kind=StockMovementKind.RECEIPT,
+                frm=None,
+                to=place,
+                actor=user,
+                reason=f"{run.code} · {place.code}",
+                supply_id=run.id,
+                # What this cell's newest lot cost, remembered on the cell.
+                # The pile form makes a unit cost mandatory, so every card
+                # booked in this way can be sold at a margin somebody can
+                # actually read afterwards.
+                unit_cost=payload.unit_cost,
+            )
+            filling[into][1] = room - step
+            if filling[into][1] == 0:
+                into += 1
+            left -= step
+        quantity += line.quantity
+
+    went = ", ".join(place.code for place, _ in spread)
+
+    # The identification photograph belongs to the card, and the first one
+    # wins: a second pile of the same goods should not quietly replace the
+    # picture somebody is recognising them by.
+    if payload.snapshot_url and not product.snapshot_url:
+        product.snapshot_url = payload.snapshot_url
+        session.add(product)
+
+    audit.record(
+        session,
+        actor=user,
+        action="pile.receive",
+        entity="product",
+        entity_id=product.id,
+        field="location",
+        old=None,
+        new=went,
+        note=f"{run.code} · {quantity} dona · {product.title}",
+    )
+    session.commit()
+    pr.refresh(session, product.id)
+    session.commit()
+    session.refresh(product)
+
+    out = s.PileOut(
+        product=sv.admin_product_out(session, product),
+        run_id=run.id,
+        run_code=run.code,
+        location_code=went,
+        placements=[
+            s.PilePlacedOut(code=place.code, quantity=units)
+            for place, units in spread
+        ],
+        quantity=quantity,
+        total_cost=quantity * payload.unit_cost + run.transport_cost,
+        labels=[
+            s.ProductLabelOut(
+                variant_id=variant.id,
+                product_title=product.title,
+                variant_label=pr.label(variant),
+                sku=variant.sku,
+                barcode=variant.barcode,
+                price=variant.price,
+            )
+            for variant in cells
+        ],
+    )
+    idem.keep(session, user, idempotency_key, "pile", payload, out)
+    replayed = idem.commit(session, user, idempotency_key, "pile")
+    return s.PileOut(**replayed) if replayed else out
+
+
+# --------------------------------------------------------------------------- market runs
 
 
 @router.post(
     "/supplies",
-    response_model=s.SupplyOut,
+    response_model=list[s.SupplyOut],
     status_code=status.HTTP_201_CREATED,
-    summary="Declare a batch that is coming in",
+    summary="Sacks are in the building — thirty seconds at the door",
 )
-def declare_supply(
-    payload: s.SupplyCreateIn, user: SellerUser, session: SessionDep
-) -> s.SupplyOut:
-    """A promise, not a movement. Nothing reaches the shelf until it is counted."""
-    seller = _seller_for(session, user, payload.seller_id)
-    supply = Supply(
-        code=_next_code(session, Supply, "SUP"),
-        seller_id=seller.id,
-        note=payload.note,
-    )
-    session.add(supply)
-    session.commit()
-    session.refresh(supply)
+def start_run(
+    payload: s.SupplyCreateIn, user: WarehouseUser, session: SessionDep
+) -> list[s.SupplyOut]:
+    """One draft per sack, so each is sorted and closed on its own.
 
-    for line in payload.lines:
-        offer = _own_offer(session, seller, line.offer_id)
-        _check_variant(session, offer, line.variant_id)
-        session.add(
-            SupplyLine(
-                supply_id=supply.id,
-                offer_id=offer.id,
-                variant_id=line.variant_id,
-                declared_quantity=line.quantity,
-            )
+    Five sacks is five rows and not one row with a count on it: they will be
+    opened on different evenings by different people, and a run that can only
+    be closed all at once is a run that stays open until the last sack is
+    dealt with.
+    """
+    runs = []
+    for _ in range(payload.sacks):
+        run = Supply(
+            code=_next_code(session, Supply, "SUP"),
+            place=payload.place.strip(),
+            # The whole fare against the first sack rather than divided by
+            # five: apportioning a taxi across sacks is arithmetic nobody
+            # asked for, and the total run cost is the same either way.
+            transport_cost=payload.transport_cost if not runs else 0,
+            note=payload.note,
+            buyer_id=user.id,
         )
+        session.add(run)
+        session.commit()
+        session.refresh(run)
+        runs.append(run)
+
+    audit.record(
+        session,
+        actor=user,
+        action="supply.start",
+        entity="supply",
+        entity_id=runs[0].id,
+        field="sacks",
+        old=None,
+        new=payload.sacks,
+        note=payload.place,
+    )
     session.commit()
-    return _supply_out(session, supply)
+    return [_supply_out(session, run) for run in runs]
 
 
 @router.get(
     "/supplies",
     response_model=list[s.SupplyOut],
-    summary="My batches — or everybody's, for the warehouse",
+    summary="Market runs, unsorted ones first",
 )
 def list_supplies(
     user: StockViewer,
@@ -110,516 +478,236 @@ def list_supplies(
     status_filter: SupplyStatus | None = Query(None, alias="status"),
 ) -> list[s.SupplyOut]:
     stmt = select(Supply)
-    if user.role is UserRole.SELLER:
-        # Not a filter they chose — the only rows that exist for them.
-        stmt = stmt.where(Supply.seller_id == _own_seller(session, user).id)
     if status_filter is not None:
         stmt = stmt.where(Supply.status == status_filter)
-    rows = session.exec(stmt.order_by(col(Supply.declared_at).desc())).all()
+    # The same rule as the order queue: a queue is worked from the front, a
+    # history is read from the top. `draft` is sacks standing on the floor,
+    # and serving the newest first is how the one that came on Monday is still
+    # there on Friday.
+    waiting = status_filter is SupplyStatus.DRAFT
+    rows = session.exec(
+        stmt.order_by(
+            col(Supply.declared_at) if waiting else col(Supply.declared_at).desc(),
+            col(Supply.id) if waiting else col(Supply.id).desc(),
+        )
+    ).all()
     return [_supply_out(session, row) for row in rows]
 
 
 @router.get("/supplies/{supply_id}", response_model=s.SupplyOut)
 def get_supply(supply_id: int, user: StockViewer, session: SessionDep) -> s.SupplyOut:
-    return _supply_out(session, _visible_supply(session, user, supply_id))
+    return _supply_out(session, _supply(session, supply_id))
 
 
 @router.post(
-    "/supplies/{supply_id}/receive",
+    "/supplies/{supply_id}/sorted",
     response_model=s.SupplyOut,
-    summary="Count a batch in — this is where goods reach the shelf",
+    summary="This sack has been dealt with — its goods went in as piles",
 )
-def receive_supply(
-    supply_id: int,
-    payload: s.SupplyReceiveIn,
-    user: WarehouseUser,
-    session: SessionDep,
+def sack_sorted(
+    supply_id: int, user: WarehouseUser, session: SessionDep
 ) -> s.SupplyOut:
-    """What was actually found, line by line, and the shelf follows.
+    """Closes the reminder, not a receipt.
 
-    The declared figure is left alone: a declaration is a promise and a
-    receipt is a fact, and the gap between them is the only thing either party
-    will want to talk about afterwards. A line not mentioned is received as
-    nought — it did not turn up.
+    A ``draft`` supply is two words for one thing: goods are standing in the
+    building and nobody knows what they are. Its value is entirely the age on
+    the dashboard. When somebody finally tips it out, what comes out is piles —
+    one card each, one receipt each, booked through ``POST /piles`` — and there
+    is no arrangement of lines on *this* row that would describe that, because
+    a sack is not one pile.
+
+    So this row is dismissed rather than filled in. Not ``cancel``: cancelling
+    says the goods were never booked, and these were.
     """
-    supply = session.get(Supply, supply_id)
-    if supply is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("supply_not_found"))
-    if supply.status is not SupplyStatus.DECLARED:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            i18n.label("bad_transition", from_=supply.status.value, to="received"),
-        )
-
-    counted = {entry.line_id: entry.received_quantity for entry in payload.lines}
-    lines = session.exec(
-        select(SupplyLine).where(SupplyLine.supply_id == supply.id)
-    ).all()
-    unknown = set(counted) - {line.id for line in lines}
-    if unknown:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, i18n.label("supply_line_not_found")
-        )
-
-    touched: set[int] = set()
-    for line in lines:
-        received = counted.get(line.id, 0)
-        line.received_quantity = received
-        session.add(line)
-        offer = session.get(Offer, line.offer_id)
-        if offer is None or received == 0:
-            continue
-        st.move(
-            session,
-            offer=offer,
-            kind=StockMovementKind.INTAKE,
-            quantity=received,
-            variant_id=line.variant_id,
-            actor=user,
-            reason=payload.note or f"{supply.code} qabul qilindi",
-            supply_id=supply.id,
-        )
-        touched.add(offer.product_id)
-
-    supply.status = SupplyStatus.RECEIVED
-    supply.received_at = utcnow()
-    supply.received_by_id = user.id
-    if payload.note:
-        supply.note = payload.note
-    session.add(supply)
-
+    run = _draft(session, supply_id)
+    run.status = SupplyStatus.RECEIVED
+    run.received_at = utcnow()
+    run.received_by_id = user.id
+    run.note = i18n.label("sack_sorted_note")
+    session.add(run)
     audit.record(
         session,
         actor=user,
-        action="supply.receive",
+        action="supply.sorted",
         entity="supply",
-        entity_id=supply.id,
+        entity_id=run.id,
         field="status",
-        old=SupplyStatus.DECLARED,
+        old=SupplyStatus.DRAFT,
         new=SupplyStatus.RECEIVED,
-        note=payload.note,
+        note=run.note,
     )
     session.commit()
-    for product_id in touched:
-        of.refresh(session, product_id)
-    session.commit()
-    session.refresh(supply)
-    return _supply_out(session, supply)
+    session.refresh(run)
+    return _supply_out(session, run)
 
 
 @router.post(
     "/supplies/{supply_id}/cancel",
     response_model=s.SupplyOut,
-    summary="Call off a batch that has not arrived",
+    summary="A sack that is not going to be booked in",
 )
 def cancel_supply(
-    supply_id: int, user: StockViewer, session: SessionDep
+    supply_id: int,
+    payload: s.SupplyCancelIn,
+    user: WarehouseUser,
+    session: SessionDep,
 ) -> s.SupplyOut:
-    supply = _visible_supply(session, user, supply_id)
-    if supply.status is not SupplyStatus.DECLARED:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            i18n.label("bad_transition", from_=supply.status.value, to="cancelled"),
-        )
-    supply.status = SupplyStatus.CANCELLED
-    session.add(supply)
+    """Only a draft. A closed run is corrected, never called off."""
+    run = _draft(session, supply_id)
+    run.status = SupplyStatus.CANCELLED
+    run.note = payload.reason.strip()
+    session.add(run)
     audit.record(
         session,
         actor=user,
         action="supply.cancel",
         entity="supply",
-        entity_id=supply.id,
+        entity_id=run.id,
         field="status",
-        old=SupplyStatus.DECLARED,
+        old=SupplyStatus.DRAFT,
         new=SupplyStatus.CANCELLED,
+        note=run.note,
     )
     session.commit()
-    session.refresh(supply)
-    return _supply_out(session, supply)
-
-
-# --------------------------------------------------------------------------- stocktakes
-
-
-@router.post(
-    "/stock-counts",
-    response_model=s.StockCountOut,
-    status_code=status.HTTP_201_CREATED,
-    summary="Open a stocktake, snapshotting what is expected",
-)
-def open_count(
-    payload: s.StockCountCreateIn, user: WarehouseUser, session: SessionDep
-) -> s.StockCountOut:
-    """The expected figures are frozen now, not read at the end.
-
-    A sale during the count would otherwise look like a discrepancy, and
-    somebody would go looking for goods that were bought while they counted.
-    """
-    offer = session.get(Offer, payload.offer_id)
-    if offer is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("offer_not_found"))
-
-    open_already = session.exec(
-        select(StockCount).where(
-            StockCount.offer_id == offer.id, StockCount.status == StockCountStatus.OPEN
-        )
-    ).first()
-    if open_already is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("count_already_open"))
-
-    count = StockCount(
-        code=_next_code(session, StockCount, "CNT"),
-        offer_id=offer.id,
-        note=payload.note,
-        opened_by_id=user.id,
-    )
-    session.add(count)
-    session.commit()
-    session.refresh(count)
-
-    leaves = of.leaf_variants(session, offer.product_id)
-    if leaves:
-        for leaf in leaves:
-            session.add(
-                StockCountLine(
-                    count_id=count.id,
-                    variant_id=leaf.id,
-                    expected=of.variant_stock(session, offer.id, leaf.id) or 0,
-                )
-            )
-    else:
-        session.add(StockCountLine(count_id=count.id, expected=offer.stock_left))
-    session.commit()
-    return _count_out(session, count)
-
-
-@router.get("/stock-counts", response_model=list[s.StockCountOut])
-def list_counts(
-    user: WarehouseUser,
-    session: SessionDep,
-    status_filter: StockCountStatus | None = Query(None, alias="status"),
-) -> list[s.StockCountOut]:
-    stmt = select(StockCount)
-    if status_filter is not None:
-        stmt = stmt.where(StockCount.status == status_filter)
-    rows = session.exec(stmt.order_by(col(StockCount.opened_at).desc())).all()
-    return [_count_out(session, row) for row in rows]
-
-
-@router.get("/stock-counts/{count_id}", response_model=s.StockCountOut)
-def get_count(count_id: int, user: WarehouseUser, session: SessionDep) -> s.StockCountOut:
-    return _count_out(session, _count(session, count_id))
-
-
-@router.post(
-    "/stock-counts/{count_id}/close",
-    response_model=s.StockCountOut,
-    summary="Record what was found, and correct the difference",
-)
-def close_count(
-    count_id: int,
-    payload: s.StockCountCloseIn,
-    user: WarehouseUser,
-    session: SessionDep,
-) -> s.StockCountOut:
-    """The difference becomes a movement, so the correction has a reason.
-
-    Against the *expected* figure frozen when the count opened, not against
-    the shelf as it stands now — anything sold in between is already in the
-    ledger and is not a discrepancy.
-    """
-    count = _count(session, count_id)
-    if count.status is not StockCountStatus.OPEN:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            i18n.label("bad_transition", from_=count.status.value, to="closed"),
-        )
-    offer = session.get(Offer, count.offer_id)
-    if offer is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("offer_not_found"))
-
-    lines = session.exec(
-        select(StockCountLine).where(StockCountLine.count_id == count.id)
-    ).all()
-    by_variant = {line.variant_id: line for line in lines}
-    for entry in payload.lines:
-        line = by_variant.get(entry.variant_id)
-        if line is None:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, i18n.label("variant_not_of_product")
-            )
-        line.counted = entry.counted
-        session.add(line)
-
-    for line in lines:
-        if line.counted is None or line.difference == 0:
-            continue
-        st.move(
-            session,
-            offer=offer,
-            kind=StockMovementKind.COUNT_ADJUSTMENT,
-            quantity=line.difference,
-            variant_id=line.variant_id,
-            actor=user,
-            reason=payload.note or f"{count.code} sanoq farqi",
-            count_id=count.id,
-        )
-
-    count.status = StockCountStatus.CLOSED
-    count.closed_at = utcnow()
-    count.closed_by_id = user.id
-    if payload.note:
-        count.note = payload.note
-    session.add(count)
-
-    audit.record(
-        session,
-        actor=user,
-        action="stock_count.close",
-        entity="stock_count",
-        entity_id=count.id,
-        field="difference",
-        old=None,
-        new=sum(line.difference or 0 for line in lines),
-        note=payload.note or count.code,
-    )
-    of.refresh(session, offer.product_id)
-    session.commit()
-    session.refresh(count)
-    return _count_out(session, count)
-
-
-# --------------------------------------------------------------------------- removals
-
-
-@router.post(
-    "/removals",
-    response_model=s.RemovalOut,
-    status_code=status.HTTP_201_CREATED,
-    summary="Ask for goods back — damaged or simply unsold",
-)
-def request_removal(
-    payload: s.RemovalCreateIn, user: SellerUser, session: SessionDep
-) -> s.RemovalOut:
-    seller = _seller_for(session, user, payload.seller_id)
-    removal = RemovalOrder(
-        code=_next_code(session, RemovalOrder, "RMV"),
-        seller_id=seller.id,
-        reason=payload.reason,
-        note=payload.note,
-    )
-    session.add(removal)
-    session.commit()
-    session.refresh(removal)
-
-    for line in payload.lines:
-        offer = _own_offer(session, seller, line.offer_id)
-        _check_variant(session, offer, line.variant_id)
-        session.add(
-            RemovalLine(
-                removal_id=removal.id,
-                offer_id=offer.id,
-                variant_id=line.variant_id,
-                quantity=line.quantity,
-            )
-        )
-    session.commit()
-    return _removal_out(session, removal)
-
-
-@router.get("/removals", response_model=list[s.RemovalOut])
-def list_removals(
-    user: StockViewer,
-    session: SessionDep,
-    status_filter: RemovalStatus | None = Query(None, alias="status"),
-) -> list[s.RemovalOut]:
-    stmt = select(RemovalOrder)
-    if user.role is UserRole.SELLER:
-        stmt = stmt.where(RemovalOrder.seller_id == _own_seller(session, user).id)
-    if status_filter is not None:
-        stmt = stmt.where(RemovalOrder.status == status_filter)
-    rows = session.exec(stmt.order_by(col(RemovalOrder.requested_at).desc())).all()
-    return [_removal_out(session, row) for row in rows]
-
-
-@router.get("/removals/{removal_id}", response_model=s.RemovalOut)
-def get_removal(removal_id: int, user: StockViewer, session: SessionDep) -> s.RemovalOut:
-    return _removal_out(session, _visible_removal(session, user, removal_id))
-
-
-@router.post(
-    "/removals/{removal_id}/prepare",
-    response_model=s.RemovalOut,
-    summary="Pick it and set it aside — the goods stop being on sale",
-)
-def prepare_removal(
-    removal_id: int,
-    payload: s.RemovalPrepareIn,
-    user: WarehouseUser,
-    session: SessionDep,
-) -> s.RemovalOut:
-    """Ready means picked and standing by the door.
-
-    No movement yet — the goods are still ours to account for — but they are
-    held: selling something that is already on a pallet waiting for its owner
-    is the failure this state exists to prevent.
-    """
-    removal = _removal(session, removal_id)
-    if removal.status is not RemovalStatus.REQUESTED:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            i18n.label("bad_transition", from_=removal.status.value, to="ready"),
-        )
-
-    prepared = {entry.line_id: entry.prepared_quantity for entry in payload.lines}
-    lines = session.exec(
-        select(RemovalLine).where(RemovalLine.removal_id == removal.id)
-    ).all()
-    unknown = set(prepared) - {line.id for line in lines}
-    if unknown:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, i18n.label("removal_line_not_found")
-        )
-
-    touched: set[int] = set()
-    for line in lines:
-        line.prepared_quantity = prepared.get(line.id, 0)
-        session.add(line)
-        offer = session.get(Offer, line.offer_id)
-        if offer is not None:
-            touched.add(offer.product_id)
-
-    removal.status = RemovalStatus.READY
-    removal.ready_at = utcnow()
-    removal.prepared_by_id = user.id
-    session.add(removal)
-    session.commit()
-    # Held now, so the card must stop offering them.
-    for product_id in touched:
-        of.refresh(session, product_id)
-    session.commit()
-    session.refresh(removal)
-    return _removal_out(session, removal)
-
-
-@router.post(
-    "/removals/{removal_id}/collect",
-    response_model=s.RemovalOut,
-    summary="Hand it over — this is where the goods leave us",
-)
-def collect_removal(
-    removal_id: int, user: WarehouseUser, session: SessionDep
-) -> s.RemovalOut:
-    removal = _removal(session, removal_id)
-    if removal.status is not RemovalStatus.READY:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            i18n.label("bad_transition", from_=removal.status.value, to="collected"),
-        )
-
-    touched: set[int] = set()
-    for line in session.exec(
-        select(RemovalLine).where(RemovalLine.removal_id == removal.id)
-    ).all():
-        offer = session.get(Offer, line.offer_id)
-        if offer is None or not line.prepared_quantity:
-            continue
-        st.move(
-            session,
-            offer=offer,
-            kind=StockMovementKind.SELLER_RETURN,
-            quantity=line.prepared_quantity,
-            variant_id=line.variant_id,
-            actor=user,
-            reason=removal.note or f"{removal.code} · {removal.reason.value}",
-            removal_id=removal.id,
-        )
-        touched.add(offer.product_id)
-
-    removal.status = RemovalStatus.COLLECTED
-    removal.collected_at = utcnow()
-    session.add(removal)
-    audit.record(
-        session,
-        actor=user,
-        action="removal.collect",
-        entity="removal_order",
-        entity_id=removal.id,
-        field="status",
-        old=RemovalStatus.READY,
-        new=RemovalStatus.COLLECTED,
-        note=removal.code,
-    )
-    session.commit()
-    for product_id in touched:
-        of.refresh(session, product_id)
-    session.commit()
-    session.refresh(removal)
-    return _removal_out(session, removal)
+    session.refresh(run)
+    return _supply_out(session, run)
 
 
 # --------------------------------------------------------------------------- the shelf
 
 
 @router.post(
-    "/offers/{offer_id}/write-off",
-    response_model=s.ShelfOut,
-    summary="Goods that are gone — damaged, lost, spoiled",
+    "/stock/empty",
+    response_model=s.EmptiedOut,
+    summary="Take everything off a cell, or out of the whole room",
 )
-def write_off(
-    offer_id: int, payload: s.WriteOffIn, user: WarehouseUser, session: SessionDep
-) -> s.ShelfOut:
-    offer = session.get(Offer, offer_id)
-    if offer is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("offer_not_found"))
-    _check_variant(session, offer, payload.variant_id)
+def empty_room(
+    payload: s.EmptyRoomIn, user: AdminUser, session: SessionDep
+) -> s.EmptiedOut:
+    """The one operation here that makes stock disappear rather than move.
 
-    st.move(
-        session,
-        offer=offer,
-        kind=StockMovementKind.WRITE_OFF,
-        quantity=payload.quantity,
-        variant_id=payload.variant_id,
-        actor=user,
-        reason=payload.reason,
-    )
+    Everything else in this file is a journey: goods arrive, cross the room,
+    go out in a courier's bag. This writes off what the shop still believes it
+    has — for a room being cleared to start again, or a cell whose contents
+    turned out not to exist.
+
+    **Still a movement per line.** It would be quicker to delete the
+    placements, and the ledger would then disagree with the shelf for ever
+    with nothing to explain it. So every line leaves the building the way any
+    other line does — ``kind=write_off``, from where it was, to nowhere — the
+    invariant that a placement equals the sum of its movements survives, and
+    the reason is on every row.
+    """
+    if payload.code.strip():
+        cells = [_pile_cell(session, payload.code)]
+    else:
+        cells = [
+            row
+            for row in session.exec(select(Location)).all()
+            if row.kind is not LocationKind.COURIER
+        ]
+
+    reason = payload.reason.strip()
+    moved = units = touched = 0
+    products: set[int] = set()
+    for cell in cells:
+        placements = session.exec(
+            select(StockPlacement).where(StockPlacement.location_id == cell.id)
+        ).all()
+        if not placements:
+            continue
+        touched += 1
+        for row in placements:
+            # Read before the move. ``st.move`` decrements this very row, so
+            # counting after it counted nought every time — the answer said
+            # "one line moved, no units" and the caller had no way to tell that
+            # from a cell that was already empty.
+            qty = row.qty
+            variant = _variant(session, row.variant_id)
+            st.move(
+                session,
+                variant=variant,
+                qty=qty,
+                kind=StockMovementKind.WRITE_OFF,
+                frm=cell,
+                to=None,
+                actor=user,
+                reason=reason,
+            )
+            moved += 1
+            units += qty
+            products.add(variant.product_id)
+
     audit.record(
         session,
         actor=user,
-        action="stock.write_off",
-        entity="offer",
-        entity_id=offer.id,
-        field="stock_left",
+        action="stock.empty",
+        entity="location",
+        entity_id=cells[0].id if len(cells) == 1 else None,
+        field="qty",
+        old=units,
+        new=0,
+        note=f"{payload.code.strip() or 'hamma joy'} · {reason}",
+    )
+    session.commit()
+    for product_id in sorted(products):
+        pr.refresh(session, product_id)
+    session.commit()
+    return s.EmptiedOut(moved=moved, units=units, cells=touched)
+
+
+@router.post(
+    "/stock/damage",
+    response_model=s.ShelfOut,
+    summary="Goods that are broken — into the damaged corner",
+)
+def damage(
+    payload: s.WriteOffIn, user: WarehouseUser, session: SessionDep
+) -> s.ShelfOut:
+    """Not off the books: into ``BRAK``, which is a place in the building.
+
+    A broken shirt has not evaporated. It is in the corner by the door, it is
+    countable, and somebody will eventually decide whether it goes back to the
+    market or into a bin — none of which is sayable if the ledger's answer to
+    "damaged" is that the goods stopped existing.
+
+    Asking for more than the building holds is refused in the reader's
+    language. It used to arrive as ``str(error)`` — "only 4 of
+    MB-000001-QORA-M on the shelves, not 999", English, with an internal code
+    in it — on a form whose every other refusal is Uzbek. See
+    ``app.stock.refusal``.
+    """
+    variant = _variant(session, payload.variant_id)
+    corner = loc.staging(session, loc.BRAK)
+
+    try:
+        st.take_from_shelf(
+            session,
+            variant,
+            payload.quantity,
+            kind=StockMovementKind.DAMAGE,
+            to=corner,
+            actor=user,
+            reason=payload.reason,
+        )
+    except st.StockError as error:
+        raise st.refusal(error) from None
+
+    audit.record(
+        session,
+        actor=user,
+        action="stock.damage",
+        entity="product_variant",
+        entity_id=variant.id,
+        field="location",
         old=None,
-        new=-payload.quantity,
+        new=corner.code,
         note=payload.reason,
     )
-    of.refresh(session, offer.product_id)
+    pr.refresh(session, variant.product_id)
     session.commit()
-    session.refresh(offer)
-    return _shelf_out(session, offer, payload.variant_id)
-
-
-@router.get(
-    "/offers/{offer_id}/shelf",
-    response_model=list[s.ShelfOut],
-    summary="On hand, promised, and left to sell",
-)
-def read_shelf(
-    offer_id: int, user: StockViewer, session: SessionDep
-) -> list[s.ShelfOut]:
-    offer = session.get(Offer, offer_id)
-    if offer is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("offer_not_found"))
-    if user.role is UserRole.SELLER and offer.seller_id != _own_seller(session, user).id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("not_your_offer"))
-
-    rows = [_shelf_out(session, offer, None)]
-    rows.extend(
-        _shelf_out(session, offer, leaf.id)
-        for leaf in of.leaf_variants(session, offer.product_id)
-    )
-    return rows
+    session.refresh(variant)
+    return _shelf_out(session, variant)
 
 
 @router.get(
@@ -630,20 +718,15 @@ def read_shelf(
 def list_movements(
     user: StockViewer,
     session: SessionDep,
-    offer_id: int | None = Query(None),
+    variant_id: int | None = Query(None),
     kind: StockMovementKind | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
 ) -> s.Page[s.MovementOut]:
     """A count that looks wrong is not an argument, it is this list."""
     stmt = select(StockMovement)
-    if user.role is UserRole.SELLER:
-        mine = session.exec(
-            select(Offer.id).where(Offer.seller_id == _own_seller(session, user).id)
-        ).all()
-        stmt = stmt.where(col(StockMovement.offer_id).in_(mine or [-1]))
-    if offer_id is not None:
-        stmt = stmt.where(StockMovement.offer_id == offer_id)
+    if variant_id is not None:
+        stmt = stmt.where(StockMovement.variant_id == variant_id)
     if kind is not None:
         stmt = stmt.where(StockMovement.kind == kind)
 
@@ -665,113 +748,224 @@ def list_movements(
 # --------------------------------------------------------------------------- helpers
 
 
-def _own_seller(session: SessionDep, user: User) -> Seller:
-    seller = session.exec(select(Seller).where(Seller.user_id == user.id)).first()
-    if seller is None:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, i18n.label("seller_account_missing")
-        )
-    return seller
+def _one_spelling(rows: list) -> list[str]:
+    """Most-used first, and one chip per thing however it was typed.
 
-
-def _seller_for(session: SessionDep, user: User, seller_id: int | None) -> Seller:
-    """Whose batch this is. A seller acts as themselves; an admin must say."""
-    if user.role is not UserRole.ADMIN:
-        own = _own_seller(session, user)
-        if seller_id is not None and seller_id != own.id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("not_your_offer"))
-        return own
-    if seller_id is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, i18n.label("seller_required"))
-    seller = session.get(Seller, seller_id)
-    if seller is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("seller_not_found"))
-    return seller
-
-
-def _own_offer(session: SessionDep, seller: Seller, offer_id: int) -> Offer:
-    offer = session.get(Offer, offer_id)
-    if offer is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("offer_not_found"))
-    if offer.seller_id != seller.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("not_your_offer"))
-    return offer
-
-
-def _check_variant(session: SessionDep, offer: Offer, variant_id: int | None) -> None:
-    """A count sits on a leaf of this product, or on the offer itself.
-
-    Which cell is required wherever there are cells. A movement that names no
-    leaf comes off the offer's total and off no colour, and afterwards there
-    is no working out which colour it was — the shelf and its colours drift
-    apart by exactly that much, permanently. The same rule the basket enforces
-    on the way out is enforced here on the way in.
+    Writes are tidied now, but the rows written before that are still there —
+    and a `nike` chip beside a `Nike` chip makes somebody choose between two
+    right answers. Grouped by spelling, and the spelling most people used wins.
     """
-    leaves = {leaf.id: leaf for leaf in of.leaf_variants(session, offer.product_id)}
-    if variant_id is None:
-        if leaves:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                i18n.label("variant_required"),
-            )
-        return
-    variant = session.get(ProductVariant, variant_id)
-    if variant is None or variant.product_id != offer.product_id or variant.id not in leaves:
+    tally: dict[str, int] = {}
+    for value, count in rows:
+        # Tidied on the way out as well as on the way in. Writes are tidy now,
+        # but the rows written before that are still there, and a `nike` chip
+        # is a chip somebody taps — which would write `nike` again. Tapping the
+        # tidy one sends `Nike`, and the brand lookup is case-insensitive, so
+        # it lands on the row that already exists.
+        label = pr.tidy_label(value)
+        if label:
+            tally[label] = tally.get(label, 0) + int(count)
+    return sorted(tally, key=lambda label: -tally[label])[:40]
+
+
+def _pile_cell(session: SessionDep, code: str) -> Location:
+    """Where the pile is going, which is always a cell.
+
+    A typed cell code is checked against the cells that exist rather than
+    trusted, because there is no scanner yet and ``A-03-11`` is one keystroke
+    away from ``A-03-01``. A code for a cell that is not there is refused; a
+    code for the wrong *cell* is caught by the form showing what is in it.
+
+    Says nothing about whether the cell is retired, because the two callers
+    want opposite answers: a pile is *arriving* and must not go into a cell
+    that is off the map, while emptying one is the way goods get out of
+    exactly that mess and must keep working. ``_open_cell`` below is the
+    arriving half.
+    """
+    wanted = code.strip().upper()
+    cell = loc.by_code(session, wanted)
+    if cell is None:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, i18n.label("variant_not_of_product")
+            status.HTTP_404_NOT_FOUND, i18n.label("no_such_cell", code=wanted)
+        )
+    if cell.kind is not LocationKind.BIN:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("putaway_needs_a_cell")
+        )
+    return cell
+
+
+def _open_cell(session: SessionDep, code: str) -> Location:
+    """The same, and standing in the room: goods may actually go in here.
+
+    ``loc.by_code`` finds a cell by its code and says nothing about whether it
+    is still part of the building, so a pile could be shelved into a cell
+    somebody retired last month — where the count would include it and the map
+    would not show it, which is the one thing retiring a cell is not allowed
+    to produce.
+
+    Refused here rather than left to ``st.move``, which refuses it too: this
+    runs before a stub card is written, and a request turned away at the
+    ledger would leave a product nobody asked for in the catalogue. The
+    sentence names the cell and says to bring it back or pick another one.
+    """
+    cell = _pile_cell(session, code)
+    if not cell.is_active:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("cell_retired_destination", code=cell.code),
+        )
+    return cell
+
+
+def _pile_spread(session: SessionDep, payload: s.PileIn) -> list[tuple[Location, int]]:
+    """Where the pile is going and how much of it goes to each cell.
+
+    One cell or several, and exactly one of the two ways of saying so.
+    Neither is the old "empty means the receiving area" state, which is a
+    putaway queue nobody used; both is two answers to one question, and
+    picking one of them silently is how goods end up on a shelf nobody was
+    told about.
+
+    The split has to **add up to the pile**. The sizes are the count of what
+    came off the van and the cells are where it went, so a disagreement is
+    somebody having mistyped one of the two — and there is no way to tell
+    which, so neither is guessed at. The sentence says both numbers, because
+    "does not add up" without them is a person recounting a sack.
+
+    Every cell is checked the way a single one always was: a ``BIN`` that
+    exists and has not been retired, because ``A-03-11`` is one keystroke from
+    ``A-03-01`` and a cell that left the room a month ago still answers to its
+    code.
+
+    **Capacity is not checked.** Deliberately, and not an omission — see the
+    endpoint.
+    """
+    total = sum(line.quantity for line in payload.sizes)
+    one = payload.location_code.strip()
+
+    if one and payload.placements:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, i18n.label("pile_one_place_or_the_other")
+        )
+    if not one and not payload.placements:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, i18n.label("pile_needs_a_place")
+        )
+    if one:
+        return [(_open_cell(session, one), total)]
+
+    placed = sum(line.quantity for line in payload.placements)
+    if placed != total:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            i18n.label("pile_split_does_not_add_up", placed=placed, total=total),
+        )
+    return [
+        (_open_cell(session, line.code), line.quantity) for line in payload.placements
+    ]
+
+
+def _pile_card(session: SessionDep, user: User, payload: s.PileIn) -> Product:
+    """The card this pile goes on: one that exists, or a stub written now.
+
+    Written here rather than through the catalogue's own door because what the
+    desk knows is not what that door asks for. It has a name, a colour and
+    sizes; it has no category, no price and no catalogue picture, and requiring
+    any of them is what stopped the goods reaching the shelf.
+    """
+    if payload.product_id is not None:
+        product = session.get(Product, payload.product_id)
+        if product is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, i18n.label("product_not_found")
+            )
+        return product
+
+    kind = pr.tidy_label(payload.kind)
+    brand = brands.named(session, payload.brand) if payload.brand.strip() else None
+    title = payload.title.strip() or " · ".join(
+        part
+        for part in (kind, brand.name if brand else "", pr.tidy_label(payload.colour))
+        if part
+    )
+    if not title:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, i18n.label("pile_needs_a_name")
         )
 
-
-def _visible_supply(session: SessionDep, user: User, supply_id: int) -> Supply:
-    supply = session.get(Supply, supply_id)
-    if supply is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("supply_not_found"))
-    if user.role is UserRole.SELLER and supply.seller_id != _own_seller(session, user).id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("not_your_supply"))
-    return supply
-
-
-def _removal(session: SessionDep, removal_id: int) -> RemovalOrder:
-    removal = session.get(RemovalOrder, removal_id)
-    if removal is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("removal_not_found"))
-    return removal
-
-
-def _visible_removal(session: SessionDep, user: User, removal_id: int) -> RemovalOrder:
-    removal = _removal(session, removal_id)
-    if user.role is UserRole.SELLER and removal.seller_id != _own_seller(session, user).id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, i18n.label("not_your_supply"))
-    return removal
-
-
-def _count(session: SessionDep, count_id: int) -> StockCount:
-    count = session.get(StockCount, count_id)
-    if count is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("count_not_found"))
-    return count
-
-
-def _seller_out(session: SessionDep, seller_id: int) -> s.SellerOut:
-    seller = session.get(Seller, seller_id)
-    return (
-        s.SellerOut(id=seller.id, name=seller.name)
-        if seller
-        else s.SellerOut(id=0, name="")
+    product = Product(
+        sku=pr.next_sku(session),
+        title=title,
+        kind=kind,
+        brand_id=brand.id if brand else None,
+        snapshot_url=payload.snapshot_url,
+        # Nothing yet: the shop cannot show this and is not meant to.
+        category_id=None,
+        price=0,
+        in_stock=False,
+        status=ProductStatus.DRAFT,
     )
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+
+    audit.record(
+        session,
+        actor=user,
+        action="product.create",
+        entity="product",
+        entity_id=product.id,
+        field="status",
+        old=None,
+        new=ProductStatus.DRAFT,
+        note=f"{product.sku} · {product.title}",
+    )
+    session.commit()
+    session.refresh(product)
+    return product
 
 
-def _names(
-    session: SessionDep, offer_id: int, variant_id: int | None
-) -> tuple[str, str, str]:
-    """The label, the title and the code — what a person and a scanner read."""
-    offer = session.get(Offer, offer_id)
-    product = session.get(Product, offer.product_id) if offer else None
-    variant = session.get(ProductVariant, variant_id) if variant_id else None
+def _supply(session: SessionDep, supply_id: int) -> Supply:
+    run = session.get(Supply, supply_id)
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("supply_not_found"))
+    return run
+
+
+def _draft(session: SessionDep, supply_id: int) -> Supply:
+    run = _supply(session, supply_id)
+    if run.status is not SupplyStatus.DRAFT:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("bad_transition", from_=run.status.value, to="received"),
+        )
+    return run
+
+
+def _variant(session: SessionDep, variant_id: int) -> ProductVariant:
+    variant = session.get(ProductVariant, variant_id)
+    if variant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("variant_invalid"))
+    return variant
+
+
+def _names(session: SessionDep, variant_id: int) -> tuple[str, str, str]:
+    """The label, the title and the code — what a person and a scanner read.
+
+    **The label names the whole cell of the grid**, "Oq · S" and not "S". A
+    receipt of a two-colour shirt used to produce six lines reading "S", "M",
+    "L", "S", "M", "L", with somebody typing a count against each: two rows
+    that read identically on the screen where the counting happens is the
+    shape of a miscount.
+    """
+    variant = session.get(ProductVariant, variant_id)
+    product = session.get(Product, variant.product_id) if variant else None
+    label = sv.variant_label(variant) if variant else "—"
     return (
-        (variant.label if variant else "—"),
+        label or "—",
         (product.title if product else ""),
-        (product.sku if product else ""),
+        (variant.sku if variant and variant.sku else (product.sku if product else "")),
     )
 
 
@@ -781,130 +975,85 @@ def _supply_out(session: SessionDep, supply: Supply) -> s.SupplyOut:
     ).all()
     out = []
     for line in lines:
-        label, title, sku = _names(session, line.offer_id, line.variant_id)
+        label, title, sku = _names(session, line.variant_id)
         out.append(
             s.SupplyLineOut(
                 id=line.id,
-                offer_id=line.offer_id,
-                variant_id=line.variant_id,
-                sku=sku,
-                variant_label=label,
-                product_title=title,
-                declared_quantity=line.declared_quantity,
-                received_quantity=line.received_quantity,
-                difference=line.difference,
-            )
-        )
-    return s.SupplyOut(
-        id=supply.id,
-        code=supply.code,
-        seller=_seller_out(session, supply.seller_id),
-        status=supply.status,
-        note=supply.note,
-        lines=out,
-        declared_at=supply.declared_at,
-        received_at=supply.received_at,
-    )
-
-
-def _count_out(session: SessionDep, count: StockCount) -> s.StockCountOut:
-    offer = session.get(Offer, count.offer_id)
-    product = session.get(Product, offer.product_id) if offer else None
-    lines = session.exec(
-        select(StockCountLine)
-        .where(StockCountLine.count_id == count.id)
-        .order_by(col(StockCountLine.id))
-    ).all()
-    return s.StockCountOut(
-        id=count.id,
-        code=count.code,
-        offer_id=count.offer_id,
-        product_title=product.title if product else "",
-        seller=_seller_out(session, offer.seller_id) if offer else s.SellerOut(id=0, name=""),
-        status=count.status,
-        note=count.note,
-        lines=[
-            s.StockCountLineOut(
-                id=line.id,
-                variant_id=line.variant_id,
-                sku=_names(session, count.offer_id, line.variant_id)[2],
-                variant_label=_names(session, count.offer_id, line.variant_id)[0],
-                expected=line.expected,
-                counted=line.counted,
-                difference=line.difference,
-            )
-            for line in lines
-        ],
-        opened_at=count.opened_at,
-        closed_at=count.closed_at,
-    )
-
-
-def _removal_out(session: SessionDep, removal: RemovalOrder) -> s.RemovalOut:
-    lines = session.exec(
-        select(RemovalLine)
-        .where(RemovalLine.removal_id == removal.id)
-        .order_by(col(RemovalLine.id))
-    ).all()
-    out = []
-    for line in lines:
-        label, title, sku = _names(session, line.offer_id, line.variant_id)
-        out.append(
-            s.RemovalLineOut(
-                id=line.id,
-                offer_id=line.offer_id,
                 variant_id=line.variant_id,
                 sku=sku,
                 variant_label=label,
                 product_title=title,
                 quantity=line.quantity,
-                prepared_quantity=line.prepared_quantity,
+                unit_cost=line.unit_cost,
+                line_cost=line.line_cost,
             )
         )
-    return s.RemovalOut(
-        id=removal.id,
-        code=removal.code,
-        seller=_seller_out(session, removal.seller_id),
-        status=removal.status,
-        reason=removal.reason,
-        note=removal.note,
+    buyer = session.get(User, supply.buyer_id) if supply.buyer_id else None
+    # Standing time is what turns an unsorted run from a row in a list into
+    # something somebody acts on, so it is computed here rather than left to
+    # each client to work out from a timestamp.
+    since = supply.received_at or utcnow()
+    return s.SupplyOut(
+        id=supply.id,
+        code=supply.code,
+        status=supply.status,
+        place=supply.place,
+        transport_cost=supply.transport_cost,
+        buyer=(buyer.full_name or buyer.phone) if buyer else "",
+        note=supply.note,
         lines=out,
-        requested_at=removal.requested_at,
-        ready_at=removal.ready_at,
-        collected_at=removal.collected_at,
+        total_cost=sum(line.line_cost for line in lines) + supply.transport_cost,
+        declared_at=supply.declared_at,
+        received_at=supply.received_at,
+        age_minutes=max(0, int((since - supply.declared_at).total_seconds() // 60)),
     )
 
 
-def _shelf_out(session: SessionDep, offer: Offer, variant_id: int | None) -> s.ShelfOut:
-    label, _, _ = _names(session, offer.id, variant_id)
+def _shelf_out(session: SessionDep, variant: ProductVariant) -> s.ShelfOut:
+    label, _, _ = _names(session, variant.id)
     return s.ShelfOut(
-        offer_id=offer.id,
-        variant_id=variant_id,
-        variant_label=label if variant_id else "Hammasi",
-        on_hand=st.on_hand(session, offer.id, variant_id),
-        reserved=st.reserved(session, offer.id, variant_id),
-        sellable=st.sellable(session, offer, variant_id),
+        variant_id=variant.id,
+        variant_label=label,
+        on_hand=st.on_hand(session, variant.id),
+        reserved=st.reserved(session, variant.id),
+        sellable=st.sellable(session, variant),
+        places=[
+            s.PlacementOut(location_id=place.id, code=place.code, qty=qty)
+            for place, qty in st.placements(session, variant.id)
+        ],
     )
+
+
+def _code(session: SessionDep, location_id: int | None) -> str:
+    """A place's code, or the outside world.
+
+    The em dash is the point: "from —" is a market run arriving and "to —" is
+    a parcel out of the door, and both are moves the room made rather than
+    holes in the record.
+    """
+    if location_id is None:
+        return "—"
+    place = session.get(Location, location_id)
+    return place.code if place else "—"
 
 
 def _movement_out(session: SessionDep, movement: StockMovement) -> s.MovementOut:
-    label, title, sku = _names(session, movement.offer_id, movement.variant_id)
+    label, title, sku = _names(session, movement.variant_id)
     actor = session.get(User, movement.actor_id) if movement.actor_id else None
     return s.MovementOut(
         id=movement.id,
-        offer_id=movement.offer_id,
         variant_id=movement.variant_id,
         sku=sku,
         variant_label=label,
         product_title=title,
         kind=movement.kind,
-        quantity=movement.quantity,
+        quantity=movement.qty,
+        from_code=_code(session, movement.from_location_id),
+        to_code=_code(session, movement.to_location_id),
         reason=movement.reason,
         actor=(actor.full_name or actor.phone) if actor else "tizim",
         supply_id=movement.supply_id,
         order_id=movement.order_id,
         return_request_id=movement.return_request_id,
-        count_id=movement.count_id,
-        removal_id=movement.removal_id,
         created_at=movement.created_at,
     )

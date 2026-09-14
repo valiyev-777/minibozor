@@ -115,20 +115,10 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Уведомление не найдено",
         "en": "Notification not found",
     },
-    "review_already_left": {
-        "uz": "Siz bu mahsulotga sharh qoldirgansiz",
-        "ru": "Вы уже оставили отзыв на этот товар",
-        "en": "You've already reviewed this product",
-    },
     "address_required": {
         "uz": "Yetkazish manzilini tanlang",
         "ru": "Выберите адрес доставки",
         "en": "Choose a delivery address",
-    },
-    "promo_invalid": {
-        "uz": "Promokod yaroqsiz",
-        "ru": "Промокод недействителен",
-        "en": "That promo code isn't valid",
     },
     "otp_expired": {
         "uz": "Kod eskirgan — qaytadan so'rang",
@@ -159,13 +149,6 @@ LABELS: dict[str, dict[str, str]] = {
     "pin_changed": {"uz": "PIN o'zgartirildi", "ru": "PIN изменён", "en": "PIN changed"},
     "pin_wrong": {"uz": "PIN noto'g'ri", "ru": "Неверный PIN", "en": "That PIN isn't right"},
     "pin_removed": {"uz": "PIN o'chirildi", "ru": "PIN удалён", "en": "PIN removed"},
-    "card_expired": {
-        "uz": "Kartaning muddati o'tgan",
-        "ru": "Срок действия карты истёк",
-        "en": "That card has expired",
-    },
-    "card_removed": {"uz": "Karta o'chirildi", "ru": "Карта удалена", "en": "Card removed"},
-    "card_not_found": {"uz": "Karta topilmadi", "ru": "Карта не найдена", "en": "Card not found"},
     "product_not_found": {
         "uz": "Mahsulot topilmadi",
         "ru": "Товар не найден",
@@ -251,12 +234,6 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "Order not found",
     },
     "account_deleted": {"uz": "Hisob o'chirildi", "ru": "Аккаунт удалён", "en": "Account deleted"},
-    "review_not_found": {
-        "uz": "Sharh topilmadi",
-        "ru": "Отзыв не найден",
-        "en": "Review not found",
-    },
-    "review_removed": {"uz": "Sharh o'chirildi", "ru": "Отзыв удалён", "en": "Review removed"},
     "order_placed_note": {
         "uz": "{code} qabul qilindi — tez orada yig'amiz",
         "ru": "{code} принят — скоро начнём сборку",
@@ -272,6 +249,160 @@ LABELS: dict[str, dict[str, str]] = {
         "uz": "{from_} holatidan {to} holatiga o'tib bo'lmaydi",
         "ru": "Переход из «{from_}» в «{to}» невозможен",
         "en": "{from_} cannot become {to}",
+    },
+    "cancel_is_operators": {
+        "uz": "Buyurtmani bekor qilish operator ishi — ombor faqat yig'adi "
+              "va kuryerga topshiradi",
+        "ru": "Отменяет заказ оператор — склад только собирает и передаёт "
+              "курьеру",
+        "en": "Cancelling is the operator's — the warehouse picks and hands "
+              "over, and nothing else",
+    },
+    "nothing_new": {
+        "uz": "Yangi rang yoki o'lcham yo'q va miqdor ham kiritilmagan",
+        "ru": "Нет ни нового цвета или размера, ни количества",
+        "en": "Nothing new here, and no quantity either",
+    },
+    "colour_needs_photo": {
+        "uz": "Har rangning o'z rasmi bo'lishi kerak. Rasmsiz rang: {colours}",
+        "ru": "У каждого цвета должно быть своё фото. Без фото: {colours}",
+        "en": "Every colour needs its own photograph. Without one: {colours}",
+    },
+    # The three gates between a pile on the shelf and a card in the shop. Each
+    # is named on its own so a queue can say what is missing without anybody
+    # opening the card to find out.
+    "needs_category": {
+        "uz": "kategoriya",
+        "ru": "категория",
+        "en": "a category",
+    },
+    "needs_price": {
+        "uz": "sotuv narxi",
+        "ru": "цена продажи",
+        "en": "a selling price",
+    },
+    "needs_photo": {
+        "uz": "rasm",
+        "ru": "фото",
+        "en": "a photograph",
+    },
+    "tile_held_back": {
+        "uz": "Javonda bor, do'konda yo'q",
+        "ru": "На полке есть, в магазине нет",
+        "en": "On the shelf, not in the shop",
+    },
+    "sack_sorted_note": {
+        "uz": "Saralandi — tovarlari uyum bo'lib kirdi",
+        "ru": "Разобрано — товар оформлен партиями",
+        "en": "Sorted — the goods went in as piles",
+    },
+    # The soft list: what a card is missing to read like a shop. Not refused,
+    # so the wording is a thing to do rather than a thing that is wrong.
+    "needs_subtitle": {
+        "uz": "qisqa izoh",
+        "ru": "короткое описание",
+        "en": "a short line",
+    },
+    "needs_description": {
+        "uz": "tavsif",
+        "ru": "описание",
+        "en": "a description",
+    },
+    "needs_specs": {
+        "uz": "xususiyatlar",
+        "ru": "характеристики",
+        "en": "a specification table",
+    },
+    "needs_more_photos": {
+        "uz": "ko'proq rasm",
+        "ru": "больше фото",
+        "en": "more photographs",
+    },
+    "card_not_ready": {
+        "uz": "Sotuvga chiqarish uchun yetishmaydi: {gaps}",
+        "ru": "Для продажи не хватает: {gaps}",
+        "en": "Not ready for sale — missing: {gaps}",
+    },
+    "move_nowhere": {
+        "uz": "Bir katakdan o'sha katakka ko'chirib bo'lmaydi",
+        "ru": "Нельзя переместить в ту же ячейку",
+        "en": "That is the cell it is already in",
+    },
+    "card_deleted": {
+        "uz": "Karta o'chirildi",
+        "ru": "Карточка удалена",
+        "en": "The card is gone",
+    },
+    "card_archived_not_deleted": {
+        "uz": "Kartaning tarixi bor — o'chirilmadi, arxivga olindi",
+        "ru": "У карточки есть история — не удалена, а в архиве",
+        "en": "This card has history — archived rather than deleted",
+    },
+    "card_has_history": {
+        "uz": "qoldiq harakati yoki buyurtmasi bor",
+        "ru": "есть движение остатка или заказ",
+        "en": "a stock movement or an order names it",
+    },
+    "no_such_cell": {
+        "uz": "Bunday yacheyka yo'q: {code}",
+        "ru": "Такой ячейки нет: {code}",
+        "en": "No such cell: {code}",
+    },
+    "pile_needs_a_colour": {
+        "uz": "Qaysi rang kelganini tanlang: {colours}",
+        "ru": "Выберите, какой цвет пришёл: {colours}",
+        "en": "Say which colour arrived: {colours}",
+    },
+    "count_needs_every_line": {
+        "uz": "Har bir qatorni sanash kerak — bunisi qolib ketdi: {labels}",
+        "ru": "Каждую строку нужно пересчитать — эти пропущены: {labels}",
+        "en": "Every line has to be counted — these were left out: {labels}",
+    },
+    "variant_still_holds": {
+        "uz": "Bu yacheykada {count} dona bor — avval javondan chiqarish kerak",
+        "ru": "Здесь ещё {count} шт. — сначала спишите или переместите",
+        "en": "It still holds {count} — take them off the shelf first",
+    },
+    "pile_sized_or_not": {
+        "uz": "«{card}» kartasi {shape}. Bir kartada ikkalasi bo'lmaydi — "
+              "yangi karta oching yoki o'lchamni to'g'rilang",
+        "ru": "Карточка «{card}» {shape}. В одной карточке не может быть и "
+              "того и другого — заведите новую или исправьте размер",
+        "en": "The card \u201c{card}\u201d {shape}. One card cannot be both — "
+              "open a new card or correct the size",
+    },
+    "shape_sized": {
+        "uz": "o'lchamli",
+        "ru": "с размерами",
+        "en": "has sizes",
+    },
+    "shape_sizeless": {
+        "uz": "o'lchamsiz",
+        "ru": "без размеров",
+        "en": "has no sizes",
+    },
+    "pile_needs_a_name": {
+        "uz": "Tavar nomi yoki turi kerak",
+        "ru": "Нужно название или тип товара",
+        "en": "The goods need a name or a kind",
+    },
+    "order_taken": {
+        "uz": "Bu zakasni boshqa kuryer olib ketdi",
+        "ru": "Этот заказ уже забрал другой курьер",
+        "en": "Another courier has taken this one",
+    },
+    "order_not_ready": {
+        "uz": "Zakas hali tayyor emas — ombor yig'ishini kutmoqda",
+        "ru": "Заказ ещё не готов — склад его собирает",
+        "en": "Not ready yet — the warehouse is still picking it",
+    },
+    "shipping_is_couriers": {
+        "uz": "Zakasni yo'lga chiqarish kuryer ishi — u ombordan o'zi olib "
+              "ketadi. Ombor faqat 'Tayyor' deb belgilaydi",
+        "ru": "Заказ отправляет курьер — он сам забирает его со склада. "
+              "Склад только помечает «Готов»",
+        "en": "Shipping is the courier's — they take it off the shelf "
+              "themselves. The warehouse only marks it ready",
     },
     "reason_required": {
         "uz": "Rad etish sababini yozing",
@@ -293,33 +424,6 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Конец интервала должен быть позже начала",
         "en": "A window has to end after it starts",
     },
-    # offers
-    "banner_not_found": {
-        "uz": "Banner topilmadi", "ru": "Баннер не найден", "en": "Banner not found",
-    },
-    "section_not_found": {
-        "uz": "Blok topilmadi", "ru": "Блок не найден", "en": "Section not found",
-    },
-    "promo_not_found": {
-        "uz": "Promokod topilmadi",
-        "ru": "Промокод не найден",
-        "en": "Promo code not found",
-    },
-    "promo_exists": {
-        "uz": "Bu promokod allaqachon bor",
-        "ru": "Такой промокод уже есть",
-        "en": "That promo code already exists",
-    },
-    "promo_empty": {
-        "uz": "Chegirma foizi yoki summasini ko'rsating",
-        "ru": "Укажите процент или сумму скидки",
-        "en": "Give a percentage or an amount off",
-    },
-    "promo_in_use": {
-        "uz": "Ishlatilgan promokodni o'chirib bo'lmaydi — faolsizlantiring",
-        "ru": "Использованный промокод удалить нельзя — отключите его",
-        "en": "A promo code that has been used cannot be deleted — switch it off",
-    },
     "order_repeats": {
         "uz": "Tartibda takrorlangan qator bor",
         "ru": "В порядке есть повторяющаяся строка",
@@ -329,11 +433,6 @@ LABELS: dict[str, dict[str, str]] = {
         "uz": "Tartibda hamma qator bo'lishi kerak",
         "ru": "Порядок должен содержать все строки",
         "en": "The order has to name every row",
-    },
-    "seller_exists": {
-        "uz": "Bu nomli sotuvchi allaqachon bor",
-        "ru": "Продавец с таким именем уже есть",
-        "en": "A seller with that name already exists",
     },
     "account_taken": {
         "uz": "Bu hisob boshqa sotuvchiga bog'langan",
@@ -350,6 +449,31 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Такой slug уже используется",
         "en": "That slug is already in use",
     },
+    "rack_exists": {
+        "uz": "Bunday javon allaqachon bor",
+        "ru": "Такой стеллаж уже есть",
+        "en": "That rack already exists",
+    },
+    "rack_added": {
+        "uz": "{rack} javoni yaratildi — {cells} ta yacheyka",
+        "ru": "Стеллаж {rack} создан — {cells} ячеек",
+        "en": "Rack {rack} created — {cells} cells",
+    },
+    "rack_not_found": {
+        "uz": "Bunday javon yo'q: {rack}",
+        "ru": "Такого стеллажа нет: {rack}",
+        "en": "No such rack: {rack}",
+    },
+    "rack_extended": {
+        "uz": "{rack} javoniga {cells} ta yacheyka qo'shildi",
+        "ru": "В стеллаж {rack} добавлено ячеек: {cells}",
+        "en": "{cells} cells added to rack {rack}",
+    },
+    "rack_already_that_big": {
+        "uz": "{rack} javoni allaqachon shu o'lchamda — yangi yacheyka qo'shilmadi",
+        "ru": "Стеллаж {rack} уже такого размера — новых ячеек нет",
+        "en": "Rack {rack} is already at least this big — nothing added",
+    },
     "brand_not_found": {
         "uz": "Brend topilmadi",
         "ru": "Бренд не найден",
@@ -359,6 +483,26 @@ LABELS: dict[str, dict[str, str]] = {
         "uz": "Bu brendda mahsulotlar bor",
         "ru": "У этого бренда есть товары",
         "en": "That brand still has products",
+    },
+    # Folding one brand into another, and the two ways of asking for nonsense.
+    "brand_merge_itself": {
+        "uz": "Brendni o'ziga qo'shib bo'lmaydi — qaysi biri qoladi?",
+        "ru": "Бренд нельзя объединить с самим собой — какой из них остаётся?",
+        "en": "A brand cannot be merged into itself — which one would be left?",
+    },
+    "brand_name_taken": {
+        "uz": "«{name}» nomi boshqa brendga ({slug}) tegishli. Ikkalasi bitta "
+              "bo'lsa, ularni birlashtiring.",
+        "ru": "Название «{name}» уже принадлежит другому бренду ({slug}). Если "
+              "это один и тот же бренд — объедините их.",
+        "en": "Another brand ({slug}) already answers to “{name}”. If "
+              "they are the same make, merge them instead.",
+    },
+    "brand_merged_note": {
+        "uz": "«{loser}» «{winner}» ichiga qo'shildi — {cards} ta karta ko'chdi",
+        "ru": "«{loser}» объединён с «{winner}» — перенесено карточек: {cards}",
+        "en": "“{loser}” folded into “{winner}” — {cards} "
+              "cards moved",
     },
     "category_in_use": {
         "uz": "Bu turkumda mahsulot yoki ichki turkum bor",
@@ -401,108 +545,6 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "У этого цвета есть размеры",
         "en": "That colour still has sizes",
     },
-    "offer_not_found": {
-        "uz": "Taklif topilmadi",
-        "ru": "Предложение не найдено",
-        "en": "Offer not found",
-    },
-    "offer_exists": {
-        "uz": "Bu mahsulotga taklifingiz allaqachon bor",
-        "ru": "У вас уже есть предложение на этот товар",
-        "en": "You already have an offer on this product",
-    },
-    "not_your_offer": {
-        "uz": "Bu sizning taklifingiz emas",
-        "ru": "Это не ваше предложение",
-        "en": "That offer is not yours",
-    },
-    "period_backwards": {
-        "uz": "Davr oxiri boshidan keyin bo'lishi kerak",
-        "ru": "Конец периода должен быть позже начала",
-        "en": "A period has to end after it starts",
-    },
-    "period_overlaps": {
-        "uz": "Bu kunlarni qamragan davr allaqachon bor — bir sotuv ikki "
-              "davrga tushib qolmasligi kerak",
-        "ru": "Период на эти дни уже существует — одна продажа не должна "
-              "попасть в два периода",
-        "en": "A period already covers those days — one sale must not fall "
-              "into two of them",
-    },
-    "period_not_found": {
-        "uz": "Hisob-kitob davri topilmadi",
-        "ru": "Расчётный период не найден",
-        "en": "Settlement period not found",
-    },
-    "period_closed": {
-        "uz": "Bu davr yopilgan — sotuvchilar raqamni ko'rgan, u o'zgarmaydi. "
-              "Keyin kelgan narsa keyingi davrga tushadi.",
-        "ru": "Период закрыт — продавцы уже видели сумму, она не меняется. "
-              "Всё пришедшее позже попадёт в следующий период.",
-        "en": "That period is closed — the sellers have seen the figure and it "
-              "does not change. Anything later falls into the next one.",
-    },
-    "period_empty": {
-        "uz": "Avval hisobotlarni yig'ing — yopish uchun hech narsa yo'q",
-        "ru": "Сначала сформируйте отчёты — закрывать нечего",
-        "en": "Generate the statements first — there is nothing to close",
-    },
-    "statement_not_found": {
-        "uz": "Hisobot topilmadi",
-        "ru": "Отчёт не найден",
-        "en": "Statement not found",
-    },
-    "statement_open": {
-        "uz": "Hisobot hali yopilmagan — qayta hisoblanayotgan raqamni "
-              "to'lab bo'lmaydi",
-        "ru": "Отчёт ещё не закрыт — нельзя платить по сумме, которая ещё "
-              "пересчитывается",
-        "en": "That statement is not closed yet — a figure still being "
-              "recomputed cannot be paid",
-    },
-    "statement_closed": {
-        "uz": "Hisobot yopilgan — tuzatish keyingi davrga yoziladi",
-        "ru": "Отчёт закрыт — правка вносится в следующий период",
-        "en": "That statement is closed — a correction goes in the next period",
-    },
-    "statement_paid": {
-        "uz": "Bu hisobot allaqachon to'langan",
-        "ru": "По этому отчёту уже выплачено",
-        "en": "That statement has already been paid",
-    },
-    "period_not_opened": {
-        "uz": "Davr hali ochilmagan — bu oxirgi davrdan keyingi kunlar",
-        "ru": "Период ещё не открыт — это дни после последнего периода",
-        "en": "No run opened yet — these are the days since the last one",
-    },
-    "tariff_not_found": {
-        "uz": "Og'irlik guruhi topilmadi",
-        "ru": "Весовая группа не найдена",
-        "en": "Weight band not found",
-    },
-    "tariff_band_exists": {
-        "uz": "Shu og'irlikda tugaydigan guruh allaqachon bor — ikkitasi "
-              "bo'lsa, posilka qaysi guruhga tushishi qator tartibiga bog'liq "
-              "bo'lib qoladi",
-        "ru": "Группа с таким верхним весом уже есть — при двух таких "
-              "группах то, в какую попадёт посылка, будет зависеть от "
-              "порядка строк",
-        "en": "A band already tops out at that weight — with two of them, "
-              "which one a parcel falls into would depend on row order",
-    },
-    "tariff_top_band": {
-        "uz": "Bu eng og'ir guruh — o'chirilsa, undan pastdagi guruhdan "
-              "og'irroq har bir posilka hech qaysi guruhga tushmaydi va "
-              "yig'ish haqi olinmay qoladi. Avval pastdagi guruh chegarasini "
-              "ko'taring yoki o'rniga yangisini qo'shing.",
-        "ru": "Это самая тяжёлая группа — если её удалить, каждая посылка "
-              "тяжелее предыдущей группы не попадёт ни в одну и сбор не "
-              "возьмётся. Сначала поднимите верхний предел группы ниже или "
-              "добавьте замену.",
-        "en": "That is the heaviest band — delete it and every parcel above "
-              "the band below falls into no band at all and is handled free. "
-              "Raise the ceiling below it, or add the replacement first.",
-    },
     "last_admin": {
         "uz": "Bu oxirgi admin — rolini tushirib bo'lmaydi, aks holda tizimga "
               "hech kim kira olmaydi. Avval boshqa admin tayinlang.",
@@ -510,6 +552,30 @@ LABELS: dict[str, dict[str, str]] = {
               "никто не войдёт. Сначала назначьте другого администратора.",
         "en": "That is the last admin — demoting them would leave nobody who can "
               "sign in. Appoint another admin first.",
+    },
+    "last_admin_active": {
+        "uz": "Bu oxirgi admin — hisobini o'chirsangiz, tizimga hech kim kira "
+              "olmaydi. Avval boshqa admin tayinlang.",
+        "ru": "Это последний администратор — отключив его, войти в систему будет "
+              "некому. Сначала назначьте другого администратора.",
+        "en": "That is the last admin — deactivating them would leave nobody who "
+              "can sign in. Appoint another admin first.",
+    },
+    "already_staff": {
+        "uz": "Bu raqam allaqachon xodimniki ({role}). Rolini o'zgartirish uchun "
+              "rol eshigidan foydalaning.",
+        "ru": "Этот номер уже принадлежит сотруднику ({role}). Чтобы изменить "
+              "роль, воспользуйтесь сменой роли.",
+        "en": "That number already belongs to a member of staff ({role}). Change "
+              "their role instead.",
+    },
+    "not_an_appointment": {
+        "uz": "Mijoz — bu lavozim emas. Xodimni ishdan bo'shatish uchun rolini "
+              "o'zgartiring yoki hisobini o'chiring.",
+        "ru": "Клиент — это не должность. Чтобы снять сотрудника, смените ему "
+              "роль или отключите аккаунт.",
+        "en": "Customer is not a job. To stand somebody down, change their role "
+              "or deactivate the account.",
     },
     "file_empty": {
         "uz": "Fayl bo'sh",
@@ -541,36 +607,6 @@ LABELS: dict[str, dict[str, str]] = {
               "один запрос",
         "en": "That key was used for a different request — one key belongs to "
               "one request",
-    },
-    "shift_required": {
-        "uz": "Avval smenani boshlang — naqd pul smenaga yig'iladi",
-        "ru": "Сначала откройте смену — наличные учитываются по смене",
-        "en": "Start a shift first — cash is counted against one",
-    },
-    "shift_closed": {
-        "uz": "Bu smena allaqachon yopilgan",
-        "ru": "Эта смена уже закрыта",
-        "en": "That shift is already closed",
-    },
-    "shift_open": {
-        "uz": "Smena hali yopilmagan — pul topshirilmagan",
-        "ru": "Смена ещё не закрыта — деньги не сданы",
-        "en": "That shift is not closed yet — the cash has not been handed in",
-    },
-    "shift_counted": {
-        "uz": "Bu smena allaqachon sanalgan",
-        "ru": "Эта смена уже пересчитана",
-        "en": "That shift has already been counted",
-    },
-    "shift_not_found": {
-        "uz": "Smena topilmadi",
-        "ru": "Смена не найдена",
-        "en": "Shift not found",
-    },
-    "not_your_shift": {
-        "uz": "Bu sizning smenangiz emas",
-        "ru": "Это не ваша смена",
-        "en": "That is not your shift",
     },
     "not_your_delivery": {
         "uz": "Bu buyurtma sizga biriktirilmagan",
@@ -637,28 +673,28 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "If it was not collected, say why — an operator decides from "
               "that sentence",
     },
-    "admin_has_no_seller": {
-        "uz": "Administratorning o'z do'koni yo'q — sotuvchini «Sotuvchilar» "
-              "orqali oching",
-        "ru": "У администратора нет своего магазина — откройте продавца через "
-              "«Продавцы»",
-        "en": "An admin has no shop of their own — open a seller from the "
-              "sellers list instead",
+    "images_required": {
+        "uz": "Kamida bitta rasm kerak — rasmsiz mahsulotni hech kim bosmaydi",
+        "ru": "Нужно хотя бы одно фото — товар без фото никто не откроет",
+        "en": "At least one picture — a card with no photo is a card nobody taps",
     },
-    "seller_account_missing": {
-        "uz": "Hisobingiz sotuvchiga bog'lanmagan",
-        "ru": "Ваш аккаунт не привязан к продавцу",
-        "en": "Your account is not linked to a seller",
+    "sizes_all_or_none": {
+        "uz": "Yo hamma rangda razmer bo'lsin, yo hech qaysisida: qoldiq eng "
+              "pastki bo'g'inda sanaladi va ikki darajani aralashtirib bo'lmaydi",
+        "ru": "Либо размеры у всех цветов, либо ни у одного: остаток считается "
+              "на нижнем уровне, и смешивать два уровня нельзя",
+        "en": "Either every colour has sizes or none does — stock is counted on "
+              "the leaves and the two levels cannot be mixed",
     },
-    "seller_required": {
-        "uz": "Qaysi sotuvchi uchun ekanini ko'rsating",
-        "ru": "Укажите, для какого продавца",
-        "en": "Say which seller this is for",
+    "sizes_repeat": {
+        "uz": "Bitta rangda bir razmer ikki marta berilgan",
+        "ru": "В одном цвете размер указан дважды",
+        "en": "A size is repeated within one colour",
     },
-    "seller_not_found": {
-        "uz": "Sotuvchi topilmadi",
-        "ru": "Продавец не найден",
-        "en": "Seller not found",
+    "colors_repeat": {
+        "uz": "Bir rang ikki marta berilgan",
+        "ru": "Цвет указан дважды",
+        "en": "A colour is repeated",
     },
     "variants_required": {
         "uz": "Mahsulotning har bir variantini ko'rsatish shart: {missing}",
@@ -670,46 +706,247 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Вариант не принадлежит этому товару",
         "en": "That variant does not belong to this product",
     },
-    "stock_is_the_warehouses": {
-        "uz": "Qoldiqni ombor kirimi belgilaydi, sotuvchi emas",
-        "ru": "Остаток задаётся приёмкой на склад, а не продавцом",
-        "en": "Stock is set by warehouse intake, not by the seller",
-    },
     # the warehouse
+    "supply_nothing_sorted": {
+        "uz": "Avval qopni saralang: birorta ham qator yo'q.",
+        "ru": "Сначала разберите мешок: ни одной строки.",
+        "en": "Sort the sack first: it has no lines.",
+    },
+    "tile_unsorted_sacks": {
+        "uz": "Saralanmagan qoplar",
+        "ru": "Неразобранные мешки",
+        "en": "Sacks nobody has opened",
+    },
+    "tile_orders_today": {
+        "uz": "Bugungi buyurtmalar",
+        "ru": "Заказы за сегодня",
+        "en": "Orders today",
+    },
+    "tile_awaiting_putaway": {
+        "uz": "Qabulda turibdi",
+        "ru": "Ждёт размещения",
+        "en": "Standing in the receiving area",
+    },
+    "tile_cells_full": {
+        "uz": "To'lgan kataklar",
+        "ru": "Заполненные ячейки",
+        "en": "Cells nearly full",
+    },
+    "tile_cells_empty": {
+        "uz": "{count} ta bo'sh katak",
+        "ru": "{count} пустых ячеек",
+        "en": "{count} empty cells",
+    },
+    "tile_sold_out": {
+        "uz": "Tugagan tavarlar",
+        "ru": "Закончились",
+        "en": "Sold out",
+    },
+    "tile_sold_out_hint": {
+        "uz": "sotuvda turibdi, lekin qolmagan",
+        "ru": "в продаже, но на складе нет",
+        "en": "on sale with nothing on the shelf",
+    },
+    "tile_low_stock": {
+        "uz": "Tugayotgan variantlar",
+        "ru": "Заканчиваются",
+        "en": "Running out",
+    },
+    "tile_low_stock_hint": {
+        "uz": "{count} tadan kam qolgan",
+        "ru": "Осталось {count} или меньше",
+        "en": "{count} left or fewer",
+    },
+    "tile_no_photograph": {
+        "uz": "Rasmsiz — sotuvga chiqmagan",
+        "ru": "Без фото — не в продаже",
+        "en": "Held back for want of a photograph",
+    },
+    "tile_no_photograph_hint": {
+        "uz": "Rasm qo'yilsa, o'zi sotuvga chiqadi",
+        "ru": "Появится в продаже, как только будет фото",
+        "en": "One picture each and they are in the shop",
+    },
+    "tile_couriers_out": {
+        "uz": "Yo'ldagi kuryerlar",
+        "ru": "Курьеры в пути",
+        "en": "Couriers out with parcels",
+    },
+    "age_hours_minutes": {
+        "uz": "{hours} soat {minutes} daqiqa",
+        "ru": "{hours} ч {minutes} мин",
+        "en": "{hours} h {minutes} min",
+    },
+    "age_hours": {
+        "uz": "{hours} soat",
+        "ru": "{hours} ч",
+        "en": "{hours} h",
+    },
+    "age_minutes": {
+        "uz": "{minutes} daqiqa",
+        "ru": "{minutes} мин",
+        "en": "{minutes} min",
+    },
+    "location_not_found": {
+        "uz": "Bunday joy yo'q: {code}",
+        "ru": "Такого места нет: {code}",
+        "en": "No such place: {code}",
+    },
+    "putaway_needs_a_cell": {
+        "uz": "Faqat javon katagiga joylashtiriladi",
+        "ru": "Разместить можно только в ячейку стеллажа",
+        "en": "Goods go into a shelf cell, not into a staging area",
+    },
+    # Taking a cell out of the room, and the three ways that goes wrong. Each
+    # sentence says what to do next: a refusal a warehouse cannot act on is a
+    # refusal somebody works around by putting the goods somewhere quiet.
+    "cell_retire_needs_a_cell": {
+        "uz": "Faqat javon katagini olib tashlash mumkin — {code} ish joyi, u "
+              "har doim kerak",
+        "ru": "Убрать можно только ячейку стеллажа — {code} это рабочая зона, "
+              "она нужна всегда",
+        "en": "Only a shelf cell can be retired — {code} is an area with a job "
+              "and the room always needs it",
+    },
+    "cell_retire_not_empty": {
+        "uz": "{code} yacheykasida {units} dona bor — avval boshqa yacheykaga "
+              "ko'chiring yoki hisobdan chiqaring",
+        "ru": "В ячейке {code} лежит {units} шт. — сначала перенесите в другую "
+              "ячейку или спишите",
+        "en": "{code} still holds {units} — move them to another cell or write "
+              "them off first",
+    },
+    "cell_retired_destination": {
+        "uz": "{code} yacheykasi olib tashlangan — avval qaytaring yoki boshqa "
+              "yacheykani tanlang",
+        "ru": "Ячейка {code} убрана — сначала верните её или выберите другую",
+        "en": "{code} is retired — bring it back first, or choose another cell",
+    },
+    "cell_retired_count": {
+        "uz": "{code} yacheykasi olib tashlangan — sanashdan oldin uni qaytaring",
+        "ru": "Ячейка {code} убрана — верните её, прежде чем считать",
+        "en": "{code} is retired — bring it back before counting it",
+    },
+    # Not enough there to take. The numbers rather than a sentence built in
+    # code: this used to reach the screen as English off the exception.
+    "cell_holds_less": {
+        "uz": "{code} yacheykasida {wanted} dona yo'q — {held} dona bor",
+        "ru": "В ячейке {code} нет {wanted} шт. — там {held} шт.",
+        "en": "{code} holds {held}, not {wanted}",
+    },
+    # And the other shortfall: not enough in the whole building. No cell code,
+    # because there is not one — the goods are spread across cells and the
+    # corner by the door, and naming a cell would send somebody to the wrong
+    # shelf. Its own sentence rather than a reuse of the one above: "A-02-03
+    # holds 4, not 9" and "there are 4 altogether, not 9" send a person to two
+    # different places.
+    "shelves_hold_less": {
+        "uz": "Javonlarda {wanted} dona yo'q — hammasi bo'lib {held} dona bor",
+        "ru": "На складе нет {wanted} шт. — всего {held} шт.",
+        "en": "There are {held} on the shelves altogether, not {wanted}",
+    },
+    "cell_is_empty": {
+        "uz": "{code} yacheykasi bo'sh — ko'chiradigan narsa yo'q",
+        "ru": "Ячейка {code} пуста — переносить нечего",
+        "en": "{code} is empty — there is nothing to move",
+    },
+    "pile_needs_a_place": {
+        "uz": "Qayerga qo'yilishini ko'rsating: bitta yacheyka yoki bo'lib joylash",
+        "ru": "Укажите, куда кладём: одну ячейку или разбивку",
+        "en": "Say where it goes: one cell, or a split across cells",
+    },
+    "pile_one_place_or_the_other": {
+        "uz": "Yo bitta yacheyka, yo bo'lib joylash — ikkalasi birga emas",
+        "ru": "Либо одна ячейка, либо разбивка — не оба сразу",
+        "en": "One cell or a split, not both",
+    },
+    "pile_split_does_not_add_up": {
+        "uz": "Yacheykalarga {placed} dona bo'lindi, pilada esa {total} dona bor",
+        "ru": "По ячейкам разложено {placed} шт., а в партии {total} шт.",
+        "en": "The cells add up to {placed}, the pile is {total}",
+    },
+    "putaway_plan_over_capacity": {
+        "uz": "Javonlarda joy yetmaydi — oxirgi {code} yacheykasiga {over} dona "
+              "ortiqcha qo'yiladi",
+        "ru": "На стеллажах не хватает места — в последнюю ячейку {code} ляжет "
+              "на {over} шт. больше нормы",
+        "en": "The racks have no room left — the last cell {code} takes {over} "
+              "more than it holds",
+    },
+    "putaway_plan_needs_cells": {
+        "uz": "Xonada javon yacheykalari yo'q",
+        "ru": "В комнате нет ячеек стеллажей",
+        "en": "The room has no shelf cells",
+    },
+    "count_already_open": {
+        "uz": "Bu katak allaqachon sanalmoqda",
+        "ru": "Эта ячейка уже пересчитывается",
+        "en": "Somebody is already counting this cell",
+    },
+    "count_already_closed": {
+        "uz": "Sanash yakunlangan",
+        "ru": "Пересчёт уже закрыт",
+        "en": "That count is closed",
+    },
+    "count_not_found": {
+        "uz": "Sanash topilmadi",
+        "ru": "Пересчёт не найден",
+        "en": "Count not found",
+    },
+    "count_difference": {
+        "uz": "Sanashdagi farq",
+        "ru": "Расхождение при пересчёте",
+        "en": "What the count found",
+    },
+    "labels_need_a_selection": {
+        "uz": "Qaysi yorliqlar? Qabul yoki variantlarni tanlang",
+        "ru": "Какие этикетки? Укажите поставку или варианты",
+        "en": "Which labels? Name a market run or some variants",
+    },
+    "order_not_pickable": {
+        "uz": "Bu buyurtma terishga tayyor emas",
+        "ru": "Этот заказ ещё не для сборки",
+        "en": "That order is not one to pick",
+    },
+    "pick_not_found": {
+        "uz": "Terish vazifasi topilmadi",
+        "ru": "Задание на сборку не найдено",
+        "en": "Pick task not found",
+    },
+    "pick_line_not_found": {
+        "uz": "Terish qatori topilmadi",
+        "ru": "Строка сборки не найдена",
+        "en": "That line is not on this task",
+    },
+    "pick_already_taken": {
+        "uz": "Bu vazifani boshqa xodim oldi",
+        "ru": "Задание уже взял другой сотрудник",
+        "en": "Somebody has already taken this one",
+    },
+    "pick_not_yours": {
+        "uz": "Bu vazifa sizniki emas",
+        "ru": "Это не ваше задание",
+        "en": "That trolley is somebody else's",
+    },
+    "pick_already_done": {
+        "uz": "Bu vazifa yakunlangan",
+        "ru": "Задание уже завершено",
+        "en": "That task is finished",
+    },
+    "pick_line_done": {
+        "uz": "Bu qator allaqachon terilgan",
+        "ru": "Эта строка уже собрана",
+        "en": "That line is already fetched",
+    },
+    "pick_not_finished": {
+        "uz": "Hali hamma qator terilmagan",
+        "ru": "Собрано не всё",
+        "en": "Not everything has been fetched yet",
+    },
     "supply_not_found": {
         "uz": "Partiya topilmadi",
         "ru": "Поставка не найдена",
         "en": "Supply not found",
-    },
-    "supply_line_not_found": {
-        "uz": "Partiyada bunday satr yo'q",
-        "ru": "В поставке нет такой строки",
-        "en": "No such line in that supply",
-    },
-    "not_your_supply": {
-        "uz": "Bu sizning partiyangiz emas",
-        "ru": "Это не ваша поставка",
-        "en": "That is not yours",
-    },
-    "removal_not_found": {
-        "uz": "Qaytarib olish buyrug'i topilmadi",
-        "ru": "Заявка на вывоз не найдена",
-        "en": "Removal order not found",
-    },
-    "removal_line_not_found": {
-        "uz": "Buyruqda bunday satr yo'q",
-        "ru": "В заявке нет такой строки",
-        "en": "No such line in that order",
-    },
-    "count_not_found": {
-        "uz": "Sanoq topilmadi",
-        "ru": "Инвентаризация не найдена",
-        "en": "Stocktake not found",
-    },
-    "count_already_open": {
-        "uz": "Bu taklif bo'yicha sanoq allaqachon ochiq",
-        "ru": "По этому предложению инвентаризация уже открыта",
-        "en": "A stocktake is already open on this offer",
     },
     # what the customer is told when somebody finally answers
     "order_packing_note": {
@@ -762,36 +999,43 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "По {code} возвращено {amount} сум",
         "en": "{amount} UZS returned for {code}",
     },
-    "review_published": {
-        "uz": "Sharhingiz e'lon qilindi",
-        "ru": "Ваш отзыв опубликован",
-        "en": "Your review is published",
+    # ------------------------------------------- the goods after the refund
+    #
+    # Two people are told two different things about the same parcel: the
+    # warehouse's verdict goes to the seller, because it is the seller who has
+    # to answer it, and the answer has a deadline on it. The customer is not
+    # in this conversation at all — their money is already back.
+    "inspection_ok": {
+        "uz": "Butun",
+        "ru": "Целый",
+        "en": "Whole",
     },
-    "review_published_note": {
-        "uz": "{product} bo'yicha sharhingiz endi hammaga ko'rinadi",
-        "ru": "Ваш отзыв о «{product}» теперь виден всем",
-        "en": "Your review of {product} is now visible to everyone",
+    "inspection_damaged": {
+        "uz": "Buzilgan",
+        "ru": "Повреждён",
+        "en": "Damaged",
     },
-    "review_rejected": {
-        "uz": "Sharhingiz e'lon qilinmadi",
-        "ru": "Отзыв не опубликован",
-        "en": "Your review wasn't published",
+    "return_already_inspected": {
+        "uz": "Bu ariza allaqachon tekshirilgan",
+        "ru": "Эта заявка уже осмотрена",
+        "en": "That request has already been inspected",
     },
-    "review_rejected_note": {
-        "uz": "{product} bo'yicha sharhingiz e'lon qilinmadi: {reason}",
-        "ru": "Отзыв о «{product}» не опубликован: {reason}",
-        "en": "Your review of {product} wasn't published: {reason}",
+    "return_not_here_yet": {
+        "uz": "Tovar hali omborga kelmagan — avval qaytarish tasdiqlanadi",
+        "ru": "Товар ещё не на складе — сначала возврат одобряют",
+        "en": "The goods are not here yet — a return is approved first",
     },
+    # a batch the warehouse refused
     # order status pills and timeline
     "status_placed": {"uz": "QABUL QILINDI", "ru": "ПРИНЯТ", "en": "PLACED"},
-    "status_packing": {"uz": "YIG'ILMOQDA", "ru": "СОБИРАЕТСЯ", "en": "PACKING"},
+    "status_packing": {"uz": "TAYYOR", "ru": "ГОТОВ", "en": "READY"},
     "status_shipped": {"uz": "YO'LDA", "ru": "В ПУТИ", "en": "ON THE WAY"},
     "status_delivered": {"uz": "YETKAZILDI", "ru": "ДОСТАВЛЕН", "en": "DELIVERED"},
     "status_cancelled": {"uz": "BEKOR QILINDI", "ru": "ОТМЕНЁН", "en": "CANCELLED"},
     "status_returned": {"uz": "QAYTARILDI", "ru": "ВОЗВРАЩЁН", "en": "RETURNED"},
     "event_placed": {"uz": "Buyurtma qabul qilindi", "ru": "Заказ принят",
                      "en": "Order placed"},
-    "event_packing": {"uz": "Omborda yig'ildi", "ru": "Собран на складе",
+    "event_packing": {"uz": "Yig'ildi — kuryer kutilmoqda", "ru": "Собран — ждёт курьера",
                       "en": "Picked at the warehouse"},
     "event_shipped": {"uz": "Kuryerga topshirildi", "ru": "Передан курьеру",
                       "en": "Handed to the courier"},
@@ -830,10 +1074,33 @@ LABELS: dict[str, dict[str, str]] = {
                      "en": "Cash · to the courier"},
     "card": {"uz": "Karta", "ru": "Карта", "en": "Card"},
     "paid": {"uz": "to'landi", "ru": "оплачено", "en": "paid"},
+    # The saved cards, and what a charge says when it does not go through.
+    #
+    # A refusal names the reason rather than saying "payment failed", because
+    # the three reasons ask the customer for three different things: another
+    # card, more money on this one, or a card that has not expired. One
+    # sentence for all three is one sentence nobody can act on.
+    "card_not_found": {"uz": "Karta topilmadi", "ru": "Карта не найдена",
+                       "en": "Card not found"},
+    "card_removed": {"uz": "Karta o'chirildi", "ru": "Карта удалена",
+                     "en": "Card removed"},
+    "card_expired": {"uz": "Kartaning amal qilish muddati o'tgan",
+                     "ru": "Срок действия карты истёк", "en": "The card has expired"},
+    "card_required": {"uz": "To'lov uchun kartani tanlang",
+                      "ru": "Выберите карту для оплаты",
+                      "en": "Choose a card to pay with"},
+    "card_declined": {"uz": "Bank to'lovni rad etdi. Boshqa karta bilan urinib ko'ring",
+                      "ru": "Банк отклонил платёж. Попробуйте другую карту",
+                      "en": "The bank declined the payment. Try another card"},
+    "card_no_funds": {"uz": "Kartada mablag' yetarli emas",
+                      "ru": "На карте недостаточно средств",
+                      "en": "Not enough money on the card"},
+    "card_unusable": {"uz": "Bu karta bilan to'lov qilib bo'lmaydi. Kartani qayta qo'shing",
+                      "ru": "Этой картой оплатить нельзя. Добавьте карту заново",
+                      "en": "This card cannot be charged. Add it again"},
+    "payment_failed": {"uz": "To'lov amalga oshmadi", "ru": "Платёж не прошёл",
+                       "en": "The payment did not go through"},
     "unpaid": {"uz": "to'lanmagan", "ru": "не оплачено", "en": "unpaid"},
-    "card_masked": {"uz": "Karta ···· {last4} · {state}",
-                    "ru": "Карта ···· {last4} · {state}",
-                    "en": "Card ···· {last4} · {state}"},
     # filter flags and rating buckets
     "flag_next_day_delivery": {"uz": "Ertaga yetkaziladi", "ru": "Доставка завтра",
                                "en": "Arrives tomorrow"},
@@ -864,6 +1131,286 @@ LABELS: dict[str, dict[str, str]] = {
     "sort_rating": {"uz": "Reyting bo'yicha", "ru": "По рейтингу", "en": "By rating"},
     "sort_new": {"uz": "Yangilari", "ru": "Новинки", "en": "New arrivals"},
     "sort_discount": {"uz": "Chegirma bo'yicha", "ru": "По скидке", "en": "By discount"},
+    # ── the reports ───────────────────────────────────────────────────────
+    #
+    # The owner opened `/hisobotlar` and found a paged table of raw stock
+    # movements: no dates, no totals, not a single so'm. Everything below names
+    # a figure on the screens that replaced it. The words are plain on purpose
+    # — "Bozorga chiqqan pul" and not "COGS" — because the person reading them
+    # runs the shop rather than an accounts department.
+    "report_period_backwards": {
+        "uz": "Boshlanish sanasi tugash sanasidan keyin bo'lmasligi kerak",
+        "ru": "Начало периода позже конца",
+        "en": "The period starts after it ends",
+    },
+    "report_period_too_long": {
+        "uz": "Eng ko'pi {days} kun so'ralishi mumkin",
+        "ru": "Максимум {days} дней за раз",
+        "en": "At most {days} days at a time",
+    },
+    # sales
+    "fig_revenue": {"uz": "Tushum", "ru": "Выручка", "en": "Revenue"},
+    "fig_orders": {"uz": "Buyurtmalar", "ru": "Заказы", "en": "Orders"},
+    "fig_average_order": {
+        "uz": "O'rtacha buyurtma",
+        "ru": "Средний чек",
+        "en": "Average order value",
+    },
+    "fig_delivered": {"uz": "Yetkazilgan", "ru": "Доставлено", "en": "Delivered"},
+    "fig_cancelled": {"uz": "Bekor qilingan", "ru": "Отменено", "en": "Cancelled"},
+    "fig_returned": {"uz": "Qaytarilgan", "ru": "Возвращено", "en": "Returned"},
+    "fig_cancel_rate": {
+        "uz": "Bekor qilish ulushi",
+        "ru": "Доля отмен",
+        "en": "Cancellation rate",
+    },
+    "fig_delivery_fee": {
+        "uz": "Yetkazish haqi",
+        "ru": "Доход от доставки",
+        "en": "Delivery fee income",
+    },
+    "fig_discount": {
+        "uz": "Berilgan chegirma",
+        "ru": "Выданные скидки",
+        "en": "Discount given away",
+    },
+    "fig_refunds": {
+        "uz": "Qaytarilgan pul",
+        "ru": "Возвраты денег",
+        "en": "Refunds paid",
+    },
+    "fig_net": {"uz": "Sof tushum", "ru": "Чистая выручка", "en": "Net"},
+    # money
+    "fig_money_in": {"uz": "Kirgan pul", "ru": "Приход", "en": "Money in"},
+    "fig_money_out": {
+        "uz": "Bozorga chiqqan pul",
+        "ru": "Расход на закуп",
+        "en": "Money out to the market",
+    },
+    "fig_difference": {
+        "uz": "Farq — kirim ayirib chiqim",
+        "ru": "Разница — приход минус расход",
+        "en": "Difference — cash in less cash out",
+    },
+    "fig_runs": {
+        "uz": "Bozor safarlari",
+        "ru": "Поездки на рынок",
+        "en": "Market runs",
+    },
+    "fig_average_run": {
+        "uz": "O'rtacha safar",
+        "ru": "Средняя поездка",
+        "en": "Average run",
+    },
+    "fig_transport": {"uz": "Transport", "ru": "Транспорт", "en": "Transport"},
+    "fig_units_bought": {
+        "uz": "Olingan dona",
+        "ru": "Куплено штук",
+        "en": "Units bought",
+    },
+    "fig_gross_margin": {
+        "uz": "Yalpi foyda",
+        "ru": "Валовая прибыль",
+        "en": "Gross margin",
+    },
+    # customers
+    "fig_signups": {
+        "uz": "Yangi ro'yxatdan o'tganlar",
+        "ru": "Новые регистрации",
+        "en": "New signups",
+    },
+    "fig_buyers": {"uz": "Xaridorlar", "ru": "Покупатели", "en": "Buyers"},
+    "fig_new_buyers": {
+        "uz": "Birinchi marta olganlar",
+        "ru": "Купили впервые",
+        "en": "First-time buyers",
+    },
+    "fig_returning_buyers": {
+        "uz": "Qaytib kelganlar",
+        "ru": "Вернувшиеся",
+        "en": "Returning buyers",
+    },
+    "fig_repeat_rate": {
+        "uz": "Qayta xarid ulushi",
+        "ru": "Доля повторных",
+        "en": "Repeat-purchase rate",
+    },
+    "fig_orders_per_customer": {
+        "uz": "Xaridorga buyurtma",
+        "ru": "Заказов на покупателя",
+        "en": "Orders per customer",
+    },
+    "fig_lapsed": {
+        "uz": "Uzoqdan beri olmaganlar",
+        "ru": "Давно не покупали",
+        "en": "Lapsed customers",
+    },
+    # products
+    "fig_units_sold": {
+        "uz": "Sotilgan dona",
+        "ru": "Продано штук",
+        "en": "Units sold",
+    },
+    "fig_products_sold": {
+        "uz": "Sotilgan tovar turlari",
+        "ru": "Товаров продано",
+        "en": "Products sold",
+    },
+    "fig_dead_stock": {
+        "uz": "Qimirlamayotgan variantlar",
+        "ru": "Неподвижные позиции",
+        "en": "Dead stock",
+    },
+    "fig_dead_stock_value": {
+        "uz": "Qimirlamayotgan qiymat",
+        "ru": "Стоимость неподвижного",
+        "en": "Dead stock value",
+    },
+    # stock
+    "fig_stock_value": {
+        "uz": "Ombordagi qiymat",
+        "ru": "Стоимость склада",
+        "en": "Stock value at selling price",
+    },
+    "fig_stock_units": {
+        "uz": "Ombordagi dona",
+        "ru": "Штук на складе",
+        "en": "Units in the building",
+    },
+    "fig_sellable_value": {
+        "uz": "Sotiladigan qiymat",
+        "ru": "Стоимость к продаже",
+        "en": "Sellable value",
+    },
+    "fig_damaged_value": {
+        "uz": "Brakdagi qiymat",
+        "ru": "Стоимость брака",
+        "en": "Damaged value",
+    },
+    "fig_written_off": {
+        "uz": "Hisobdan chiqarilgan",
+        "ru": "Списано",
+        "en": "Written off",
+    },
+    "fig_damaged_units": {
+        "uz": "Brakka o'tgan",
+        "ru": "Ушло в брак",
+        "en": "Moved to the damaged corner",
+    },
+    "fig_stocktake_accuracy": {
+        "uz": "Sanoq aniqligi",
+        "ru": "Точность пересчёта",
+        "en": "Stocktake accuracy",
+    },
+    "fig_cells_full": {
+        "uz": "To'lgan kataklar",
+        "ru": "Заполненные ячейки",
+        "en": "Cells nearly full",
+    },
+    "fig_cells_empty": {
+        "uz": "Bo'sh kataklar",
+        "ru": "Пустые ячейки",
+        "en": "Empty cells",
+    },
+    # the work
+    "fig_deliveries": {"uz": "Yetkazishlar", "ru": "Доставки", "en": "Deliveries"},
+    "fig_attempts": {
+        "uz": "Eshik qoqishlar",
+        "ru": "Попытки доставки",
+        "en": "Knocks at a door",
+    },
+    "fig_first_attempt": {
+        "uz": "Birinchi urinishda",
+        "ru": "С первой попытки",
+        "en": "First-attempt success",
+    },
+    "fig_cash_collected": {
+        "uz": "Eshikda olingan naqd",
+        "ru": "Наличные у двери",
+        "en": "Cash collected at the door",
+    },
+    "fig_returns_rate": {
+        "uz": "Qaytarish ulushi",
+        "ru": "Доля возвратов",
+        "en": "Returns rate",
+    },
+    "fig_returns_opened": {
+        "uz": "Ochilgan qaytarishlar",
+        "ru": "Открыто возвратов",
+        "en": "Returns opened",
+    },
+    "fig_returns_approved": {
+        "uz": "Ma'qullangan",
+        "ru": "Одобрено",
+        "en": "Approved",
+    },
+    "fig_returns_rejected": {
+        "uz": "Rad etilgan",
+        "ru": "Отклонено",
+        "en": "Rejected",
+    },
+    "fig_inspected_ok": {
+        "uz": "Qayta sotiladigan",
+        "ru": "Годно к продаже",
+        "en": "Sellable again",
+    },
+    "fig_inspected_damaged": {"uz": "Brak", "ru": "Брак", "en": "Damaged"},
+    "dur_fulfilment": {
+        "uz": "Buyurtmadan yetkazishgacha",
+        "ru": "От заказа до доставки",
+        "en": "Order to doorstep",
+    },
+    "dur_pick_wait": {
+        "uz": "Terishni kutish",
+        "ru": "Ожидание сборки",
+        "en": "Waiting to be picked",
+    },
+    "dur_pick_work": {
+        "uz": "Terish",
+        "ru": "Сборка",
+        "en": "Picking",
+    },
+    # the places goods stand in, as a person would name them
+    "kind_bin": {
+        "uz": "Javon kataklari",
+        "ru": "Ячейки стеллажей",
+        "en": "Shelf cells",
+    },
+    "kind_receiving": {"uz": "Qabul", "ru": "Приёмка", "en": "Receiving"},
+    "kind_packing": {"uz": "Yig'im", "ru": "Сборка", "en": "Packing"},
+    "kind_courier": {
+        "uz": "Kuryer sumkalari",
+        "ru": "Сумки курьеров",
+        "en": "Courier bags",
+    },
+    "kind_damaged": {"uz": "Brak", "ru": "Брак", "en": "Damaged"},
+    "kind_returns": {
+        "uz": "Ko'rilmagan qaytganlar",
+        "ru": "Непроверенные возвраты",
+        "en": "Uninspected returns",
+    },
+    # how it was paid for, and how it got there
+    "split_card": {"uz": "Karta", "ru": "Картой", "en": "Card"},
+    "split_cash": {"uz": "Naqd", "ru": "Наличными", "en": "Cash"},
+    "split_courier": {"uz": "Kuryer", "ru": "Курьером", "en": "Courier"},
+    "split_pickup": {
+        "uz": "Punktdan olish",
+        "ru": "Самовывоз",
+        "en": "Pick-up point",
+    },
+    # A failure recorded with no reason. Its own row rather than folded into
+    # the others: it is a gap in the work and hiding it is how it stays one.
+    "reason_not_given": {
+        "uz": "Sabab yozilmagan",
+        "ru": "Причина не указана",
+        "en": "No reason given",
+    },
+    "unknown_person": {"uz": "Noma'lum", "ru": "Неизвестно", "en": "Unknown"},
+    "market_not_said": {
+        "uz": "Bozor yozilmagan",
+        "ru": "Рынок не указан",
+        "en": "Market not recorded",
+    },
 }
 
 MONTHS: dict[str, list[str]] = {

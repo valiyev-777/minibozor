@@ -17,10 +17,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,12 +44,40 @@ import uz.minibozor.core.design.icon.MbIcon
 fun MbScreen(
     modifier: Modifier = Modifier,
     background: Color = MbTheme.colors.canvas,
+    /**
+     * What is painted behind the status bar.
+     *
+     * The page's own ground by default, and that was every screen — which left
+     * a strip of grey canvas above the white band the tabs open with, so the
+     * clock sat on a step of colour that belonged to nothing. `design/screens`
+     * draws it the other way round: the header's white starts at the top of the
+     * phone and the clock is inside it. A screen whose first thing is a band of
+     * surface passes that colour here and the step is gone.
+     *
+     * Painted over the frame rather than under it, because the Scaffold's own
+     * container colour would cover anything drawn behind. Nothing composes into
+     * that strip — the content is inset past it — so there is nothing there to
+     * cover.
+     */
+    statusBand: Color = background,
     topBar: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
     content: @Composable (androidx.compose.foundation.layout.PaddingValues) -> Unit,
 ) {
+    val bandHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .then(
+                if (statusBand == background) {
+                    Modifier
+                } else {
+                    Modifier.drawWithContent {
+                        drawContent()
+                        drawRect(statusBand, size = Size(size.width, bandHeight.toPx()))
+                    }
+                }
+            ),
         containerColor = background,
         topBar = topBar,
         bottomBar = bottomBar,

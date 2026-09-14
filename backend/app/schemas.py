@@ -15,25 +15,21 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models import (
     AttemptResult,
     CardStatus,
+    CountStatus,
     DeliveryKind,
     Language,
+    LocationKind,
     NotificationKind,
     OrderStatus,
     PaymentMethod,
+    PickStatus,
     PickupRunStatus,
     ProductStatus,
-    RemovalReason,
-    RemovalStatus,
+    ReturnInspection,
     ReturnStatus,
-    ReviewStatus,
-    SettlementStatus,
-    ShiftStatus,
-    StatementLineKind,
-    StockCountStatus,
     StockMovementKind,
     SupplyStatus,
     UserRole,
-    VariantKind,
 )
 
 T = TypeVar("T")
@@ -243,23 +239,40 @@ class BrandOut(BaseModel):
     product_count: int = 0
 
 
-class VariantOut(BaseModel):
-    id: int
-    kind: VariantKind
-    label: str
-    value: str
-    # The product in this colour, so the picker can show photographs instead of
-    # hex swatches. None for sizes, and for a colour nobody photographed.
+class ColourOut(BaseModel):
+    """One colour a card comes in, with the picture of it.
+
+    A colour is chosen by looking at the thing, so what the picker draws is
+    the photograph; the hex is the fallback for a colour that has none, which
+    only a draft can have.
+    """
+
+    colour: str
+    hex: str = ""
     image_url: str | None = None
+    in_stock: bool = True
+
+
+class VariantOut(BaseModel):
+    """One cell of the colour × size grid — the thing that is actually bought.
+
+    Flat, where this used to be a tree of colours with sizes hanging off them.
+    A basket line names one of these and nothing else: the pair used to be two
+    ids that could disagree with each other, and one of the two was an
+    aggregate nobody could point at on a shelf.
+    """
+
+    id: int
+    colour: str
+    size: str
+    label: str            # "Qora · 42", ready to print
+    sku: str = ""
+    barcode: str = ""
+    price: int
     in_stock: bool
-    # How many of this colour, or of this size in this colour, are left. None
-    # means the shelf is only counted as a whole, and the product's own
-    # stock_left is the answer.
-    stock_left: int | None = None
-    # The colour a size belongs to: sizes are counted per colour, so a page
-    # showing one colour shows that colour's sizes. Null on a colour, and on a
-    # size of a product that has no colours.
-    parent_id: int | None = None
+    # What can still be bought: what is on a sellable shelf, less what is
+    # already in somebody's basket or promised to an order.
+    stock_left: int = 0
 
 
 class SpecOut(BaseModel):
@@ -301,9 +314,11 @@ class ProductOut(ProductCardOut):
     images: list[str]
     category: CategoryOut
     brand: BrandOut | None
+    # The colours first, because that is the order a person chooses in: which
+    # one, looking at the photographs, and then which size of it.
+    colours: list[ColourOut]
     variants: list[VariantOut]
     specs: list[SpecOut]
-    seller: str
     warranty: str | None
     is_original: bool
     free_delivery: bool
@@ -312,47 +327,6 @@ class ProductOut(ProductCardOut):
     # How many have been sold — the product page prints it beside the rating,
     # where "2 010 ta buyurtma" is the strongest thing on the panel.
     sold_count: int = 0
-
-
-class RatingBucket(BaseModel):
-    stars: int
-    count: int
-    percent: int
-
-
-class ReviewSummaryOut(BaseModel):
-    rating: float
-    total: int
-    distribution: list[RatingBucket]
-    # A handful of customer photographs for the strip beside the rating, and the
-    # full count so the last tile can say how many more there are.
-    photos: list[str] = []
-    photos_total: int = 0
-
-
-class ReviewOut(BaseModel):
-    id: int
-    author_name: str
-    author_initials: str
-    rating: int
-    text: str
-    variant_label: str
-    tags: list[str]
-    photos: list[str]
-    likes: int
-    liked_by_me: bool = False
-    status: ReviewStatus
-    created_at: datetime
-    product: ProductCardOut | None = None
-
-
-class ReviewCreateIn(BaseModel):
-    rating: int = Field(ge=1, le=5)
-    text: str = ""
-    tags: list[str] = []
-    photos: list[str] = []
-    variant_label: str = ""
-    order_item_id: int | None = None
 
 
 class BannerOut(BaseModel):
@@ -421,6 +395,13 @@ class CartItemOut(BaseModel):
     product_id: int
     title: str
     image_url: str | None
+    # The colour and the size, apart. `variant_label` joins them with a dot
+    # for a place with one line to spare, and a client that prints only that
+    # ends up showing "Qora · 41" as though it were the name of one thing —
+    # the customer chose a colour *and* a size, and the basket should say so.
+    # Kept beside it rather than instead of it: the shipped apps read the label.
+    colour: str = ""
+    size: str = ""
     variant_label: str
     # Which size and which colour this line is, and not only what they are
     # called. The label is one joined string for reading; a client deciding
@@ -429,7 +410,6 @@ class CartItemOut(BaseModel):
     # match on the product — so a shirt in the basket in medium left no way to
     # add a large.
     variant_id: int | None = None
-    color_variant_id: int | None = None
     unit_price: int
     old_unit_price: int | None
     quantity: int
@@ -458,18 +438,15 @@ class CartOut(BaseModel):
 
 class CartAddIn(BaseModel):
     product_id: int
+    # One id, not two. It names a cell of the colour × size grid; a card with
+    # no variation has exactly one and it may be left out.
     variant_id: int | None = None
-    color_variant_id: int | None = None
     quantity: int = Field(default=1, ge=1, le=99)
 
 
 class CartUpdateIn(BaseModel):
     quantity: int | None = Field(default=None, ge=0, le=99)
     selected: bool | None = None
-
-
-class PromoIn(BaseModel):
-    code: str
 
 
 # --------------------------------------------------------------------------- delivery
@@ -535,35 +512,6 @@ class SlotDayOut(BaseModel):
     slots: list[SlotOut]
 
 
-# --------------------------------------------------------------------------- payment
-
-
-class CardOut(BaseModel):
-    id: int
-    brand: str
-    last4: str
-    holder: str
-    expiry: str
-    status: CardStatus
-    is_default: bool
-
-
-class CardIn(BaseModel):
-    """The app never sends a PAN here.
-
-    A real integration collects the card in the processor's own SDK/webview and
-    posts back only the resulting token plus the display fields below.
-    """
-
-    brand: str = "Humo"
-    last4: str = Field(min_length=4, max_length=4, pattern=r"^\d{4}$")
-    holder: str = ""
-    expiry_month: int = Field(ge=1, le=12)
-    expiry_year: int = Field(ge=2024, le=2099)
-    processor_token: str
-    is_default: bool = False
-
-
 # --------------------------------------------------------------------------- orders
 
 
@@ -572,6 +520,8 @@ class OrderItemOut(BaseModel):
     product_id: int | None
     title: str
     image_url: str
+    colour: str = ""
+    size: str = ""
     variant_label: str
     unit_price: int
     quantity: int
@@ -601,6 +551,33 @@ class OrderSummaryOut(BaseModel):
     can_track: bool
 
 
+class DeliveryAttemptOut(BaseModel):
+    """One knock at one door.
+
+    The courier's own list carries a *count* and the last reason, which is
+    what somebody about to knock needs. An operator is answering a different
+    question — has this been tried enough to give up on — and a number cannot
+    answer it: three attempts at one wrong buzzer and three on three different
+    days are the same count and different decisions. So this is the row, with
+    who knocked and when.
+
+    ``courier_name`` and not ``courier_id``: an operator ringing the customer
+    to ask what happened wants to know which of their couriers to ask next,
+    and an id is not something anybody says out loud.
+    """
+
+    id: int
+    order_id: int
+    order_code: str
+    courier_name: str
+    result: AttemptResult
+    reason: str
+    recipient_name: str
+    photo_url: str | None
+    cash_collected: int
+    happened_at: datetime
+
+
 class OrderOut(OrderSummaryOut):
     delivery_kind: DeliveryKind
     address_line: str
@@ -618,6 +595,44 @@ class OrderOut(OrderSummaryOut):
     discount: int
     items: list[OrderItemOut]
     events: list[OrderEventOut]
+    # Every knock, and empty for a customer looking at their own order — the
+    # doors that were tried are staff's business and the customer's timeline
+    # already says "on its way".
+    #
+    # It lives on the shared shape rather than a staff-only one because the
+    # operator's detail screen *is* the customer's shape (see
+    # `operations.get_order`), and the alternative was a second rendering of
+    # an order to keep in step with this one.
+    attempts: list[DeliveryAttemptOut] = []
+
+
+class CardOut(BaseModel):
+    id: int
+    brand: str
+    last4: str
+    holder: str
+    expiry: str
+    status: CardStatus
+    is_default: bool
+
+
+class CardIn(BaseModel):
+    """The app never sends a PAN here.
+
+    The number is collected and validated on the handset — Luhn and the BIN,
+    see ``core/util/CardBrand.kt`` — and what is posted is the description a
+    person recognises their own card by, plus the token that can be charged.
+    Until an SDK is wired up the token is ``app.payments.DEV_TOKEN_PREFIX``
+    and a uuid, which is the one line that changes when Click or Payme lands.
+    """
+
+    brand: str = "Humo"
+    last4: str = Field(min_length=4, max_length=4, pattern=r"^\d{4}$")
+    holder: str = ""
+    expiry_month: int = Field(ge=1, le=12)
+    expiry_year: int = Field(ge=2024, le=2099)
+    processor_token: str
+    is_default: bool = False
 
 
 class CheckoutIn(BaseModel):
@@ -625,6 +640,9 @@ class CheckoutIn(BaseModel):
     pickup_point_id: int | None = None
     slot_id: int | None = None
     payment_method: PaymentMethod = PaymentMethod.CARD
+    # Which card pays for it. Required when the method is ``card`` and refused
+    # when it is ``cash``: an order cannot be charged to a card nobody named,
+    # and a cash order that names one is a client that has not decided.
     payment_card_id: int | None = None
     recipient_name: str = ""
     recipient_phone: str = ""
@@ -637,8 +655,10 @@ class CheckoutPreviewOut(BaseModel):
     address: AddressOut | None
     pickup_point: PickupPointOut | None
     slot: SlotOut | None
-    card: CardOut | None
     totals: CartTotalsOut
+    # The card the order would be charged to, so the confirm screen can name it
+    # before anybody presses anything.
+    card: CardOut | None = None
 
 
 class ReasonOut(BaseModel):
@@ -673,282 +693,813 @@ class ReturnOut(BaseModel):
     created_at: datetime
 
 
-# --------------------------------------------------------------------------- offers
-
-
-class SellerOut(BaseModel):
-    id: int
-    name: str
-
-
-class OfferOut(BaseModel):
-    """One seller's price for a product.
-
-    An addition, not a change: every existing response still carries the
-    winning offer's figures in the fields it always did. This is the list
-    behind that one number.
-    """
-
-    id: int
-    seller: SellerOut
-    price: int
-    old_price: int | None
-    discount_percent: int | None
-    stock_left: int
-    in_stock: bool
-    # Whose price the product card is showing. Exactly one offer has it, and
-    # only while it has something left.
-    is_winner: bool
-
-
-class StaffOfferVariantOut(BaseModel):
-    variant_id: int
-    kind: VariantKind
-    label: str
-    parent_id: int | None
-    stock_left: int
-
-
-class StaffOfferOut(BaseModel):
-    """An offer as the seller who owns it, or an admin, needs to see it."""
-
-    id: int
-    seller: SellerOut
-    product_id: int
-    product_title: str
-    price: int
-    old_price: int | None
-    stock_left: int
-    active: bool
-    is_winner: bool
-    variants: list[StaffOfferVariantOut]
-    created_at: datetime
-
-
-class OfferCreateIn(BaseModel):
-    """Offering a product at a price.
-
-    ``variant_ids`` is what closes a hole rather than ceremony. An offer that
-    named no variants used to win the card and leave every colour of the
-    product without a count, because a colour with no row on the winning offer
-    reads as "nobody counts this apart". Listing them says which colours and
-    sizes this offer is for; how many of each is the warehouse's answer, and
-    starts at nought.
-    """
-
-    product_id: int
-    price: int = Field(gt=0)
-    old_price: int | None = Field(None, gt=0)
-    active: bool = True
-    # Admin only. A seller offers as themselves and may not say otherwise.
-    seller_id: int | None = None
-    variant_ids: list[int] = Field(default_factory=list, max_length=200)
-
-
-class OfferUpdateIn(BaseModel):
-    """What a seller may change: the price, and whether they are still selling.
-
-    ``old_price`` set to 0 removes the struck-through price; omitted leaves it
-    as it was. Stock is deliberately absent — see ``PUT .../stock``.
-    """
-
-    price: int | None = Field(None, gt=0)
-    old_price: int | None = Field(None, ge=0)
-    active: bool | None = None
-
-
-class OfferVariantStockIn(BaseModel):
-    variant_id: int
-    stock_left: int = Field(ge=0)
-
-
-class OfferStockIn(BaseModel):
-    """A stocktake correction: the counts found, and why they differ.
-
-    Only the leaves are given — the sizes of a product that has sizes, its
-    colours otherwise. Colour totals follow from the sizes, so a shelf cannot
-    be left disagreeing with itself. ``stock_left`` is for a product with no
-    variants at all, where the offer *is* the leaf.
-
-    ``reason`` is required. A count that changed for no stated reason is
-    exactly what the movement ledger exists to make impossible, and this is
-    the one endpoint that could still write one.
-    """
-
-    reason: str = Field(min_length=1, max_length=200)
-    stock_left: int | None = Field(None, ge=0)
-    variants: list[OfferVariantStockIn] = Field(default_factory=list, max_length=200)
-
-
 # --------------------------------------------------------------------------- warehouse
 
 
 class StockLineOut(BaseModel):
-    """One count on one offer, named so a person can read it.
+    """One count on one variant, named so a person can read it.
 
-    The SKU is here because a warehouse reads a barcode, not a title: a
-    scanner hands the screen a code, and the code has to be able to find the
-    line. There is no per-variant barcode in this model, so a scan identifies
-    the product and the size is still tapped.
+    The SKU is here because a warehouse reads a label, not a title: the code
+    on the pile has to be able to find the line.
     """
 
-    offer_id: int
-    variant_id: int | None
+    variant_id: int
     sku: str
     variant_label: str
     product_title: str
+
+
+class PlacementOut(BaseModel):
+    """How many of one variant one place holds."""
+
+    location_id: int
+    code: str
+    qty: int
 
 
 class MovementOut(StockLineOut):
     id: int
     kind: StockMovementKind
     quantity: int
+    # Where it came from and where it went, by code. "—" at either end is the
+    # outside world: a market run arriving, a parcel going out of the door.
+    from_code: str
+    to_code: str
     reason: str
     actor: str
     supply_id: int | None
     order_id: int | None
     return_request_id: int | None
-    count_id: int | None
-    removal_id: int | None
     created_at: datetime
 
 
 class ShelfOut(BaseModel):
     """What the ledger says, what is promised, and what is left to sell."""
 
-    offer_id: int
-    variant_id: int | None
+    variant_id: int
     variant_label: str
+    # Everything in the building. Not the same as what can be sold: the
+    # damaged corner and the uninspected returns are in the building too.
     on_hand: int
     reserved: int
     sellable: int
-
-
-class SupplyLineIn(BaseModel):
-    offer_id: int
-    variant_id: int | None = None
-    quantity: int = Field(gt=0)
+    places: list[PlacementOut] = []
 
 
 class SupplyCreateIn(BaseModel):
-    """A batch a seller says is coming.
+    """Sacks brought back from the market, before anybody has opened them.
 
-    No label from the seller: their own reference belongs to their system, may
-    repeat, and two sellers may use the same one on the same day. The code
-    comes back from us and goes on the pallet.
+    Thirty seconds at the door: how many sacks, where from, what the van cost.
+    The lines are filled in later, while sorting — nobody knows what is in a
+    sack until it is tipped out on the table.
     """
 
-    lines: list[SupplyLineIn] = Field(min_length=1, max_length=500)
+    sacks: int = Field(default=1, ge=1, le=100)
+    place: str = ""
+    transport_cost: int = Field(default=0, ge=0)
     note: str = ""
-    seller_id: int | None = None    # admin only
 
 
-class SupplyReceiveLineIn(BaseModel):
-    line_id: int
-    received_quantity: int = Field(ge=0)
+class SupplyCancelIn(BaseModel):
+    """Why a run is not being booked in.
 
+    Required: a sack that vanished without a sentence against it is
+    indistinguishable from one nobody bothered to sort.
+    """
 
-class SupplyReceiveIn(BaseModel):
-    lines: list[SupplyReceiveLineIn] = Field(min_length=1, max_length=500)
-    note: str = ""
+    reason: str = Field(min_length=1, max_length=500)
 
 
 class SupplyLineOut(StockLineOut):
     id: int
-    declared_quantity: int
-    received_quantity: int | None
-    difference: int | None
+    quantity: int
+    unit_cost: int
+    line_cost: int
 
 
 class SupplyOut(BaseModel):
     id: int
     code: str
-    seller: SellerOut
     status: SupplyStatus
+    place: str
+    transport_cost: int
+    buyer: str
     note: str
     lines: list[SupplyLineOut]
+    total_cost: int
     declared_at: datetime
     received_at: datetime | None
+    # How long the sacks have been standing there. The one figure that turns
+    # an unsorted run from a row in a list into something anybody acts on.
+    age_minutes: int
 
 
-class StockCountCreateIn(BaseModel):
-    offer_id: int
-    note: str = ""
+class LocationOut(BaseModel):
+    """One place, as the shelf map draws it.
 
+    ``units`` and ``products`` are what a cell is judged by: how full it is
+    and how many different things are mixed into it. A picker reaching into a
+    cell of black and white shoes needs to be told to look, and the count is
+    what tells them.
+    """
 
-class StockCountLineIn(BaseModel):
-    variant_id: int | None = None
-    counted: int = Field(ge=0)
-
-
-class StockCountCloseIn(BaseModel):
-    lines: list[StockCountLineIn] = Field(min_length=1, max_length=500)
-    note: str = ""
-
-
-class StockCountLineOut(BaseModel):
-    id: int
-    variant_id: int | None
-    sku: str
-    variant_label: str
-    expected: int
-    counted: int | None
-    difference: int | None
-
-
-class StockCountOut(BaseModel):
     id: int
     code: str
-    offer_id: int
+    kind: LocationKind
+    rack: str | None = None
+    column_no: int | None = None
+    row_no: int | None = None
+    capacity: int = 0
+    is_active: bool = True
+    note: str = ""
+
+    products: int = 0
+    units: int = 0
+    # How many more units this place is meant to take. Null where no capacity
+    # was ever stated — every staging area, and a cell built in a hurry — and
+    # null is not "plenty": it is nobody having said, which is a different
+    # thing for a screen to draw than a number.
+    free: int | None = None
+    # Against capacity, **uncapped**. It used to be capped at a hundred, which
+    # made a cell holding sixty-five of a stated sixty read exactly like one
+    # holding sixty — the office could not see the one thing this figure is on
+    # the screen to show them. 130 means a third more than it is meant to
+    # hold. Zero capacity reads as nought rather than as a division by
+    # nothing, and the bar on the map clamps its own width.
+    fill_percent: int = 0
+    # How long the oldest thing here has been standing, in minutes. The one
+    # figure that turns QABUL from a list into something somebody acts on.
+    oldest_minutes: int = 0
+
+
+class CellContentOut(BaseModel):
+    """One variant in one place, named the way a person reads a label."""
+
+    variant_id: int
+    product_id: int
     product_title: str
-    seller: SellerOut
-    status: StockCountStatus
-    note: str
-    lines: list[StockCountLineOut]
-    opened_at: datetime
-    closed_at: datetime | None
+    variant_label: str
+    sku: str
+    barcode: str
+    qty: int
+    minutes_here: int = 0
 
 
-class RemovalLineIn(BaseModel):
-    offer_id: int
-    variant_id: int | None = None
+class LocationDetailOut(LocationOut):
+    contents: list[CellContentOut] = []
+
+
+class ShelfMapOut(BaseModel):
+    """The room in one answer, because the map draws all of it at once.
+
+    Three lists rather than one: the racks are a grid, the staging areas are a
+    row of tiles above them, and a courier's bag is a tile that exists only
+    while somebody is carrying something.
+    """
+
+    cells: list[LocationOut]
+    staging: list[LocationOut]
+    couriers: list[LocationOut]
+
+
+class RackWriteIn(BaseModel):
+    """A shelf unit to build, described the way somebody stands in front of it.
+
+    Columns and rows rather than a total: a rack is a grid and every code in
+    the building reads ``A-03-02`` — third column, second row from the floor.
+    A number of cells with no shape to it could not be written down as codes,
+    and a picker's route through the room is a walk along columns.
+    """
+
+    # Short, because it is the first thing on every label in the building.
+    rack: str = Field(min_length=1, max_length=4, pattern=r"^[A-Za-z0-9]+$")
+    columns: int = Field(ge=1, le=99)
+    rows: int = Field(ge=1, le=99)
+    # What one cell holds, in units. Shown rather than enforced — see Location.
+    capacity: int = Field(default=60, ge=0, le=9999)
+
+
+class RackExtendIn(BaseModel):
+    """The shape a rack that already exists should **have** — not a delta.
+
+    Somebody bolted a fifth column onto A. They are standing in front of it
+    counting columns, so what they can say without arithmetic is "A is five
+    by four now"; "add one column" asks them to know what the system thinks A
+    was, and they are looking at the shelf rather than at the system.
+
+    It also makes the request repeatable. Sending the same shape twice adds
+    nothing the second time, which is what a form somebody double-taps at the
+    end of a Saturday needs to do.
+
+    **Nothing is ever removed.** A smaller shape than the rack already has is
+    not an error and not a demolition — it adds nothing and says so. Retiring
+    a cell is ``is_active`` and is a decision about one cell, taken by
+    somebody who has looked at what is in it.
+
+    The rack letter is in the path, because this door is about a rack that is
+    already there. Building a new one is ``POST /warehouse/racks``, and the
+    two are apart on purpose: "A, 6 columns" against an A that does not exist
+    is a typo, and against an A of four columns it is a screwdriver.
+    """
+
+    columns: int = Field(ge=1, le=99)
+    rows: int = Field(ge=1, le=99)
+    # What one *new* cell holds, in units. Absent means what the rack's own
+    # cells already hold — a shelf unit is one piece of furniture and a column
+    # bolted onto it holds what the others hold, so the schema's own default
+    # would be a number from a different rack. Existing cells are never
+    # touched, whatever this says.
+    capacity: int | None = Field(default=None, ge=0, le=9999)
+
+
+class RackOut(BaseModel):
+    rack: str
+    # How many cells were **written**, which for an extension is how many were
+    # missing rather than how many were asked for.
+    cells: int
+    message: str
+
+
+class CellActiveIn(BaseModel):
+    """Taking a cell out of the room, or bolting it back in.
+
+    One door with a boolean rather than a retire door and a restore door, the
+    way ``POST /admin/users/{id}/active`` is one door for somebody leaving and
+    somebody coming back. The two are the same decision read from opposite
+    sides, and two endpoints would be two places for the audit row and the
+    last-one rule to drift apart.
+
+    **Not a delete.** The cell keeps its code, its capacity and every movement
+    that ever named it — a stocktake from March still points at ``A-02-04``,
+    and deleting the row would leave the ledger naming a place that does not
+    exist. What changes is that the room stops offering it: it is off the
+    shelf map, off the label sheet, off the putaway plan, and nothing may be
+    put into it.
+
+    Its own schema and not a reuse of ``ActiveWriteIn``: that one is about a
+    person, its wording is about somebody leaving the shop, and a cell is not
+    somebody. The fields being identical today is a coincidence of two
+    booleans.
+
+    ``note`` is why — two dead columns on a rack that was built 6×4 by
+    mistake, a shelf that collapsed. Not required, because the audit row
+    records who and when regardless, but it is the field that makes the log
+    worth reading a year later.
+    """
+
+    active: bool
+    note: str = Field("", max_length=200)
+
+
+class WhereIsOut(BaseModel):
+    """Where one thing is, for the search box on the map.
+
+    Type a name or paste a barcode and the cells holding it light up. The
+    answer is per variant and not per card: "krossovka" is in nine cells and
+    none of that helps; "qora 42" is in one.
+    """
+
+    variant_id: int
+    product_id: int
+    product_title: str
+    variant_label: str
+    sku: str
+    barcode: str
+    places: list[PlacementOut] = []
+
+
+class PutawayLineOut(CellContentOut):
+    """Something standing in the receiving area, waiting to be shelved."""
+
+    suggestion: str = ""       # a cell this model is already in, if there is one
+
+
+class EmptyRoomIn(BaseModel):
+    """Take everything off a cell, or out of the whole room.
+
+    A reason is required and there is no default. This writes off goods that
+    the shop still believes it has — the one operation here that makes stock
+    disappear rather than move — and "why" is the only thing that tells a
+    stocktake three months later from a mistake somebody made in a hurry.
+    """
+
+    # Empty when the whole room is meant. A cell code narrows it to one cell.
+    code: str = Field(default="", max_length=20)
+    reason: str = Field(min_length=3, max_length=200)
+
+
+class EmptiedOut(BaseModel):
+    """What left, so the answer is not a shrug."""
+
+    moved: int = 0
+    units: int = 0
+    cells: int = 0
+
+
+class SuggestedCellOut(BaseModel):
+    """The cell the receiving form should offer, or an empty code.
+
+    Its own shape rather than a reused `Message`, whose fields are `ok` and
+    `message`: a cell code is not a message, and reading one out of the other
+    is how a caller ends up asserting on the wrong key.
+    """
+
+    code: str = ""
+
+
+class PutawayPlanLineOut(BaseModel):
+    """One cell in the plan, and what the plan would put in it.
+
+    ``free`` and ``units`` are how it was chosen, shown rather than hidden: a
+    plan a person cannot argue with is a plan they will ignore, and the whole
+    answer is a suggestion. Null ``free`` is a cell with no stated capacity —
+    not a roomy one, an unmeasured one.
+    """
+
+    code: str
+    quantity: int
+    free: int | None = None
+    units: int = 0
+    # Whether this cell already holds this model. One model per cell is the
+    # discipline, and these come first — the screen usually ticks them and
+    # thinks about the rest.
+    holds_this_model: bool = False
+
+
+class PutawayPlanOut(BaseModel):
+    """Where N pieces would go if nobody thought about it.
+
+    The answer the receiving screen needs in one request: it was asking
+    ``suggest-cell`` for one code, getting one cell that may hold four more
+    pairs, and leaving the person to work out the other forty by eye.
+
+    ``over_capacity`` says the last line is more than the room it is going
+    into. That happens because the goods are standing on the floor: a plan
+    that stops short of the quantity is a plan that does not say where the
+    rest went, and the honest answer is a cell that will be over-full and a
+    sentence saying so.
+    """
+
+    quantity: int
+    lines: list[PutawayPlanLineOut] = []
+    over_capacity: bool = False
+    # Empty when the plan fits. A sentence in the reader's language when it
+    # does not, because "130%" on its own is a screen nobody reads twice.
+    message: str = ""
+
+
+class MoveIn(BaseModel):
+    """Carry a quantity from where it is to a cell.
+
+    ``from_code`` because a mistyped cell is the one thing nothing else can
+    fix: goods land on a shelf in one action now, and if that action named the
+    wrong shelf then the ledger and the room disagree until somebody says so.
+    Both legs are named, so the movement is a journey rather than an
+    adjustment — an adjustment says the count was wrong, and it was not.
+    """
+
+    variant_id: int
+    qty: int = Field(gt=0)
+    from_code: str = Field(min_length=1, max_length=20)
+    to_code: str = Field(min_length=1, max_length=20)
+
+
+class MoveCellIn(BaseModel):
+    """Carry what is standing in one cell over to another, in one action.
+
+    A cell holds one model in four sizes, and tidying it through ``MoveIn``
+    was four requests, four idempotency keys and four chances to be
+    interrupted halfway — leaving a model in two cells, which is the exact
+    mess moving it was meant to clear up. This is the same journey, once.
+
+    **No quantities.** What moves is what is there, read inside the
+    transaction that moves it. The alternative — a list of lines with counts
+    on them — is a snapshot the screen read some seconds ago, and if a picker
+    took two out of the cell in between then the batch is asking for five
+    where three stand and the whole move is refused. "Everything in A-02-03"
+    does not go stale.
+
+    ``variant_ids`` narrows it: a cell with two models in it, and only one of
+    them is moving. Empty means all of it, which is the ordinary case and the
+    reason this door exists.
+    """
+
+    from_code: str = Field(min_length=1, max_length=20)
+    to_code: str = Field(min_length=1, max_length=20)
+    variant_ids: list[int] = Field(default=[], max_length=200)
+
+
+class PutawayIn(BaseModel):
+    """Carry a quantity to a cell.
+
+    ``code`` is typed, not scanned — market goods have no usable code of their
+    own and the owner's phone cameras read them badly. It must keep working
+    unchanged when a scanner gun is plugged in later: the gun types the code
+    and presses Enter, which is what a text input already does.
+    """
+
+    variant_id: int
+    qty: int = Field(gt=0)
+    code: str = Field(min_length=1, max_length=30)
+
+
+class PickLineOut(BaseModel):
+    """One place to walk to, and the thing to bring back from it.
+
+    **The variant leads, not the cell.** The cell is where you walk to; the
+    variant is the thing you must not get wrong, so the model, the colour and
+    the size come first and the code follows them.
+    """
+
+    id: int
+    variant_id: int
+    product_title: str
+    colour: str
+    size: str
+    variant_label: str
+    sku: str
+    barcode: str
+    location_id: int
+    location_code: str
+    qty: int
+    picked_qty: int
+    walk_order: int
+    # Whether this cell holds anything else. A picker reaching into a cell of
+    # black and white shoes has to be told to look.
+    mixed_cell: bool = False
+
+
+class PickTaskOut(BaseModel):
+    id: int
+    order_id: int
+    order_code: str
+    status: PickStatus
+    picker: str = ""
+    lines: list[PickLineOut] = []
+    created_at: datetime
+    taken_at: datetime | None = None
+    finished_at: datetime | None = None
+    age_minutes: int = 0
+
+
+class PickWaitingOut(BaseModel):
+    """One order that is waiting for the board, with nothing on it yet.
+
+    Not a task, and that is the point: a task exists once somebody has worked
+    out where the goods are, and until then the order is only a promise the
+    bench has not begun. The picker's board shows these above the real tasks so
+    that starting one is a tap rather than a message to the office.
+    """
+
+    order_id: int
+    order_code: str
+    items_count: int
+    # The same one-line summary the office queue carries: a picker recognises
+    # an order by the thing in it, not by its code.
+    items_summary: str = ""
+    delivery_day: date | None = None
+    delivery_window: str = ""
+    age_minutes: int = 0
+
+
+class PickLineIn(BaseModel):
+    qty: int = Field(gt=0)
+
+
+class CountLineOut(BaseModel):
+    variant_id: int
+    product_title: str
+    variant_label: str
+    sku: str
+    barcode: str
+    expected_qty: int
+    counted_qty: int
+
+
+class CountOut(BaseModel):
+    id: int
+    location_id: int
+    location_code: str
+    status: CountStatus
+    counter: str = ""
+    note: str = ""
+    lines: list[CountLineOut] = []
+    started_at: datetime
+    closed_at: datetime | None = None
+
+
+class CountStartIn(BaseModel):
+    code: str = Field(min_length=1, max_length=30)
+
+
+class CountedLineIn(BaseModel):
+    variant_id: int
+    counted_qty: int = Field(ge=0)
+
+
+class CountSubmitIn(BaseModel):
+    """What is actually in the cell, as counted.
+
+    Every variant the system thinks is there has to be answered for — a line
+    left out is a line nobody counted, and treating silence as agreement is
+    how a stocktake finds nothing. Variants *not* expected may be added: goods
+    turn up in the wrong cell, and that is exactly what a count is for.
+    """
+
+    lines: list[CountedLineIn] = Field(min_length=1, max_length=500)
+    note: str = ""
+
+
+class CardPriceIn(BaseModel):
+    """One selling price for the whole card.
+
+    The money lives on the variants, because a 43 can cost more than a 41 — but
+    nothing off a market run is priced by size, and pricing twelve cells one at
+    a time to publish one card is the sort of arithmetic that leaves cards
+    unpublished. So this writes them all, and repricing a single cell
+    afterwards still goes through its own door.
+    """
+
+    price: int = Field(gt=0)
+    old_price: int | None = Field(None, gt=0)
+    # Only this colour, when a colour costs more than the others.
+    colour: str | None = None
+
+
+class PileSizeIn(BaseModel):
+    """One size of one pile. An empty size is goods that have none."""
+
+    size: str = Field(default="", max_length=40)
     quantity: int = Field(gt=0)
 
 
-class RemovalCreateIn(BaseModel):
-    reason: RemovalReason
-    lines: list[RemovalLineIn] = Field(min_length=1, max_length=500)
-    note: str = ""
-    seller_id: int | None = None    # admin only
+class PilePlacementIn(BaseModel):
+    """How much of the pile goes in one cell.
+
+    In units and not in sizes. A person splitting a sack across four cells is
+    filling the first one until it is full and starting the next; they are
+    not deciding that the 42s go here and the 43s there, and asking them for
+    that matrix is asking them to invent an answer at the shelf.
+    """
+
+    code: str = Field(min_length=1, max_length=20)
+    quantity: int = Field(gt=0)
 
 
-class RemovalPrepareLineIn(BaseModel):
-    line_id: int
-    prepared_quantity: int = Field(ge=0)
+class PilePlacedOut(BaseModel):
+    """One cell of a split pile, and what went into it."""
 
-
-class RemovalPrepareIn(BaseModel):
-    lines: list[RemovalPrepareLineIn] = Field(min_length=1, max_length=500)
-    note: str = ""
-
-
-class RemovalLineOut(StockLineOut):
-    id: int
-    quantity: int
-    prepared_quantity: int | None
-
-
-class RemovalOut(BaseModel):
-    id: int
     code: str
-    seller: SellerOut
-    status: RemovalStatus
-    reason: RemovalReason
-    note: str
-    lines: list[RemovalLineOut]
-    requested_at: datetime
-    ready_at: datetime | None
-    collected_at: datetime | None
+    quantity: int
+
+
+class PileIn(BaseModel):
+    """A pile off the van, booked in and shelved in one action.
+
+    This is the receiving desk's whole vocabulary. A sack from the market is
+    usually one thing — only black trainers, only white shirts — so the form
+    is one row and not a matrix, and it does receipt *and* putaway together
+    because the person is standing at the shelf holding the goods. Splitting
+    those into two screens was making somebody walk the room twice.
+
+    Either ``product_id`` names a card that already exists, or ``kind`` /
+    ``brand`` / ``colour`` write a new one. Two black trainers of different
+    makes are two cards, which is why the brand is part of the identity and
+    why the identification photograph matters more than the spelling.
+
+    ``location_code`` is required — or ``placements`` is, and exactly one of
+    the two. It was optional for a while — empty meant the receiving area,
+    and a putaway queue offered the goods to whoever had time — but that
+    queue was never used: whoever opens a sack is standing at the shelf with
+    it, and shelving in the same breath is what the form is for. A wrong cell
+    is corrected with ``POST /warehouse/move`` rather than by leaving goods
+    homeless. Neither given is that old homeless state coming back, and is
+    refused; both given is two answers to one question, and is refused too.
+
+    ``placements`` is the big sack: eighty pairs do not go in a cell that
+    holds sixty, and the person is standing in front of four cells with the
+    pile at their feet. The quantities must add up to the pile — the sizes
+    are the count of what came off the van and the cells are where it went,
+    so a disagreement between them is somebody having mistyped one of the
+    two, and guessing which is how goods go missing on paper.
+    """
+
+    product_id: int | None = None
+
+    kind: str = Field(default="", max_length=60)
+    brand: str = Field(default="", max_length=80)
+    colour: str = Field(default="", max_length=60)
+    colour_hex: str = Field(default="", max_length=9)
+    # Composed from kind/brand/colour when absent. A card written at the desk
+    # is renamed at publishing time by somebody writing for customers.
+    title: str = Field(default="", max_length=200)
+    snapshot_url: str = Field(default="", max_length=300)
+
+    sizes: list[PileSizeIn] = Field(min_length=1, max_length=60)
+
+    # What one of these cost at the market. Required, and required *here*:
+    # this is the only moment anybody knows it. By the evening it is a guess,
+    # and a guessed cost is worse than an empty one because it reaches the
+    # profit report looking like a fact.
+    unit_cost: int = Field(gt=0)
+
+    # One cell for the whole pile, which is the ordinary sack. Kept as it
+    # was, minus the length floor: `placements` is the other way of
+    # answering, and one of the two has to be allowed to be absent. Which is
+    # missing is checked at the door rather than by the schema, so the reason
+    # comes back as a sentence in the reader's language instead of as a
+    # validation error naming a field.
+    location_code: str = Field(default="", max_length=20)
+    # Or several cells, in the order they should be filled. The first is
+    # filled to its quantity, then the next: a size may straddle two cells,
+    # because that is what happens when a pile is split and the movements are
+    # per variant and cell anyway.
+    placements: list[PilePlacementIn] = Field(default=[], max_length=40)
+
+    # This pile's own receipt. Where it was bought and what the van cost, both
+    # optional — and its own row rather than a line on a shared daily run,
+    # because a ``draft`` supply means "a sack nobody has opened" and goods
+    # that are already on a shelf cannot be sitting in one.
+    place: str = Field(default="", max_length=120)
+    transport_cost: int = Field(default=0, ge=0)
+
+
+class PileOut(BaseModel):
+    """What was booked in, and what to write on the box."""
+
+    product: AdminProductOut
+    run_id: int
+    run_code: str
+    # Where it went, as one string, because the receiving screen prints a
+    # line. One cell is its code, exactly as before; a split is the codes
+    # joined by a comma, which is what somebody would write on the box. Still
+    # a string and not a list: every caller prints it, and turning it into an
+    # array to serve the rarer case would have broken all of them to spare
+    # one a join.
+    location_code: str
+    # And the same thing with the counts on it, for a screen that wants to
+    # show the split rather than print it. One entry for the ordinary pile.
+    placements: list[PilePlacedOut] = []
+    quantity: int
+    total_cost: int
+    # For the box: the codes we generated. Printed when there is a printer,
+    # written with a marker when there is not — either way the goods carry
+    # something that tells them apart from the next sack.
+    labels: list[ProductLabelOut] = []
+
+
+class RetireIn(BaseModel):
+    """Whether this cell is offered in the shop. False puts it back."""
+
+    retired: bool
+
+
+class VocabOut(BaseModel):
+    """The receiving desk's chips, learned rather than configured.
+
+    Nobody sets up a list of goods before they have received any, and a market
+    brings whatever it brings. So the chips are what has come through the door
+    before, most-used first, and "+ yangi" is always there.
+
+    ``sizes`` is keyed by kind: trainers were last received in 40-45 and shirts
+    in S-XXL, and offering the right row is the difference between three taps
+    and twelve.
+    """
+
+    kinds: list[str] = []
+    brands: list[str] = []
+    colours: list[str] = []
+    sizes: dict[str, list[str]] = {}
+    # The kinds that have no sizes at all — a cap, a bag, a wristwatch. The
+    # desk asked every kind for sizes, and somebody holding a sack of caps
+    # types *something* into a box that will not go away, which is how a size
+    # called "KS" was born. Learned the same way as the rest: a kind belongs
+    # here while every one of its cells is sizeless.
+    sizeless: list[str] = []
+    # The rows of the specification table, keyed by kind: what was written
+    # against a Krossovka last time. Typing "Mato", "Taglik", "Ishlab
+    # chiqarilgan" from scratch for every card is how a table stays empty, and
+    # an empty table is a block the apps do not draw at all.
+    spec_keys: dict[str, list[str]] = {}
+
+
+class ProductLabelOut(BaseModel):
+    """One printable label: what we generate, because nothing else has a code."""
+
+    variant_id: int
+    product_title: str
+    variant_label: str
+    sku: str
+    barcode: str
+    price: int
+
+
+class CellLabelOut(BaseModel):
+    code: str
+    rack: str | None = None
+    column_no: int | None = None
+    row_no: int | None = None
+
+
+class LabelSheetOut(BaseModel):
+    """The data behind an A4 sheet the browser prints.
+
+    Rendered client-side: a barcode is a picture of a string and drawing it in
+    the browser means no image to store, no font to install on a server, and a
+    reprint that cannot drift from the code on the row.
+    """
+
+    products: list[ProductLabelOut] = []
+    cells: list[CellLabelOut] = []
+
+
+class FigureOut(BaseModel):
+    """One headline, and the same headline over the period before it.
+
+    ``percent`` is null when the previous period was nought. "Up from nothing"
+    has no percentage, and the alternatives are all worse: infinity does not
+    render, a hundred per cent is a lie, and nought reads as "no change" — the
+    opposite of what happened. A null tells the screen to draw the arrow and
+    leave the number off.
+
+    ``money`` says whether the value is so'm or a count of things, because the
+    apps format money themselves and a so'm figure printed as a bare integer is
+    the one mistake every client makes once.
+
+    ``percent_value`` is for the figures that are themselves a percentage — a
+    cancellation rate, a first-attempt rate. The value is then in hundredths of
+    a per cent, so 12.34% is 1234 and the wire stays integers all the way
+    through, as money does.
+    """
+
+    key: str
+    label: str
+    value: int
+    # Null on a figure the period before cannot answer. Stock value, full
+    # cells, dead stock: the shop knows what is standing in the room now and
+    # keeps no history of what was standing in it a month ago, so a previous
+    # would have to be invented. Null makes the screen draw the figure without
+    # an arrow, which is the truth; a nought would draw an arrow pointing up.
+    previous: int | None = None
+    delta: int | None = None
+    percent: float | None = None
+    money: bool = False
+    percent_value: bool = False
+
+
+class DashboardTileOut(BaseModel):
+    """One figure on the dashboard, and where to go and act on it.
+
+    ``href`` is not decoration. A dashboard figure that is not a link is a
+    dead end: somebody reads "4 cards held back for want of a photograph" and
+    then has to go and find them.
+    """
+
+    key: str
+    label: str
+    value: int
+    hint: str = ""
+    href: str = ""
+    # For the one tile that must be impossible to ignore — sacks that have
+    # been standing too long.
+    urgent: bool = False
+    # The same figure a period ago, where a period ago means anything. Most of
+    # these tiles are about now — how many cells are full, how many sacks are
+    # standing — and the shop keeps no history of that, so they carry null and
+    # the screen draws no arrow. Orders today has yesterday.
+    previous: int | None = None
+
+
+class SalesPointOut(BaseModel):
+    day: date
+    orders: int
+    total: int
+
+
+class MoverOut(BaseModel):
+    variant_id: int
+    product_title: str
+    variant_label: str
+    qty: int
+
+
+class DashboardOut(BaseModel):
+    """The first screen: the figures, the fortnight, and what is moving.
+
+    ``headlines`` was added because every trend on the dashboard was being
+    computed in the browser from the last two points of ``sales`` — which
+    answers "today against yesterday" and nothing else, gets the answer wrong
+    before midday when today is half over, and puts the definition of the
+    shop's own revenue in a React component. The figures now arrive with their
+    comparison already made, over three windows, by the same code the reports
+    use. ``sales`` and ``tiles`` are unchanged: the nav badges and several
+    screens read the tile keys.
+    """
+
+    tiles: list[DashboardTileOut]
+    sales: list[SalesPointOut]
+    movers: list[MoverOut]
+    headlines: list[FigureOut] = []
 
 
 class WriteOffIn(BaseModel):
@@ -959,7 +1510,7 @@ class WriteOffIn(BaseModel):
     stolen.
     """
 
-    variant_id: int | None = None
+    variant_id: int
     quantity: int = Field(gt=0)
     reason: str = Field(min_length=1, max_length=200)
 
@@ -967,39 +1518,18 @@ class WriteOffIn(BaseModel):
 # --------------------------------------------------------------------------- admin
 
 
-class AdminSellerOut(BaseModel):
-    id: int
-    name: str
-    phone: str
-    commission_percent: int
-    active: bool
-    # The account that signs in as this seller, if one is linked yet.
-    user_phone: str | None
-    user_name: str | None
-    offer_count: int
-    created_at: datetime
+class GapOut(BaseModel):
+    """One reason a card is not in the shop: the key and the words.
 
-
-class SellerCreateIn(BaseModel):
-    """A seller, and optionally the account that signs in as them.
-
-    Linking an account is what *makes* somebody a seller — it is not a
-    separate administrative step — so giving a phone here grants that user the
-    seller role, and the change is written to the audit log.
+    Both, because the two readers want different things. The publishing screen
+    branches on ``key`` to decide which control to put in front of somebody —
+    a category picker, a price field, a camera — and shows ``label``, which is
+    the server's wording in the reader's language, so that the browser is not
+    keeping its own copy of a rule or a translation.
     """
 
-    name: str = Field(min_length=1, max_length=120)
-    phone: str = Field("", max_length=20)
-    commission_percent: int = Field(5, ge=0, le=100)
-    user_phone: str | None = Field(None, pattern=UZ_PHONE)
-
-
-class SellerUpdateIn(BaseModel):
-    name: str | None = Field(None, min_length=1, max_length=120)
-    phone: str | None = Field(None, max_length=20)
-    commission_percent: int | None = Field(None, ge=0, le=100)
-    active: bool | None = None
-    user_phone: str | None = Field(None, pattern=UZ_PHONE)
+    key: str
+    label: str
 
 
 class AdminProductOut(BaseModel):
@@ -1009,16 +1539,33 @@ class AdminProductOut(BaseModel):
     sku: str
     title: str
     subtitle: str
+    kind: str
     status: ProductStatus
     next_statuses: list[ProductStatus]
-    category_slug: str
+    # Absent on a card still waiting to be filed and priced.
+    category_slug: str | None
     brand_slug: str | None
+    snapshot_url: str
+    # Why this card is not in the shop. Empty means it is ready, whether or
+    # not anybody has published it yet.
+    unready: list[GapOut] = []
+    # What it is missing to read like a shop rather than a stub. Not a gate:
+    # a card with one photograph and no prose still sells, and holding it back
+    # until the writing is done is how nothing goes on sale.
+    listing_gaps: list[GapOut] = []
     price: int
     old_price: int | None
+    # What these last cost at the market, from the most recent market run that
+    # named any of this card's cells. The publishing screen offers a markup
+    # against it, because "+75%" is how the person who bought them thinks — and
+    # they wrote the cost at the bench with the sack open, which is the only
+    # moment anybody knew it.
+    last_cost: int = 0
     stock_left: int
-    offer_count: int
-    proposed_by: SellerOut | None
-    moderation_note: str
+    # The cells of this card that are empty — `Qora`, or `Qora / 42`. A card
+    # is rarely out of stock as a whole; one colour of it is, and that is the
+    # one nobody notices until a customer orders it.
+    sold_out: list[str] = []
     image_count: int
     variant_count: int
     created_at: datetime
@@ -1065,20 +1612,28 @@ class AdminBrandOut(BaseModel):
     ``/brands`` sends ``product_count: 0`` for every row — the count is only
     computed in ``/products/filters``, and scoped to one listing. Here it is
     the whole catalogue, and it is the answer to "can this be deleted".
+
+    ``aliases`` is every spelling this row answers to, which is what a merge
+    screen has to show: two rows are the same make when somebody recognises
+    the words, and the words people actually typed are the only evidence there
+    is. Deliberately not a similarity score — a number saying two brands are
+    83% alike is a number nobody can check, and the decision it would be
+    steering deletes a row.
     """
 
     id: int
     slug: str
     name: str
     product_count: int
+    aliases: list[str] = []
 
 
 class CatalogSummaryOut(BaseModel):
     """How many cards sit in each state.
 
     One query for a number the sidebar wants on every screen. The alternative
-    is fetching the moderation queue itself to count its rows, which is a page
-    of cards fetched to display an integer.
+    is fetching the drafts themselves to count them, which is a page of cards
+    fetched to display an integer.
     """
 
     counts: dict[ProductStatus, int]
@@ -1095,10 +1650,13 @@ class AdminImageOut(BaseModel):
     id: int
     url: str
     sort: int
+    # Which colour this is a photograph of. Empty on a card with no colours,
+    # where the picture is of the thing itself.
+    colour: str = ""
 
 
 class AdminVariantOut(BaseModel):
-    """A colour or a size, and whether it may be deleted.
+    """One cell of the grid, as the editor holds it.
 
     ``can_delete`` is the backend's own answer, from the same function the
     delete endpoint refuses with — not a rule copied into the browser that
@@ -1108,30 +1666,43 @@ class AdminVariantOut(BaseModel):
     """
 
     id: int
-    kind: VariantKind
+    colour: str
+    colour_hex: str
+    size: str
     label: str
-    value: str
-    image_url: str | None
-    parent_id: int | None
+    sku: str
+    barcode: str
+    price: int
     sort: int
-    stock_left: int | None
+    stock_left: int
     in_stock: bool
+    # Out of the shop window without being erased: a size received by mistake
+    # cannot be deleted — the ledger points at it — and would otherwise be
+    # offered, struck through, for the life of the card.
+    retired: bool = False
     can_delete: bool
     # An already-translated sentence, empty when it can be deleted.
     blocked_reason: str
 
 
-class AdminVariantsOut(BaseModel):
-    """The tree, plus whether a size may be added to it at all.
+class ColourIn(BaseModel):
+    colour: str = Field(min_length=1, max_length=60)
+    hex: str = Field(default="", max_length=9)
 
-    The second guard the editor has to show in advance: a colour with stock
-    against it cannot take its first size, because the shelf is counted on the
-    colour and the size would move where the counting happens.
+
+class VariantGridIn(BaseModel):
+    """The colour × size matrix, in one step.
+
+    Typing twelve variants by hand for every shoe model is how a warehouse
+    stops being used, so the form takes the colours and the sizes and the grid
+    is what comes back. Sending it again adds what is new and leaves what
+    exists alone — a colour added in October must not renumber the barcodes
+    printed in June.
     """
 
-    variants: list[AdminVariantOut]
-    can_add_size: bool
-    size_blocked_reason: str
+    colours: list[ColourIn] = Field(default_factory=list, max_length=40)
+    sizes: list[str] = Field(default_factory=list, max_length=40)
+    price: int = Field(default=0, ge=0)
 
 
 class AdminSpecOut(BaseModel):
@@ -1171,21 +1742,34 @@ class AdminProductDetailOut(AdminProductOut):
 class ProductCreateIn(BaseModel):
     """A new card.
 
-    ``price`` seeds the cached figure and nothing more. The price a shopper
-    pays comes from an offer, and ``app.offers.refresh`` overwrites this the
-    moment one exists — it is here so a card with no offers yet has a number
-    to show rather than a nought. Stock is absent on purpose: it comes from
-    the movement ledger and is the warehouse's to move.
+    ``price`` is what the card is advertised at until it has priced variants,
+    and ``app.products.refresh`` takes it over as soon as it has — the money
+    itself is on the variant, because a 43 can cost more than a 41. Stock is
+    absent on purpose: it comes from the movement ledger and is the
+    warehouse's to move.
     """
 
-    sku: str = Field(min_length=1, max_length=40)
+    # Generated when absent. Market goods arrive with no usable code and
+    # nobody at a receiving desk should be inventing one: a person asked to
+    # think of "KRS-01" is a person who stops writing cards.
+    sku: str = Field(default="", max_length=40)
     title: str = Field(min_length=1, max_length=200)
     subtitle: str = ""
     description: str = ""
-    category_slug: str
+    # The receiving desk's word for the goods — "Krossovka". Free text on
+    # purpose: the vocabulary is learned from what has been received.
+    kind: str = Field(default="", max_length=60)
+    # Both optional, because a card written with the sack open has neither yet
+    # and the goods still have to reach the shelf. ``app.products.unready``
+    # names the gaps and ``status`` keeps the card out of the shop until they
+    # are filled.
+    category_slug: str | None = None
     brand_slug: str | None = None
-    price: int = Field(gt=0)
+    price: int = Field(default=0, ge=0)
     old_price: int | None = Field(None, gt=0)
+    # The identification photograph, over the open sack. Not a catalogue
+    # picture; see ``Product.snapshot_url``.
+    snapshot_url: str = Field(default="", max_length=300)
     badge: str | None = None
     warranty: str | None = None
     is_original: bool = True
@@ -1198,8 +1782,8 @@ class ProductCreateIn(BaseModel):
 class ProductUpdateIn(BaseModel):
     """Everything about a card except its price, its stock and its status.
 
-    Those three have owners: the price belongs to an offer, the stock to the
-    ledger, and the status to a moderation decision with a reason attached.
+    Those three have owners: the price belongs to the variants, the stock to
+    the ledger, and the status to whether every colour has a photograph.
     """
 
     title: str | None = Field(None, min_length=1, max_length=200)
@@ -1215,20 +1799,16 @@ class ProductUpdateIn(BaseModel):
     translations: dict[Lang, ProductTextIn] = Field(default_factory=dict)
 
 
-class ProductProposeIn(ProductCreateIn):
-    """A seller suggesting a card for the platform's catalogue.
+class ProductStatusIn(BaseModel):
+    """Into the shop, or out of it.
 
-    The catalogue belongs to the platform: a seller attaches an offer to a card
-    that already exists rather than opening their own copy, because a copy per
-    seller duplicates the catalogue and leaves the warehouse holding the same
-    goods in two places. What a seller *can* do is suggest one, and this is
-    that — it lands in moderation, never in the shop.
+    ``note`` lands in the audit log beside who moved it: a card taken out of
+    the shop is a card that stops selling, and the sentence explaining why is
+    what somebody reads in three months when they ask what happened to it.
     """
 
-
-class ProductStatusIn(BaseModel):
     status: ProductStatus
-    reason: str = ""
+    note: str = ""
 
 
 class CategoryWriteIn(BaseModel):
@@ -1239,7 +1819,12 @@ class CategoryWriteIn(BaseModel):
     image_url: str | None = None
     parent_slug: str | None = None
     sort: int = 0
-    is_quick_link: bool = False
+    # True by default, and that is the fix for a hole rather than a preference:
+    # the home screen's grid and the catalogue's own filter both read this, so
+    # a category written with it false is a category nobody browsing the shop
+    # can ever reach. The seller writes one while filing a card, which is the
+    # moment they are least equipped to know that.
+    is_quick_link: bool = True
     translations: dict[Lang, CategoryTextIn] = Field(default_factory=dict)
 
 
@@ -1260,21 +1845,53 @@ class BrandWriteIn(BaseModel):
     translations: dict[Lang, BrandTextIn] = Field(default_factory=dict)
 
 
+class BrandMergeIn(BaseModel):
+    """Which row survives the merge.
+
+    The brand in the path is the one that disappears and this is the one that
+    is left, because the request reads the way the sentence does: merge
+    ``on-cloud`` **into** ``on-running``. Naming the survivor by slug and not
+    by id so the call can be written from what the brand list already shows.
+    """
+
+    into: str = Field(min_length=1, max_length=60)
+
+
+class BrandMergeOut(BaseModel):
+    """What the merge did, in the two numbers somebody will want to check."""
+
+    brand: BrandOut
+    # How many cards changed hands. The figure the audit row carries, returned
+    # as well because the screen that asked has to say something that is not
+    # "done".
+    products_moved: int
+    # Every spelling the survivor now answers to, the loser's among them — so
+    # it is visible that the duplicate cannot come back through the desk.
+    aliases: list[str] = []
+
+
 class ImageWriteIn(BaseModel):
     url: str = Field(min_length=1, max_length=300)
+    # Which colour this is a photograph of. A picture belongs to a colour, not
+    # to a variant: two colours in six sizes is two pictures, not twelve.
+    colour: str = Field(default="", max_length=60)
     sort: int = 0
 
 
 class VariantWriteIn(BaseModel):
-    kind: VariantKind
-    label: str = Field(min_length=1, max_length=60)
-    value: str = Field(min_length=1, max_length=60)
-    image_url: str | None = None
-    # Which colour this size belongs to. Required for a size on a product that
-    # has colours — a size that belongs to nothing is a cell of no grid.
-    parent_id: int | None = None
+    """One cell of the grid, edited on its own.
+
+    The grid itself is made in one step — see ``VariantGridIn`` — because
+    typing twelve variants by hand for every shoe model is how a warehouse
+    stops being used. This is for afterwards: repricing a size, correcting a
+    colour's spelling, printing a label again.
+    """
+
+    colour: str = Field(default="", max_length=60)
+    colour_hex: str = Field(default="", max_length=9)
+    size: str = Field(default="", max_length=40)
+    price: int = Field(default=0, ge=0)
     sort: int = 0
-    translations: dict[Lang, VariantTextIn] = Field(default_factory=dict)
 
 
 class SpecWriteIn(BaseModel):
@@ -1291,21 +1908,6 @@ class SpecsReplaceIn(BaseModel):
 
 
 # --------------------------------------------------------------------------- showcase
-
-
-class AdminBannerOut(BaseModel):
-    id: int
-    kicker: str
-    title: str
-    subtitle: str
-    cta: str
-    image_url: str
-    gradient_from: str
-    gradient_to: str
-    target_type: str
-    target_value: str
-    sort: int
-    active: bool
 
 
 class BannerWriteIn(BaseModel):
@@ -1334,17 +1936,6 @@ class BannerUpdateIn(BaseModel):
     active: bool | None = None
 
 
-class AdminSectionOut(BaseModel):
-    id: int
-    key: str
-    title: str
-    subtitle: str
-    category_slug: str | None
-    layout: str
-    sort: int
-    active: bool
-
-
 class SectionWriteIn(BaseModel):
     key: str = Field(min_length=1, max_length=60, pattern=r"^[a-z0-9-]+$")
     title: str = Field(min_length=1, max_length=120)
@@ -1371,15 +1962,6 @@ class ReorderIn(BaseModel):
     """
 
     ids: list[int] = Field(min_length=1, max_length=200)
-
-
-class AdminPromoOut(BaseModel):
-    id: int
-    code: str
-    percent_off: int
-    amount_off: int
-    min_total: int
-    active: bool
 
 
 class PromoWriteIn(BaseModel):
@@ -1496,6 +2078,170 @@ class RoleWriteIn(BaseModel):
     note: str = Field("", max_length=200)
 
 
+class StaffMemberOut(StaffUserOut):
+    """A staff row, with the two things a directory is actually read for.
+
+    ``email`` because the office writes to people. ``last_seen`` because the
+    question asked of a staff list is nearly always "is this still somebody's
+    account?" — a courier who left in March has a row that looks exactly like
+    a courier who is out on a round.
+
+    ``last_seen`` is **derived, not stored**: it is the newest refresh token
+    the account still holds. One is written when they sign in and another on
+    every renewal, so the timestamp tracks use rather than only the first
+    login, and no column had to be added to ``users`` to get it. Null means
+    nothing is outstanding — they have never signed in, or they signed out.
+    """
+
+    email: str | None = None
+    last_seen: datetime | None = None
+
+
+class StaffAppointIn(PhoneIn):
+    """Putting somebody on the staff, by the only thing anybody knows: a number.
+
+    The phone normalisation is inherited from ``PhoneIn`` rather than written
+    again, so an admin typing ``901234567`` appoints the same person who later
+    signs in as ``+998901234567``. Two spellings of one number would be two
+    accounts, and the one they signed in to would be the empty one.
+
+    The number need not exist yet. Somebody is hired on Monday and handed the
+    app on Tuesday; until now there was no way to make the account before they
+    first signed in, which is why staff were made with a shell script.
+    """
+
+    full_name: str = Field("", max_length=120)
+    role: UserRole
+    note: str = Field("", max_length=200)
+
+
+class AdminUserWriteIn(BaseModel):
+    """The two fields on somebody else's account an admin may correct.
+
+    A name taken down wrong at the counter, and an email nobody can spell over
+    the telephone. Not the role — that has its own door with the last-admin
+    rule on it. Not the language, the notification switches or the PIN: those
+    are the person's own settings, and an office that can quietly turn
+    somebody's order notifications off is an office that gets blamed for the
+    message that never arrived.
+
+    Unset is unchanged, so a form that edits one field sends one field — and
+    clearing an email is ``""``, which is a different statement from not
+    mentioning it.
+    """
+
+    full_name: str | None = Field(None, max_length=120)
+    email: str | None = Field(None, max_length=120)
+
+
+class ActiveWriteIn(BaseModel):
+    """Somebody left, or somebody came back.
+
+    Not a delete. Their orders, their addresses and every audit row naming
+    them stay where they are — an account is the thread all of that hangs off,
+    and deleting it would take the history of the shop with it. ``is_active``
+    is checked on every request, so switching it off is the door that closes
+    behind somebody.
+    """
+
+    active: bool
+    note: str = Field("", max_length=200)
+
+
+class CustomerRowOut(BaseModel):
+    """A customer as the office sees them in a list.
+
+    The four figures are what somebody reaches for before picking up the
+    telephone: how often this person buys, what they have actually paid for,
+    when they last did, and whether they are still using the app at all.
+
+    ``spent`` counts delivered orders only. A placed order is a promise and a
+    cancelled one is nothing; counting either would make the shop's keenest
+    tyre-kicker its best customer.
+    """
+
+    id: int
+    phone: str
+    full_name: str
+    email: str | None
+    is_active: bool
+    created_at: datetime
+    orders_count: int
+    spent: int
+    last_order_at: datetime | None
+    last_seen: datetime | None
+
+
+class CustomerOrderOut(BaseModel):
+    """One line of a customer's order history, short enough for a panel.
+
+    Not ``OrderSummaryOut``: that carries the delivery wording, the payment
+    label and the item thumbnails, which is a screen's worth of fetching per
+    row, and this is ten rows drawn beside everything else about the person.
+    """
+
+    id: int
+    code: str
+    status: OrderStatus
+    status_label: str
+    total: int
+    created_at: datetime
+
+
+class CustomerDetailOut(CustomerRowOut):
+    """Everything about one customer, on the screen somebody opens mid-call.
+
+    Assembled in one response rather than left to the panel, because the
+    alternative is six requests fired when a name is clicked while the person
+    on the telephone waits through all of them.
+
+    The cards carry the brand, the last four digits and whether they still
+    work — never ``processor_token``, which is the only part of that row that
+    can actually be charged and has no business leaving the server.
+
+    The basket is here because it answers the commonest call there is: the
+    thing they cannot check out is a line the office can now see, with the
+    reason it is unavailable already worked out.
+    """
+
+    language: Language
+    birth_date: date | None
+    favorites_count: int
+    addresses: list[AddressOut]
+    cards: list[CardOut]
+    orders: list[CustomerOrderOut]
+    cart: list[CartItemOut]
+
+
+class AuditRowOut(BaseModel):
+    """One line of the trail, with the actor already resolved.
+
+    Thirty-eight places in the code write these rows and nothing read them
+    back, so the one question the table exists to answer — who changed this,
+    and when — could only be answered with a database client on the server.
+
+    The actor's name and number are joined on here rather than looked up per
+    row by the panel: a page of fifty rows is two queries instead of
+    fifty-one, and a screen that prints ids where people should be is a screen
+    nobody reads. ``actor_role`` is off the row itself — the authority the
+    change was made under, not whatever the person's role is today.
+    """
+
+    id: int
+    created_at: datetime
+    actor_id: int | None
+    actor_name: str
+    actor_phone: str
+    actor_role: UserRole | None
+    action: str
+    entity: str
+    entity_id: int | None
+    field: str
+    old_value: str | None
+    new_value: str | None
+    note: str
+
+
 class MediaOut(BaseModel):
     """Where an uploaded picture ended up.
 
@@ -1515,356 +2261,6 @@ class MediaOut(BaseModel):
     bytes: int
 
 
-# ------------------------------------------------------------------ the seller's own
-
-# The marketplace's founding move — a seller arrives and puts their goods up —
-# did not work. Offering a product needs a ``product_id``, and the only
-# catalogue listing was the admin's; so a seller could edit the offers
-# somebody had opened for them and could not open one.
-#
-# These three shapes close that. What runs through all of them: a seller is an
-# outside party, so each answers exactly what they need and nothing about
-# anybody else's arrangement with us.
-
-
-class SellerMeOut(BaseModel):
-    """Which shop am I.
-
-    ``/staff/me`` answers with the *user* — a phone number and a role — and
-    says nothing about the ``sellers`` row behind it. So the cabinet greeted
-    people by phone number, and a seller who had just been taken on had no way
-    to confirm they were linked to the right shop, which is the one thing they
-    would want to check first.
-
-    The commission rate is here because it is a term of their own contract and
-    they are entitled to read it. It is also the figure every statement is
-    computed from, so a seller who cannot see it cannot check a payout.
-    """
-
-    id: int
-    name: str
-    phone: str
-    commission_percent: int
-    active: bool
-    # When this account was pointed at this shop. Null for a shop linked
-    # before the column existed and whose link was never recorded.
-    linked_at: datetime | None
-    # When we took the shop on, which is earlier and is not the same thing.
-    created_at: datetime
-    offer_count: int
-
-
-class SellerVariantOut(BaseModel):
-    """A colour or a size, and whether an offer must name it.
-
-    ``is_leaf`` is the whole point. An offer has to name every leaf — the
-    sizes of a product that has sizes, its colours otherwise — and naming
-    some of them is refused, because an offer covering half a card leaves the
-    rest of it without figures. The rule was already enforced with a 422 and
-    there was no way for a seller to find out what the leaves were.
-    """
-
-    id: int
-    kind: VariantKind
-    label: str
-    value: str
-    image_url: str | None
-    parent_id: int | None
-    is_leaf: bool
-
-
-class SellerCatalogOut(BaseModel):
-    """A card as somebody deciding whether to stock it sees it.
-
-    Not the admin's shape. That one answers with the Uzbek on the row because
-    an editor is about to write it back; this one is read to *recognise* a
-    product, so it is translated and carries the photograph.
-
-    **The shop price is here on purpose.** Every seller's name, price and
-    stock is already returned by ``GET /products/{id}/offers``, which needs no
-    token at all — so withholding it would protect nothing and only make a
-    seller price blind or price by opening the shop in another tab. What it
-    tells them is the thing they actually need: what this goes for, and how
-    many people are already selling it.
-    """
-
-    id: int
-    sku: str
-    title: str
-    subtitle: str
-    image_url: str | None
-    category_slug: str
-    category_name: str
-    brand_name: str | None
-
-    # The winning offer's figures, which is what a shopper is shown.
-    price: int
-    old_price: int | None
-    in_stock: bool
-    offer_count: int
-    variant_count: int
-
-    # Whether this is already mine, so a list can say "you sell this" instead
-    # of offering a button that answers 409.
-    mine: bool
-    my_offer_id: int | None
-    my_price: int | None
-
-
-class SellerCatalogDetailOut(SellerCatalogOut):
-    """One card with everything the offer form needs in one request.
-
-    ``leaf_ids`` is the answer to the rule above, in the shape the write
-    endpoint takes: read it, send it as ``variant_ids``, and the offer covers
-    the whole card. Deriving it from ``variants`` is possible and inviting a
-    client to re-derive a backend rule is how the two drift.
-    """
-
-    description: str
-    variants: list[SellerVariantOut]
-    leaf_ids: list[int]
-    # Everyone selling it, cheapest first — the same list the shop shows.
-    offers: list[OfferOut]
-
-
-# ------------------------------------------------------------------ payouts
-
-# What a seller is owed, and what it is made of.
-#
-# Every shape here is read by somebody who may be about to disagree with it,
-# which is why none of them is only a total. A statement carries its headings
-# and its lines; a line carries what it was computed from.
-
-
-class StatementLineOut(BaseModel):
-    """One row of an account, and its source.
-
-    ``amount`` is signed the way the ledger is: positive is owed to the
-    seller, negative is what we keep or claw back. The apps never see this —
-    it is a backoffice shape — so the sign convention can be the one the
-    arithmetic actually uses rather than one that reads nicely in a column.
-    """
-
-    id: int
-    kind: StatementLineKind
-    amount: int
-    quantity: int
-    title: str
-    note: str
-    occurred_at: datetime
-    # Which event this came from. Exactly one is set on everything but a
-    # manual adjustment.
-    order_item_id: int | None
-    return_request_id: int | None
-    offer_id: int | None
-
-
-class SellerStatementOut(BaseModel):
-    """A seller's account for one period.
-
-    The headings are positive figures read as deductions — "commission
-    420 000" — while ``payable`` is the signed arithmetic. It can be negative:
-    a period of refunds and storage against no sales means the seller owes us,
-    and rounding that up to zero would hide a debt rather than settle it.
-    """
-
-    id: int
-    period_id: int
-    period_label: str
-    starts_on: date
-    ends_on: date
-    seller_id: int
-    seller_name: str
-    status: SettlementStatus
-
-    gross_sales: int
-    commission: int
-    fulfilment: int
-    refunds: int
-    storage: int
-    adjustments: int
-    payable: int
-
-    line_count: int
-    closed_at: datetime | None
-    paid_at: datetime | None
-    payment_method: str
-    payment_reference: str
-    note: str
-
-
-class SellerStatementDetailOut(SellerStatementOut):
-    """The same account with its composition, which is the point of it.
-
-    A seller told "9 100 000" has a number to argue with. A seller shown the
-    order lines, the returns and the days of storage that add up to it has an
-    account to read.
-    """
-
-    lines: list[StatementLineOut]
-
-
-class SettlementPeriodOut(BaseModel):
-    id: int
-    label: str
-    starts_on: date
-    ends_on: date
-    status: SettlementStatus
-    closed_at: datetime | None
-    statement_count: int
-    # Across every seller in the period, so a run can be looked at whole.
-    total_payable: int
-
-
-class PeriodCreateIn(BaseModel):
-    """A payout run's dates.
-
-    Chosen rather than derived: a week and a month are both reasonable and
-    which one a marketplace uses is a business decision, not something to
-    infer from a calendar.
-    """
-
-    starts_on: date
-    ends_on: date
-    label: str = Field("", max_length=80)
-
-
-class StatementPayIn(BaseModel):
-    """Marking money as gone.
-
-    The reference is what makes this checkable later — a transfer number
-    somebody can look up when a seller says it never arrived. Not required,
-    because cash exists, but asked for.
-    """
-
-    method: str = Field(min_length=1, max_length=60, examples=["bank o'tkazmasi"])
-    reference: str = Field("", max_length=80)
-    note: str = Field("", max_length=200)
-
-
-class AdjustmentIn(BaseModel):
-    """A correction, with the reason attached.
-
-    Signed, and the note is required. An unexplained adjustment is the one
-    line of a statement nobody can defend, so the endpoint refuses a blank
-    one rather than accepting a number from nowhere.
-    """
-
-    amount: int
-    note: str = Field(min_length=1, max_length=200)
-
-
-class FulfilmentTariffOut(BaseModel):
-    """One weight band's two rates: per shipment, and per day on a shelf."""
-
-    id: int
-    max_grams: int
-    fee: int
-    storage_per_day: int
-    label: str
-
-
-class FulfilmentTariffWriteIn(BaseModel):
-    """A new weight band.
-
-    ``max_grams`` is the top of the band, and it is what makes a band a band:
-    the lightest one that still covers a parcel is the one that applies, so
-    two bands sharing a ceiling would make "which band is this" a question
-    with two answers. The endpoint refuses the second.
-
-    Both rates default to nothing rather than to a guess. A fee that has not
-    been decided is better charged as zero than as a number somebody made up,
-    because the seller is going to read it against their contract.
-    """
-
-    max_grams: int = Field(gt=0)
-    fee: int = Field(0, ge=0)
-    storage_per_day: int = Field(0, ge=0)
-    label: str = ""
-
-
-class FulfilmentTariffUpdateIn(BaseModel):
-    """A change to a term of a contract; every field left out is left alone.
-
-    Partial rather than whole-row because the audit trail records fields, not
-    saves: a panel that PUT the entire band back would log four changes every
-    time somebody corrected the label.
-    """
-
-    max_grams: int | None = Field(None, gt=0)
-    fee: int | None = Field(None, ge=0)
-    storage_per_day: int | None = Field(None, ge=0)
-    label: str | None = None
-
-
-# ----------------------------------------------------- the period still running
-
-
-class RunningLineOut(BaseModel):
-    """One row of a running total.
-
-    ``StatementLineOut`` with the ``id`` removed, and the absence is the
-    point: these rows are worked out for the request and stored nowhere, so an
-    id would be a handle on something that does not exist and a panel would be
-    entitled to think it could fetch it again.
-    """
-
-    kind: StatementLineKind
-    amount: int
-    quantity: int
-    title: str
-    note: str
-    occurred_at: datetime
-    order_item_id: int | None
-    return_request_id: int | None
-    offer_id: int | None
-
-
-class RunningTotalOut(BaseModel):
-    """How the period is going so far — deliberately not a statement.
-
-    ``is_final`` is a constant ``false`` rather than a flag that might one day
-    be true. That is the whole shape of the thing: a seller reading this is
-    reading arithmetic over events that have not stopped arriving, and the
-    figure will differ from the one they are paid. Closing the period is what
-    turns a number into a promise, and a closed period answers on
-    ``/statements`` instead.
-
-    An adjustment is not here. Every other line is derived from something that
-    happened — goods delivered, goods returned, days on a shelf — and can be
-    recomputed from the events at any moment. An adjustment is a decision
-    somebody wrote onto a statement with a reason attached, and until a
-    statement exists there is nothing to write it on.
-    """
-
-    is_final: Literal[False] = False
-
-    # Null when nobody has opened a run covering today: the window is then the
-    # gap between the last period and now, which is a real span of days and
-    # not a period. Sales still happen in it.
-    period_id: int | None
-    period_label: str
-    period_status: SettlementStatus | None
-    starts_on: date
-    ends_on: date
-    # When the tally was taken. Two requests a minute apart may disagree, and
-    # this is what says which is the later one.
-    as_of: datetime
-
-    seller_id: int
-    seller_name: str
-
-    gross_sales: int
-    commission: int
-    fulfilment: int
-    refunds: int
-    storage: int
-    payable: int
-
-    line_count: int
-    lines: list[RunningLineOut]
-
-
 # ------------------------------------------------------------------ the courier
 
 # The last mile, which the system could not describe at all.
@@ -1872,6 +2268,40 @@ class RunningTotalOut(BaseModel):
 # Every write shape here is submitted from a phone that may have queued it for
 # an hour and may send it twice. The header ``Idempotency-Key`` is required on
 # all of them; see ``app.idempotency`` for why it is not optional.
+
+
+class CourierEarningsOut(BaseModel):
+    """What a courier has done and what it came to.
+
+    Theirs alone, and it is the reason a courier opens the app when they are
+    not at a door: nobody works a round they cannot count. Three windows
+    rather than one running total — today is what they are doing now, the
+    month is what their rent is measured against, and the lifetime figure is
+    the one that makes a long day feel like it added up to something.
+
+    ``cash_on_hand`` is not earnings and is deliberately next to them: money
+    taken at doors belongs to the office and a courier carrying it needs to
+    see how much of it they are carrying. Confusing the two is how a courier
+    ends up short at the end of a week.
+    """
+
+    delivered_today: int
+    delivered_month: int
+    delivered_total: int
+
+    fee_per_delivery: int
+    earned_today: int
+    earned_month: int
+    earned_total: int
+
+    # Cash collected at doors and not yet handed in. Ours to reconcile, and
+    # shown because the person holding it should know the figure.
+    cash_on_hand: int
+
+    # How many doors were knocked on for nothing. Not a score — a courier who
+    # takes the hard addresses should not read this as a mark against them —
+    # but a figure they can point at when an operator asks.
+    failed_attempts: int
 
 
 class CourierOrderOut(BaseModel):
@@ -1908,17 +2338,6 @@ class CourierOrderOut(BaseModel):
     last_failure: str
 
 
-class CourierAssignIn(BaseModel):
-    """An operator putting an order on somebody's round."""
-
-    courier_id: int
-    # The stop number. Zero means unplaced, and the list falls back to the
-    # delivery window and then the code, so an unsequenced round is still in
-    # a sensible order rather than an arbitrary one.
-    sequence: int = Field(0, ge=0, le=999)
-    note: str = Field("", max_length=200)
-
-
 class DeliverIn(BaseModel):
     """Proof that goods changed hands.
 
@@ -1950,72 +2369,6 @@ class FailedIn(BaseModel):
 
     reason: str = Field(min_length=1, max_length=200)
     photo_url: str = Field("", max_length=300)
-
-
-class DeliveryAttemptOut(BaseModel):
-    id: int
-    order_id: int
-    order_code: str
-    result: AttemptResult
-    reason: str
-    recipient_name: str
-    photo_url: str | None
-    cash_collected: int
-    happened_at: datetime
-
-
-class ShiftOut(BaseModel):
-    """A round, and the money that came back from it.
-
-    Three cash figures because they are three separate claims and the whole
-    value is in where they differ. ``cash_expected`` is the sum of the
-    deliveries and is ours; ``cash_declared`` is the courier's word;
-    ``cash_counted`` is what the office found. ``difference`` is the counted
-    figure against the expected one, and it is null until somebody has
-    counted — a nought would be a claim nobody has made.
-    """
-
-    id: int
-    courier_id: int
-    courier_name: str
-    status: ShiftStatus
-    opened_at: datetime
-    closed_at: datetime | None
-
-    cash_expected: int
-    cash_declared: int | None
-    cash_counted: int | None
-    difference: int | None
-    counted_at: datetime | None
-
-    orders_delivered: int
-    orders_failed: int
-    note: str
-
-
-class ShiftDetailOut(ShiftOut):
-    """The same round with every door on it, so the total is followable."""
-
-    attempts: list[DeliveryAttemptOut]
-
-
-class ShiftCloseIn(BaseModel):
-    """Handing the cash over.
-
-    The declared figure is required even when it matches: a courier saying
-    "this is what I have" is the claim the reconciliation is against, and
-    inferring it from our own total would leave nothing to reconcile.
-    """
-
-    cash_declared: int = Field(ge=0)
-    note: str = Field("", max_length=200)
-
-
-class ShiftCountIn(BaseModel):
-    """What the office actually counted."""
-
-    cash_counted: int = Field(ge=0)
-    note: str = Field("", max_length=200)
 
 
 class PickupLineOut(BaseModel):
@@ -2085,6 +2438,14 @@ class PickupCollectIn(BaseModel):
 
 
 class StaffReturnOut(BaseModel):
+    """One return request, read by the office or by the warehouse.
+
+    The inspection fields are the reason both read the same shape. A return
+    is answered once after the money — whoever opened the parcel says what
+    they found — and the shelf follows from that, so every screen involved
+    needs to see the verdict to know whether there is anything left to do.
+    """
+
     id: int
     order_id: int
     order_code: str
@@ -2100,19 +2461,24 @@ class StaffReturnOut(BaseModel):
     next_statuses: list[ReturnStatus]
     created_at: datetime
 
+    product_title: str = ""
 
-class StaffReviewOut(BaseModel):
-    id: int
-    product_id: int
-    product_title: str
-    author_name: str
-    author_phone: str
-    rating: int
-    text: str
-    photos: list[str]
-    status: ReviewStatus
-    next_statuses: list[ReviewStatus]
-    created_at: datetime
+    inspection: ReturnInspection | None = None
+    inspection_label: str = ""
+    inspection_note: str = ""
+    inspected_at: datetime | None = None
+    relisted: bool = False
+
+
+class ReturnInspectIn(BaseModel):
+    """The warehouse's verdict on a parcel that came back.
+
+    ``result`` has no default. Somebody has to look at the shirt, and a
+    default here would be a verdict arrived at by pressing Save.
+    """
+
+    result: ReturnInspection
+    note: str = ""
 
 
 class DecisionIn(BaseModel):
@@ -2153,11 +2519,32 @@ class StaffOrderOut(BaseModel):
     delivery_day: date | None
     delivery_window: str
     items_count: int
+    # What is in it, short enough for a row.
+    #
+    # The queue used to carry a count and nothing else, so a picker reading it
+    # knew an order had one thing in it and not what the thing was — which is
+    # the whole of their job. They had to open every order to find out what to
+    # fetch, and on a bench with twenty of them that is twenty round trips.
+    #
+    # A sentence rather than the lines themselves: a row has space for one, and
+    # the order's own screen has every line with its price.
+    items_summary: str
     total: int
     paid: bool
     # What this order may become next. The backoffice draws its buttons from
     # this rather than from its own copy of the rules, so the two cannot drift.
     next_statuses: list[OrderStatus]
+    # Who is carrying it, if anybody yet.
+    #
+    # ``Order.courier_id`` has existed since the courier app was built, and
+    # nothing outside the courier's own endpoints could read it — so the
+    # operator's queue could not show an unassigned order as unassigned, and
+    # the panel that is supposed to plan the round had no way to see the round.
+    # The name as well as the id because a row is read by a person and an id
+    # is not a person.
+    courier_id: int | None = None
+    courier_name: str = ""
+    courier_sequence: int = 0
     created_at: datetime
 
 
@@ -2214,3 +2601,390 @@ class SlotUpdateIn(BaseModel):
     price: int | None = Field(None, ge=0)
     note: str | None = None
     express: bool | None = None
+
+
+# --------------------------------------------------------------------------- reports
+
+# The shapes behind `app.routers.reports`, which replaced a paged table of raw
+# stock movements filed under the menu item an owner opens to see how the
+# business is doing.
+#
+# Two decisions run through every model below.
+#
+# **Every headline carries the period before it.** "Oshishi pasayishi" — is it
+# going up or down — is the whole question, and a figure without its twin makes
+# the browser difference two numbers and hope it picked the right two. So a
+# figure is a `FigureOut`: this period, last period, the difference, and the
+# percentage where one exists.
+#
+# **A figure that lies is worse than a figure we do not show.** Where something
+# is only partly knowable — margin on orders placed before the cost column
+# existed — the coverage travels with it rather than being rounded away.
+
+
+class ReportPeriodOut(BaseModel):
+    """What was asked for, and what it is being compared against.
+
+    Echoed back rather than assumed, because the previous period is chosen
+    here — the same number of days, ending the day before this one starts —
+    and a screen that printed "vs last month" without being told would be
+    guessing at it.
+    """
+
+    from_day: date
+    to_day: date
+    previous_from_day: date
+    previous_to_day: date
+    days: int
+    bucket: Literal["day", "week", "month"]
+
+
+class SalesBucketOut(BaseModel):
+    """One day, week or month of trade, named by the day it starts.
+
+    ``revenue`` is bucketed by the day the goods were **delivered** and the
+    counts by the day the order was **placed**, and the two are deliberately
+    not the same axis — see the report's own docstring. A bucket with nothing
+    in it is present rather than skipped: a chart that drops empty days draws a
+    shop that was busy every day it was open.
+    """
+
+    day: date
+    label: str
+    orders: int = 0
+    delivered: int = 0
+    cancelled: int = 0
+    returned: int = 0
+    revenue: int = 0
+    refunds: int = 0
+
+
+class SplitRowOut(BaseModel):
+    """Revenue cut one way — by payment method, or by how it was delivered."""
+
+    key: str
+    label: str
+    orders: int
+    revenue: int
+    previous_orders: int
+    previous_revenue: int
+
+
+class SalesReportOut(BaseModel):
+    """Trade over a period, with the period before it beside every figure."""
+
+    period: ReportPeriodOut
+    headlines: list[FigureOut]
+    buckets: list[SalesBucketOut]
+    by_payment: list[SplitRowOut]
+    by_delivery: list[SplitRowOut]
+    # Delivered orders with no `delivered` event to bucket by. Nought is the
+    # expected answer and anything else means the revenue series is
+    # understating itself by that many orders — so it is on the wire rather
+    # than in a log, where the one person who could act on it would never see
+    # it.
+    delivered_without_a_time: int = 0
+
+
+class MoneyBucketOut(BaseModel):
+    """Cash in and cash out on one day, week or month.
+
+    ``difference`` is exactly that — what came in less what went out — and is
+    **not** profit. A market run that lands on the 3rd puts a month's buying
+    into one day, so this swings hard and says nothing about whether the shop
+    made money. Profit is the margin block, and only for the days it can see.
+    """
+
+    day: date
+    label: str
+    money_in: int = 0
+    money_out: int = 0
+    refunds: int = 0
+    difference: int = 0
+
+
+class MarketSpendOut(BaseModel):
+    """What was spent at one market, over this period and the one before.
+
+    ``place`` is free text off the run — nobody maintains a list of markets —
+    so an empty one is a run somebody did not say where they went, and it is
+    shown as itself rather than being folded into the others.
+    """
+
+    place: str
+    runs: int
+    units: int
+    cost: int
+    previous_cost: int
+
+
+class BuyerSpendOut(BaseModel):
+    """What one person spent at the market. The only party to a purchase there
+    is — nobody delivers to this shop, so there is no supplier to rank."""
+
+    buyer_id: int | None
+    name: str
+    runs: int
+    cost: int
+    previous_cost: int
+
+
+class MarginOut(BaseModel):
+    """Gross margin, and how much of the period it could actually see.
+
+    The honest part of this whole exercise. ``revenue`` and ``cost`` cover
+    **only the lines that carry a cost**, so the percentage between them is
+    real; ``units_costed`` against ``units`` is what says how much of the
+    period that was. A screen showing the percentage without the coverage
+    beside it would read as the shop's margin when it may be the margin on four
+    units out of nine hundred.
+
+    ``known_from`` is the day the first order carrying a cost was placed.
+    Everything before it is unknowable — not nought — because the column did
+    not exist and no backfill can invent what a shirt sold in March cost
+    without inventing it. Null means no order anywhere carries a cost yet, and
+    the whole block should be drawn as "not yet".
+    """
+
+    revenue: int
+    cost: int
+    margin: int
+    # Hundredths of a per cent, as `FigureOut.percent_value` describes. Null
+    # when nothing costed was sold, because nought per cent is a claim.
+    margin_percent: int | None
+    units: int
+    units_costed: int
+    coverage_percent: int
+    known_from: date | None
+
+
+class MoneyReportOut(BaseModel):
+    """The shop's cash shape, and — where it is knowable — its margin."""
+
+    period: ReportPeriodOut
+    headlines: list[FigureOut]
+    buckets: list[MoneyBucketOut]
+    by_market: list[MarketSpendOut]
+    by_buyer: list[BuyerSpendOut]
+    margin: MarginOut
+
+
+class CustomerBucketOut(BaseModel):
+    """Signups and buyers over one bucket, bucketed by when they happened."""
+
+    day: date
+    label: str
+    signups: int = 0
+    orders: int = 0
+    first_orders: int = 0
+    repeat_orders: int = 0
+
+
+class CustomerRankOut(BaseModel):
+    """One customer on a list somebody is going to act on.
+
+    ``spent`` is delivered so'm over their whole life, not over the period: a
+    call list is about who is worth ringing, and somebody who spent nine
+    million last year and nothing this month is exactly who it is for.
+
+    ``days_since`` is nought on the top-spender list, where it means nothing,
+    and is the point of the lapsed list, where it is what makes the row a
+    reason to pick up a telephone.
+    """
+
+    user_id: int
+    name: str
+    phone: str
+    orders: int
+    spent: int
+    last_order_at: datetime | None
+    days_since: int = 0
+
+
+class CustomersReportOut(BaseModel):
+    """Who is buying, who is coming back, and who has stopped."""
+
+    period: ReportPeriodOut
+    headlines: list[FigureOut]
+    buckets: list[CustomerBucketOut]
+    top_customers: list[CustomerRankOut]
+    # Bought before, nothing since. The most useful thing on the screen,
+    # because it is the only list here that is a list of things to do.
+    lapsed: list[CustomerRankOut]
+    lapsed_after_days: int
+
+
+class ProductSaleOut(BaseModel):
+    """Units and so'm for one card over the period, against the one before.
+
+    Revenue per product is computable off `order_items` today and nothing in
+    the back office shows it — a shop could see what moved and not what it was
+    worth, which are different lists with different things at the top.
+    """
+
+    product_id: int | None
+    title: str
+    units: int
+    revenue: int
+    previous_units: int
+    previous_revenue: int
+    delta_units: int
+    delta_revenue: int
+
+
+class VariantSaleOut(BaseModel):
+    """The same for one cell of the grid, with what is left of it.
+
+    ``sell_through_percent`` is units sold in the period against those units
+    plus what is on the shelf now — hundredths of a per cent. It mixes a flow
+    with a snapshot on purpose: the question it answers is "did we buy too many
+    of these", and the stock that is left is the half of that question the
+    period cannot supply. Null when neither sold nor stocked.
+    """
+
+    variant_id: int
+    product_id: int | None
+    product_title: str
+    variant_label: str
+    units: int
+    revenue: int
+    previous_units: int
+    stock_left: int
+    sell_through_percent: int | None
+
+
+class DeadStockOut(BaseModel):
+    """On a shelf, and nobody has bought one for a long time.
+
+    ``shelf_value`` is at the **selling** price, which is the figure that makes
+    somebody act: what the shop paid is sunk, and what it is asking is what is
+    standing still. Costed value is in the money report, where it belongs.
+    """
+
+    variant_id: int
+    product_id: int | None
+    product_title: str
+    variant_label: str
+    stock_left: int
+    unit_price: int
+    shelf_value: int
+    last_delivered_at: datetime | None
+
+
+class ProductsReportOut(BaseModel):
+    """What sold, what is rising, what is falling, and what is not moving."""
+
+    period: ReportPeriodOut
+    headlines: list[FigureOut]
+    products: list[ProductSaleOut]
+    variants: list[VariantSaleOut]
+    rising: list[ProductSaleOut]
+    falling: list[ProductSaleOut]
+    dead_stock: list[DeadStockOut]
+    dead_after_days: int
+
+
+class StockKindOut(BaseModel):
+    """What is standing in one kind of place, and what it is worth.
+
+    The genuinely valuable split. "The shop holds 94 million so'm of stock" is
+    a number nobody can act on; "eleven million of it is in the damaged corner
+    and four million is returns nobody has opened" is a morning's work.
+    """
+
+    kind: LocationKind
+    label: str
+    units: int
+    value: int
+    variants: int
+
+
+class StocktakeOut(BaseModel):
+    """How far the shelf had drifted, off the counts that were closed.
+
+    Nothing surfaces this today, and it is the only measure of whether the
+    ledger and the room agree. ``accuracy_percent`` is hundredths of a per
+    cent: expected less the total miscount, over expected. Null when nothing
+    was counted in the period, because a hundred per cent accuracy on nought
+    lines is the most misleading number available here.
+    """
+
+    counts: int
+    lines: int
+    lines_wrong: int
+    expected_units: int
+    counted_units: int
+    miscounted_units: int
+    accuracy_percent: int | None
+
+
+class StockReportOut(BaseModel):
+    """What is in the building, where it is standing, and how right that is."""
+
+    period: ReportPeriodOut
+    headlines: list[FigureOut]
+    by_kind: list[StockKindOut]
+    cells: int
+    cells_full: int
+    cells_empty: int
+    stocktake: StocktakeOut
+    previous_stocktake: StocktakeOut
+
+
+class CourierRowOut(BaseModel):
+    """One courier's period: knocks, doors that opened, and cash in hand."""
+
+    courier_id: int
+    name: str
+    phone: str
+    attempts: int
+    delivered: int
+    failed: int
+    # Hundredths of a per cent. Null when they knocked on no doors.
+    success_percent: int | None
+    cash_collected: int
+    previous_delivered: int
+
+
+class ReasonRowOut(BaseModel):
+    """A free-text reason and how often it was given, commonest first.
+
+    Ranked rather than totalled, because the action is always "deal with the
+    top one". An empty reason is its own row: a failure recorded with no reason
+    is a gap in the work, and folding it into the others hides it.
+    """
+
+    reason: str
+    count: int
+    previous: int
+    # Hundredths of a per cent of this period's total.
+    share_percent: int
+
+
+class DurationOut(BaseModel):
+    """How long a step of the work took, in minutes.
+
+    Median as well as average, because one parcel that sat over a weekend
+    moves an average and does not move a median — and the question ("how long
+    does this normally take") is about the middle one. ``samples`` is how many
+    it was measured over; a duration over three of them is not a fact about the
+    shop and the screen is told so.
+    """
+
+    key: str
+    label: str
+    samples: int
+    average_minutes: int | None
+    median_minutes: int | None
+    previous_average_minutes: int | None
+
+
+class OperationsReportOut(BaseModel):
+    """The work itself: the door, the bench, and what came back."""
+
+    period: ReportPeriodOut
+    headlines: list[FigureOut]
+    couriers: list[CourierRowOut]
+    failure_reasons: list[ReasonRowOut]
+    return_reasons: list[ReasonRowOut]
+    durations: list[DurationOut]

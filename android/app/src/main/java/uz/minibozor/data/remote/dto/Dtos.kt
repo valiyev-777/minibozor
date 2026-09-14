@@ -161,74 +161,55 @@ data class BrandDto(
     @SerialName("product_count") val productCount: Int = 0,
 )
 
+/**
+ * One colour the card comes in, with the photograph of it.
+ *
+ * A colour is chosen by looking at the thing rather than at a hex circle, so
+ * the picker draws [imageUrl] and falls back to [hex] only for a colour that
+ * has no picture — which only a draft can have, and a draft never reaches this
+ * app.
+ */
+@Immutable
+@Serializable
+data class ColourDto(
+    val colour: String,
+    val hex: String = "",
+    @SerialName("image_url") val imageUrl: String? = null,
+    @SerialName("in_stock") val inStock: Boolean = true,
+)
+
+/**
+ * One cell of the colour × size grid — the thing that is actually bought.
+ *
+ * **Flat, where this used to be a tree.** A colour was a row and its sizes
+ * hung off it by `parent_id`, which meant every count existed at two depths
+ * and a basket line named two ids that could disagree with each other. A
+ * variant is now the pair itself: "qora / 42", with its own barcode, its own
+ * price and its own count, and a basket line names one id.
+ *
+ * The picker's job changed with it: choose a colour from [ProductDto.colours],
+ * then a size among the variants of that colour, and send that variant's [id].
+ */
 @Immutable
 @Serializable
 data class VariantDto(
     val id: Int,
-    val kind: String,
-    val label: String,
-    val value: String,
-    /**
-     * The product photographed in this colour, when the shop supplied one.
-     *
-     * A colour is chosen by looking at the thing rather than at a hex circle,
-     * so the picker draws this when it is there and falls back to [value] when
-     * it is not. Always null on a size.
-     */
-    @SerialName("image_url") val imageUrl: String? = null,
-    @SerialName("in_stock") val inStock: Boolean,
-    /**
-     * How many of this colour are on the shelf.
-     *
-     * The product's own count is the whole shelf; this is the share of it
-     * wearing one colour. The page asks the colour rather than the product,
-     * because the photograph above is of one colour and the count under it has
-     * to be about the thing being looked at. Null on a size, and on a colour
-     * the shop does not count apart — then the product's own count answers.
-     */
-    @SerialName("stock_left") val stockLeft: Int? = null,
-    /**
-     * The colour a size belongs to.
-     *
-     * Sizes are counted per colour: one row per colour per size, each with its
-     * own count, so the page shows the sizes of the colour on screen. Null on a
-     * colour, and on a size of a product that has no colours — then the sizes
-     * are the product's own.
-     */
-    @SerialName("parent_id") val parentId: Int? = null,
+    val colour: String = "",
+    val size: String = "",
+    /** "Qora · 42", assembled by the server so three clients cannot spell it three ways. */
+    val label: String = "",
+    val sku: String = "",
+    /** Ours, printed by us. Market goods arrive with no usable code of their own. */
+    val barcode: String = "",
+    val price: Long = 0,
+    @SerialName("in_stock") val inStock: Boolean = true,
+    /** What can still be bought: on a sellable shelf, less what is promised. */
+    @SerialName("stock_left") val stockLeft: Int = 0,
 )
 
 @Immutable
 @Serializable
 data class SpecDto(val key: String, val value: String)
-
-// --------------------------------------------------------------------- offers
-
-@Immutable
-@Serializable
-data class SellerDto(val id: Int, val name: String)
-
-/**
- * One seller's price for a product.
- *
- * The card carries one price because one offer wins it; this is the list behind
- * that number. Several sellers put the same thing on the same card, so "who am
- * I buying from" is a question the page has to be able to answer, and until
- * this was fetched it could not.
- */
-@Immutable
-@Serializable
-data class OfferDto(
-    val id: Int,
-    val seller: SellerDto,
-    val price: Long,
-    @SerialName("old_price") val oldPrice: Long? = null,
-    @SerialName("discount_percent") val discountPercent: Int? = null,
-    @SerialName("stock_left") val stockLeft: Int = 0,
-    @SerialName("in_stock") val inStock: Boolean = true,
-    /** Whose price the card is showing. Exactly one offer has it, or none. */
-    @SerialName("is_winner") val isWinner: Boolean = false,
-)
 
 @Immutable
 @Serializable
@@ -279,9 +260,10 @@ data class ProductDto(
     @SerialName("is_favorite") val isFavorite: Boolean = false,
     val category: CategoryDto,
     val brand: BrandDto? = null,
+    /** The colours first, because that is the order a person chooses in. */
+    val colours: List<ColourDto> = emptyList(),
     val variants: List<VariantDto> = emptyList(),
     val specs: List<SpecDto> = emptyList(),
-    val seller: String = "",
     val warranty: String? = null,
     @SerialName("stock_left") val stockLeft: Int = 0,
     @SerialName("is_original") val isOriginal: Boolean = true,
@@ -416,6 +398,15 @@ data class CartItemDto(
     @SerialName("product_id") val productId: Int,
     val title: String,
     @SerialName("image_url") val imageUrl: String? = null,
+    /**
+     * The colour and the size, apart.
+     *
+     * `variantLabel` joins them with a dot for a line with one line to spare.
+     * Printing only that shows "Qora · 41" as though it were the name of one
+     * thing, and the customer chose a colour *and* a size.
+     */
+    val colour: String = "",
+    val size: String = "",
     @SerialName("variant_label") val variantLabel: String = "",
     /**
      * The size and the colour this line was added for.
@@ -427,7 +418,6 @@ data class CartItemDto(
      * that line and there was no way left to add a large.
      */
     @SerialName("variant_id") val variantId: Int? = null,
-    @SerialName("color_variant_id") val colorVariantId: Int? = null,
     @SerialName("unit_price") val unitPrice: Long,
     @SerialName("old_unit_price") val oldUnitPrice: Long? = null,
     val quantity: Int,
@@ -459,7 +449,6 @@ data class CartDto(val items: List<CartItemDto>, val totals: CartTotalsDto)
 data class CartAddRequest(
     @SerialName("product_id") val productId: Int,
     @SerialName("variant_id") val variantId: Int? = null,
-    @SerialName("color_variant_id") val colorVariantId: Int? = null,
     val quantity: Int = 1,
 )
 
@@ -544,7 +533,21 @@ data class SlotDayDto(
 )
 
 // -------------------------------------------------------------------- payment
+//
+// There is no card vault behind this API any more. `CardDto` and `CardRequest`
+// went with the marketplace: a shopper pays by card at checkout or in cash at
+// the door, and neither wants a stored PAN. `me/overview` still answers
+// `cards_count`, at nought, so the profile screen keeps its shape.
 
+// -------------------------------------------------------------------- payment
+
+/**
+ * A saved card, as its owner recognises it.
+ *
+ * Four digits, a name, an expiry — and nothing that can be charged. The number
+ * never leaves the handset; what the server can charge is a token it holds and
+ * this app never sees again. See `AddCardViewModel`.
+ */
 @Immutable
 @Serializable
 data class CardDto(
@@ -578,6 +581,15 @@ data class OrderItemDto(
     @SerialName("product_id") val productId: Int? = null,
     val title: String,
     @SerialName("image_url") val imageUrl: String = "",
+    /**
+     * The colour and the size, apart.
+     *
+     * `variantLabel` joins them with a dot for a line with one line to spare.
+     * Printing only that shows "Qora · 41" as though it were the name of one
+     * thing, and the customer chose a colour *and* a size.
+     */
+    val colour: String = "",
+    val size: String = "",
     @SerialName("variant_label") val variantLabel: String = "",
     @SerialName("unit_price") val unitPrice: Long,
     val quantity: Int,
@@ -650,6 +662,7 @@ data class CheckoutRequest(
     @SerialName("pickup_point_id") val pickupPointId: Int? = null,
     @SerialName("slot_id") val slotId: Int? = null,
     @SerialName("payment_method") val paymentMethod: String = "card",
+    /** Which card pays for it. Required by the server when the method is `card`. */
     @SerialName("payment_card_id") val paymentCardId: Int? = null,
     @SerialName("recipient_name") val recipientName: String = "",
     @SerialName("recipient_phone") val recipientPhone: String = "",
@@ -664,8 +677,9 @@ data class CheckoutPreviewDto(
     val address: AddressDto? = null,
     @SerialName("pickup_point") val pickupPoint: PickupPointDto? = null,
     val slot: SlotDto? = null,
-    val card: CardDto? = null,
     val totals: CartTotalsDto,
+    /** The card the order would be charged to, so the confirm screen can name it. */
+    val card: CardDto? = null,
 )
 
 @Immutable

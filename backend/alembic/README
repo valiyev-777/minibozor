@@ -1,0 +1,25 @@
+Migrations for the Mini Bozor API. Single database.
+
+Run everything from `backend/`, which is where `alembic.ini` looks for
+`alembic/` and where `prepend_sys_path = .` puts `app` on the import path.
+
+    .venv/bin/alembic upgrade head                                # apply
+    .venv/bin/alembic revision --autogenerate -m "what changed"   # write one
+    .venv/bin/alembic current                                     # where am I
+    .venv/bin/alembic check                                       # any drift?
+
+Two things here are not the default and both are deliberate; `env.py` explains
+them at length:
+
+* The database URL is **not** in `alembic.ini`. `env.py` reads it from
+  `app.core.config.settings`, so it is the same value the application opens
+  and `MB_DATABASE_URL` steers both.
+* `render_as_batch=True`, because SQLite cannot `ALTER` a column and batch
+  mode rewrites the table instead.
+
+`0001_baseline` is the schema as `SQLModel.metadata.create_all` had been
+building it up to 2026-09-07, when Alembic went in. A database older than that
+is adopted rather than rebuilt — see `tools/adopt_alembic.py`.
+
+The full story, including how to undo one and why startup checks the revision
+rather than applying it, is under "Schema changes" in `backend/README.md`.

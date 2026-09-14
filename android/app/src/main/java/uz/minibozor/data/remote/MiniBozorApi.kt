@@ -81,10 +81,6 @@ interface MiniBozorApi {
     @GET("products/{id}/similar")
     suspend fun similar(@Path("id") id: Int): List<ProductCardDto>
 
-    /** Every seller offering this product, cheapest first. */
-    @GET("products/{id}/offers")
-    suspend fun offers(@Path("id") id: Int): List<OfferDto>
-
     @GET("brands")
     suspend fun brands(): List<BrandDto>
 
@@ -185,6 +181,12 @@ interface MiniBozorApi {
     suspend fun pickupPoints(): List<PickupPointDto>
 
     // ----------------------------------------------------------- 32 cards
+    //
+    // Back, and never a PAN. The card is entered and validated on the handset;
+    // what these four calls carry is the description its owner recognises it
+    // by and the token the server charges. Until Click or Payme is wired up
+    // the token is a stand-in and the charge is decided by a test processor —
+    // see `app/payments.py` on the server and `AddCardViewModel` here.
 
     @GET("payment-cards")
     suspend fun cards(): List<CardDto>

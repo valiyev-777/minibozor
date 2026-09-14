@@ -1,0 +1,392 @@
+/**
+ * Sotuvga chiqarish — the shop window, and it is the seller's screen.
+ *
+ * Two lists, because there are two ways a card fails a customer and only one
+ * of them is visible.
+ *
+ * **Sotuvga chiqmagan** — goods on a shelf that nobody can buy. Three things
+ * are refused until they exist: a category (or nothing browsing finds it), a
+ * price (or there is nothing to charge), and a photograph per colour (or the
+ * shop shows a grey square). This is money standing still, and nothing about
+ * it breaks or errors, which is why it needs a count in the menu.
+ *
+ * **Yupqa ko'rinadi** — cards that *are* on sale and read like a receipt. The
+ * apps hide a block whose field is empty: no description means no description
+ * panel rather than an empty one, so a thin card looks sparse rather than
+ * broken and nobody ever notices it needs finishing. Hence the second list.
+ * None of it is refused — a card with one photograph still sells, and holding
+ * it back until the prose is written is how nothing goes on sale at all.
+ *
+ * The server names both sets: `unready` is the gate, `listing_gaps` is the
+ * to-do list, and the browser branches on `gap.key` to decide which control to
+ * put in front of somebody rather than keeping its own copy of the rule.
+ */
+
+import { Camera, Check, Loader2, Package } from "lucide-react"
+import { useMemo, useState } from "react"
+
+import { Empty, PageHeader, Panel, Problem, Waiting } from "@/components/page"
+// The words, the filing, the price and the table are drawn here and on
+// Mahsulotlar, which is the only screen a finished card can be reached from.
+import { Filing, Pricing, Specs, Words } from "@/components/card-editor"
+import { Capture, mediaUrl } from "@/components/photo-step"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/cn"
+import { age, minutesSince, money } from "@/lib/format"
+import {
+  useAddImage,
+  useImages,
+  useProducts,
+  usePublish,
+  useVariants,
+} from "@/lib/queries"
+import type { AdminProduct } from "@/lib/types"
+
+// Three days. An afternoon is somebody waiting for daylight; three days is
+// goods nobody is going to get round to, costing rent and earning nothing.
+const STALE_MINUTES = 3 * 24 * 60
+
+export function PublishPage() {
+  const drafts = useProducts("", "draft")
+  const live = useProducts("", "active")
+  const [open, setOpen] = useState<number | null>(null)
+
+  // Only what is actually on a shelf. A card somebody started and abandoned is
+  // not money sitting still, and mixing the two makes the count mean nothing.
+  const held = useMemo(
+    () =>
+      (drafts.data?.items ?? [])
+        .filter((card) => card.stock_left > 0)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    [drafts.data],
+  )
+  // Anything on sale with a gap of either kind. A card that was published and
+  // then had a pile of red shirts booked in against it has an unphotographed
+  // colour — a hard gap on a card that is already live — and it belonged to
+  // neither list while this only looked at the soft ones. The colour itself is
+  // held back from the shop until it is photographed; this is what gets it
+  // photographed.
+  const thin = useMemo(
+    () =>
+      (live.data?.items ?? []).filter(
+        (card) => card.unready.length > 0 || card.listing_gaps.length > 0,
+      ),
+    [live.data],
+  )
+
+  const worth = held.reduce((sum, card) => sum + card.stock_left * card.price, 0)
+
+  return (
+    <div className="space-y-5">
+      <PageHeader title="Sotuvga chiqarish" subtitle="Do'kon vitrinasi" />
+
+      <Problem error={drafts.error || live.error} />
+      {drafts.isLoading ? <Waiting what="Navbat" /> : null}
+
+      <section className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-small font-semibold">
+            Javonda bor, do'konda yo'q
+            {held.length ? <span className="tabular"> · {held.length}</span> : null}
+          </h2>
+          {worth ? (
+            <span className="text-micro tabular text-ink-faint">{money(worth)}</span>
+          ) : null}
+        </div>
+
+        {!drafts.isLoading && held.length === 0 ? (
+          <Empty what="Javondagi hamma tovar do'konda ham bor." />
+        ) : null}
+
+        <ul className="space-y-2">
+          {held.map((card) => (
+            <li key={card.id}>
+              <Row
+                card={card}
+                gaps={card.unready}
+                urgent
+                open={open === card.id}
+                onOpen={() => setOpen(open === card.id ? null : card.id)}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-small font-semibold">
+          Sotuvda, lekin to'liq emas
+          {thin.length ? <span className="tabular"> · {thin.length}</span> : null}
+        </h2>
+        <p className="text-micro text-ink-faint">
+          Rasmsiz rang do'konda ko'rsatilmaydi — qolgan ranglar sotiladi.
+          Boshqalari esa sahifani quruq qiladi: ilova bo'sh maydonni yashiradi,
+          shuning uchun bu ro'yxat bor.
+        </p>
+
+        {!live.isLoading && thin.length === 0 ? (
+          <Empty what="Sotuvdagi kartalar to'liq." />
+        ) : null}
+
+        <ul className="space-y-2">
+          {thin.map((card) => (
+            <li key={card.id}>
+              <Row
+                card={card}
+                gaps={[...card.unready, ...card.listing_gaps]}
+                // A live card missing a photograph is a colour the shop
+                // cannot show, which is a different weight of problem from
+                // missing prose.
+                urgent={card.unready.length > 0}
+                open={open === card.id}
+                onOpen={() => setOpen(open === card.id ? null : card.id)}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------------- one row
+
+function Row({
+  card,
+  gaps,
+  urgent,
+  open,
+  onOpen,
+}: {
+  card: AdminProduct
+  gaps: { key: string; label: string }[]
+  urgent?: boolean
+  open: boolean
+  onOpen: () => void
+}) {
+  const minutes = minutesSince(card.created_at)
+  const stale = Boolean(urgent) && minutes >= STALE_MINUTES
+
+  return (
+    <Panel
+      bare
+      className={cn(stale && "border-danger", open && "border-brand")}
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex w-full items-center gap-3 p-4 text-left">
+        {card.snapshot_url ? (
+          <img
+            src={mediaUrl(card.snapshot_url)}
+            alt=""
+            className="size-12 shrink-0 rounded-control object-cover" />
+        ) : (
+          <span className="grid size-12 shrink-0 place-items-center rounded-control bg-canvas text-ink-faint">
+            <Package className="size-5" />
+          </span>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-body font-semibold">{card.title}</div>
+          <div className="text-micro tabular text-ink-soft">
+            {card.stock_left} dona · {card.sku}
+            {card.price ? ` · ${money(card.price)}` : ""}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {gaps.map((gap) => (
+              <span
+                key={gap.key}
+                className={cn(
+                  "rounded-control px-1.5 py-0.5 text-micro",
+                  urgent ? "bg-warn-soft text-warn-ink" : "bg-canvas text-ink-soft",
+                )}
+              >
+                {gap.label}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {urgent ? (
+          <span
+            className={cn(
+              "shrink-0 text-micro tabular",
+              stale ? "font-semibold text-danger" : "text-ink-faint",
+            )}
+          >
+            {age(minutes)}
+          </span>
+        ) : null}
+      </button>
+
+      {open ? <Editor card={card} /> : null}
+    </Panel>
+  )
+}
+
+// ------------------------------------------------------------------ the editor
+
+function Editor({ card }: { card: AdminProduct }) {
+  const gate = new Set(card.unready.map((gap) => gap.key))
+  const publish = usePublish(card.id)
+
+  return (
+    <div className="space-y-5 border-t border-line p-4">
+      {gate.size ? (
+        <div className="space-y-4">
+          <h3 className="text-micro font-semibold uppercase tracking-wide text-warn-ink">
+            {card.status === "active"
+              ? "Do'konda ko'rinishi uchun"
+              : "Sotuvga chiqishi uchun"}
+          </h3>
+          {gate.has("needs_photo") ? <Photos card={card} /> : null}
+          {gate.has("needs_category") ? <Filing card={card} /> : null}
+          {gate.has("needs_price") ? <Pricing card={card} /> : null}
+
+          <Problem error={publish.error} />
+        </div>
+      ) : card.next_statuses.includes("active") ? (
+        <>
+          <Problem error={publish.error} />
+          <Button size="lg" className="w-full gap-2" disabled={publish.isPending} onClick={() => publish.mutate("active")}
+          >
+            {publish.isPending ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <Check className="size-5" />
+            )}
+            Sotuvga chiqarish
+          </Button>
+        </>
+      ) : (
+        /* Already on sale. The button used to be drawn here too, labelled
+           "Sotuvda" and still sending `active` — so pressing it asked the
+           server to move a card from active to active and got the refusal it
+           deserved. Which button exists is the server's answer, not a guess
+           from the status: `next_statuses` is on the card for exactly this. */
+        <p className="flex items-center gap-2 rounded-control bg-good-soft p-2 text-small text-good">
+          <Check className="size-4 shrink-0" />
+          Sotuvda — quyidagilarni to'ldirsangiz to'liqroq ko'rinadi
+        </p>
+      )}
+
+      <div className="space-y-4 border-t pt-4">
+        <h3 className="text-micro font-semibold uppercase tracking-wide text-ink-soft">
+          Telefonda to'liq ko'rinishi uchun
+        </h3>
+        <Words card={card} />
+        <Specs card={card} />
+        {!gate.has("needs_photo") ? <Photos card={card} more /> : null}
+        {!gate.has("needs_price") ? <Pricing card={card} /> : null}
+      </div>
+    </div>
+  )
+}
+
+// -------------------------------------------------------------- the photographs
+
+function Photos({ card, more }: { card: AdminProduct; more?: boolean }) {
+  const grid = useVariants(card.id)
+  const shots = useImages(card.id)
+  const image = useAddImage(card.id)
+  const [taken, setTaken] = useState<Record<string, string>>({})
+
+  // One per colour, never per size: two colours in six sizes is two
+  // photographs, and asking for twelve is how a desk stops photographing
+  // anything at all.
+  const colours = useMemo(() => {
+    const seen = new Set((grid.data ?? []).map((cell) => cell.colour))
+    return [...seen]
+  }, [grid.data])
+
+  const [colour, setColour] = useState<string | null>(null)
+  const active = colour ?? colours[0] ?? ""
+  const held = (shots.data ?? []).filter((one) => one.colour === active)
+
+  return (
+    <section className="space-y-2">
+      <h4 className="flex items-center gap-2 text-small font-medium">
+        <Camera className="size-4 text-ink-soft" />
+        {more ? "Ko'proq rasm" : "Katalog rasmi"}
+        {more ? (
+          <span className="font-normal text-ink-faint">
+            — mijoz varaqlaydi, bittasi kam
+          </span>
+        ) : null}
+      </h4>
+
+      {colours.length > 1 ? (
+        <div className="flex flex-wrap gap-1">
+          {colours.map((one) => (
+            <button
+              key={one}
+              type="button"
+              onClick={() => setColour(one)}
+              className={cn(
+                "h-control rounded-control border px-3 text-small",
+                one === active && "border-brand bg-brand text-brand-ink",
+              )}
+            >
+              {one || "rasm"}
+              <span className="ml-1 tabular opacity-70">
+                {(shots.data ?? []).filter((shot) => shot.colour === one).length}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {held.length ? (
+        <ul className="flex flex-wrap gap-1">
+          {held.map((shot) => (
+            <li key={shot.id}>
+              <img
+                src={mediaUrl(shot.url)}
+                alt=""
+                className="size-16 rounded-control border object-cover" />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {/* The identification snapshot is already on the card and is sometimes
+          good enough. Reusing it is one tap against a walk to the bench. */}
+      {card.snapshot_url && !held.length && !taken[active] ? (
+        <div className="flex items-center gap-2 rounded-control border border-dashed p-2">
+          <img
+            src={mediaUrl(card.snapshot_url)}
+            alt=""
+            className="size-12 rounded-control object-cover" />
+          <p className="min-w-0 flex-1 text-micro text-ink-soft">
+            Qabuldagi tanish rasmi. Yaxshi chiqqan bo'lsa qaytadan olish shart emas.
+          </p>
+          <Button type="button" variant="secondary" disabled={image.isPending} onClick={() =>
+              image.mutate(
+                { url: card.snapshot_url, colour: active },
+                {
+                  onSuccess: () =>
+                    setTaken((was) => ({ ...was, [active]: card.snapshot_url })),
+                },
+              )
+            }
+          >
+            Shuni ishlat
+          </Button>
+        </div>
+      ) : null}
+
+      <Capture
+        colour={active}
+        current={undefined}
+        onTaken={(one, url) => {
+          setTaken((was) => ({ ...was, [one]: url }))
+          image.mutate({ url, colour: one })
+        }}
+      />
+
+      <Problem error={image.error} />
+    </section>
+  )
+}
+

@@ -8,15 +8,18 @@ from sqlalchemy import Integer
 from sqlmodel import Session, col, func, select
 
 from app import i18n
+from app import products as pr
 from app import schemas as s
+from app import stock as st
+from app import transitions as tr
 from app.models import (
     Address,
     Brand,
     CartItem,
     Category,
+    DeliveryAttempt,
     DeliverySlot,
     Favorite,
-    Offer,
     Order,
     OrderEvent,
     OrderItem,
@@ -29,18 +32,19 @@ from app.models import (
     ProductSpec,
     ProductStatus,
     ProductVariant,
-    PromoCode,
-    Review,
-    ReviewLike,
-    ReviewStatus,
     User,
 )
 
-# Above the median basket, so delivery is a real line on a typical order and
-# free on a large one. At 250 000 it was under a quarter of the median price in
-# the catalogue, so all but the cheapest orders shipped free and the fee never
-# appeared at all.
-FREE_DELIVERY_THRESHOLD = 3_000_000
+# Above a typical basket and below an unusual one, so the fee is a real line on
+# most orders and a reason to add one more thing on some.
+#
+# 3 000 000 was set against the seeded marketplace catalogue, where it was
+# roughly a median basket. This shop's dearest thing is 638 000 — so nothing
+# would ever have reached it, and the app was telling customers about a free
+# delivery they could not get. **This is the owner's number, not a technical
+# one:** it is one line, and it should be set to about three of whatever the
+# shop mostly sells.
+FREE_DELIVERY_THRESHOLD = 500_000
 STANDARD_DELIVERY_FEE = 19_000
 
 UZ_MONTHS = [
@@ -134,12 +138,32 @@ def in_the_shop(stmt):
     be written that forgets: there is a test that walks every product-returning
     endpoint and holds them all to it.
     """
-    return stmt.where(Product.status == ProductStatus.PUBLISHED)
+    return stmt.where(Product.status == ProductStatus.ACTIVE)
 
 
 def is_in_the_shop(product: Product | None) -> bool:
     """The same question about one row we already have in hand."""
-    return product is not None and product.status is ProductStatus.PUBLISHED
+    return product is not None and product.status is ProductStatus.ACTIVE
+
+
+def colour_image(session: Session, product_id: int, colour: str) -> str | None:
+    """The first photograph of one colour of a card.
+
+    A colour is chosen by looking at the thing, so a basket line for a black
+    shirt showing the white cover photograph is a line the shopper does not
+    recognise as theirs — and the first place they notice is the order, which
+    is the worst place to be surprised. A card cannot leave ``draft`` while a
+    colour of it is without a picture, but a draft's may be, so this answers
+    ``None`` and the caller falls back to the product's cover.
+    """
+    if not colour:
+        return None
+    row = session.exec(
+        select(ProductImage)
+        .where(ProductImage.product_id == product_id, ProductImage.colour == colour)
+        .order_by(col(ProductImage.sort), col(ProductImage.id))
+    ).first()
+    return media_url(row.url) if row else None
 
 
 def primary_image(session: Session, product_id: int) -> str | None:
@@ -177,7 +201,16 @@ def favorite_ids(session: Session, user: User | None) -> set[int]:
     return set(rows)
 
 
-def product_card(session: Session, p: Product, favs: set[int]) -> s.ProductCardOut:
+def product_card(
+    session: Session,
+    p: Product,
+    favs: set[int],
+    shelf: dict[int, int] | None = None,
+) -> s.ProductCardOut:
+    """One card. ``shelf`` is the page's stock figures, read once for all of
+    them — a card holds no stock of its own, and asking per card is a query per
+    row of every listing."""
+    left = shelf[p.id] if shelf is not None and p.id in shelf else pr.on_shelf(session, p.id)
     return s.ProductCardOut(
         id=p.id,
         title=i18n.t(session, "product", p.id, "title", p.title),
@@ -191,7 +224,7 @@ def product_card(session: Session, p: Product, favs: set[int]) -> s.ProductCardO
         badge=i18n.t(session, "product", p.id, "badge", p.badge) if p.badge else None,
         in_stock=p.in_stock,
         is_favorite=p.id in favs,
-        stock_left=p.stock_left,
+        stock_left=left,
         has_variants=has_variants(session, p.id),
     )
 
@@ -207,7 +240,8 @@ def has_variants(session: Session, product_id: int) -> bool:
 def product_cards(
     session: Session, products: list[Product], favs: set[int]
 ) -> list[s.ProductCardOut]:
-    return [product_card(session, p, favs) for p in products]
+    shelf = pr.shelf_map(session, [p.id for p in products])
+    return [product_card(session, p, favs, shelf) for p in products]
 
 
 def category_out(session: Session, c: Category) -> s.CategoryOut:
@@ -251,21 +285,93 @@ def brand_out(session: Session, b: Brand, product_count: int = 0) -> s.BrandOut:
     )
 
 
+def admin_product_out(session: Session, product: Product) -> s.AdminProductOut:
+    """A card as the people who own the catalogue see it.
+
+    Here rather than in the admin router because the receiving desk answers
+    with one too: booking a pile in returns the card it went on, and that is
+    the same card in the same shape.
+    """
+    # Both absent on a card the receiving desk wrote and nobody has filed yet.
+    category = (
+        session.get(Category, product.category_id) if product.category_id else None
+    )
+    brand = session.get(Brand, product.brand_id) if product.brand_id else None
+    images = session.exec(
+        select(func.count())
+        .select_from(ProductImage)
+        .where(ProductImage.product_id == product.id)
+    ).one()
+    variants = session.exec(
+        select(func.count())
+        .select_from(ProductVariant)
+        .where(ProductVariant.product_id == product.id)
+    ).one()
+    return s.AdminProductOut(
+        id=product.id,
+        sku=product.sku,
+        title=product.title,
+        subtitle=product.subtitle,
+        kind=product.kind,
+        status=product.status,
+        next_statuses=tr.next_states(tr.PRODUCT_TRANSITIONS, product.status),
+        category_slug=category.slug if category else None,
+        brand_slug=brand.slug if brand else None,
+        snapshot_url=product.snapshot_url,
+        unready=[
+            s.GapOut(key=gap, label=i18n.label(gap))
+            for gap in pr.unready(session, product.id)
+        ],
+        listing_gaps=[
+            s.GapOut(key=gap, label=i18n.label(gap))
+            for gap in pr.listing_gaps(session, product.id)
+        ],
+        price=product.price,
+        old_price=product.old_price,
+        last_cost=pr.last_cost(session, product.id),
+        stock_left=pr.on_shelf(session, product.id),
+        # Which cells are empty, not whether the card as a whole is. The black
+        # bag runs out, the red one does not, the total still reads 3 and the
+        # card still says "sotuvda" — so the first anybody hears of it is a
+        # customer ordering black.
+        sold_out=pr.sold_out(session, product.id),
+        image_count=int(images),
+        variant_count=int(variants),
+        created_at=product.created_at,
+    )
+
+
 def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
     card = product_card(session, p, favs)
     images = session.exec(
         select(ProductImage).where(ProductImage.product_id == p.id).order_by(col(ProductImage.sort))
     ).all()
-    variants = session.exec(
-        select(ProductVariant)
-        .where(ProductVariant.product_id == p.id)
-        .order_by(col(ProductVariant.sort))
-    ).all()
+    # Through `products.variants`, not a query of its own: that is where "in
+    # what order does a person read these" is answered — colours in the order
+    # they arrived, sizes in the order they are worn. A second query here meant
+    # the phone got the order the cells were *made* in, so a shirt that came in
+    # M and L and then S, XL and XXL read "M L S XL XXL".
+    # What the shop offers, which is not every cell there is: a size received
+    # by mistake is retired rather than deleted — the ledger points at it —
+    # and a retired cell is not a size this shop sells.
+    variants = pr.offered(session, p.id)
     specs = session.exec(
         select(ProductSpec).where(ProductSpec.product_id == p.id).order_by(col(ProductSpec.sort))
     ).all()
     category = session.get(Category, p.category_id)
     brand = session.get(Brand, p.brand_id) if p.brand_id else None
+
+    # The colours with a photograph, and only those. Goods keep arriving: a
+    # pile of red shirts against a card already on sale adds a colour nobody
+    # has photographed, and it would otherwise reach the shop as a grey square.
+    # A card with no colours at all — one default cell — shows everything.
+    shown = pr.photographed_colours(session, p.id)
+
+    # What of each cell a customer could actually buy, asked once per cell and
+    # then answered from here — the colour strip, the size row and the count
+    # under them are three renderings of one figure and used to be three
+    # queries, one of which read a cached flag instead.
+    sellable = {v.id: st.sellable(session, v) for v in variants}
 
     note = i18n.label("eta_next_day" if p.next_day_delivery else "eta_few_days")
     if p.free_delivery:
@@ -282,18 +388,41 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
         images=[media_url(i.url) for i in images],
         category=category_out(session, category),
         brand=brand_out(session, brand) if brand else None,
+        colours=[
+            s.ColourOut(
+                colour=colour,
+                hex=next(
+                    (v.colour_hex for v in variants if v.colour == colour), ""
+                ),
+                image_url=colour_image(session, p.id, colour),
+                in_stock=any(
+                    sellable[v.id] > 0 for v in variants if v.colour == colour
+                ),
+            )
+            for colour in shown
+        ],
         variants=[
             s.VariantOut(
                 id=v.id,
-                kind=v.kind,
-                label=i18n.t(session, "variant", v.id, "label", v.label),
-                value=v.value,
-                image_url=media_url(v.image_url),
-                in_stock=v.in_stock,
-                stock_left=v.stock_left,
-                parent_id=v.parent_id,
+                colour=v.colour,
+                size=v.size,
+                label=variant_label(v),
+                sku=v.sku,
+                barcode=v.barcode,
+                price=v.price or p.price,
+                # From the shelf, not from the flag beside it. `in_stock` is a
+                # cache kept by `stock.move`, so it is right for a cell that
+                # has ever moved and wrong for one that never has: a size
+                # written into the grid and never received sat there saying
+                # `true` with nothing behind it, and the shop offered a size
+                # the shop had never owned. Two fields answering one question
+                # from two places is one field too many, and the picker was
+                # reading the wrong one.
+                in_stock=sellable[v.id] > 0,
+                stock_left=sellable[v.id],
             )
             for v in variants
+            if not shown or v.colour in shown
         ],
         specs=[
             s.SpecOut(
@@ -302,7 +431,6 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
             )
             for sp in specs
         ],
-        seller=p.seller,
         warranty=i18n.t(session, "product", p.id, "warranty", p.warranty) if p.warranty else None,
         is_original=p.is_original,
         free_delivery=p.free_delivery,
@@ -310,94 +438,6 @@ def product_out(session: Session, p: Product, favs: set[int]) -> s.ProductOut:
         delivery_note=note,
         sold_count=p.sold_count,
     )
-
-
-# --------------------------------------------------------------------------- reviews
-
-
-def review_out(
-    session: Session,
-    r: Review,
-    *,
-    viewer: User | None = None,
-    with_product: bool = False,
-) -> s.ReviewOut:
-    author = session.get(User, r.user_id)
-    name = short_name(author.full_name) if author and author.full_name else "Mijoz"
-    liked = False
-    if viewer:
-        liked = session.exec(
-            select(ReviewLike).where(
-                ReviewLike.review_id == r.id, ReviewLike.user_id == viewer.id
-            )
-        ).first() is not None
-
-    product = None
-    if with_product:
-        p = session.get(Product, r.product_id)
-        if p:
-            product = product_card(session, p, favorite_ids(session, viewer))
-
-    return s.ReviewOut(
-        id=r.id,
-        author_name=name,
-        author_initials=initials(author.full_name if author else ""),
-        rating=r.rating,
-        text=r.text,
-        variant_label=r.variant_label,
-        tags=list(r.tags or []),
-        photos=[media_url(p) for p in (r.photos or [])],
-        likes=r.likes,
-        liked_by_me=liked,
-        status=r.status,
-        created_at=r.created_at,
-        product=product,
-    )
-
-
-def review_summary(session: Session, product_id: int) -> s.ReviewSummaryOut:
-    reviews = session.exec(
-        select(Review).where(
-            Review.product_id == product_id, Review.status == ReviewStatus.PUBLISHED
-        )
-    ).all()
-    total = len(reviews)
-    counts = {n: 0 for n in range(1, 6)}
-    for r in reviews:
-        counts[r.rating] = counts.get(r.rating, 0) + 1
-    avg = sum(r.rating for r in reviews) / total if total else 0.0
-    distribution = [
-        s.RatingBucket(
-            stars=n,
-            count=counts[n],
-            percent=round(counts[n] / total * 100) if total else 0,
-        )
-        for n in range(5, 0, -1)
-    ]
-    # Every published photograph, newest first, capped at what a strip can show.
-    # The count is of photographs rather than of reviews carrying them: the tile
-    # says "+60", and 60 pictures across 20 reviews is still 60 pictures.
-    photos = [
-        media_url(url)
-        for r in sorted(reviews, key=lambda r: r.created_at, reverse=True)
-        for url in r.photos
-    ]
-    return s.ReviewSummaryOut(
-        rating=round(avg, 1),
-        total=total,
-        distribution=distribution,
-        photos=[u for u in photos[:9] if u],
-        photos_total=len([u for u in photos if u]),
-    )
-
-
-def recalc_product_rating(session: Session, product_id: int) -> None:
-    summary = review_summary(session, product_id)
-    product = session.get(Product, product_id)
-    if product:
-        product.rating = summary.rating
-        product.reviews_count = summary.total
-        session.add(product)
 
 
 # --------------------------------------------------------------------------- cart
@@ -409,111 +449,152 @@ def cart_items(session: Session, user: User) -> list[CartItem]:
     ).all()
 
 
-def shelf_left(
-    product: Product,
-    color: ProductVariant | None,
-    size: ProductVariant | None = None,
-) -> int:
+# The windows a small shop delivers in. Free, because the fee is on the order
+# and not on the hour: charging more for the afternoon is a thing a shop with
+# several vans does, and there is one courier here.
+STANDARD_WINDOWS: tuple[tuple[str, str, str], ...] = (
+    ("09:00", "13:00", "Ertalab"),
+    ("13:00", "18:00", "Kunduzi"),
+    ("18:00", "21:00", "Kechqurun"),
+)
+SLOT_CAPACITY = 20
+
+
+def ensure_slots(session: Session, days: list[date]) -> None:
+    """The standard windows exist for every day in the window asked about.
+
+    Nothing wrote a ``delivery_slots`` row. The office has a door for opening
+    windows across a range of days — and until somebody walked through it the
+    checkout could not be completed at all: no slot meant no delivery time,
+    which meant a button that said "Yetkazish vaqti" and a screen with nothing
+    on it. A shop cannot take its first order.
+
+    Created on read rather than seeded once, because a seeded fortnight runs
+    out in a fortnight and the failure is silent. This is safe where
+    ``locations.staging`` refuses to do the same thing: a slot is keyed by the
+    day and the hour, so writing one that is already there is a no-op, and a
+    day nobody delivers on is a day with no orders rather than a second
+    receiving area nothing can see.
+
+    The office's own windows win: this only fills a day that has none, so a
+    day somebody has deliberately emptied or repriced is left alone.
     """
-    How many of the thing actually chosen are left.
+    have = {
+        row.day
+        for row in session.exec(
+            select(DeliverySlot).where(col(DeliverySlot.day).in_(days))
+        ).all()
+    }
+    missing = [day for day in days if day not in have]
+    if not missing:
+        return
 
-    A cart line is for one colour in one size, not for the product, so the
-    answer is the shelf the choice actually stands on.
+    for day in missing:
+        for start, end, note in STANDARD_WINDOWS:
+            session.add(
+                DeliverySlot(
+                    day=day,
+                    start_time=start,
+                    end_time=end,
+                    note=note,
+                    price=0,
+                    capacity_left=SLOT_CAPACITY,
+                )
+            )
+    session.commit()
 
-    A size row *is* that shelf: it is one cell of the colour × size grid and
-    knows which colour it belongs to, so where there is a size there is nothing
-    left to combine. Colours and sizes used to be two separate splits of one
-    total and the answer was whichever was scarcer — which meant the last black
-    41 could be sold twice over, once for every blue one still in the stockroom.
 
-    Falls back to the colour, and then to the whole shelf, for a choice nobody
-    counted apart.
+def variant_label(variant: ProductVariant) -> str:
+    """"Qora · 42", or whichever half of it exists.
+
+    One string, built in one place: a label assembled in the basket, in the
+    order and again on a printed label is three chances for the same shoe to
+    read three ways.
     """
-    if size is not None and size.stock_left is not None:
-        return size.stock_left
-    if color is not None and color.stock_left is not None:
-        return color.stock_left
-    return product.stock_left
+    return " · ".join(part for part in (variant.colour, variant.size) if part)
+
+
+def unit_price(product: Product, variant: ProductVariant | None):
+    """What one of the thing actually chosen costs.
+
+    The money is on the variant — a 43 can cost more than a 41 — and the
+    card's own price is the cheapest of them, which is what a shopper who has
+    chosen nothing yet is shown.
+    """
+    if variant is not None and variant.price > 0:
+        return variant.price, product.old_price
+    return product.price, product.old_price
 
 
 def cart_item_out(session: Session, item: CartItem) -> s.CartItemOut | None:
-    from app import offers as of
-
     product = session.get(Product, item.product_id)
     if product is None:
         return None
-    color = session.get(ProductVariant, item.color_variant_id) if item.color_variant_id else None
-    size = session.get(ProductVariant, item.variant_id) if item.variant_id else None
+    variant = session.get(ProductVariant, item.variant_id) if item.variant_id else None
 
-    # The offer this line was added on, held rather than looked up again: a
-    # shopper is charged the price they were shown, even if a cheaper seller
-    # has since undercut it or the one they picked has since put theirs up.
-    # Its own shelf is what caps the quantity, too — the product's cached
-    # figure belongs to whichever offer is winning, which may not be this one.
-    offer = session.get(Offer, item.offer_id) if item.offer_id else None
-    if offer is not None:
-        unit_price, old_unit_price = offer.price, offer.old_price
-        # This shopper's own hold does not count against them: the line they
-        # are looking at is the reason the goods are held.
-        left = of.shelf_left(
-            session,
-            offer,
-            item.color_variant_id,
-            item.variant_id,
-            for_user_id=item.user_id,
-        )
-        available = offer.active and left > 0
-    else:
-        unit_price, old_unit_price = product.price, product.old_price
-        left = shelf_left(product, color, size)
-        available = (
-            product.in_stock
-            and (color is None or color.in_stock)
-            and (size is None or size.in_stock)
-        )
+    price, old_unit_price = unit_price(product, variant)
+    # This shopper's own hold does not count against them: the line they are
+    # looking at is the reason the goods are held.
+    left = pr.shelf_left(
+        session,
+        product,
+        item.variant_id,
+        for_user_id=item.user_id,
+    )
+    available = left > 0
 
-    # A card withdrawn from the shop cannot be bought, whatever its offers say.
+    # A card withdrawn from the shop cannot be bought, whatever the shelf says.
     # The line stays in the basket and reads as unavailable rather than
     # disappearing: the shopper put it there, and a basket that quietly loses
     # a row is a basket nobody trusts.
     if not is_in_the_shop(product):
         available = False
 
-    labels = [
-        i18n.t(session, "variant", v.id, "label", v.label)
-        for v in (color, size)
-        if v is not None
-    ]
+    label = variant_label(variant) if variant else ""
     return s.CartItemOut(
         id=item.id,
         product_id=product.id,
         title=i18n.t(session, "product", product.id, "title", product.title),
-        image_url=primary_image(session, product.id),
-        variant_label=" · ".join(labels)
-        if labels
-        else i18n.t(session, "product", product.id, "subtitle", product.subtitle),
+        # The colour's own photograph, because that is the thing in the
+        # basket. **No fallback to the cover when the line has a colour.** The
+        # cover is another colour's photograph, and a black shirt shown as the
+        # white one is the line somebody opens tomorrow saying they did not
+        # order this — which is a dispute, where a grey square is a shrug. The
+        # cover is right only where the card has no colours to confuse.
+        image_url=(
+            colour_image(session, product.id, variant.colour)
+            if variant and variant.colour
+            else primary_image(session, product.id)
+        ),
+        colour=variant.colour if variant else "",
+        size=variant.size if variant else "",
+        variant_label=label
+        or i18n.t(session, "product", product.id, "subtitle", product.subtitle),
         variant_id=item.variant_id,
-        color_variant_id=item.color_variant_id,
-        unit_price=unit_price,
+        unit_price=price,
         old_unit_price=old_unit_price,
         quantity=item.quantity,
         selected=item.selected,
         in_stock=available,
         stock_left=left,
-        line_total=unit_price * item.quantity,
+        line_total=price * item.quantity,
     )
 
 
 def promo_discount(session: Session, code: str | None, subtotal: int) -> tuple[int, str | None]:
-    if not code:
-        return 0, None
-    promo = session.exec(
-        select(PromoCode).where(PromoCode.code == code.upper(), PromoCode.active.is_(True))
-    ).first()
-    if promo is None or subtotal < promo.min_total:
-        return 0, None
-    discount = promo.amount_off + round(subtotal * promo.percent_off / 100)
-    return min(discount, subtotal), promo.code
+    """No code is valid, because there are no codes.
+
+    ``PromoCode`` went with the panels rebuild — there was no screen that
+    wrote one and none is planned in this pass — but the *shape* stays: the
+    cart still accepts a ``promo_code`` and still answers with a discount and
+    a code, because the shipped apps send and read both. So every code is
+    simply unrecognised, which is a thing the cart screen already knew how to
+    say, and nothing above this function had to change.
+
+    Bringing discounts back means giving this function a table to look in
+    again, and nothing else.
+    """
+    return 0, None
 
 
 def cart_totals(
@@ -594,18 +675,6 @@ def slot_out(sl: DeliverySlot) -> s.SlotOut:
     )
 
 
-def card_out(c: PaymentCard) -> s.CardOut:
-    return s.CardOut(
-        id=c.id,
-        brand=c.brand,
-        last4=c.last4,
-        holder=c.holder,
-        expiry=f"{c.expiry_month:02d}/{str(c.expiry_year)[-2:]}",
-        status=c.status,
-        is_default=c.is_default,
-    )
-
-
 # --------------------------------------------------------------------------- orders
 
 
@@ -625,15 +694,50 @@ def order_eta_label(o: Order) -> str:
     return i18n.label("delivered_on", date=uz_date(o.delivery_day))
 
 
+def card_out(c: PaymentCard) -> s.CardOut:
+    """One saved card, as the person who owns it recognises it.
+
+    The expiry is assembled here rather than in the client: three apps printing
+    ``12/30`` from a month and a year is three chances to print ``12/2030`` on
+    one of them.
+    """
+    return s.CardOut(
+        id=c.id,
+        brand=c.brand,
+        last4=c.last4,
+        holder=c.holder,
+        expiry=f"{c.expiry_month:02d}/{str(c.expiry_year)[-2:]}",
+        status=c.status,
+        is_default=c.is_default,
+    )
+
+
 def payment_label(session: Session, o: Order) -> str:
     if o.payment_method == PaymentMethod.CASH:
         return i18n.label("cash_courier")
-    if o.payment_card_id:
-        card = session.get(PaymentCard, o.payment_card_id)
-        if card:
-            state = i18n.label("paid" if o.paid else "unpaid")
-            return i18n.label("card_masked", last4=card.last4, state=state)
     return i18n.label("card")
+
+
+def items_summary(items: list[OrderItem]) -> str:
+    """What to fetch, in one line.
+
+    The first line named in full with its variant, and a count of the rest — a
+    picker recognises an order by the thing in it, and an order of six
+    different things is a row that would wrap to four lines if it listed them.
+
+    Here rather than in a router because two queues print it now: the office's
+    order list and the bench's own board. Two copies would drift, and the whole
+    point is that the picker reads the same sentence the operator does.
+    """
+    if not items:
+        return ""
+    first = items[0]
+    head = first.title
+    if first.variant_label:
+        head = f"{head} · {first.variant_label}"
+    if first.quantity > 1:
+        head = f"{head} × {first.quantity}"
+    return head if len(items) == 1 else f"{head} +{len(items) - 1}"
 
 
 def order_summary(session: Session, o: Order) -> s.OrderSummaryOut:
@@ -653,7 +757,14 @@ def order_summary(session: Session, o: Order) -> s.OrderSummaryOut:
     )
 
 
-def order_out(session: Session, o: Order) -> s.OrderOut:
+def order_out(session: Session, o: Order, *, with_attempts: bool = False) -> s.OrderOut:
+    """One order, in the shape both the customer and staff read.
+
+    ``with_attempts`` is off by default: the doors a courier knocked on are
+    staff's business, and a customer's own timeline already says the order is
+    on its way. An operator asks it on, because deciding whether to give up on
+    a delivery is exactly the decision the list of knocks exists for.
+    """
     summary = order_summary(session, o)
     items = session.exec(select(OrderItem).where(OrderItem.order_id == o.id)).all()
     events = session.exec(
@@ -681,6 +792,8 @@ def order_out(session: Session, o: Order) -> s.OrderOut:
                 product_id=i.product_id,
                 title=i.title,
                 image_url=media_url(i.image_url) or "",
+                colour=i.colour,
+                size=i.size,
                 variant_label=i.variant_label,
                 unit_price=i.unit_price,
                 quantity=i.quantity,
@@ -699,12 +812,50 @@ def order_out(session: Session, o: Order) -> s.OrderOut:
             )
             for e in events
         ],
+        attempts=_attempts_out(session, o) if with_attempts else [],
     )
 
 
 # Where the order numbers start. Chosen so the first order of a fresh
 # deployment does not look like the first order ever placed.
 ORDER_CODE_BASE = 104_688
+
+
+def _attempts_out(session: Session, o: Order) -> list[s.DeliveryAttemptOut]:
+    """Every knock at this order's door, oldest first, with the courier named.
+
+    Named rather than numbered: an operator ringing a customer to ask what
+    happened wants to know which of their couriers to ask next, and a
+    ``courier_id`` is not something anybody says out loud.
+    """
+    rows = session.exec(
+        select(DeliveryAttempt)
+        .where(DeliveryAttempt.order_id == o.id)
+        .order_by(col(DeliveryAttempt.happened_at))
+    ).all()
+    if not rows:
+        return []
+    names = {
+        user.id: user.full_name
+        for user in session.exec(
+            select(User).where(col(User.id).in_({row.courier_id for row in rows}))
+        ).all()
+    }
+    return [
+        s.DeliveryAttemptOut(
+            id=row.id,
+            order_id=row.order_id,
+            order_code=o.code,
+            courier_name=names.get(row.courier_id, ""),
+            result=row.result,
+            reason=row.reason,
+            recipient_name=row.recipient_name,
+            photo_url=media_url(row.photo_url) or "",
+            cash_collected=row.cash_collected,
+            happened_at=row.happened_at,
+        )
+        for row in rows
+    ]
 
 
 def next_order_code(session: Session) -> str:
@@ -775,25 +926,3 @@ def stamp_order_event(session: Session, order: Order, note: str = "") -> OrderEv
 
 def utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
-
-
-def offer_out(session: Session, o, *, winner_id: int | None) -> s.OfferOut:
-    from app.models import Seller
-
-    seller = session.get(Seller, o.seller_id)
-    discount = (
-        round((o.old_price - o.price) / o.old_price * 100)
-        if o.old_price and o.old_price > o.price
-        else None
-    )
-    return s.OfferOut(
-        id=o.id,
-        seller=s.SellerOut(id=seller.id, name=seller.name) if seller else
-        s.SellerOut(id=0, name=""),
-        price=o.price,
-        old_price=o.old_price,
-        discount_percent=discount,
-        stock_left=o.stock_left,
-        in_stock=o.stock_left > 0,
-        is_winner=o.id == winner_id,
-    )

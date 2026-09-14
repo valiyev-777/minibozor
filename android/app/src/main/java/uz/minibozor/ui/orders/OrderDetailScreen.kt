@@ -40,6 +40,7 @@ import uz.minibozor.core.design.component.MbStatusPill
 import uz.minibozor.core.design.component.MbTopBar
 import uz.minibozor.core.design.component.MbTotalRow
 import uz.minibozor.core.design.component.SectionHeader
+import uz.minibozor.core.util.Features
 import uz.minibozor.core.util.grouped
 import uz.minibozor.core.util.sum
 import uz.minibozor.core.util.toLocalDateTimeOrNull
@@ -116,11 +117,20 @@ fun OrderDetailScreen(
                             MbLineItem(
                                 title = item.title,
                                 imageUrl = item.imageUrl,
-                                meta = item.variantLabel,
+                                meta = listOfNotNull(
+                                    item.colour.takeIf { it.isNotBlank() }
+                                        ?.let { "${stringResource(R.string.rang)}: $it" },
+                                    item.size.takeIf { it.isNotBlank() }
+                                        ?.let { "${stringResource(R.string.olcham)}: $it" },
+                                ).joinToString("   ").ifBlank { item.variantLabel },
                                 price = item.unitPrice,
                                 quantity = item.quantity,
                                 trailing = {
-                                    if (order.status == "delivered" && !item.reviewed &&
+                                    // "Sharh" on a delivered line, while there
+                                    // is somewhere for it to go. See
+                                    // core/util/Features.kt.
+                                    if (Features.REVIEWS &&
+                                        order.status == "delivered" && !item.reviewed &&
                                         item.productId != null
                                     ) {
                                         MbSecondaryButton(

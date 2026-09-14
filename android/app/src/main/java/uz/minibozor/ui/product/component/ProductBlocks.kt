@@ -24,6 +24,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import uz.minibozor.R
 import uz.minibozor.core.design.MbText
@@ -41,7 +42,7 @@ import uz.minibozor.core.util.grouped
 import uz.minibozor.core.util.ratingText
 import uz.minibozor.core.util.sum
 import uz.minibozor.core.util.toColor
-import uz.minibozor.data.remote.dto.OfferDto
+import uz.minibozor.data.remote.dto.ColourDto
 import uz.minibozor.data.remote.dto.VariantDto
 
 /**
@@ -53,13 +54,27 @@ import uz.minibozor.data.remote.dto.VariantDto
  * photographs sit beside it as the way through to the reviews. The description
  * still exists; it is further down, where a decided buyer goes looking for it.
  */
+/**
+ * Two of these are nullable, and each nullable one means "say nothing" rather
+ * than "say nought".
+ *
+ * `reviewsCount = null` drops the "N sharh" line: the count is only worth
+ * printing when the reviews behind it can be opened, and a page that promises
+ * 136 of them and has none to show is worse than a page that promises
+ * nothing. `onClick = null` drops the tap, for the same reason — a tile that
+ * depresses and goes nowhere reads as a broken app.
+ *
+ * The *rating* is not nullable and stays either way: it is a cached column on
+ * the product, and a page that suddenly has no rating at all reads as a
+ * regression rather than as a feature being off. See `core/util/Features.kt`.
+ */
 @Composable
 fun RatingPanel(
     rating: Double,
-    reviewsCount: Int,
+    reviewsCount: Int?,
     photos: List<String>,
     photosTotal: Int,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -67,7 +82,13 @@ fun RatingPanel(
             .fillMaxWidth()
             .clip(MbTheme.shapes.tile)
             .border(1.dp, MbTheme.colors.border, MbTheme.shapes.tile)
-            .mbClickable(MbTheme.shapes.tile, onClick = onClick)
+            .then(
+                if (onClick != null) {
+                    Modifier.mbClickable(MbTheme.shapes.tile, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -79,58 +100,60 @@ fun RatingPanel(
                 MbText(ratingText(rating), MbTheme.type.title1)
                 MbStars(rating, size = 17.dp)
             }
-            Spacer(Modifier.height(5.dp))
-            // Reviews only. The order count used to sit here beside them, and
-            // the line below now prints what has sold as one half of its own
-            // answer — the same number twice in forty vertical points was one
-            // too many.
-            MbText(
-                pluralStringResource(R.plurals.n_reviews, reviewsCount, reviewsCount),
-                MbTheme.type.caption,
-                MbTheme.colors.textSecondary,
-                maxLines = 1,
-            )
+            if (reviewsCount != null) {
+                Spacer(Modifier.height(5.dp))
+                // Reviews only. The order count used to sit here beside them,
+                // and the line below now prints what has sold as one half of
+                // its own answer — the same number twice in forty vertical
+                // points was one too many.
+                MbText(
+                    pluralStringResource(R.plurals.n_reviews, reviewsCount, reviewsCount),
+                    MbTheme.type.caption,
+                    MbTheme.colors.textSecondary,
+                    maxLines = 1,
+                )
+            }
         }
         if (photos.isNotEmpty()) {
             Spacer(Modifier.width(10.dp))
             MbPhotoStack(photos, photosTotal)
-        } else {
+        } else if (onClick != null) {
+            // The chevron is a promise that there is somewhere to go. With
+            // reviews off there is not, and a panel that offers the arrow and
+            // then does nothing when pressed is the one thing worse than a
+            // panel with no arrow.
             MbIcon("chevron-right", size = 16.dp, tint = MbTheme.colors.icon)
         }
     }
 }
 
-/** Under this many left, the count stops being a fact and becomes a reason. */
-private const val LowStock = 5
-
 /**
- * How many are left and how many have gone, in one line under the rating.
+ * How many have gone, in one line under the price.
  *
- * The same fact the tile in the grid prints, at the same weight and in the same
- * words — a caption with the box beside it, quiet by default and red once the
- * number has something to say. It was a bordered panel for a while, with a
- * meter across it and the two figures set at title size; that is a great deal
- * of page for "six left, three hundred sold", and the meter was drawing a
- * proportion of a denominator nobody had. What it says fits on a line, so it
- * takes a line.
+ * **How many are left is not on this page.** It used to lead the line — "4 dona
+ * qoldi · 4 dona sotilgan" — and a shop telling a customer how much of it is in
+ * the room is answering a question nobody asked with a figure that helps a
+ * competitor more than a buyer. What is left is still enforced, at the only
+ * moment it is a real answer: the stepper in the buy bar stops at the last one
+ * and says the number there. What goes here is the half a customer does read —
+ * how many other people bought it, which is the only fact on the page that is
+ * about them rather than about us.
  *
- * The pill only appears when there is a reason for it. A product that is simply
- * in stock says so by not saying anything.
+ * The pill stays. A shelf with none left has to say so before somebody picks a
+ * size and finds a dead button, and [inStock] is about the cell chosen above,
+ * not about the product as a whole.
  *
- * [stockLeft] and [inStock] are about the colour on show above, not about the
- * product as a whole — the photograph is of one colour, and the count under it
- * has to be the count of the thing being looked at.
+ * Nothing at all when there is nothing to say — a product in stock that nobody
+ * has bought yet gets a line of silence rather than an empty box glyph.
  */
 @Composable
 fun ShelfLine(
-    stockLeft: Int,
     soldCount: Int,
     inStock: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val gone = !inStock || stockLeft <= 0
-    val low = !gone && stockLeft <= LowStock
-    val urgent = gone || low
+    val gone = !inStock
+    if (!gone && soldCount <= 0) return
     Row(
         modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -139,21 +162,9 @@ fun ShelfLine(
         MbIcon(
             "box",
             size = 14.dp,
-            tint = if (urgent) MbTheme.colors.danger else MbTheme.colors.icon,
+            tint = if (gone) MbTheme.colors.danger else MbTheme.colors.icon,
         )
-        // Nothing to count when there are none: the pill on the right is the
-        // whole of what a sold-out shelf has to say, and "0 dona qoldi" beside
-        // it would be the same sentence twice.
-        if (!gone) {
-            MbText(
-                stringResource(R.string.n_dona_qoldi, stockLeft),
-                MbTheme.type.caption,
-                if (low) MbTheme.colors.danger else MbTheme.colors.inkMuted,
-                maxLines = 1,
-            )
-        }
         if (soldCount > 0) {
-            if (!gone) MbText("·", MbTheme.type.caption, MbTheme.colors.hairlineStrong)
             MbText(
                 pluralStringResource(R.plurals.n_sotilgan, soldCount, soldCount.grouped()),
                 MbTheme.type.caption,
@@ -161,10 +172,10 @@ fun ShelfLine(
                 maxLines = 1,
             )
         }
-        if (urgent) {
+        if (gone) {
             Spacer(Modifier.weight(1f))
             MbStatusPill(
-                stringResource(if (gone) R.string.tugadi else R.string.kam_qoldi),
+                stringResource(R.string.tugadi),
                 background = MbTheme.colors.dangerBg,
                 contentColor = MbTheme.colors.danger,
             )
@@ -215,19 +226,30 @@ private fun PickerLabel(
  * A hex circle asks the customer to imagine what "#0E0F12" looks like on a shoe;
  * the photograph shows them. Where the shop supplied no photo for a colour the
  * tile falls back to the swatch, so a half-photographed catalogue still picks.
+ *
+ * **A colour is sold out *in the size being asked about*.** The tile used to go
+ * grey only when every size of that colour had gone, so a customer who wanted a
+ * 41 was shown five bright photographs of which one actually had a 41 — they
+ * found out by tapping each in turn and watching the size row underneath.
+ * [soldOut] is the set the caller works out from the chosen size, and changing
+ * the size changes the set: the photographs light back up as the question
+ * changes. Both halves stay pressable ([MbSizeChip] does the same), because
+ * colour and size are one question asked from two ends.
  */
 @Composable
 fun ColorPicker(
-    colors: List<VariantDto>,
-    selectedId: Int?,
-    onSelect: (Int) -> Unit,
+    colors: List<ColourDto>,
+    selected: String?,
+    onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Colour names with nothing left in the size currently chosen. */
+    soldOut: Set<String> = emptySet(),
     /** Used for the fallback when a lone colour has no photo of its own. */
     productImages: List<String> = emptyList(),
 ) {
-    val selected = colors.firstOrNull { it.id == selectedId } ?: colors.firstOrNull()
+    val chosen = colors.firstOrNull { it.colour == selected } ?: colors.firstOrNull()
     Column(modifier.fillMaxWidth()) {
-        PickerLabel(stringResource(R.string.rang), selected?.label.orEmpty())
+        PickerLabel(stringResource(R.string.rang), chosen?.colour.orEmpty())
         Spacer(Modifier.height(12.dp))
         Row(
             Modifier
@@ -236,7 +258,8 @@ fun ColorPicker(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             colors.forEachIndexed { index, color ->
-                val isSelected = color.id == selected?.id
+                val isSelected = color.colour == chosen?.colour
+                val gone = color.colour in soldOut || !color.inStock
                 // One colour and no photo of its own: the product's own first
                 // photograph is a picture of it in that colour.
                 val photo = color.imageUrl
@@ -254,13 +277,15 @@ fun ColorPicker(
                             },
                             shape = MbTheme.shapes.tile,
                         )
-                        .mbClickable(MbTheme.shapes.tile, enabled = color.inStock) {
-                            onSelect(color.id)
-                        }
+                        // Pressable whether or not this colour has the size in
+                        // hand. Tapping a struck-out one is how a customer asks
+                        // "what sizes does the blue come in?", and refusing the
+                        // tap leaves them no way to ask it.
+                        .mbClickable(MbTheme.shapes.tile) { onSelect(color.colour) }
                         // Room for the ring to read as a ring rather than as a
                         // dark edge on the photograph.
                         .padding(if (isSelected) 4.dp else 3.dp)
-                        .alpha(if (color.inStock) 1f else 0.4f),
+                        .alpha(if (gone) 0.4f else 1f),
                 ) {
                     if (photo != null) {
                         MbProductImage(
@@ -273,7 +298,26 @@ fun ColorPicker(
                             Modifier
                                 .fillMaxSize()
                                 .clip(MbTheme.shapes.tileSmall)
-                                .background(color.value.toColor(MbTheme.colors.fill))
+                                .background(color.hex.toColor(MbTheme.colors.fill))
+                        )
+                    }
+                    // In a word. A sold-out colour was a dimmed photograph and
+                    // nothing else: it reads as a photograph that came out
+                    // badly, and the customer taps it again. The sizes say so
+                    // with a line through them; a photograph cannot be struck
+                    // through, so it is said.
+                    if (gone) {
+                        MbText(
+                            stringResource(R.string.tugagan),
+                            MbTheme.type.caption,
+                            MbTheme.colors.surface,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .clip(MbTheme.shapes.tileSmall)
+                                .background(MbTheme.colors.ink.copy(alpha = 0.66f))
+                                .padding(vertical = 2.dp),
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }
@@ -303,8 +347,14 @@ fun SizePicker(
     val selected = sizes.firstOrNull { it.id == selectedId }
     Column(modifier.fillMaxWidth()) {
         PickerLabel(
+            // The size, not the cell's whole label. `label` is "Qora · 41",
+            // composed for a place where the colour is worth repeating — a
+            // basket line, a pick list. Here the colour is either the strip
+            // above or the only one there is, so printing it in the heading and
+            // again on every chip made a row of "Qora · 41  Qora · 42  Qora ·
+            // 43" that says one useful digit per chip.
             name = stringResource(R.string.olcham),
-            value = selected?.label.orEmpty(),
+            value = selected?.size.orEmpty(),
             action = onOpenChart?.let { stringResource(R.string.olchamlar_jadvali) },
             onAction = onOpenChart,
         )
@@ -317,145 +367,28 @@ fun SizePicker(
         ) {
             sizes.forEach { variant ->
                 MbSizeChip(
-                    label = variant.label,
+                    label = variant.size,
                     selected = variant.id == selected?.id,
-                    enabled = variant.inStock,
+                    // Struck through, not switched off. A size this colour has
+                    // run out of is still the size the customer came for, and
+                    // pressing it re-reads the colours above against it.
+                    soldOut = !variant.inStock,
                     onClick = { onSelect(variant.id) },
                 )
             }
         }
-        // How many of the size in hand, under the row rather than on the chips.
-        // A 38-point chip holds two digits and nothing else, and a count on
-        // every one of eight of them is a wall of numbers to read before
-        // choosing — this answers about the one actually chosen, which is the
-        // one the question is being asked about. A size with none left is
-        // struck through in the row above and says nothing here.
-        val left = selected?.stockLeft
-        if (left != null && left > 0) {
-            Spacer(Modifier.height(9.dp))
-            MbText(
-                stringResource(R.string.n_dona_qoldi, left),
-                MbTheme.type.caption,
-                if (left <= LowStock) MbTheme.colors.danger else MbTheme.colors.textTertiary,
-                maxLines = 1,
-            )
-        }
+        // No count under the row. It used to answer about the size in hand,
+        // which was right when the page had no other figure — but the line
+        // under the rating now answers about the same cell and the buy bar
+        // repeats it a hundred pixels below this, so the screen said "2 dona
+        // qoldi" three times and a reader has to check whether they agree.
     }
 }
 
-/**
- * Every seller offering this product, cheapest first.
- *
- * The one price at the top of the page belongs to one seller, and on a
- * marketplace that is a fact the page has been keeping to itself: the same
- * thing sits on the same card at four prices and the customer saw one of them
- * with no way to know there were others, or who any of them were. This is the
- * list behind that number — a name, a price and what is left of it per row,
- * with the row the card is quoting marked so the two numbers are seen to be the
- * same number rather than a contradiction.
- *
- * A sold-out seller stays in the list, greyed and struck: a cheaper price that
- * has run out is the reason the price above is the one it is, and hiding it
- * turns an explanation into a mystery. A seller who has withdrawn is not here
- * at all — the server does not send them.
- *
- * Read-only. Choosing a seller is a thing the API has no way to say yet, so the
- * rows do not pretend to be buttons.
- */
-@Composable
-fun OfferRow(offer: OfferDto, modifier: Modifier = Modifier) {
-    val gone = !offer.inStock || offer.stockLeft <= 0
-    Row(
-        modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                MbText(
-                    offer.seller.name,
-                    MbTheme.type.body.copy(fontWeight = FontWeight.Bold),
-                    if (gone) MbTheme.colors.textTertiary else MbTheme.colors.ink,
-                    maxLines = 1,
-                )
-                // Which of these rows the page above is quoting. Only ever one,
-                // and only while it still has something to sell.
-                if (offer.isWinner && !gone) {
-                    MbStatusPill(
-                        stringResource(R.string.kartadagi_narx),
-                        MbTheme.colors.successBg,
-                        MbTheme.colors.success,
-                    )
-                }
-            }
-            Spacer(Modifier.height(3.dp))
-            MbText(
-                if (gone) {
-                    stringResource(R.string.tugagan)
-                } else {
-                    stringResource(R.string.n_dona_qoldi, offer.stockLeft)
-                },
-                MbTheme.type.caption,
-                when {
-                    gone -> MbTheme.colors.textTertiary
-                    offer.stockLeft <= LowStock -> MbTheme.colors.danger
-                    else -> MbTheme.colors.textSecondary
-                },
-                maxLines = 1,
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            MbText(
-                offer.price.sum(),
-                MbTheme.type.priceSmall,
-                if (gone) MbTheme.colors.textTertiary else MbTheme.colors.ink,
-                maxLines = 1,
-            )
-            val was = offer.oldPrice
-            if (was != null && was > offer.price) {
-                Spacer(Modifier.height(3.dp))
-                MbText(
-                    was.grouped(),
-                    MbTheme.type.strikePrice.copy(textDecoration = TextDecoration.LineThrough),
-                    MbTheme.colors.textQuaternary,
-                    maxLines = 1,
-                )
-            }
-        }
-    }
-}
-
-/**
- * Who is selling the thing at the price above, on the panel itself.
- *
- * On a marketplace the seller is part of what is being bought, and until now
- * the page carried the name in a delivery row folded behind "Batafsil" three
- * sections down. The count beside it is the point of the section further down:
- * "and three others are selling it" is a reason to keep scrolling, and one
- * seller says nothing at all.
- */
-@Composable
-fun SellerLine(name: String, offersCount: Int, modifier: Modifier = Modifier) {
-    Row(
-        modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        MbIcon("basket", size = 14.dp, tint = MbTheme.colors.icon)
-        MbText(name, MbTheme.type.label, MbTheme.colors.inkMuted, maxLines = 1)
-        if (offersCount > 1) {
-            MbText("·", MbTheme.type.caption, MbTheme.colors.hairlineStrong)
-            MbText(
-                pluralStringResource(R.plurals.n_sotuvchi, offersCount, offersCount),
-                MbTheme.type.caption,
-                MbTheme.colors.textSecondary,
-                maxLines = 1,
-            )
-        }
-    }
-}
+// `OfferRow` and `SellerLine` stood here, to the end of the file.
+//
+// There is one company selling now, so a product has one price and nobody to
+// name beside it. A row saying who the seller is, in a shop that *is* the
+// seller, asks the customer a question they cannot act on — and the count that
+// made it worth reading ("and three others are selling it") counted offers,
+// which is the thing that went.

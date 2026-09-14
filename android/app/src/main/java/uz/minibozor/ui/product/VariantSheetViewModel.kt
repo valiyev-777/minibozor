@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.minibozor.core.util.Outcome
+import uz.minibozor.data.remote.dto.ColourDto
 import uz.minibozor.data.remote.dto.ProductDto
 import uz.minibozor.data.remote.dto.VariantDto
 import uz.minibozor.data.repository.CartRepository
@@ -17,46 +18,75 @@ import javax.inject.Inject
 data class VariantSheetState(
     val loading: Boolean = true,
     val product: ProductDto? = null,
-    val sizeId: Int? = null,
-    val colorId: Int? = null,
+    /** The cell chosen — one colour, one size, and the thing added to a cart. */
+    val variantId: Int? = null,
+    /** The colour chosen, by name: a colour has no id and needs none. */
+    val colour: String? = null,
     val quantity: Int = 1,
     /** Set once the line is in the cart; the bottom bar becomes a stepper. */
     val cartItemId: Int? = null,
     val busy: Boolean = false,
     val error: String? = null,
 ) {
-    val colors: List<VariantDto> get() = product?.variants.orEmpty().filter { it.kind == "color" }
+    /**
+     * Only the colours worth asking about.
+     *
+     * A card with none has one blank colour, and a card with one has nothing to
+     * choose — a strip holding a single swatch is a question with one answer,
+     * and the summary at the top of the sheet is already showing the thing.
+     */
+    val colours: List<ColourDto>
+        get() = product?.colours.orEmpty()
+            .filter { it.colour.isNotBlank() }
+            .takeIf { it.size > 1 }
+            .orEmpty()
 
     /**
-     * The sizes of the colour chosen, not of the product.
+     * The cells of the colour chosen, not of the product.
      *
-     * A size belongs to a colour and carries that pair's own count, so a shirt
-     * in two colours has two sets of size rows. Listed together they put "L" in
-     * the sheet twice and let the last black L be added while a white one was
-     * still on the shelf.
+     * A cell is a colour and a size together and carries that pair's own count,
+     * so a shirt in two colours has two sets of size rows. Listed together they
+     * put "L" in the sheet twice and let the last black L be added while a
+     * white one was still on the shelf.
      */
     val sizes: List<VariantDto>
-        get() = product?.variants.orEmpty().filter {
-            it.kind == "size" && (it.parentId == null || it.parentId == colorId)
-        }
+        get() = product?.variants.orEmpty()
+            .filter { (colour == null || it.colour == colour) && it.size.isNotBlank() }
+            .takeIf { it.size > 1 }
+            .orEmpty()
 
-    val selectedColor: VariantDto? get() = colors.firstOrNull { it.id == colorId }
-    val selectedSize: VariantDto? get() = sizes.firstOrNull { it.id == sizeId }
+    val selected: VariantDto?
+        get() = product?.variants.orEmpty().firstOrNull { it.id == variantId }
 
     /**
-     * How many of the thing actually chosen are left: the colour's share of the
-     * shelf, or the whole shelf when the colours are not counted apart. The
-     * sheet is adding one colour, so that is the shelf its stepper stops at.
+     * How many of the thing actually chosen are left.
+     *
+     * The cell's own count where one is chosen — it is already "what can be
+     * bought", the shelf less what is promised — and the colour's cells added
+     * up before that. The sheet is adding one cell, so that is the shelf its
+     * stepper stops at.
      */
     val shelfLeft: Int
-        get() = selectedSize?.stockLeft
-            ?: selectedColor?.stockLeft
+        get() = selected?.stockLeft
+            ?: product?.variants.orEmpty()
+                .filter { colour == null || it.colour == colour }
+                .sumOf { it.stockLeft }
+                .takeIf { it > 0 }
             ?: product?.stockLeft
             ?: 1
 
-    /** A size has to be chosen when the product has any in stock. */
+    /**
+     * A cell has to be chosen, full stop.
+     *
+     * It used to read "unless none of the sizes is in stock", which was a way
+     * of letting a product with nothing to choose through. Now that a lone
+     * size hides its own picker, that clause would also let a card with two
+     * colours of one size through with nothing selected — and the add would go
+     * up with no variant on it.
+     */
     val ready: Boolean
-        get() = product != null && (sizes.none { it.inStock } || sizeId != null)
+        get() = product != null &&
+            (product.variants.isEmpty() || variantId != null)
 }
 
 /**
@@ -80,13 +110,23 @@ class VariantSheetViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = catalog.product(productId)) {
                 is Outcome.Success -> _state.update {
-                    val variants = result.data.variants
+                    val product = result.data
+                    val colour = product.colours.firstOrNull { c -> c.inStock }
+                        ?: product.colours.firstOrNull()
+                    // The first cell of that colour that can be bought.
+                    // Preselected rather than left blank: where there is only
+                    // one size the picker is hidden, so nothing would ever set
+                    // it — and where there are several the customer changes it
+                    // in one tap, which beats a sheet that opens refusing to
+                    // add anything.
+                    val cells = product.variants
+                        .filter { v -> colour == null || v.colour == colour.colour }
                     it.copy(
                         loading = false,
-                        product = result.data,
-                        // Preselect a colour — there is always one right answer
-                        // — but never a size, which is the customer's call.
-                        colorId = variants.firstOrNull { v -> v.kind == "color" && v.inStock }?.id,
+                        product = product,
+                        colour = colour?.colour,
+                        variantId = (cells.firstOrNull { v -> v.inStock }
+                            ?: cells.firstOrNull())?.id,
                     )
                 }
                 is Outcome.Failure -> _state.update {
@@ -96,25 +136,27 @@ class VariantSheetViewModel @Inject constructor(
         }
     }
 
-    fun selectSize(id: Int) = _state.update { it.copy(sizeId = id, error = null) }
+    fun selectSize(id: Int) = _state.update { it.copy(variantId = id, error = null) }
 
     /**
      * A colour, and whatever the size chosen before it now means.
      *
-     * Sizes belong to colours, so a size picked under the old colour is a cell
-     * of the grid this sheet is no longer showing. The same label is kept where
-     * the new colour has it in stock; otherwise the sheet goes back to asking,
-     * which is the honest state — the customer has not chosen a size of *this*
-     * colour yet.
+     * A cell is a colour *and* a size, so the one picked under the old colour
+     * buys something this sheet is no longer showing. The size itself survives
+     * the change **even where the new colour has sold out of it** — struck
+     * through and still chosen, which is what lets the row of photographs above
+     * answer "which colours have a 41". Keeping it only while it was in stock
+     * moved the customer off the size they came for without saying so.
      */
-    fun selectColor(id: Int) = _state.update { s ->
-        val ofColor = s.product?.variants.orEmpty()
-            .filter { it.kind == "size" && it.parentId == id }
-        if (ofColor.isEmpty()) return@update s.copy(colorId = id)
-        val kept = s.product?.variants?.firstOrNull { it.id == s.sizeId }?.label
+    fun selectColour(colour: String) = _state.update { s ->
+        val cells = s.product?.variants.orEmpty().filter { it.colour == colour }
+        if (cells.isEmpty()) return@update s.copy(colour = colour)
+        val kept = s.selected?.size
         s.copy(
-            colorId = id,
-            sizeId = ofColor.firstOrNull { it.label == kept && it.inStock }?.id,
+            colour = colour,
+            variantId = (cells.firstOrNull { it.size == kept }
+                ?: cells.firstOrNull { it.inStock }
+                ?: cells.first()).id,
         )
     }
 
@@ -126,8 +168,7 @@ class VariantSheetViewModel @Inject constructor(
         viewModelScope.launch {
             val result = cart.add(
                 productId = product.id,
-                variantId = current.sizeId,
-                colorVariantId = current.colorId,
+                variantId = current.variantId,
                 quantity = current.quantity,
             )
             // The line we just added, matched on what we sent rather than on
@@ -135,9 +176,7 @@ class VariantSheetViewModel @Inject constructor(
             // with the same product id, and the stepper would have driven that
             // one instead of the large that was just chosen.
             val added = (result as? Outcome.Success)?.data?.items?.lastOrNull { item ->
-                item.productId == product.id &&
-                    item.variantId == current.sizeId &&
-                    item.colorVariantId == current.colorId
+                item.productId == product.id && item.variantId == current.variantId
             }
             _state.update {
                 when (result) {

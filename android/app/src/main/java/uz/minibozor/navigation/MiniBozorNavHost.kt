@@ -43,7 +43,6 @@ import uz.minibozor.ui.checkout.CheckoutViewModel
 import uz.minibozor.ui.checkout.ConfirmScreen
 import uz.minibozor.ui.checkout.DeliveryTimeScreen
 import uz.minibozor.ui.checkout.OrderPlacedScreen
-import uz.minibozor.ui.checkout.PaymentMethodScreen
 import uz.minibozor.ui.home.HomeScreen
 import uz.minibozor.ui.onboarding.OnboardingScreen
 import uz.minibozor.ui.orders.OrderDetailScreen
@@ -197,17 +196,8 @@ fun MiniBozorNavHost(
             MainScaffold(currentRoute, ::switchTab) {
                 HomeScreen(
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
-                    // A leaf category has nothing to drill into, so go straight
-                    // to its listing rather than an empty subcategory page.
-                    onOpenCategory = { category ->
-                        if (category.hasChildren) {
-                            navController.navigate(Routes.subcategory(category.slug))
-                        } else {
-                            navController.navigate(
-                                Routes.listing(category = category.slug, title = category.name)
-                            )
-                        }
-                    },
+                    // A banner with no category behind it opens the whole
+                    // shop, which is what its copy promises.
                     onOpenBanner = { banner ->
                         navController.navigate(
                             Routes.listing(category = banner.targetValue, title = banner.title)
@@ -371,8 +361,7 @@ fun MiniBozorNavHost(
                     onBack = { navController.popBackStack() },
                     onEditAddress = { navController.navigate(Routes.ADDRESS_PICKER) },
                     onEditTime = { navController.navigate(Routes.DELIVERY_TIME) },
-                    onEditPayment = { navController.navigate(Routes.PAYMENT_METHOD) },
-                    onAddCard = { navController.navigate("add_card") },
+                    onAddCard = { navController.navigate(Routes.ADD_CARD) },
                     onOpenCart = { navController.popBackStack() },
                     onConfirm = { navController.navigate(Routes.CONFIRM) },
                 )
@@ -390,15 +379,6 @@ fun MiniBozorNavHost(
                 DeliveryTimeScreen(
                     viewModel = entry.checkoutViewModel(navController),
                     onBack = { navController.popBackStack() },
-                    onDone = { navController.popBackStack() },
-                )
-            }
-
-            composable(Routes.PAYMENT_METHOD) { entry ->
-                PaymentMethodScreen(
-                    viewModel = entry.checkoutViewModel(navController),
-                    onBack = { navController.popBackStack() },
-                    onAddCard = { navController.navigate("add_card") },
                     onDone = { navController.popBackStack() },
                 )
             }
@@ -489,13 +469,17 @@ fun MiniBozorNavHost(
         composable(Routes.CARDS) {
             CardsScreen(
                 onBack = { navController.popBackStack() },
-                onAddCard = { navController.navigate("add_card") },
+                onAddCard = { navController.navigate(Routes.ADD_CARD) },
             )
         }
 
-        composable("add_card") {
+        composable(Routes.ADD_CARD) {
             AddCardScreen(
                 onBack = { navController.popBackStack() },
+                // Back to whichever screen asked for a card — the list, or
+                // checkout. The list re-reads on resume and checkout's own
+                // `reloadCards` runs on the same signal, so the new card is
+                // selected by the time the customer is looking at it again.
                 onSaved = { navController.popBackStack() },
             )
         }

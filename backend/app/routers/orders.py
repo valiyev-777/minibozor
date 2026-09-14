@@ -3,29 +3,30 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import i18n, inventory, settlement
-from app import offers as of
+from app import i18n, inventory
+from app import payments
+from app import products as pr
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
 from app.models import (
     Address,
     CancelReason,
+    CardStatus,
     CartItem,
     DeliverySlot,
     Notification,
     NotificationKind,
-    Offer,
     Order,
     OrderItem,
     OrderStatus,
     PaymentCard,
     PaymentMethod,
     PickupPoint,
-    Product,
+    ProductImage,
+    ProductVariant,
     ReturnReason,
     ReturnRequest,
-    Seller,
 )
 
 router = APIRouter(tags=["orders"])
@@ -50,7 +51,6 @@ def checkout_preview(
     address = _resolve_address(session, user.id, payload.address_id)
     pickup = session.get(PickupPoint, payload.pickup_point_id) if payload.pickup_point_id else None
     slot = session.get(DeliverySlot, payload.slot_id) if payload.slot_id else None
-    card = _resolve_card(session, user.id, payload.payment_card_id, payload.payment_method)
 
     # A slot's price is a surcharge — the picker shows it as "+9 000" — so it
     # adds to the standard fee rather than replacing it. Replacing it made every
@@ -68,8 +68,16 @@ def checkout_preview(
         address=sv.address_out(address) if address else None,
         pickup_point=sv.pickup_out(pickup) if pickup else None,
         slot=sv.slot_out(slot) if slot else None,
-        card=sv.card_out(card) if card else None,
         totals=totals,
+        # Read here so the confirm screen can print "•• 9012" before anybody
+        # presses anything. Resolved rather than trusted: a card id from a
+        # client is a card id somebody else's client could have sent.
+        card=(
+            sv.card_out(_card(session, user.id, payload.payment_card_id))
+            if payload.payment_method is PaymentMethod.CARD
+            and payload.payment_card_id is not None
+            else None
+        ),
     )
 
 
@@ -88,7 +96,6 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         )
 
     slot = session.get(DeliverySlot, payload.slot_id) if payload.slot_id else None
-    card = _resolve_card(session, user.id, payload.payment_card_id, payload.payment_method)
 
     if preview.address:
         address_line, address_meta = preview.address.line, preview.address.meta
@@ -96,6 +103,37 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         address_line, address_meta = preview.pickup_point.name, preview.pickup_point.address
     else:
         address_line = address_meta = ""
+
+    # The money, before the order.
+    #
+    # ``paid`` used to be `payment_method == CARD` — a card order was written
+    # down as paid at the moment it was placed and nothing was ever charged.
+    # The whole shop believed it: ``courier._cash_due`` asks for nothing at
+    # the door on a card order "because it is already paid", so a shopper
+    # could tap Karta and take delivery of goods nobody was ever paid for.
+    #
+    # So the charge happens here and the order is written only if it goes
+    # through. That ordering is the customer's too — they are paying for a
+    # basket, not settling an invoice for something already promised — and it
+    # means a refusal leaves nothing behind: no order to cancel, no counts to
+    # put back, no row for the owner to explain.
+    #
+    # 402 rather than 400: the request is right and the card is real, and what
+    # went wrong is the payment. The reason is the processor's, in the
+    # customer's language, because "another card", "more money" and "this card
+    # has expired" are three different things to go and do.
+    charge = payments.Charge(ok=True)
+    if payload.payment_method is PaymentMethod.CARD:
+        if payload.payment_card_id is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, i18n.label("card_required")
+            )
+        card = _card(session, user.id, payload.payment_card_id)
+        charge = payments.charge(card, preview.totals.total)
+        if not charge.ok:
+            raise HTTPException(
+                status.HTTP_402_PAYMENT_REQUIRED, i18n.label(charge.reason)
+            )
 
     order = Order(
         code=sv.next_order_code(session),
@@ -110,8 +148,10 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         delivery_start=slot.start_time if slot else None,
         delivery_end=slot.end_time if slot else None,
         payment_method=payload.payment_method,
-        payment_card_id=card.id if card else None,
-        paid=payload.payment_method == PaymentMethod.CARD,
+        # Paid because it was, not because of which button was pressed. Cash
+        # is settled at the door by the courier, and stays false until then.
+        paid=charge.ok and payload.payment_method is PaymentMethod.CARD,
+        payment_reference=charge.reference,
         recipient_name=payload.recipient_name or user.full_name,
         recipient_phone=payload.recipient_phone or user.phone,
         subtotal=preview.totals.subtotal,
@@ -136,51 +176,46 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         # ``variant_label`` already reads well — but so that a cancellation
         # later knows which counts to put back.
         cart_item = session.get(CartItem, item.id)
-        offer = (
-            session.get(Offer, cart_item.offer_id)
-            if cart_item and cart_item.offer_id
+        # What the shop paid for this cell's newest lot, frozen beside what it
+        # is charging. Snapshotted for the same reason the price is: the next
+        # market run moves the cost and this order must not move with it.
+        # Nought when nothing was ever booked in with a price — which is every
+        # order placed before the column existed — and nought means unknown,
+        # so the reports count the line's units as uncosted rather than
+        # claiming the whole price as margin.
+        bought = (
+            session.get(ProductVariant, cart_item.variant_id)
+            if cart_item and cart_item.variant_id
             else None
         )
         order_item = OrderItem(
             order_id=order.id,
             product_id=item.product_id,
             title=item.title,
-            image_url=_raw_image(session, item.product_id),
-            variant_id=cart_item.variant_id if cart_item else None,
-            color_variant_id=cart_item.color_variant_id if cart_item else None,
-            # Who is owed for this line, snapshotted with everything else about
-            # it. The offer may be withdrawn or re-priced tomorrow; who sold it
-            # today does not change with it.
-            seller_id=offer.seller_id if offer else None,
-            offer_id=offer.id if offer else None,
-            commission_percent=_commission(session, offer),
-            # The second fee, captured for the same reason as the first: a
-            # tariff is renegotiated, and a payout worked out later against
-            # today's bands would restate what a seller was owed for a sale
-            # they made last year. See ``app.settlement``.
-            fulfilment_fee=settlement.fulfilment_fee(
-                session, session.get(Product, item.product_id)
+            # The colour's photograph, snapshotted like everything else on the
+            # line: a customer opening this order in six months should see the
+            # thing they bought, not whatever the card's cover is by then.
+            image_url=_colour_or_cover(
+                session,
+                cart_item.variant_id if cart_item else None,
+                item.product_id,
             ),
+            variant_id=cart_item.variant_id if cart_item else None,
+            colour=item.colour,
+            size=item.size,
             variant_label=item.variant_label,
             unit_price=item.unit_price,
+            unit_cost=bought.last_cost if bought else 0,
             quantity=item.quantity,
         )
         session.add(order_item)
-        # Paid, so it is a sale: the goods leave the shelf and the ledger says
-        # why. An unpaid order — cash to the courier — has not been sold yet,
-        # so nothing leaves; the goods are held for it instead, which
-        # ``app.stock.reserved`` reads off the order itself. Selling on
-        # promise-of-cash is how an undelivered order used to consume stock
-        # that a refusal at the door then never gave back.
+        # Nothing moves in the room. Paying for something does not fetch it
+        # off a shelf — a courier does, at a door — so the goods are held for
+        # this order and stand where they stand until somebody picks them.
+        # ``app.stock.reserved`` reads the hold off the order itself.
         if order_item.product_id is not None:
             touched.add(order_item.product_id)
-        if order.paid:
-            inventory.take(session, order_item)
-        else:
-            product = session.get(Product, order_item.product_id)
-            if product is not None:
-                product.sold_count += order_item.quantity
-                session.add(product)
+        inventory.take(session, order_item)
 
     sv.seed_order_events(session, order)
 
@@ -205,7 +240,7 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
     )
     session.commit()
     for product_id in touched:
-        of.refresh(session, product_id)
+        pr.refresh(session, product_id)
     if touched:
         session.commit()
     session.refresh(order)
@@ -307,13 +342,21 @@ def cancel_order(
         actor=user,
         action="order.cancel",
         note=order.cancel_reason,
-        # An unpaid order never took the goods off the shelf — they were held
-        # for it — so there is nothing there to put back.
-        shelf=order.paid,
     )
     order.status = OrderStatus.CANCELLED
     order.updated_at = sv.utcnow()
     session.add(order)
+    # The same stamp the operator's cancel writes.
+    #
+    # It was missing here, and the two cancel paths therefore left different
+    # evidence: an operator cancelling wrote a `cancelled` event and a customer
+    # pressing the button in the app wrote none at all. So the timeline the app
+    # draws stopped at "placed" for the customer's own cancellation, and
+    # anything counting cancellations off the events — a report of how many
+    # sales were called off and when — quietly saw only half of them.
+    # ``orders.updated_at`` is not the answer: it is the last change of any
+    # kind, so it moves again the next time anything touches the row.
+    sv.stamp_order_event(session, order, note=order.cancel_reason or "")
     session.add(
         Notification(
             user_id=user.id,
@@ -405,6 +448,22 @@ def _owned_order(session: SessionDep, user_id: int, order_id: int) -> Order:
     return order
 
 
+def _card(session: SessionDep, user_id: int, card_id: int | None) -> PaymentCard:
+    """This customer's card, or nothing that can be charged.
+
+    404 on somebody else's, as in ``routers.cards``: a caller who cannot use a
+    card should not be able to learn that it exists. An expired one is a 409 —
+    it is theirs, it is simply not usable, and the app should send them to the
+    form rather than telling them to try again.
+    """
+    card = session.get(PaymentCard, card_id) if card_id is not None else None
+    if card is None or card.user_id != user_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("card_not_found"))
+    if card.status is not CardStatus.ACTIVE:
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("card_expired"))
+    return card
+
+
 def _resolve_address(session: SessionDep, user_id: int, address_id: int | None) -> Address | None:
     if address_id is not None:
         address = session.get(Address, address_id)
@@ -418,33 +477,32 @@ def _resolve_address(session: SessionDep, user_id: int, address_id: int | None) 
     ).first()
 
 
-def _resolve_card(
-    session: SessionDep, user_id: int, card_id: int | None, method: PaymentMethod
-) -> PaymentCard | None:
-    if method == PaymentMethod.CASH:
-        return None
-    if card_id is not None:
-        card = session.get(PaymentCard, card_id)
-        if card is None or card.user_id != user_id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("card_not_found"))
-        return card
-    return session.exec(
-        select(PaymentCard)
-        .where(PaymentCard.user_id == user_id)
-        .order_by(col(PaymentCard.is_default).desc())
-    ).first()
+def _colour_or_cover(
+    session: SessionDep, variant_id: int | None, product_id: int | None
+) -> str:
+    """The photograph of the colour bought, and no other.
 
+    Where the line has a colour this answers that colour's picture or nothing.
+    It used to fall back to the card's cover, which is a *different* colour's
+    photograph — so an order for a black shirt could be remembered, for ever,
+    as a picture of the white one. That is the surprise nobody can argue with
+    six months later, and an empty tile is the honest version of it.
 
-def _commission(session: SessionDep, offer: Offer | None) -> int:
-    """The seller's rate as it stands right now, to be kept with the line.
-
-    Nought when there is no seller to owe — a line with no offer behind it is
-    not somebody's sale.
+    Relative paths on both sides, because this is a snapshot and the media
+    host is allowed to move.
     """
-    if offer is None:
-        return 0
-    seller = session.get(Seller, offer.seller_id)
-    return seller.commission_percent if seller else 0
+    variant = session.get(ProductVariant, variant_id) if variant_id else None
+    if variant is not None and variant.colour:
+        row = session.exec(
+            select(ProductImage)
+            .where(
+                ProductImage.product_id == variant.product_id,
+                ProductImage.colour == variant.colour,
+            )
+            .order_by(col(ProductImage.sort), col(ProductImage.id))
+        ).first()
+        return row.url if row is not None else ""
+    return _raw_image(session, product_id)
 
 
 def _raw_image(session: SessionDep, product_id: int | None) -> str:

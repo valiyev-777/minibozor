@@ -34,23 +34,8 @@ struct OrderRepository {
         await run { try await api.get("delivery/pickup-points") }
     }
 
-    // Cards
-
-    func cards() async -> Outcome<[CardDTO]> {
-        await run { try await api.get("payment-cards") }
-    }
-
-    func addCard(_ body: CardRequest) async -> Outcome<CardDTO> {
-        await run { try await api.post("payment-cards", body: body) }
-    }
-
-    func makeCardDefault(id: Int) async -> Outcome<CardDTO> {
-        await run { try await api.post("payment-cards/\(id)/default") }
-    }
-
-    func deleteCard(id: Int) async -> Outcome<Void> {
-        await run { let _: MessageDTO = try await api.delete("payment-cards/\(id)") }
-    }
+    // Cards went with the marketplace: `payment-cards` no longer exists on the
+    // API, so neither do the four calls that were here.
 
     // Checkout and orders
 

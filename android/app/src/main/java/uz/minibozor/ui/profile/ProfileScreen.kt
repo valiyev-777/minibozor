@@ -39,6 +39,7 @@ import uz.minibozor.core.design.component.MbListRow
 import uz.minibozor.core.design.component.MbScreen
 import uz.minibozor.core.design.component.MbTabBarSpacer
 import uz.minibozor.core.design.icon.MbIcon
+import uz.minibozor.core.util.Features
 import uz.minibozor.core.util.formatPhone
 
 private data class QuickAction(val glyph: String, val label: String, val route: String)
@@ -56,14 +57,19 @@ fun ProfileScreen(
 
     LaunchedEffect(state.signedOut) { if (state.signedOut) onSignedOut() }
 
-    val quickActions = listOf(
+    // "Sharhlarim" only while there are reviews to have. See
+    // core/util/Features.kt — the screen behind it stays, the row does not.
+    val quickActions = listOfNotNull(
         QuickAction("box", stringResource(R.string.buyurtmalar), "orders"),
         QuickAction("heart", stringResource(R.string.sevimlilar), "favorites"),
-        QuickAction("star", stringResource(R.string.sharhlarim), "my_reviews"),
+        QuickAction("star", stringResource(R.string.sharhlarim), "my_reviews")
+            .takeIf { Features.REVIEWS },
         QuickAction("ret", stringResource(R.string.qaytarish), "returns"),
     )
 
-    MbScreen { padding ->
+    // The tab's header is a band of surface, so that is what goes behind the
+    // clock rather than a step of grey canvas. See [MbScreen.statusBand].
+    MbScreen(statusBand = MbTheme.colors.surface) { padding ->
       Column(Modifier.fillMaxSize().padding(padding)) {
         // In the content, not the scaffold's top bar: that slot is laid out
         // above the window insets, so the name ended up under the clock.
@@ -136,6 +142,13 @@ fun ProfileScreen(
             item {
                 MbCard(padding = 6.dp) {
                     val rows = listOf(
+                        // The cards, with something behind the row again.
+                        //
+                        // It stood here for a while with `cards_count` answering
+                        // nought and nowhere to go — a row that depresses and
+                        // does nothing, which reads as a broken app. What it
+                        // leads to holds no card number: four digits, a name and
+                        // an expiry, and a token the server charges.
                         Triple("card", stringResource(R.string.tolov_kartalari), pluralStringResource(
             R.plurals.n_items,
             overview?.cardsCount ?: 0,
@@ -146,11 +159,23 @@ fun ProfileScreen(
             overview?.addressesCount ?: 0,
             overview?.addressesCount ?: 0,
         )) to "addresses",
-                        Triple("star", stringResource(R.string.sharhlarim), pluralStringResource(
-            R.plurals.n_items,
-            overview?.reviewsCount ?: 0,
-            overview?.reviewsCount ?: 0,
-        )) to "my_reviews",
+                        *(
+                            if (Features.REVIEWS) {
+                                arrayOf(
+                                    Triple(
+                                        "star",
+                                        stringResource(R.string.sharhlarim),
+                                        pluralStringResource(
+                                            R.plurals.n_items,
+                                            overview?.reviewsCount ?: 0,
+                                            overview?.reviewsCount ?: 0,
+                                        ),
+                                    ) to "my_reviews",
+                                )
+                            } else {
+                                emptyArray()
+                            }
+                            ),
                         Triple(
                             "bell",
                             stringResource(R.string.bildirishnomalar),

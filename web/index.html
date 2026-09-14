@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="uz">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#2585ff" />
+    <title>Mini Bozor</title>
+    <!-- The theme is decided before React exists, because the alternative is
+         a white page for one frame on the way to a dark one — which reads as
+         a flicker every single time the app is opened. Deliberately inline
+         and deliberately tiny; `lib/theme.tsx` owns the same key from then
+         on. -->
+    <script>
+      try {
+        var mode = localStorage.getItem("mb:theme") || "light"
+        var dark =
+          mode === "dark" ||
+          (mode === "system" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches)
+        if (dark) document.documentElement.classList.add("dark")
+      } catch (e) {}
+    </script>
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/fonts/roboto-v30/roboto-v30-cyrillic_cyrillic-ext_latin_latin-ext-regular.woff2"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

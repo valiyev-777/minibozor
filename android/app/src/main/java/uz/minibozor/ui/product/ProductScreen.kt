@@ -70,11 +70,10 @@ import uz.minibozor.core.design.icon.MbIcon
 import uz.minibozor.ui.common.MbToastHost
 import uz.minibozor.ui.common.rememberToast
 import uz.minibozor.ui.product.component.ColorPicker
-import uz.minibozor.ui.product.component.OfferRow
 import uz.minibozor.ui.product.component.RatingPanel
 import uz.minibozor.ui.product.component.ReviewRow
-import uz.minibozor.ui.product.component.SellerLine
 import uz.minibozor.ui.product.component.ShelfLine
+import uz.minibozor.core.util.Features
 import uz.minibozor.ui.product.component.SizePicker
 
 /**
@@ -107,7 +106,7 @@ private val SectionGap = Modifier.padding(top = 12.dp)
 private const val BlockHero = 0
 private const val BlockIdentity = 1
 private const val BlockOptions = 2
-private const val BlockOffers = 3
+private const val BlockRating = 3
 private const val BlockDescription = 4
 private const val BlockSmallPrint = 5
 private const val BlockReviews = 6
@@ -214,7 +213,19 @@ fun ProductScreen(
     // it rather than at some threshold of their own. Light over the full-screen
     // photograph too, whose ground is black in either theme.
     val overPhoto by remember { derivedStateOf { barCover(cover) < 1f } }
-    val lightBars = overPhoto || viewerPage != null
+    // White icons over the hero only where the hero is dark.
+    //
+    // It used to be white icons over the photograph always, with a black wash
+    // under them to make them readable. But the hero's ground is
+    // `photoStudio` — white on the light theme, because the catalogue is
+    // cut-outs rather than scenes — so forcing light icons there meant a
+    // permanent grey band across the top of every product page, holding a white
+    // clock up on a white picture. Over the photograph the bar now follows the
+    // ground it is drawn on, which is the theme; see the wash in [ProductBar].
+    //
+    // The full-screen viewer is the exception and keeps its own answer: that
+    // one really is black, whichever theme is on.
+    val lightBars = (overPhoto && darkTheme) || viewerPage != null
 
     /**
      * The window's bar icons, set only while this page is the resumed one.
@@ -245,8 +256,26 @@ fun ProductScreen(
         onPauseOrDispose { light(!darkTheme) }
     }
 
+    // The gallery: the card's own photographs, and then any colour's that is
+    // not already among them.
+    //
+    // This is the fix for a colour that did nothing. The mapping below finds a
+    // colour's page by looking its photograph up *in the gallery*, so a colour
+    // photographed separately from the card — which is now every colour, since
+    // a seller cannot submit one without its own photograph — had no page, no
+    // entry in `pageOfColor`, and tapping its swatch moved nothing. The
+    // customer tapped "black", went on looking at a white shirt, and either
+    // bought the wrong thing or did not buy.
+    //
+    // Card photographs first so the cover stays the cover, then the colours in
+    // the order the seller listed them, each one appearing once.
+    val gallery = remember(product) {
+        val colourShots = product?.colours.orEmpty().mapNotNull { it.imageUrl }
+        (product?.images.orEmpty() + colourShots).distinct()
+    }
+
     val heroPager = rememberPagerState(
-        pageCount = { maxOf(product?.images?.size ?: 1, 1) },
+        pageCount = { maxOf(gallery.size, 1) },
     )
 
     val context = LocalContext.current
@@ -257,31 +286,35 @@ fun ProductScreen(
     // tapping the black swatch turns the page to it. Whichever way the choice is
     // made the page agrees with itself, and the count under the picture is the
     // count of what is in the picture.
-    val productColors = remember(product) {
-        product?.variants.orEmpty().filter { it.kind == "color" }
-    }
-    val pageOfColor = remember(product) {
+    val productColors = remember(product) { product?.colours.orEmpty() }
+    val pageOfColor = remember(gallery, productColors) {
         productColors.mapNotNull { color ->
-            val page = product?.images.orEmpty()
-                .indexOf(color.imageUrl ?: return@mapNotNull null)
-            if (page < 0) null else color.id to page
+            val page = gallery.indexOf(color.imageUrl ?: return@mapNotNull null)
+            if (page < 0) null else color.colour to page
         }.toMap()
     }
     LaunchedEffect(heroPager.currentPage, pageOfColor) {
-        val id = pageOfColor.entries.firstOrNull { it.value == heroPager.currentPage }?.key
-        if (id != null && id != state.selectedColorId) viewModel.selectColor(id)
+        val name = pageOfColor.entries.firstOrNull { it.value == heroPager.currentPage }?.key
+        if (name != null && name != state.selectedColour) viewModel.selectColour(name)
     }
-    LaunchedEffect(state.selectedColorId, pageOfColor) {
-        val page = pageOfColor[state.selectedColorId]
+    LaunchedEffect(state.selectedColour, pageOfColor) {
+        val page = pageOfColor[state.selectedColour]
         if (page != null && page != heroPager.currentPage) heroPager.animateScrollToPage(page)
     }
 
     // What the page is actually about: the colour on show, or the product
-    // itself when it has no colours to speak of. A colour the shop does not
-    // count apart falls back to the whole shelf.
-    val selectedColor = productColors.firstOrNull { it.id == state.selectedColorId }
+    // itself when it has no colours to speak of. A colour carries no count of
+    // its own any more — the cells under it do — so the shelf is the sum of
+    // that colour's cells, and the product's own figure where there are none.
+    val selectedColor = productColors.firstOrNull { it.colour == state.selectedColour }
         ?: productColors.firstOrNull()
-    val shelfLeft = selectedColor?.stockLeft ?: product?.stockLeft ?: 0
+    val ofColour = product?.variants.orEmpty()
+        .filter { selectedColor == null || it.colour == selectedColor.colour }
+    val shelfLeft = if (ofColour.isEmpty()) {
+        product?.stockLeft ?: 0
+    } else {
+        ofColour.sumOf { it.stockLeft }
+    }
     val shelfInStock = product?.inStock == true && (selectedColor?.inStock ?: true)
 
     // And what can actually be bought, which is a narrower question than what
@@ -292,22 +325,33 @@ fun ProductScreen(
     // be separate splits of one total and the ceiling was whichever was
     // scarcer, which offered the last black 41 for as long as a blue one was
     // left. The server counts it the same way, in `shelf_left`.
-    val selectedSize = product?.variants.orEmpty()
-        .firstOrNull { it.kind == "size" && it.id == state.selectedSizeId }
+    val selectedSize = state.selectedVariant?.takeIf { it.size.isNotBlank() }
     val buyableLeft = selectedSize?.stockLeft ?: shelfLeft
     val buyable = shelfInStock && (selectedSize?.inStock ?: true)
 
-    // Who the price at the top of the page belongs to.
+    // Which colours have nothing left **in the size being asked about**.
     //
-    // `product.seller` is a line of the product's own, and on a card several
-    // sellers offer it names none of them — it says "Mini Bozor" whoever is
-    // actually quoting. The winning offer is the one whose price the page is
-    // showing, so its seller is the honest answer to "who am I buying from",
-    // and the product's own line is only the fallback for a card no offer has
-    // been attached to yet.
-    val winner = state.offers.firstOrNull { it.isWinner }
-    val sellerName = winner?.seller?.name?.takeIf { it.isNotBlank() }
-        ?: product?.seller.orEmpty()
+    // A cell is a colour and a size, so "is the blue sold out" has no answer
+    // until a size is named. The strip of photographs was answering the other
+    // question — has this colour sold out in every size — which is almost
+    // always no, so a customer after a 41 saw five bright tiles and had to tap
+    // each one to find the single colour that had one. This is the set the
+    // strip greys out, and it is recomputed as the size changes: pick 41 and
+    // the colours without a 41 go dim, pick 43 and they come back.
+    val soldOutColours = remember(product, selectedSize?.size) {
+        val size = selectedSize?.size
+        val cells = product?.variants.orEmpty()
+        productColors
+            .filter { colour ->
+                if (size == null) {
+                    !colour.inStock
+                } else {
+                    cells.none { it.colour == colour.colour && it.size == size && it.inStock }
+                }
+            }
+            .map { it.colour }
+            .toSet()
+    }
 
     Box(
         Modifier
@@ -322,17 +366,25 @@ fun ProductScreen(
                     Modifier.windowInsetsPadding(WindowInsets.statusBars),
                 )
                 else -> product?.let { product ->
-                    // The sizes of the colour on screen, not of the product.
+                    // The cells of the colour on screen, not of the product.
                     //
-                    // A size belongs to a colour and holds that pair's own
-                    // count, so a shirt with two colours has two sets of size
-                    // rows. Showing them all put "L" on the page twice and let
-                    // the last black L be sold as long as a white one was left.
-                    val sizes = product.variants.filter {
-                        it.kind == "size" &&
-                            (it.parentId == null || it.parentId == state.selectedColorId)
-                    }
-                    val colors = product.variants.filter { it.kind == "color" }
+                    // A cell is a colour and a size together and holds that
+                    // pair's own count, so a shirt in two colours has two sets
+                    // of size rows. Showing them all put "L" on the page twice
+                    // and let the last black L be sold while a white one was
+                    // still on the shelf.
+                    // More than one, or it is not a choice. A strip holding a
+                    // single swatch asks the customer to pick the only colour
+                    // there is — and the photograph above has already shown
+                    // them what it is. Same for a lone size.
+                    val sizes = state.sizes
+                        .filter { it.size.isNotBlank() }
+                        .takeIf { it.size > 1 }
+                        .orEmpty()
+                    val colors = product.colours
+                        .filter { it.colour.isNotBlank() }
+                        .takeIf { it.size > 1 }
+                        .orEmpty()
                     val hasOptions = sizes.isNotEmpty() || colors.isNotEmpty()
 
                     LazyColumn(
@@ -354,7 +406,7 @@ fun ProductScreen(
                             // of bare page above it the whole way up.
                             MbReveal(reveal, "hero", BlockHero, rise = 0.dp) {
                                 Hero(
-                                    images = product.images,
+                                    images = gallery,
                                     closed = { closed },
                                     pager = heroPager,
                                     // Read here, in the lambda, so the scroll is
@@ -420,41 +472,29 @@ fun ProductScreen(
                                         oldPrice = product.oldPrice,
                                         discountPercent = product.discountPercent,
                                     )
-                                    // Where the description used to be. What a
-                                    // stranger's page owes a buyer at this point
-                                    // is other buyers, not the seller's own
-                                    // prose.
-                                    Spacer(Modifier.height(16.dp))
-                                    RatingPanel(
-                                        rating = state.summary?.rating ?: product.rating,
-                                        reviewsCount = state.summary?.total
-                                            ?: product.reviewsCount,
-                                        photos = state.summary?.photos.orEmpty(),
-                                        photosTotal = state.summary?.photosTotal ?: 0,
-                                        onClick = { onOpenReviews(product.id) },
-                                    )
-                                    // What is on the shelf, right under what
-                                    // other people made of it: the evidence
-                                    // someone weighs between the price above and
-                                    // the choice below. One line, because that
-                                    // is all it has to say.
-                                    Spacer(Modifier.height(10.dp))
+                                    // The rating used to sit here, between the
+                                    // price and the choice. On a square hero
+                                    // that put the size row off the bottom of
+                                    // the screen: a customer had to scroll to
+                                    // do the one thing the page is for. It is
+                                    // below the pickers now — choosing is the
+                                    // task and the rating is the context, and
+                                    // that is also the order of interest.
+                                    Spacer(Modifier.height(14.dp))
+                                    // How many have gone, and whether the
+                                    // cell chosen above is empty. Not how many
+                                    // are left: the page quoted the shelf in
+                                    // two places and now quotes it in none —
+                                    // the ceiling on the stepper is where a
+                                    // customer meets the figure.
                                     ShelfLine(
-                                        stockLeft = shelfLeft,
                                         soldCount = product.soldCount,
-                                        inStock = shelfInStock,
+                                        inStock = buyable,
                                     )
-                                    // And who is selling it, on the panel
-                                    // rather than folded away in the small
-                                    // print. On a marketplace the seller is
-                                    // part of what is being bought — a price
-                                    // with no name against it is half a
-                                    // sentence — and the row three sections
-                                    // down was behind a "Batafsil" nobody taps.
-                                    if (sellerName.isNotBlank()) {
-                                        Spacer(Modifier.height(7.dp))
-                                        SellerLine(sellerName, state.offers.size)
-                                    }
+                                    // Nobody is named beside the price. One
+                                    // company sells here, and a shop that puts
+                                    // its own name under every price is telling
+                                    // the customer something they already know.
                                 }
                             }
                         }
@@ -470,9 +510,10 @@ fun ProductScreen(
                                         if (colors.isNotEmpty()) {
                                             ColorPicker(
                                                 colors = colors,
-                                                selectedId = state.selectedColorId,
-                                                onSelect = viewModel::selectColor,
-                                                productImages = product.images,
+                                                selected = state.selectedColour,
+                                                onSelect = viewModel::selectColour,
+                                                soldOut = soldOutColours,
+                                                productImages = gallery,
                                             )
                                         }
                                         if (sizes.isNotEmpty() && colors.isNotEmpty()) {
@@ -483,7 +524,7 @@ fun ProductScreen(
                                         if (sizes.isNotEmpty()) {
                                             SizePicker(
                                                 sizes = sizes,
-                                                selectedId = state.selectedSizeId,
+                                                selectedId = state.selectedVariantId,
                                                 onSelect = viewModel::selectSize,
                                             )
                                         }
@@ -492,38 +533,54 @@ fun ProductScreen(
                             }
                         }
 
-                        // Every seller offering this, straight after the
-                        // choice of size and colour and before the prose.
+                        // What other buyers made of it, after the choice
+                        // rather than before it.
                         //
-                        // One card, several sellers — that is the whole of what
-                        // makes this a marketplace rather than a shop, and the
-                        // customer's side of it did not show a trace of it. The
-                        // page picked one price and named nobody. So: the list
-                        // behind the number, at the point where somebody has
-                        // decided what they want and is deciding what to pay
-                        // for it. One offer means there is no choice to make
-                        // and the section stays away.
-                        if (state.offers.size > 1) {
-                            item(key = "offers") {
-                                MbReveal(reveal, "offers", BlockOffers, modifier = SectionGap) {
-                                    MbCard(shape = RectangleShape) {
-                                        SectionHeader(
-                                            title = stringResource(R.string.boshqa_sotuvchilar),
-                                            subtitle = pluralStringResource(
-                                                R.plurals.n_sotuvchi,
-                                                state.offers.size,
-                                                state.offers.size,
-                                            ),
-                                        )
-                                        Spacer(Modifier.height(4.dp))
-                                        state.offers.forEachIndexed { index, offer ->
-                                            if (index > 0) MbDivider()
-                                            OfferRow(offer)
-                                        }
-                                    }
+                        // The rating stays while reviews are off — it is a
+                        // cached column on the product, and a page that
+                        // suddenly has no rating at all reads as a regression.
+                        // What goes is the tap: without `Features.REVIEWS`
+                        // there is nothing behind it. See Features.kt.
+                        //
+                        // But nought is not a rating, it is the absence of one,
+                        // and with reviews off it is what every product in the
+                        // shop answers. Drawn anyway it was an empty bordered
+                        // panel reading "0.0" over five grey stars — a page
+                        // saying nobody liked this, on goods nobody has been
+                        // able to rate. So the block is emitted only once there
+                        // is a number behind it, which is the same rule the rest
+                        // of this page follows: a block whose field is empty is
+                        // not drawn, and the card reads sparse rather than
+                        // broken.
+                        val rating = state.summary?.rating ?: product.rating
+                        if (rating > 0.0) item(key = "rating") {
+                            MbReveal(reveal, "rating", BlockRating, modifier = SectionGap) {
+                                MbCard(shape = RectangleShape) {
+                                    RatingPanel(
+                                        rating = rating,
+                                        reviewsCount = if (Features.REVIEWS) {
+                                            state.summary?.total ?: product.reviewsCount
+                                        } else {
+                                            null
+                                        },
+                                        photos = state.summary?.photos.orEmpty(),
+                                        photosTotal = state.summary?.photosTotal ?: 0,
+                                        onClick = if (Features.REVIEWS) {
+                                            { onOpenReviews(product.id) }
+                                        } else {
+                                            null
+                                        },
+                                    )
                                 }
                             }
                         }
+
+                        // A section listing every seller offering this
+                        // stood here. One card with several prices on it was
+                        // the whole of what made this a marketplace, and there
+                        // is one company now — so there is no choice of who to
+                        // buy from and nothing to put at this point in the
+                        // page.
 
                         // Straight after the choice, and above the small print.
                         //
@@ -612,30 +669,24 @@ fun ProductScreen(
                                                     product.warranty,
                                                 )
                                             }
-                                            MbDivider()
-                                            DeliveryRow(
-                                                "basket",
-                                                stringResource(R.string.sotuvchi),
-                                                // The seller, and only the
-                                                // seller. What is left moved to
-                                                // the buy bar, where the count
-                                                // is a reason rather than a
-                                                // clause in a row about
-                                                // delivery.
-                                                //
-                                                // The same name the panel at
-                                                // the top prints: whoever is
-                                                // actually quoting the price,
-                                                // not the product's own line.
-                                                sellerName,
-                                            )
+                                            // A "Sotuvchi" row stood here. One
+                                            // company sells everything in this
+                                            // shop, so the answer was always
+                                            // the shop's own name — which is
+                                            // the one thing the customer did
+                                            // not need telling.
                                         }
                                     }
                                 }
                             }
                         }
 
-                        item(key = "reviews") {
+                        // The section, not just its button. Left in place it
+                        // said "hali sharh yo'q — birinchi bo'ling", which is
+                        // not true: there are no reviews because the feature
+                        // is gone, and inviting somebody to be the first leads
+                        // to a 404. See Features.kt.
+                        if (Features.REVIEWS) item(key = "reviews") {
                             MbReveal(reveal, "reviews", BlockReviews, modifier = SectionGap) {
                                 MbCard(shape = RectangleShape) {
                                     SectionHeader(
@@ -737,7 +788,7 @@ fun ProductScreen(
             // that was tapped and goes back into it.
             viewerPage?.let { page ->
                 HeroViewer(
-                    images = product?.images.orEmpty(),
+                    images = gallery,
                     initialPage = page,
                     origin = viewerOrigin,
                     onClose = { viewerPage = null },

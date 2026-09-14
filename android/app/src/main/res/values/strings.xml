@@ -71,6 +71,7 @@
     <string name="hisobdan_chiqasizmi">Hisobdan chiqasizmi?</string>
     <string name="hisobdan_chiqish">Hisobdan chiqish</string>
     <string name="hisobingiz_bormi">"Hisobingiz bormi? "</string>
+    <string name="hozir_tolanadi">Hozir to\'lanadi</string>
     <string name="hozircha_mavjud_emas">Hozircha mavjud emas</string>
     <string name="hududni_tanlang">Hududni tanlang</string>
     <string name="hujjat">Hujjat</string>
@@ -101,6 +102,7 @@
     <string name="kirish">Kirish</string>
     <string name="kirish_kodi">Kirish kodi</string>
     <string name="kirish_orqali">"Kirish orqali "</string>
+    <string name="kirish_shartlariga_rozilik">Kirish orqali siz %1$s shartlariga rozilik bildirasiz</string>
     <string name="kocha_va_uy_raqami">Ko\'cha va uy raqami</string>
     <string name="kod_avtomatik_oqiladi_sms_kelishi_bilan">Kod avtomatik o\'qiladi — SMS kelishi bilan davom etamiz</string>
     <string name="kod_kelmadimi_1150_raqamiga_qongiroq_qiling">Kod kelmadimi? 1150 raqamiga qo\'ng\'iroq qiling — bepul</string>
@@ -444,4 +446,5 @@
     </plurals>
     <string name="kartadagi_narx">Kartadagi narx</string>
     <string name="qaytarilgan_summa">Qaytarilgan summa</string>
+    <string name="omborda_n_ta_bor">Omborda %1$d ta bor</string>
 </resources>

@@ -3,12 +3,18 @@ __pycache__/
 .venv/
 .env
 *.db
+# Database backups. `cp minibozor.db minibozor.db.bak` before a downgrade is the
+# documented habit (see README, Schema changes) and the result is somebody's real
+# catalogue and orders — never source.
+*.db.bak
+*.db-journal
+*.db-wal
 .pytest_cache/
 
 # dev server output
 server.log
 
-# Runtime uploads. What people send through /staff/media is data the
+# Runtime uploads. What people send through /media is data the
 # deployment holds, not source the repository ships; the seeded catalogue
 # pictures beside it are.
 media/uploads/

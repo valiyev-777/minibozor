@@ -12,7 +12,6 @@ from app.models import (
     Notification,
     Order,
     PaymentCard,
-    Review,
     User,
 )
 
@@ -58,7 +57,10 @@ def overview(user: CurrentUser, session: SessionDep) -> s.ProfileOverviewOut:
         user=_user_out(user),
         orders_count=count(Order, Order.user_id == user.id),
         favorites_count=count(Favorite, Favorite.user_id == user.id),
-        reviews_count=count(Review, Review.user_id == user.id),
+        # The review system was removed with the panels rebuild and comes
+        # back later; the field stays so the shipped apps' profile screen
+        # keeps its shape rather than losing a tile to a schema change.
+        reviews_count=0,
         addresses_count=count(Address, Address.user_id == user.id),
         cards_count=count(PaymentCard, PaymentCard.user_id == user.id),
         unread_notifications=count(

@@ -54,6 +54,7 @@ import uz.minibozor.core.design.component.MbTabHeader
 import uz.minibozor.core.design.component.MbTextField
 import uz.minibozor.core.design.component.MbTotalRow
 import uz.minibozor.core.design.icon.MbIcon
+import uz.minibozor.core.util.Features
 import uz.minibozor.core.util.grouped
 import uz.minibozor.core.util.sum
 import uz.minibozor.data.remote.dto.CartItemDto
@@ -94,7 +95,9 @@ fun CartScreen(
         onPauseOrDispose {}
     }
 
-    MbScreen { padding ->
+    // The tab's header is a band of surface, so that is what goes behind the
+    // clock rather than a step of grey canvas. See [MbScreen.statusBand].
+    MbScreen(statusBand = MbTheme.colors.surface) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
@@ -105,7 +108,17 @@ fun CartScreen(
                 trailing = {
                     if (cart != null && cart.items.isNotEmpty()) {
                         MbText(
-                            pluralStringResource(R.plurals.n_products, cart.items.size, cart.items.size),
+                            // Units, not lines — the same figure the tab
+                            // badge carries. The header counted lines and the
+                            // badge counted units, so a basket holding two of
+                            // one shoe and four of another said "6 tovar"
+                            // under a badge saying 12, and a customer reading
+                            // both has to decide which the shop means.
+                            pluralStringResource(
+                                R.plurals.n_products,
+                                cart.totals.itemsCount,
+                                cart.totals.itemsCount,
+                            ),
                             MbTheme.type.caption,
                             MbTheme.colors.icon,
                         )
@@ -183,7 +196,11 @@ fun CartScreen(
                             )
                         }
 
-                        item(key = "promo") {
+                        // The field asking for a code, while there are codes.
+                        // The cart's own shape still carries `discount` and
+                        // `promo_code`, so nothing else here changed — see
+                        // core/util/Features.kt.
+                        if (Features.PROMO_CODES) item(key = "promo") {
                             PromoCard(
                                 applied = promo,
                                 error = promoError,
@@ -326,10 +343,21 @@ private fun CartLine(
                         MbTheme.colors.inkSoft,
                         maxLines = 2,
                     )
-                    if (item.variantLabel.isNotBlank()) {
+                    // The colour and the size, each said to be what it is.
+                    // One joined string read as the name of a single thing —
+                    // "Qora · 41" — and a customer checking a basket wants to
+                    // see that they picked black *and* that they picked 41.
+                    val chosen = listOfNotNull(
+                        item.colour.takeIf { it.isNotBlank() }
+                            ?.let { "${stringResource(R.string.rang)}: $it" },
+                        item.size.takeIf { it.isNotBlank() }
+                            ?.let { "${stringResource(R.string.olcham)}: $it" },
+                    ).joinToString("   ")
+                        .ifBlank { item.variantLabel }
+                    if (chosen.isNotBlank()) {
                         Spacer(Modifier.height(3.dp))
                         MbText(
-                            item.variantLabel,
+                            chosen,
                             MbTheme.type.meta,
                             MbTheme.colors.icon,
                             maxLines = 1,
