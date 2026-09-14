@@ -64,7 +64,7 @@ export function Copy({
 /** A code with its copy button — the pairing every table row wants. */
 export function Code({ children, className }: { children: string; className?: string }) {
   return (
-    <span className={cn("group/code inline-flex items-center gap-1", className)}>
+    <span className={cn("group/code inline-flex items-center gap-1 whitespace-nowrap", className)}>
       <span className="tabular">{children}</span>
       <Copy
         text={children}

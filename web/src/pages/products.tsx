@@ -23,8 +23,8 @@ import {
   Check,
   Image as ImageIcon,
   Loader2,
+  PackageSearch,
   Pencil,
-  Search,
   Trash2,
 } from "lucide-react"
 import { useState } from "react"
@@ -39,6 +39,8 @@ import {
   Segmented,
   Waiting,
 } from "@/components/page"
+import { Code } from "@/components/copy"
+import { DataTable, useTableState } from "@/components/data-table"
 import { Filing, Pricing, Specs, Words } from "@/components/card-editor"
 import type { Tone } from "@/components/page"
 import { PhotoStep, mediaUrl } from "@/components/photo-step"
@@ -66,100 +68,138 @@ export function ProductsPage() {
   // `?low=1`, which nothing on either side read: the count was right and the
   // list it sent you to was the whole catalogue.
   const stock = params.get("stock") ?? ""
-  const [needle, setNeedle] = useState("")
+  const state = useTableState()
   const [openId, setOpenId] = useState<number | null>(null)
-  const products = useProducts(needle, status, stock)
+  const products = useProducts(state.q, status, stock)
 
   if (openId) return <Card id={openId} onBack={() => setOpenId(null)} />
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Mahsulotlar" subtitle="Kataloq — kompaniyaniki">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
-          <Input
-            value={needle}
-            onChange={(event) => setNeedle(event.target.value)}
-            placeholder="Nomi yoki kodi"
-            aria-label="Qidirish"
-            className="h-control w-56 pl-8" />
-        </div>
-      </PageHeader>
+      <PageHeader title="Mahsulotlar" subtitle="Kataloq — kompaniyaniki" />
 
-      <div className="flex flex-wrap items-center gap-4">
-        {/* What state the card is in — one segmented control, because these
-            four are one question with four answers. It shows no answer at all
-            while the list is filtered by the shelf instead. */}
-        <Segmented
-          label="Holat"
-          value={stock ? null : status}
-          onChange={(key) => setParams(key ? { status: key } : {})}
-          options={[
-            { key: "", label: "Hammasi" },
-            { key: "draft", label: "Rasmsiz" },
-            { key: "active", label: "Sotuvda" },
-            { key: "archived", label: "Arxivda" },
-          ]}
-        />
+      {/* The catalogue is the biggest list in the app and was the last one
+          drawn by hand: its own search box in the page header, its own row,
+          no sorting, no paging and no way to take it off the screen. It is
+          the same table as the other ten now — which is the whole of what
+          "the screens match" means. */}
+      <DataTable<AdminProduct>
+        title="Mahsulotlar"
+        rows={products.data?.items ?? []}
+        total={products.data?.total}
+        loading={products.isLoading}
+        error={products.error}
+        rowKey={(row) => row.id}
+        onRowClick={(row) => setOpenId(row.id)}
+        count={(n) => `${groups(n)} ta karta`}
+        searchPlaceholder="Nomi yoki kodi"
+        empty={{
+          icon: PackageSearch,
+          title: "Bunday karta yo'q",
+          what: "Kartalar qabul ekranida, qop ochilganda yoziladi.",
+        }}
+        beforeSearch={
+          <div className="flex flex-wrap items-center gap-2">
+            {/* What state the card is in — one segmented control, because
+                these four are one question with four answers. It shows no
+                answer at all while the list is filtered by the shelf. */}
+            <Segmented
+              label="Holat"
+              value={stock ? null : status}
+              onChange={(key) => setParams(key ? { status: key } : {})}
+              options={[
+                { key: "", label: "Hammasi" },
+                { key: "draft", label: "Rasmsiz" },
+                { key: "active", label: "Sotuvda" },
+                { key: "archived", label: "Arxivda" },
+              ]}
+            />
 
-        {/* And these two are about the shelf rather than about the card —
-            money standing still in both directions: goods on sale the shop
-            cannot supply, and goods about to become that. A different
-            question, so not in the same control. */}
-        <Segmented
-          label="Javon"
-          tone="danger"
-          value={stock || null}
-          onChange={(key) => setParams(stock === key ? {} : { stock: key })}
-          options={[
-            { key: "out", label: "Tugagan" },
-            { key: "low", label: "Tugayotgan" },
-          ]}
-        />
-      </div>
-
-      <Problem error={products.error} />
-      {products.isLoading ? <Waiting what="Kartalar" /> : null}
-      {products.data?.items.length === 0 ? (
-        <Empty what="Bunday karta yo'q. Qabul ekranida, qop ochilganda yoziladi." />
-      ) : null}
-
-      <ul className="space-y-2">
-        {(products.data?.items ?? []).map((product) => (
-          <li key={product.id}>
-            <button
-              type="button"
-              onClick={() => setOpenId(product.id)}
-              className="flex w-full items-center gap-3 rounded-panel border border-panel-edge bg-surface p-4 text-left transition-colors hover:border-brand">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-body font-semibold">{product.title}</div>
-                <div className="text-micro tabular text-ink-faint">
-                  {product.sku} · {product.variant_count} variant ·{" "}
-                  {product.image_count} rasm
-                </div>
+            {/* And these two are about the shelf rather than about the card —
+                money standing still in both directions: goods on sale the
+                shop cannot supply, and goods about to become that. */}
+            <Segmented
+              label="Javon"
+              tone="danger"
+              value={stock || null}
+              onChange={(key) => setParams(stock === key ? {} : { stock: key })}
+              options={[
+                { key: "out", label: "Tugagan" },
+                { key: "low", label: "Tugayotgan" },
+              ]}
+            />
+          </div>
+        }
+        columns={[
+          {
+            key: "title",
+            header: "Karta",
+            sortable: true,
+            sortValue: (row) => row.title.toLowerCase(),
+            cell: (row) => (
+              <div className="min-w-0">
+                <div className="truncate font-medium">{row.title}</div>
                 {/* By name. A card is rarely out of stock as a whole — one
                     colour of it is, the total still reads comfortably, and
                     nobody hears about it until a customer orders that
                     colour. */}
-                {product.sold_out.length && product.status === "active" ? (
-                  <div className="mt-0.5 truncate text-micro text-danger">
-                    Tugagan: {product.sold_out.join(", ")}
+                {row.sold_out.length && row.status === "active" ? (
+                  <div className="truncate text-micro text-danger">
+                    Tugagan: {row.sold_out.join(", ")}
                   </div>
                 ) : null}
               </div>
-              <div className="shrink-0 text-right">
-                <div className="tabular text-small font-medium">
-                  {money(product.price)}
-                </div>
-                <div className="text-micro text-ink-faint">
-                  {groups(product.stock_left)} dona
-                </div>
-              </div>
-              <Status status={product.status} />
-            </button>
-          </li>
-        ))}
-      </ul>
+            ),
+            export: (row) => row.title,
+          },
+          {
+            key: "sku",
+            header: "Kod",
+            width: "1%",
+            cell: (row) => <Code>{row.sku}</Code>,
+            export: (row) => row.sku,
+          },
+          {
+            key: "variant_count",
+            header: "Variant",
+            numeric: true,
+            sortable: true,
+            sortValue: (row) => row.variant_count,
+            cell: (row) => groups(row.variant_count),
+          },
+          {
+            key: "image_count",
+            header: "Rasm",
+            numeric: true,
+            sortable: true,
+            sortValue: (row) => row.image_count,
+            cell: (row) => groups(row.image_count),
+          },
+          {
+            key: "price",
+            header: "Narx",
+            numeric: true,
+            sortable: true,
+            sortValue: (row) => row.price,
+            cell: (row) => money(row.price),
+          },
+          {
+            key: "stock_left",
+            header: "Qoldiq",
+            numeric: true,
+            sortable: true,
+            sortValue: (row) => row.stock_left,
+            cell: (row) => `${groups(row.stock_left)} dona`,
+          },
+          {
+            key: "status",
+            header: "Holat",
+            width: "1%",
+            cell: (row) => <Status status={row.status} />,
+            export: (row) => word(row.status),
+          },
+        ]}
+      />
     </div>
   )
 }
@@ -388,12 +428,15 @@ function VariantRow({
   )
 }
 
+/** The one word for a card's state — on the chip, and in an export. */
+function word(status: AdminProduct["status"]): string {
+  return status === "active" ? "sotuvda" : status === "draft" ? "rasmsiz" : "arxiv"
+}
+
 function Status({ status }: { status: AdminProduct["status"] }) {
-  const word =
-    status === "active" ? "sotuvda" : status === "draft" ? "rasmsiz" : "arxiv"
   const tone: Tone =
     status === "active" ? "good" : status === "draft" ? "warn" : "neutral"
-  return <Pill tone={tone}>{word}</Pill>
+  return <Pill tone={tone}>{word(status)}</Pill>
 }
 
 // ------------------------------------------------------------------- one card
