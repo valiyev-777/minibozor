@@ -302,21 +302,6 @@ export type Vocab = {
   spec_keys: Record<string, string[]>
 }
 
-export type PileSize = { size: string; quantity: number }
-
-export type Pile = {
-  product: AdminProduct
-  run_id: number
-  run_code: string
-  /** One code, or the codes joined by ", " when the pile was split. It is
-   *  printed on a line; `placements` is the structured truth. */
-  location_code: string
-  placements: { code: string; quantity: number }[]
-  quantity: number
-  total_cost: number
-  labels: ProductLabel[]
-}
-
 export type AdminVariant = {
   id: number
   colour: string
