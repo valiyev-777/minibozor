@@ -623,14 +623,12 @@ function IdentifyCard({
               label="Tur"
               options={vocab.data?.kinds ?? []}
               value={kind}
-              onChange={setKind}
-              placeholder="Krossovka" />
+              onChange={setKind} />
             <Chips
               label="Brend"
               options={vocab.data?.brands ?? []}
               value={brand}
-              onChange={setBrand}
-              placeholder="Nike" />
+              onChange={setBrand} />
 
             {asked && found.isLoading ? <Waiting what="Kartalar" /> : null}
 
@@ -785,67 +783,40 @@ function Chips({
   options,
   value,
   onChange,
-  placeholder,
 }: {
   label: string
   options: string[]
   value: string
   onChange: (value: string) => void
-  placeholder: string
 }) {
-  const [writing, setWriting] = useState(false)
-  // The value first, always, even when it is not one of the learned options —
-  // a word typed into "+ yangi" that is then drawn nowhere reads as the field
-  // having eaten it.
+  // Quiet filter pills, not a data entry row. These narrow the search above —
+  // they stopped being a way to *write* a card when the card form took that
+  // job — so the "+ yangi" free-text they used to carry was a second, blunter
+  // search box drawn under the real one, and it is gone. The tint style is on
+  // purpose too: a filled-brand pill next to the screen's one primary button
+  // reads as a second primary.
   const shown = [
     ...(value && !options.includes(value) ? [value] : []),
-    ...options.slice(0, 10),
+    ...options.slice(0, 8),
   ]
-  const typing = writing || (shown.length === 0 && !value)
+  if (!shown.length) return null
 
   return (
-    <div>
-      <span className="mb-1 block text-micro text-ink-soft">{label}</span>
-      <div className="flex flex-wrap gap-1">
-        {shown.map((one) => (
-          <button
-            key={one}
-            type="button"
-            onClick={() => onChange(one === value ? "" : one)}
-            className={cn(
-              "h-control rounded-control border px-3 text-small",
-              one === value && "border-brand bg-brand text-brand-ink",
-            )}
-          >
-            {one}
-          </button>
-        ))}
-        {typing ? (
-          <Input
-            autoFocus={writing}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            // Enter finishes the word, and nothing else — it must not reach
-            // the form and submit a half-written receipt.
-            onKeyDown={(event) => {
-              if (event.key !== "Enter") return
-              event.preventDefault()
-              setWriting(false)
-              event.currentTarget.blur()
-            }}
-            onBlur={() => setWriting(false)}
-            placeholder={placeholder}
-            aria-label={label}
-            className="h-control w-40" />
-        ) : (
-          <button
-            type="button"
-            onClick={() => setWriting(true)}
-            className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep">
-            + yangi
-          </button>
-        )}
-      </div>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="w-14 shrink-0 text-small text-ink-soft">{label}</span>
+      {shown.map((one) => (
+        <button
+          key={one}
+          type="button"
+          onClick={() => onChange(one === value ? "" : one)}
+          className={cn(
+            "h-control-sm rounded-full bg-line-soft px-3 text-small transition-colors hover:bg-line",
+            one === value && "bg-brand-soft font-medium text-brand-deep",
+          )}
+        >
+          {one}
+        </button>
+      ))}
     </div>
   )
 }
