@@ -742,6 +742,21 @@ export type CourierOrder = {
   cash_due: number
   attempts: number
   last_failure: string
+  /**
+   * Where the door is, when anybody knows.
+   *
+   * Nullable and *staying* nullable: every order placed before the shop began
+   * recording a pin has none and never will. A stop without one is still a
+   * stop — it keeps its place in the round and the list says
+   * `xaritada belgilanmagan` rather than quietly disappearing off a map the
+   * courier is steering by.
+   *
+   * Optional on the type as well as nullable, because the field is landing in
+   * `CourierOrderOut` alongside this work: an older server answers without it
+   * and the app must not fall over reading a round from one.
+   */
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export type CourierEarnings = {
@@ -752,8 +767,38 @@ export type CourierEarnings = {
   earned_today: number
   earned_month: number
   earned_total: number
+  /** Taken at doors less handed back, floored at nought. The two sides are
+   *  beside it because a courier querying the figure wants to see the
+   *  subtraction rather than be told the answer. */
   cash_on_hand: number
+  cash_collected: number
+  cash_handed_in: number
   failed_attempts: number
+}
+
+/** Somebody at the warehouse a courier may hand the day's takings to. The
+ *  write refuses anybody else, so the picker offers exactly this list. */
+export type CashReceiver = {
+  id: number
+  full_name: string
+  phone: string
+  role: UserRole
+}
+
+/** One receipt for cash going back over the counter. */
+export type CashHandover = {
+  id: number
+  amount: number
+  courier_id: number
+  courier_name: string
+  received_by_id: number
+  received_by_name: string
+  note: string
+  happened_at: string
+  /** What the courier is carrying **now** — on the reply to the hand-over
+   *  itself that is the figure after it, which is why the screen can redraw
+   *  without a second round trip. */
+  cash_on_hand: number
 }
 
 // ----------------------------------------------------------------- dashboard
@@ -1099,4 +1144,70 @@ export type ScanAnswer = {
   code: string
   variant: ScanVariant | null
   cell: LocationDetail | null
+}
+
+// ---------------------------------------------- the card form's reference data
+//
+// §5.3: the palette and the size systems are rows in the database, not a list
+// in a component. A shop that starts selling belts adds a row; nobody ships a
+// build. Both are read under `/admin/*` — there is no customer-facing door.
+
+/**
+ * One colour in the palette, as the picker draws it.
+ *
+ * `hex` may be empty — a colour no single swatch describes, like a melange —
+ * and the picker falls back to a hatched square rather than painting black.
+ *
+ * `spellings` is every variation that folds onto this colour's key in the
+ * words that are actually on variants. The form does not use it; the merge
+ * screen does, and it arrives on the same read.
+ */
+export type ColourSwatch = {
+  id: number
+  slug: string
+  name: string
+  hex: string
+  sort: number
+  variant_count: number
+  spellings: string[]
+}
+
+/**
+ * A run of sizes, with the values it offers.
+ *
+ * `family` and `scale` are apart from `name` on purpose: the picker draws
+ * *Erkaklar poyabzali* once with EUR/UK/US/RUS under it, rather than splitting
+ * a display string on a space — a rule that breaks on the first system called
+ * `Kamar`. Either may be empty.
+ */
+export type SizeSystem = {
+  id: number
+  slug: string
+  name: string
+  family: string
+  scale: string
+  sort: number
+  values: string[]
+  card_count: number
+}
+
+/**
+ * What a card is numbered in — and `null` means **sizeless**, not unset.
+ *
+ * §6.3: a card is sized or sizeless and never both. This is the field that
+ * says which, and it has its own door because it is that either/or rather
+ * than another text box on the edit form.
+ */
+export type ProductSizeSystem = {
+  product_id: number
+  size_system: SizeSystem | null
+}
+
+/** A make, with every spelling it answers to. `GET /admin/brands`. */
+export type AdminBrand = {
+  id: number
+  slug: string
+  name: string
+  product_count: number
+  aliases: string[]
 }

@@ -30,7 +30,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import audit, brands, colours, i18n
+from app import audit, brands, colours, i18n, richtext
 from app import products as pr
 from app import schemas as s
 from app import services as sv
@@ -216,7 +216,8 @@ def _create_card(
         sku=sku,
         title=payload.title,
         subtitle=payload.subtitle,
-        description=payload.description,
+        description=richtext.clean(payload.description),
+        description_text=richtext.plain(payload.description),
         kind=payload.kind.strip(),
         snapshot_url=payload.snapshot_url,
         category_id=category.id if category else None,
@@ -359,6 +360,13 @@ def update_product(
     if "brand_slug" in fields:
         slug = fields.pop("brand_slug")
         product.brand_id = _brand(session, slug).id if slug else None
+    if "description" in fields:
+        # Cleaned here rather than trusted from the editor: the door takes JSON
+        # from anyone holding an admin token, and the apps render this as
+        # markup.
+        html = fields.pop("description") or ""
+        product.description = richtext.clean(html)
+        product.description_text = richtext.plain(html)
     for field, value in fields.items():
         if value is not None:
             setattr(product, field, value)

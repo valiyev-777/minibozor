@@ -99,7 +99,7 @@ def list_products(
             or_(
                 func.lower(Product.title).like(needle),
                 func.lower(Product.subtitle).like(needle),
-                func.lower(Product.description).like(needle),
+                func.lower(Product.description_text).like(needle),
             )
         )
     if category:

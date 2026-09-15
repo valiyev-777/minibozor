@@ -311,6 +311,10 @@ class Product(SQLModel, table=True):
     title: str
     subtitle: str = ""
     description: str = ""
+    # The description with its markup taken off, kept beside it so the
+    # shopper's search matches words rather than tags (`app.richtext`). Written
+    # by every door that writes `description`; never edited on its own.
+    description_text: str = ""
 
     # The word the receiving desk used — "Krossovka", "Futbolka". Not the
     # category: a category is where the card is filed in the shop, and it is

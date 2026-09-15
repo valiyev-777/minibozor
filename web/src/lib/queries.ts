@@ -34,6 +34,8 @@ import type {
   StockReport,
   CellRemoved,
   Rack,
+  CashHandover,
+  CashReceiver,
   CourierEarnings,
   CourierOrder,
   CustomerDetail,
@@ -65,6 +67,10 @@ import type {
   Spec,
   Vocab,
   WhereIs,
+  AdminBrand,
+  ColourSwatch,
+  ProductSizeSystem,
+  SizeSystem,
 } from "@/lib/types"
 
 export const keys = {
@@ -99,6 +105,9 @@ export const keys = {
   available: ["round", "available"] as const,
   roundDone: ["round", "done"] as const,
   earnings: ["earnings"] as const,
+  /** Who at the warehouse may take the day's cash, and the receipts for it. */
+  cashReceivers: ["cash", "receivers"] as const,
+  handovers: ["cash", "handovers"] as const,
   whereIs: (q: string) => ["where-is", q] as const,
   /** The receiving queue: receipts labelled and still standing in QABUL. */
   receiptsWaiting: ["receipts", "waiting"] as const,
@@ -542,11 +551,20 @@ export function useMyHistory() {
   })
 }
 
-export function useAvailableOrders() {
+/**
+ * The free board — packed, unclaimed, anybody's to take.
+ *
+ * `enabled` because a courier who has said they are off shift should not have
+ * a phone in a pocket polling this every minute. It is a local preference and
+ * not a state the server holds — see `lib/shift` — so the only thing it can
+ * honestly do is stop the asking, and that is a real saving on a battery.
+ */
+export function useAvailableOrders(enabled = true) {
   return useQuery({
     queryKey: keys.available,
     queryFn: () => api<CourierOrder[]>("/courier/orders/available"),
     refetchInterval: 60_000,
+    enabled,
   })
 }
 
@@ -766,6 +784,8 @@ export function useFileCard(productId: number) {
       description?: string
       warranty?: string | null
       badge?: string | null
+      /** The make, by slug. `undefined` leaves it alone; `null` says it has none. */
+      brand_slug?: string | null
     }) =>
       api<AdminProductDetail>(`/admin/products/${productId}`, {
         method: "PATCH",
@@ -918,6 +938,11 @@ export function useDeliver(id: number) {
     mutationFn: (input: {
       recipient_name: string
       cash_collected: number
+      /** A media path from `POST /media`, uploaded when there was signal to.
+       *  Optional on the server for the same reason it is optional here: a
+       *  photograph needs an upload, an upload needs a connection, and a
+       *  basement has none. */
+      photo_url?: string
       note?: string
     }) =>
       api<CourierOrder>(`/courier/orders/${id}/deliver`, {
@@ -937,6 +962,43 @@ export function useFailed(id: number) {
         idempotencyKey: idempotencyKey(),
       }),
     onSuccess: () => invalidate(client, [...roundKeys(), ["orders"]]),
+  })
+}
+
+/* ------------------------------------------------------------ cash back in
+ *
+ * A courier's `cash_on_hand` used to be the sum of every door they had ever
+ * knocked on, so it only went up — true on somebody's first day and wrong
+ * every day after. It is `cash_collected - cash_handed_in` now, and this is
+ * the write that moves the second figure.
+ *
+ * Both halves are here because the screen needs both: a hand-in has to name
+ * the person who took the money, and naming somebody means choosing them from
+ * a list the write will actually accept. `GET /courier/cash/receivers` is that
+ * list — warehouse and admin, exactly the set the POST allows — so the picker
+ * cannot offer a name the write then refuses.
+ */
+
+export function useCashReceivers() {
+  return useQuery({
+    queryKey: keys.cashReceivers,
+    queryFn: () => api<CashReceiver[]>("/courier/cash/receivers"),
+  })
+}
+
+export function useHandInCash() {
+  const client = useQueryClient()
+  return useMutation({
+    meta: { done: "Naqd topshirildi" },
+    mutationFn: (input: { amount: number; received_by_id: number; note?: string }) =>
+      api<CashHandover>("/courier/cash/handovers", {
+        body: input,
+        idempotencyKey: idempotencyKey(),
+      }),
+    // The earnings door is where `cash_on_hand` is read from, and it has just
+    // changed. The receipt list with it, so the screen that lists them is
+    // right the moment it is opened.
+    onSuccess: () => invalidate(client, [keys.earnings, keys.handovers]),
   })
 }
 
@@ -1618,5 +1680,127 @@ export function useScan() {
   return useMutation({
     mutationFn: (code: string) =>
       api<ScanAnswer>(`/warehouse/scan?code=${encodeURIComponent(code)}`),
+  })
+}
+
+// ------------------------------------------------- the card form (§5.2 · W2)
+//
+// The palette, the size systems, and the two doors a card's own size system
+// has. Keyed locally rather than in `keys` at the top: these are this wave's
+// additions and a section that owns its own keys is a section that can be
+// lifted out whole.
+//
+// **Why the palette is read here and not from `/warehouse/vocab`.** Vocab
+// offers the *most-used spelling* of a colour as a chip, which is a plaster
+// applied at display time over rows that are still wrong underneath. The
+// palette is the list itself, with the swatch that makes a colour something
+// you point at rather than something you spell.
+
+const cardFormKeys = {
+  colours: ["colours"] as const,
+  sizeSystems: ["size-systems"] as const,
+  brands: ["brands"] as const,
+  productSizeSystem: (id: number) => ["products", id, "size-system"] as const,
+}
+
+/** The palette, in the order the picker draws it. */
+export function useColours() {
+  return useQuery({
+    queryKey: cardFormKeys.colours,
+    queryFn: () => api<ColourSwatch[]>("/admin/colours"),
+    // Seeded and rarely added to, and the modal that reads it is opened many
+    // times in one sitting at a receiving bench.
+    staleTime: 5 * 60_000,
+  })
+}
+
+/**
+ * "+ yangi rang" — a colour the shop has started selling.
+ *
+ * Guarded `CatalogReader` on the server on purpose, so the bench may add one
+ * without leaving the form: somebody holding a sack of a colour nobody has
+ * sold before will not go and find the owner, they will type it into the
+ * nearest box that accepts it. That is how three spellings of one colour
+ * happened in the first place.
+ */
+export function useAddColour() {
+  const client = useQueryClient()
+  return useMutation({
+    meta: { done: "Rang qo'shildi" },
+    mutationFn: (input: { name: string; hex?: string }) =>
+      api<ColourSwatch>("/admin/colours", { body: input }),
+    onSuccess: () => invalidate(client, [cardFormKeys.colours]),
+  })
+}
+
+/** Every run of sizes, with its values — grouped by `family` on screen. */
+export function useSizeSystems() {
+  return useQuery({
+    queryKey: cardFormKeys.sizeSystems,
+    queryFn: () => api<SizeSystem[]>("/admin/size-systems"),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/** Every make, with the spellings it answers to. */
+export function useBrands() {
+  return useQuery({
+    queryKey: cardFormKeys.brands,
+    queryFn: () => api<AdminBrand[]>("/admin/brands"),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/** What this card is sized in. `size_system: null` is **sizeless** (§6.3). */
+export function useProductSizeSystem(productId: number | null) {
+  return useQuery({
+    queryKey: cardFormKeys.productSizeSystem(productId ?? 0),
+    queryFn: () =>
+      api<ProductSizeSystem>(`/admin/products/${productId}/size-system`),
+    enabled: Boolean(productId),
+  })
+}
+
+/**
+ * Name the run of sizes this card is numbered in, or say it has none.
+ *
+ * It changes no variant — a card already carrying 41, 42 and 43 goes on
+ * carrying them. What moves is what the form offers next.
+ */
+export function useSetProductSizeSystem(productId: number) {
+  const client = useQueryClient()
+  return useMutation({
+    meta: { done: "O'lcham tizimi saqlandi" },
+    mutationFn: (slug: string | null) =>
+      api<ProductSizeSystem>(`/admin/products/${productId}/size-system`, {
+        method: "PUT",
+        body: { slug },
+      }),
+    onSuccess: () =>
+      invalidate(client, [
+        cardFormKeys.productSizeSystem(productId),
+        cardFormKeys.sizeSystems,
+      ]),
+  })
+}
+
+/**
+ * The 43 that really does cost more — one cell, on its own.
+ *
+ * The card-wide door (`usePriceCard`) is what publishing uses, because twelve
+ * requests to price a shoe is how a card stays in the queue for a week. This
+ * is the exception it leaves room for, and it is the only door that writes
+ * money onto a single variant.
+ */
+export function useRepriceVariant(productId: number) {
+  const client = useQueryClient()
+  return useMutation({
+    meta: { done: "Narx saqlandi" },
+    mutationFn: (input: { variantId: number; price: number }) =>
+      api<AdminVariant>(
+        `/admin/products/${productId}/variants/${input.variantId}`,
+        { method: "PATCH", body: { price: input.price } },
+      ),
+    onSuccess: () => invalidate(client, [["products"], keys.dashboard]),
   })
 }
