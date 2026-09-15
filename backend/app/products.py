@@ -348,8 +348,18 @@ def next_sku(session: Session) -> str:
     up "KRS-01" with a sack open in front of them is a person who stops writing
     cards, which is how the flow stalled before.
     """
-    used = session.exec(select(func.count()).select_from(Product)).one()
-    return f"MB-{int(used) + 1:06d}"
+    # The next number after the highest ever written — never the row count.
+    # Count+1 collides the moment any card has been deleted: the count shrinks,
+    # the deleted card's code stays used for ever (§6.5), and the person who
+    # never typed a SKU in their life gets "Bu SKU allaqachon ishlatilgan" on
+    # the receiving screen. Which is exactly how it was found.
+    taken = session.exec(select(Product.sku).where(col(Product.sku).like("MB-%"))).all()
+    top = 0
+    for one in taken:
+        tail = one[3:]
+        if tail.isdigit():
+            top = max(top, int(tail))
+    return f"MB-{top + 1:06d}"
 
 
 def variant_sku(product: Product, variant: ProductVariant) -> str:

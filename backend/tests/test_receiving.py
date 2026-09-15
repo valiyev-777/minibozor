@@ -396,3 +396,43 @@ def test_the_ledger_reads_the_two_moments_back(
     # the cost to one receipt.
     assert {leg.supply_id for leg in legs} == {made.json()["run_id"]}
     _assert_the_room_adds_up()
+
+
+def test_a_deleted_card_does_not_poison_the_next_sku(
+    client: TestClient, warehouse: dict[str, str], admin: dict[str, str]
+) -> None:
+    """Create, delete, create again — the third card gets a fresh code.
+
+    `next_sku` used to be count+1, which collides the moment anything has ever
+    been deleted: the count shrinks, the deleted card's code stays used for
+    ever, and the bench — which never types a SKU — gets "Bu SKU allaqachon
+    ishlatilgan" on every new card until somebody works out why. Found live,
+    on a database where cleanup had deleted two walked-through cards.
+    """
+    def open_card(title: str) -> dict:
+        made = client.post(
+            f"{API}/admin/products",
+            json={"sku": "", "title": title, "kind": "Shapka", "price": 0},
+            headers=warehouse,
+        )
+        assert made.status_code == 201, made.text
+        return made.json()
+
+    first = open_card("Shapka birinchi")
+    second = open_card("Shapka ikkinchi")
+    assert first["sku"] != second["sku"]
+
+    # Take the FIRST one out, so the count drops below the highest number —
+    # deleting the newest would hide the defect.
+    gone = client.delete(f"{API}/admin/products/{first['id']}", headers=admin)
+    assert gone.status_code == 200, gone.text
+
+    third = open_card("Shapka uchinchi")
+    assert third["sku"] not in (first["sku"], second["sku"])
+
+    # And the receiving door mints its stubs through the same generator.
+    receipt = _receive(
+        client, warehouse, kind="Shapka to'rtinchi", colour="Qora",
+        sizes=(("58", 3),), key="sku-after-delete",
+    )
+    assert receipt.status_code == 201, receipt.text

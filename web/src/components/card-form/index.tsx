@@ -658,6 +658,7 @@ function WritingACard({
         </Section>
       ) : null}
 
+      {full ? (
       <Section
         step={6}
         title="Xususiyatlarni tanlash"
@@ -700,6 +701,7 @@ function WritingACard({
           </Button>
         ) : null}
       </Section>
+      ) : null}
 
       {full ? (
         <>
@@ -822,6 +824,7 @@ function WritingACard({
           they have their own doors and their own guards, and a card whose
           price waits on a button at the bottom of a long form is a card that
           gets published unpriced. */}
+      {full ? (
       <div className="sticky bottom-[var(--bottom-nav)] z-10 rounded-panel border border-line bg-surface/95 px-4 py-3 shadow-raised backdrop-blur">
         <Button
           type="button"
@@ -835,6 +838,7 @@ function WritingACard({
           Saqlash
         </Button>
       </div>
+      ) : null}
     </div>
   )
 }
