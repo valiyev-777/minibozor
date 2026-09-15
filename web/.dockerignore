@@ -1,0 +1,7 @@
+# Same as backend/.dockerignore: the context is package.json and the lockfile.
+# node_modules is installed inside the image, and shipping the host's copy into
+# the context would be slower than installing it.
+node_modules/
+dist/
+dev-dist/
+*.log

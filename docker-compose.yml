@@ -1,0 +1,151 @@
+# The whole system, in containers: the database, the API and the web app.
+#
+#     ./dev.sh            bring it up and hold it
+#     ./dev.sh status     one line per service
+#     ./dev.sh down       stop it
+#
+# `dev.sh` is a thin wrapper around this file — it passes `--env-file
+# backend/.env`, opens the adb tunnel a USB phone needs, and prints the
+# addresses. Everything about *what runs* is here.
+#
+# ------------------------------------------------------------------ the shape
+#
+# Neither application image contains any source. The repository is bind-mounted
+# at /app in both, so `--reload` and HMR work exactly as they do on the host and
+# an edit is never an image rebuild. The images hold the dependencies, which is
+# the part that is slow and the part worth pinning.
+#
+# The repository root is mounted, not backend/ and web/ separately, because
+# web/src/index.css imports `../../shared/theme.css` — one design-token file
+# that both the web app and the panels read. Mount the two apps on their own and
+# that import points at nothing.
+
+name: minibozor
+
+services:
+  # --------------------------------------------------------------------- db
+  db:
+    image: postgres:16-alpine
+    container_name: minibozor_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${MB_POSTGRES_DB:-minibozor}
+      POSTGRES_USER: ${MB_POSTGRES_USER:-minibozor}
+      POSTGRES_PASSWORD: ${MB_POSTGRES_PASSWORD:?set MB_POSTGRES_PASSWORD in backend/.env}
+      # Postgres compares and sorts text by the collation the cluster was
+      # initialised with, and that cannot be changed afterwards without
+      # recreating it. Pinned so every machine sorts the catalogue the same
+      # way — `ORDER BY name` over Uzbek and Russian titles is not the same
+      # answer under C as under a UTF-8 locale.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    ports:
+      # 5434 on the host: 5432 and 5433 are usually another project's, and
+      # finding that out by connecting to the wrong database is worse than
+      # picking a free port.
+      - "${MB_POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready answers as soon as the socket accepts, which on a first boot
+      # happens once while initdb is still working and then again for real. The
+      # start_period covers that first window so `depends_on` cannot latch onto
+      # it.
+      test: ["CMD-SHELL", "pg_isready -U ${MB_POSTGRES_USER:-minibozor} -d ${MB_POSTGRES_DB:-minibozor}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # -------------------------------------------------------------------- api
+  api:
+    build: ./backend
+    container_name: minibozor_api
+    restart: unless-stopped
+    # backend/.env is the configuration, unchanged and unduplicated — the same
+    # file the host venv reads. `environment:` below overrides exactly one key
+    # out of it, and only the one that cannot mean the same thing in both
+    # places.
+    env_file:
+      - ./backend/.env
+    environment:
+      # `localhost` inside a container is the container, so a Postgres URL that
+      # says localhost:5434 finds nothing here — between containers the address
+      # is the service name and the port Postgres actually listens on, db:5432.
+      #
+      # The default is SQLite, and deliberately: the file under the bind mount
+      # is this project's real database, at head and with the catalogue in it,
+      # while the Postgres volume is an empty cluster still at 0001_baseline.
+      # Running in Docker should not silently move you to a different, emptier
+      # database than the one you were working on yesterday.
+      #
+      # To use Postgres instead, put this in backend/.env — note `db`, not
+      # localhost, and no port, and that the host venv goes on reading
+      # MB_DATABASE_URL and is unaffected:
+      #
+      #   MB_DOCKER_DATABASE_URL=postgresql+psycopg://minibozor:PASSWORD@db:5432/minibozor
+      #
+      # The entrypoint will migrate it to head and seed it on first start.
+      MB_DATABASE_URL: ${MB_DOCKER_DATABASE_URL:-sqlite:///./minibozor.db}
+    # As you, not as root.
+    #
+    # The bind mount is a two-way street: a container writing through it writes
+    # onto your disk, and a root container leaves root-owned files behind. It
+    # did exactly that once — `backend/minibozor.db` and four uploaded images
+    # came back owned by root:root at mode 644, which your own venv can read
+    # and no longer write. Running the process as the host's uid:gid means
+    # every file the API creates — the SQLite journal, an uploaded photo — is
+    # yours, and both ways of running the backend keep working on the same
+    # files.
+    #
+    # 1000:1000 is this machine; `id -u`, `id -g` if that is ever not true.
+    # Only the API needs it: the web container writes nothing into the
+    # repository, and its node_modules volume was installed as root.
+    user: "${MB_UID:-1000}:${MB_GID:-1000}"
+    volumes:
+      - ./:/app
+    working_dir: /app/backend
+    ports:
+      - "${MB_API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      # A cold uvicorn with --reload and 190 routes is not fast. Until this
+      # window is up a failing check does not count against `retries`.
+      start_period: 40s
+
+  # -------------------------------------------------------------------- web
+  web:
+    build: ./web
+    container_name: minibozor_web
+    restart: unless-stopped
+    environment:
+      # The API address as the *browser* will use it, not as the container
+      # would. This URL is fetched by JavaScript running on your machine, so it
+      # has to be a host address — http://api:8000 would be resolvable from
+      # inside the web container and meaningless in Chrome.
+      VITE_API_URL: ${MB_API_URL:-http://localhost:8000}
+    volumes:
+      - ./:/app
+      # Keeps the image's node_modules visible at this path instead of the
+      # host's, which the bind mount above would otherwise cover it with. See
+      # the comment in web/Dockerfile.
+      - web_node_modules:/app/web/node_modules
+    working_dir: /app/web
+    ports:
+      - "${MB_WEB_PORT:-5173}:5173"
+    depends_on:
+      - api
+
+volumes:
+  # Compose names these for the project: `minibozor_pgdata` and
+  # `minibozor_web_node_modules`. There is an older `backend_minibozor_pgdata`
+  # from when this file lived in backend/ — it holds an empty cluster still at
+  # 0001_baseline, nothing was ever migrated into it, and it is not referenced
+  # here. `docker volume rm backend_minibozor_pgdata` when you want the space.
+  pgdata:
+  web_node_modules:

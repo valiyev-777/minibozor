@@ -1,0 +1,13 @@
+# The build context is only ever pyproject.toml — everything the image runs is
+# bind-mounted over it at run time. Keeping .venv (hundreds of MB) and the
+# database out of the context is the difference between a two-second build and
+# a two-minute one.
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.db-*
+.pytest_cache/
+.ruff_cache/
+media/
+*.log

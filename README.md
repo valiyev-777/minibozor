@@ -25,15 +25,30 @@ docs/         BUILD_PROMPT.md — the brief this rebuild is written against
 ./dev.sh
 ```
 
-That is Postgres (if configured), the API and the web app, in dependency
+That is the database, the API and the web app — three containers, in dependency
 order, with a health check on each and one address list at the end. `Ctrl+C`
-stops everything it started.
+stops them. You need Docker and nothing else: no Python virtualenv, no Node, no
+matching versions on your machine.
 
 ```bash
 ./dev.sh status     # is everything alive? one line per service
-./dev.sh down       # stop whatever is still holding our ports
+./dev.sh logs api   # follow one service's output
+./dev.sh down       # stop everything
+./dev.sh build      # rebuild the images, after a dependency change
+./dev.sh sh api     # a shell inside a container
 ./dev.sh --help     # and how to move the ports
 ```
+
+**Editing is not rebuilding.** Neither image holds any source code — the
+repository is mounted into both containers at run time — so a change to a
+router is a uvicorn reload and a change to a component is an HMR update, the
+same as running them on the host. `./dev.sh build` is only for a change to
+`backend/pyproject.toml` or `web/package.json`.
+
+New to Docker, or to this compose file? **[docs/DOCKER.md](docs/DOCKER.md)** is
+the walkthrough: the three containers, why `db:5432` and `localhost:5434` are
+the same database by two routes, what `down -v` destroys, and what to do when
+one of them will not come up.
 
 The seed writes one account per role, so there is somebody to let in on a
 fresh database.

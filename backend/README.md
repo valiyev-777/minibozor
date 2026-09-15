@@ -659,11 +659,17 @@ for production. **One codebase, both databases**, and the suite runs on either.
 
 ```bash
 cp .env.example .env                     # then set MB_POSTGRES_PASSWORD
-docker compose up -d                     # Postgres 16, one volume
+(cd .. && docker compose up -d db)       # Postgres 16, one volume
 .venv/bin/uv pip install "psycopg[binary]"   # or: pip install -e ".[postgres]"
 ```
 
-`docker-compose.yml` reads the password from `.env` and does not contain one:
+The database is one service of `../docker-compose.yml`, which is the whole
+system — database, API and web app. `../dev.sh` brings all three up; `up -d db`
+is the database on its own, for when the API is what you are running from this
+venv. There is no compose file in this directory any more: two files declaring
+one container named `minibozor_db` is one file too many.
+
+That compose file reads the password from `.env` and does not contain one:
 `.env` is gitignored, and a password committed to a repository is a password
 for ever — it stays in the history after somebody "changes" it and it is the
 same one on every machine that cloned. An unset `MB_POSTGRES_PASSWORD` stops
@@ -795,5 +801,6 @@ after lunch failing.
 
 ### Not in this yet
 
-Deploy, CI, backups and monitoring. `docker-compose.yml` brings up a database
-to develop and test against; it is not a production topology.
+Deploy, CI, backups and monitoring. `../docker-compose.yml` brings up a
+database, an API and a web app to develop and test against — with the source
+bind-mounted in and `--reload` on. It is not a production topology.
