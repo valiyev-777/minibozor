@@ -611,6 +611,19 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "The cash does not match: {owed} so'm is owed and {given} was "
               "entered",
     },
+    "cash_more_than_held": {
+        "uz": "Qo'lingizdagi naqddan ko'pini topshirib bo'lmaydi: {held} so'm "
+              "bor, {given} ko'rsatilgan",
+        "ru": "Нельзя сдать больше, чем на руках: есть {held} сум, указано "
+              "{given}",
+        "en": "You cannot hand in more than you hold: {held} so'm on hand and "
+              "{given} was entered",
+    },
+    "cash_receiver_not_found": {
+        "uz": "Naqdni qabul qiluvchi xodim topilmadi",
+        "ru": "Сотрудник, принимающий наличные, не найден",
+        "en": "Nobody here takes cash under that name",
+    },
     "courier_not_found": {
         "uz": "Kuryer topilmadi",
         "ru": "Курьер не найден",

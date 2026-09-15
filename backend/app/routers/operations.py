@@ -43,6 +43,7 @@ from app.deps import (
     WarehouseUser,
 )
 from app.models import (
+    CashHandover,
     Notification,
     NotificationKind,
     Order,
@@ -566,6 +567,47 @@ def list_couriers(user: OperatorUser, session: SessionDep) -> list[s.StaffUserOu
             is_active=row.is_active,
             created_at=row.created_at,
         )
+        for row in rows
+    ]
+
+
+@router.get(
+    "/cash/handovers",
+    response_model=list[s.CashHandoverOut],
+    summary="Cash handed in by couriers, newest first",
+)
+def list_cash_handovers(
+    user: WarehouseUser,
+    session: SessionDep,
+    courier_id: int | None = Query(None, description="One courier's receipts"),
+) -> list[s.CashHandoverOut]:
+    """The office's side of ``POST /courier/cash/handovers``.
+
+    Read by the warehouse as well as the owner, and for the same reason
+    ``list_pickups`` is: the person at the desk is the one the envelope was
+    handed to, and they are entitled to see what they signed for.
+
+    Every row names both hands and carries its own time, so "who had the
+    takings on Tuesday" is a question with an answer. ``cash_on_hand`` beside
+    it is what that courier is carrying today, which is the figure that says
+    whether anybody still owes anything.
+    """
+    stmt = select(CashHandover)
+    if courier_id is not None:
+        stmt = stmt.where(CashHandover.courier_id == courier_id)
+    rows = session.exec(
+        stmt.order_by(col(CashHandover.happened_at).desc(), col(CashHandover.id).desc())
+    ).all()
+    # One figure per courier rather than one per row: the same query repeated
+    # down a list of a hundred receipts is ninety-nine answers nobody asked for.
+    on_hand: dict[int, int] = {}
+    for row in rows:
+        if row.courier_id not in on_hand:
+            on_hand[row.courier_id] = courier_router._cash_on_hand(
+                session, row.courier_id
+            )
+    return [
+        courier_router._handover_out(session, row, on_hand[row.courier_id])
         for row in rows
     ]
 

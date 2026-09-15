@@ -201,6 +201,120 @@
   --shadow-panel: 0 1px 2px rgb(18 28 37 / 0.06);
   --shadow-raised:
     0 1px 2px rgb(18 28 37 / 0.08), 0 6px 16px rgb(18 28 37 / 0.08);
+
+  /* ---------------------------------------------------------- the courier
+   *
+   * A **second visual language**, and the only one in this file.
+   *
+   * Everything above is a back office: a page of cards on a grey field, read
+   * at a desk, with a rail down the left. The courier's app is not that and
+   * cannot be squeezed into it — it is a full-bleed map with glass floating
+   * over it, held one-handed, outdoors, in daylight, by somebody who is
+   * walking. A map has no canvas to put a card on, and a screen that is
+   * mostly somebody else's imagery needs its own contrast rules: translucent
+   * fills with a blur behind them, a hairline of white on the lit edge, and
+   * one saturated hue per meaning so a glance answers the question.
+   *
+   * So the courier gets its own group rather than a set of exceptions written
+   * into its screens. The rule that a screen never writes a hex is unchanged;
+   * this is the system being given the colours it was missing.
+   *
+   * **Three meanings, and the designer stated them plainly:** blue is an act
+   * the courier can take, green is a thing that happened, amber is cash in a
+   * pocket. They are *not* `brand` / `good` / `warn` renamed. `brand` is a
+   * `#2585ff` chosen to sit on white paper at a desk; `act` is the iOS
+   * `#0a84ff`, which is what a floating pill over a map needs to stay blue in
+   * sun. `warn` means "not yet" and `cash` means "money you are carrying" —
+   * one is a state and the other is an amount, and the day they diverge is
+   * the day a shared token would have been wrong.
+   *
+   * Dark is not in the design, which is a light iOS mockup. It exists because
+   * this app has a theme switch and a courier works after sunset: the wash and
+   * the glass invert into the app's own navy ramp, the three hues keep their
+   * identity, and the tiles themselves are filtered (`.kuryer-tiles`). */
+  /* The one size the courier's surface adds. A screen there opens with its
+   * own name set large — `Bugun`, `Yukni tanlash`, `To'lov` — and it has to be
+   * *smaller* than the one sum underneath it, because the sum is the thing
+   * being read. `.figure` and `.display` are both bigger than that and are
+   * already spoken for; this is the heading over them.
+   *
+   * Fixed rather than restated per density, unlike every other size in this
+   * file, and that is a property of the surface rather than an oversight: the
+   * courier app is a phone app and is always `density-comfortable`. A desk
+   * width shows the same screens at the same size in a column. */
+  --text-kuryer-title: 1.875rem; /* 30px */
+  --text-kuryer-title--line-height: 1.1;
+
+  --color-kuryer-ground: #eef1f0;
+  --color-kuryer-ground-deep: #e4eaee;
+  --color-kuryer-ink: #0b0f19;
+  --color-kuryer-ink-soft: #5a6069;
+  --color-kuryer-ink-faint: #7d838d;
+  /* The one opaque surface: a plain white tile on the wash, which is the
+   * design's second card and carries no blur. */
+  --color-kuryer-card: #ffffff;
+  /* The glass. A fill this translucent is only legible with the blur behind
+   * it — see `.kuryer-glass`, which is the pair and must not be split. */
+  --color-kuryer-glass: rgb(252 253 253 / 0.78);
+  /* The same glass, less see-through, for a pane that **scrolling content
+   * passes under**: a running total over a moving list is the one place where
+   * 78% and a blur still let a headline read through, and a summary you have
+   * to squint past the list to read is not a summary. The artboard uses two
+   * alphas for exactly this reason. */
+  --color-kuryer-glass-strong: rgb(252 253 253 / 0.94);
+  --color-kuryer-glass-edge: rgb(255 255 255 / 0.95);
+  --color-kuryer-sheet: rgb(246 248 250 / 0.86);
+  /* The grab handle at the top of a sheet, and a hairline inside a card. */
+  --color-kuryer-grab: rgb(60 60 67 / 0.24);
+  --color-kuryer-hair: rgb(60 60 67 / 0.09);
+  /* A chip that means nothing in particular — a weight, a fragility note. */
+  --color-kuryer-quiet: rgb(16 32 40 / 0.06);
+
+  /* Blue: something to do. */
+  --color-kuryer-act: #0a84ff;
+  --color-kuryer-act-ink: #ffffff;
+  --color-kuryer-act-deep: #0a63c9;
+  --color-kuryer-act-soft: rgb(10 132 255 / 0.1);
+  --color-kuryer-act-edge: rgb(10 132 255 / 0.5);
+
+  /* Green: it happened. Never a brand accent, never warmth. */
+  --color-kuryer-done: #30d158;
+  --color-kuryer-done-ink: #04240f;
+  --color-kuryer-done-deep: #0b8a3e;
+  --color-kuryer-done-soft: rgb(48 209 88 / 0.13);
+  --color-kuryer-done-edge: rgb(48 209 88 / 0.4);
+
+  /* Amber: cash, and the amount of it in somebody's pocket. */
+  --color-kuryer-cash: #f0b400;
+  --color-kuryer-cash-ink: #8a5a00;
+  --color-kuryer-cash-soft: rgb(255 214 10 / 0.18);
+  --color-kuryer-cash-edge: rgb(255 214 10 / 0.4);
+
+  /* Red: stop. Going offline, and a door that did not open. */
+  --color-kuryer-halt: #ff3b30;
+  --color-kuryer-halt-ink: #c2261c;
+  --color-kuryer-halt-soft: rgb(255 59 48 / 0.1);
+  --color-kuryer-halt-edge: rgb(255 59 48 / 0.3);
+
+  /* iOS radii, which are a different family from the desk's 8/12. Named for
+   * what they wrap, same as the other two: a sheet, a pane of glass, a tile,
+   * a full-width slab of a button, a small nub of a chip. */
+  --radius-sheet: 34px;
+  --radius-glass: 28px;
+  --radius-tile: 24px;
+  --radius-slab: 20px;
+  --radius-nub: 15px;
+
+  /* Elevation over a map is not the desk's two steps. A pill floating over
+   * imagery needs a real shadow to detach from it, and the filled actions
+   * carry a coloured one — which is the one place in this whole system a
+   * shadow is allowed a hue, because it is the glow of a button that is lit. */
+  --shadow-kuryer-card: 0 1px 3px rgb(16 32 40 / 0.07);
+  --shadow-kuryer-glass: 0 12px 30px rgb(16 32 40 / 0.08);
+  --shadow-kuryer-float: 0 8px 22px rgb(16 32 40 / 0.14);
+  --shadow-kuryer-sheet: 0 -14px 44px rgb(16 32 40 / 0.16);
+  --shadow-kuryer-act: 0 12px 28px rgb(10 132 255 / 0.28);
+  --shadow-kuryer-done: 0 12px 28px rgb(48 209 88 / 0.26);
 }
 
 :root {
@@ -384,6 +498,55 @@ body {
 
   --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.5), 0 6px 16px rgb(0 0 0 / 0.45);
+
+  /* The courier's surface after sunset. The wash and the glass invert into
+   * the same navy ramp the rest of the app uses; the three hues keep their
+   * identity and only the *inks* move, because a `#8a5a00` cash figure is
+   * unreadable on a dark pane and a `#0a63c9` label is not blue any more, it
+   * is a smudge. The filled buttons keep their light-mode inks — a white
+   * label on iOS blue and a near-black one on iOS green are correct in both. */
+  --color-kuryer-ground: #0d1218;
+  --color-kuryer-ground-deep: #070a0f;
+  --color-kuryer-ink: #e9eef5;
+  --color-kuryer-ink-soft: #9aa6b8;
+  --color-kuryer-ink-faint: #6a7484;
+  --color-kuryer-card: #161f2b;
+  --color-kuryer-glass: rgb(20 27 37 / 0.72);
+  --color-kuryer-glass-strong: rgb(18 24 33 / 0.95);
+  --color-kuryer-glass-edge: rgb(255 255 255 / 0.12);
+  --color-kuryer-sheet: rgb(14 20 28 / 0.86);
+  --color-kuryer-grab: rgb(233 238 245 / 0.28);
+  --color-kuryer-hair: rgb(233 238 245 / 0.1);
+  --color-kuryer-quiet: rgb(233 238 245 / 0.08);
+
+  --color-kuryer-act: #0a84ff;
+  --color-kuryer-act-ink: #ffffff;
+  --color-kuryer-act-deep: #7db6ff;
+  --color-kuryer-act-soft: rgb(10 132 255 / 0.2);
+  --color-kuryer-act-edge: rgb(10 132 255 / 0.6);
+
+  --color-kuryer-done: #30d158;
+  --color-kuryer-done-ink: #04240f;
+  --color-kuryer-done-deep: #5fdc7a;
+  --color-kuryer-done-soft: rgb(48 209 88 / 0.18);
+  --color-kuryer-done-edge: rgb(48 209 88 / 0.45);
+
+  --color-kuryer-cash: #f0b400;
+  --color-kuryer-cash-ink: #f3c469;
+  --color-kuryer-cash-soft: rgb(255 214 10 / 0.16);
+  --color-kuryer-cash-edge: rgb(255 214 10 / 0.35);
+
+  --color-kuryer-halt: #ff453a;
+  --color-kuryer-halt-ink: #ff8078;
+  --color-kuryer-halt-soft: rgb(255 69 58 / 0.14);
+  --color-kuryer-halt-edge: rgb(255 69 58 / 0.4);
+
+  --shadow-kuryer-card: 0 1px 3px rgb(0 0 0 / 0.5);
+  --shadow-kuryer-glass: 0 12px 30px rgb(0 0 0 / 0.45);
+  --shadow-kuryer-float: 0 8px 22px rgb(0 0 0 / 0.5);
+  --shadow-kuryer-sheet: 0 -14px 44px rgb(0 0 0 / 0.5);
+  --shadow-kuryer-act: 0 12px 28px rgb(10 132 255 / 0.3);
+  --shadow-kuryer-done: 0 12px 28px rgb(48 209 88 / 0.22);
 }
 
 /* --------------------------------------------------------------- touch tools
@@ -440,6 +603,16 @@ body {
    * and an ellipsis in a menu is a menu you have to learn. */
   --nav-bar: calc(var(--control-lg) + 0.75rem);
   --bottom-nav: 0px;
+
+  /* The courier's tab bar, which is a different measurement because it is a
+   * different bar: it floats clear of the bottom edge over a map rather than
+   * sitting flush on it, so the room a screen owes it is the bar plus the gap
+   * plus the home indicator. Its own token rather than a second meaning for
+   * `--bottom-nav` — the two shells are siblings, and a screen that reads the
+   * wrong one ends either under a bar or above a stripe of nothing. */
+  --kuryer-tabs: calc(
+    var(--control-md) + 0.75rem + max(0.75rem, env(safe-area-inset-bottom))
+  );
 }
 
 @media (width < 48rem) {
@@ -447,5 +620,149 @@ body {
   .density-cozy,
   .density-comfortable {
     --bottom-nav: calc(var(--nav-bar) + env(safe-area-inset-bottom));
+  }
+}
+
+/* ----------------------------------------------------------------- the glass
+ *
+ * The one recipe the courier's screens are built out of, written here rather
+ * than repeated as four utilities on every floating thing — **because the fill
+ * and the blur are not separable**. `--color-kuryer-glass` is 78% opaque over
+ * whatever the map happens to be showing; without the blur behind it a road
+ * name runs straight through the text sitting on it. A screen that wrote
+ * `bg-kuryer-glass` on its own would be legible on the artboard and unreadable
+ * over a city.
+ *
+ * `saturate(180%)` is not decoration either: blurring a photograph washes it
+ * out, and pulling the saturation back is what keeps the pane reading as
+ * frosted glass over a map rather than as a grey rectangle.
+ *
+ * The hairline is on the pane, not under it. A half-pixel of near-white along
+ * the top edge is what gives a translucent panel an edge at all — it is the
+ * only thing separating the pane from a bright patch of map underneath it.
+ */
+.kuryer-glass {
+  background: var(--color-kuryer-glass);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 0.5px solid var(--color-kuryer-glass-edge);
+}
+
+/* The running total over a moving list — see `--color-kuryer-glass-strong`. */
+.kuryer-glass-strong {
+  background: var(--color-kuryer-glass-strong);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 0.5px solid var(--color-kuryer-glass-edge);
+}
+
+/* The bottom sheet is the same glass with more of it: a taller pane holds more
+ * map behind it, so it blurs harder and sits on a slightly more opaque fill.
+ * Its hairline is only along the top, which is its only exposed edge. */
+.kuryer-sheet {
+  background: var(--color-kuryer-sheet);
+  backdrop-filter: blur(34px) saturate(180%);
+  -webkit-backdrop-filter: blur(34px) saturate(180%);
+  border-top: 0.5px solid var(--color-kuryer-glass-edge);
+}
+
+/* The map itself, in the dark theme.
+ *
+ * OpenStreetMap's standard tiles are one raster and there is no dark one on
+ * the same host. Inverting and rotating the hue back is the standard way to
+ * get a night map out of a day map: roads stay lighter than land, water stays
+ * cool, and the labels stay legible. Applied to the tile layer alone, so the
+ * markers and the route drawn on top of it keep their real colours. */
+.dark .kuryer-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.86) contrast(0.92);
+}
+
+/* Leaflet paints a white `#ddd` ground under the tiles and puts its own
+ * attribution on a white chip. Both are wrong on a dark theme and neither is
+ * reachable from a class on our side of the component. */
+.kuryer-map .leaflet-container {
+  background: var(--color-kuryer-ground-deep);
+  font-family: inherit;
+  outline: none;
+}
+
+.kuryer-map .leaflet-control-attribution {
+  background: var(--color-kuryer-glass);
+  color: var(--color-kuryer-ink-faint);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 6px 0 0 0;
+}
+
+.kuryer-map .leaflet-control-attribution a {
+  color: var(--color-kuryer-ink-soft);
+}
+
+/* The route and the stop pins.
+ *
+ * Global classes rather than utilities because Leaflet builds these nodes
+ * itself — the polyline is an `<path>` in a pane React never sees, and a pin
+ * is an HTML string handed to `divIcon`. A token read through CSS is the only
+ * way they get the same blue as the button that advances the round.
+ */
+.kuryer-route {
+  stroke: var(--color-kuryer-act);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.kuryer-pin {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 3px solid var(--color-kuryer-card);
+  box-shadow: var(--shadow-kuryer-float);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* Done, doing, next — the same three states the list prints, so a glance at
+ * the map and a glance at the sheet say the same thing. */
+.kuryer-pin-past {
+  background: var(--color-kuryer-done);
+  color: var(--color-kuryer-done-ink);
+}
+
+.kuryer-pin-now {
+  background: var(--color-kuryer-act);
+  color: var(--color-kuryer-act-ink);
+}
+
+.kuryer-pin-next {
+  background: var(--color-kuryer-card);
+  color: var(--color-kuryer-ink-soft);
+}
+
+/* The pill that floats over the map and breathes, so the eye finds it on a
+ * screen that is otherwise a still picture. Off entirely under
+ * `prefers-reduced-motion`, which the media query at the foot of this file
+ * does for everything. */
+@keyframes kuryer-float {
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, -4px);
+  }
+}
+
+.kuryer-afloat {
+  animation: kuryer-float 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kuryer-afloat {
+    animation: none;
   }
 }

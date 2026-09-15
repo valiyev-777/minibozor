@@ -10,6 +10,15 @@
 import { Navigate, Route, Routes } from "react-router-dom"
 
 import { Shell } from "@/components/shell"
+import { KuryerShell } from "@/components/kuryer/shell"
+import { KuryerConfirm } from "@/pages/kuryer/confirm"
+import { KuryerEarnings } from "@/pages/kuryer/earnings"
+import { KuryerHome } from "@/pages/kuryer/home"
+import { KuryerPayment } from "@/pages/kuryer/payment"
+import { KuryerProfile } from "@/pages/kuryer/profile"
+import { KuryerRoute } from "@/pages/kuryer/route"
+import { KuryerStop } from "@/pages/kuryer/stop"
+import { KuryerTake } from "@/pages/kuryer/take"
 import { LoginPage } from "@/pages/login"
 import { NotFound } from "@/pages/oops"
 import { CountsPage } from "@/pages/counts"
@@ -51,6 +60,38 @@ export function App() {
 
   return (
     <Routes>
+      {/* ------------------------------------------------------ the courier app
+       *
+       * A **sibling** of the back office's shell rather than a screen inside
+       * it, and that is the one architectural decision this design forces. The
+       * courier's screens are a full-bleed map with glass floating over it and
+       * a tab bar of their own; the shell above them is a 264px rail, a
+       * breadcrumb bar and `p-6` of grey canvas. Nesting one in the other
+       * would mean every courier screen opening by undoing the frame it was
+       * given — and a second navigation drawn under the first one on a phone.
+       *
+       * So there are two shells, the other roles' is untouched, and they share
+       * everything below the chrome: the session, the query client, the theme
+       * and `shared/theme.css`. See `components/kuryer/shell`.
+       *
+       * Guarded by role here rather than through `canReach`: the courier's
+       * `navFor` entries are the *old* three screens, which still work — see
+       * below — and this app is not in any menu.
+       */}
+      {staff.role === "courier" ? (
+        <Route path="/kuryer" element={<KuryerShell />}>
+          <Route index element={<KuryerHome />} />
+          <Route path="olish" element={<KuryerTake />} />
+          <Route path="marshrut" element={<KuryerRoute />} />
+          <Route path="marshrut/:id" element={<KuryerStop />} />
+          <Route path="marshrut/:id/tasdiq" element={<KuryerConfirm />} />
+          <Route path="marshrut/:id/tolov" element={<KuryerPayment />} />
+          <Route path="daromad" element={<KuryerEarnings />} />
+          <Route path="profil" element={<KuryerProfile />} />
+          <Route path="*" element={<Navigate to="/kuryer" replace />} />
+        </Route>
+      ) : null}
+
       <Route element={<Shell />}>
         {may("/") ? (
           <Route index element={<DashboardPage />} />
@@ -103,7 +144,20 @@ export function App() {
         ) : null}
         {may("/jurnal") ? <Route path="/jurnal" element={<AuditPage />} /> : null}
 
-        {/* ---------------------------------------------------------- kuryer */}
+        {/* ---------------------------------------------------------- kuryer
+         *
+         * The old three screens, kept and working, and reached from the rail
+         * exactly as before. They are the *desk* view of the same work — an
+         * owner opening a courier's account at a laptop to see what is in
+         * their van gets a table rather than a map — and deleting them would
+         * have meant a courier signing in at a desk landing in a phone app
+         * stretched across a monitor.
+         *
+         * They are not in any tab of the new app and the new app is not in
+         * this menu: two doors to one job, each the right shape for where it
+         * is opened. The courier's own home is `/kuryer` now (`homeFor`), so
+         * the map is what a phone lands on.
+         */}
         {may("/ishlarim") ? (
           <Route path="/ishlarim" element={<MyWorkPage />} />
         ) : null}

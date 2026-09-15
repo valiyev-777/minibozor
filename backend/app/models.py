@@ -686,6 +686,18 @@ class Order(SQLModel, table=True):
     delivery_kind: DeliveryKind = Field(default=DeliveryKind.COURIER)
     address_line: str = ""
     address_meta: str = ""
+    # Where the door is, snapshotted for the same reason the words for it are:
+    # the address row can be edited or deleted after the order is placed, and
+    # the order still has to say where it went. A courier's map has nothing to
+    # draw without these.
+    #
+    # **Null is an ordinary answer.** An address saved without a pin has none,
+    # and so has every order placed before this column existed — those are not
+    # backfillable, because a guessed coordinate on a delivery record is worse
+    # than no coordinate at all. Anything reading them says "no pin" rather
+    # than dropping the stop.
+    latitude: float | None = None
+    longitude: float | None = None
     pickup_point_id: int | None = Field(default=None, foreign_key="pickup_points.id")
 
     # When the order is promised, as a snapshot rather than a booking. Nothing
@@ -1418,6 +1430,51 @@ class PickupLine(SQLModel, table=True):
     reason: str = ""              # why not, when not
     photo_url: str = ""
     attempted_at: datetime | None = None
+
+
+class CashHandover(SQLModel, table=True):
+    """Money leaving a courier's pocket and going back to the shop.
+
+    ``DeliveryAttempt.cash_collected`` says what was taken at a door and there
+    was nothing anywhere that said it had ever been given back — so a courier's
+    cash on hand was the sum of everything they had ever collected, a figure
+    that is only true on their first day.
+
+    **A table of its own, and not a column.** Three shapes were possible and
+    two of them are wrong:
+
+    * A running total on ``users`` reset by a button is a counter, not a
+      record: it cannot say when the money moved or who took it, and the one
+      question anybody ever asks about cash is "who had it on Tuesday".
+    * A third ``AttemptResult`` on ``delivery_attempts`` would need a null
+      ``order_id`` on a column that is not nullable, because a hand-in happens
+      at no door and for no order — and it would land in every query that
+      counts attempts, starting with the earnings figures next to it.
+
+    So a hand-in is its own event, with its own time, naming both hands it
+    passed through. Cash on hand is then taken-at-doors less handed-in, which
+    is an arithmetic anybody can check against these rows.
+
+    **It is never edited and never deleted.** A mistake is corrected by the
+    office in the audit log beside it, the way every other money figure here
+    is; rewriting a receipt is not a thing this shop does.
+    """
+
+    __tablename__ = "cash_handovers"
+
+    id: int | None = Field(default=None, primary_key=True)
+    # Whose pocket it came out of. Taken from the token that made the request
+    # and never from a request body — a courier hands in their own cash, and a
+    # courier_id somebody could send is a courier_id somebody could forge.
+    courier_id: int = Field(foreign_key="users.id", index=True)
+    # And whose hand it went into. Required: "handed in to the warehouse" with
+    # nobody named is a row that settles no argument.
+    received_by_id: int = Field(foreign_key="users.id", index=True)
+    # In so'm, always positive. Nought is not a hand-over, it is a tap on a
+    # button, and it is refused at the door rather than stored.
+    amount: int = 0
+    note: str = Field(default="", max_length=200)
+    happened_at: datetime = Field(default_factory=utcnow, index=True)
 
 
 # --------------------------------------------------------------------------- the palette and the size systems

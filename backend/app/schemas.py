@@ -2321,7 +2321,15 @@ class CourierEarningsOut(BaseModel):
 
     # Cash collected at doors and not yet handed in. Ours to reconcile, and
     # shown because the person holding it should know the figure.
+    #
+    # Taken at doors less handed back: ``cash_collected - cash_handed_in``,
+    # floored at nought. Both sides are shown beside it because a courier
+    # querying the figure wants to see the subtraction, not be told the
+    # answer — and because a total that only ever went up was the bug this
+    # replaces.
     cash_on_hand: int
+    cash_collected: int = 0
+    cash_handed_in: int = 0
 
     # How many doors were knocked on for nothing. Not a score — a courier who
     # takes the hard addresses should not read this as a mark against them —
@@ -2346,6 +2354,16 @@ class CourierOrderOut(BaseModel):
     recipient_phone: str
     address_line: str
     address_meta: str
+    # The pin, snapshotted onto the order at checkout. Both null together on a
+    # stop whose address was saved without one, and on every order placed
+    # before the column existed — a map draws those from the text and says so
+    # rather than dropping the stop off the round.
+    #
+    # Defaulted, unlike everything else on this shape, because a replayed
+    # idempotency record written before these existed is parsed back through
+    # this model: a required field would turn an old key's retry into a 500.
+    latitude: float | None = None
+    longitude: float | None = None
     delivery_kind: DeliveryKind
     delivery_day: date | None
     delivery_window: str
@@ -2394,6 +2412,70 @@ class FailedIn(BaseModel):
 
     reason: str = Field(min_length=1, max_length=200)
     photo_url: str = Field("", max_length=300)
+
+
+# --------------------------------------------------------------------------- cash back in
+
+
+class CashReceiverOut(BaseModel):
+    """Somebody a courier may hand the day's cash to.
+
+    A name and an id, and nothing else: the courier is standing at a desk
+    picking the person in front of them out of a short list, not browsing
+    staff records.
+    """
+
+    id: int
+    full_name: str
+    phone: str
+    role: UserRole
+
+
+class CashHandoverIn(BaseModel):
+    """Cash going back to the office.
+
+    There is no ``courier_id`` here on purpose. Whose money it is comes from
+    the token that made the request, so "hand in somebody else's cash" is not
+    a request this shape can express.
+
+    ``amount`` is greater than nought rather than at least nought: a hand-over
+    of nothing is a tap on a button, and storing one would put a receipt in
+    the ledger for an event that did not happen.
+    """
+
+    amount: int = Field(gt=0)
+    # Who is taking it. Checked against the roles that may — the warehouse desk
+    # and the owner — rather than trusted, because a courier's client could
+    # name anybody at all.
+    received_by_id: int
+    note: str = Field("", max_length=200)
+
+
+class CashHandoverOut(BaseModel):
+    """One receipt, from both sides.
+
+    Both names are spelled out rather than left as ids: this row is read by an
+    office screen listing every hand-in, and a table of numbers is a table
+    somebody has to go and resolve.
+    """
+
+    id: int
+    amount: int
+    courier_id: int
+    courier_name: str
+    received_by_id: int
+    received_by_name: str
+    note: str
+    happened_at: datetime
+    # What that courier is carrying **now**, not a figure frozen at the moment
+    # of this receipt. Same meaning on every shape that returns one, so an
+    # office list of ten receipts from one courier repeats the same number
+    # rather than offering ten answers to one question.
+    #
+    # On the reply to the hand-over itself that is the same thing as "after
+    # this one", which is why it is there: the phone redraws the figure without
+    # a second round trip, on the connection this app is built for.
+    cash_on_hand: int = 0
 
 
 class PickupLineOut(BaseModel):

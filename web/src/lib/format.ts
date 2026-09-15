@@ -47,6 +47,51 @@ export function time(value: string | Date | null | undefined): string {
   return `${pad(when.getHours())}:${pad(when.getMinutes())}`
 }
 
+/* The days and the months, written out.
+ *
+ * Not `Intl.DateTimeFormat("uz-UZ", { weekday: "long" })` — the top of this
+ * file is about exactly this: a runtime without the locale data answers in
+ * English, silently, and the courier's home screen greets them with
+ * "Thursday". Fourteen words is a cheaper guarantee than a polyfill. */
+const DAYS = [
+  "Yakshanba",
+  "Dushanba",
+  "Seshanba",
+  "Chorshanba",
+  "Payshanba",
+  "Juma",
+  "Shanba",
+]
+
+const MONTHS = [
+  "yanvar",
+  "fevral",
+  "mart",
+  "aprel",
+  "may",
+  "iyun",
+  "iyul",
+  "avgust",
+  "sentabr",
+  "oktabr",
+  "noyabr",
+  "dekabr",
+]
+
+/** `Payshanba, 15-sentabr` — the line over the courier's day. */
+export function dayLine(value: string | Date | null | undefined): string {
+  const when = asDate(value)
+  if (!when) return ""
+  return `${DAYS[when.getDay()]}, ${when.getDate()}-${MONTHS[when.getMonth()]}`
+}
+
+/** `15-sentabr`, without the weekday. */
+export function dayMonth(value: string | Date | null | undefined): string {
+  const when = asDate(value)
+  if (!when) return ""
+  return `${when.getDate()}-${MONTHS[when.getMonth()]}`
+}
+
 /** `08.09.2026 14:30`, for a row that has to say exactly when. */
 export function dateTime(value: string | Date | null | undefined): string {
   const when = asDate(value)
@@ -91,6 +136,20 @@ export function ageBrief(minutes: number): string {
 /** `3 dona` — a count with its unit, which every warehouse screen shows. */
 export function units(count: number): string {
   return `${groups(count)} dona`
+}
+
+/**
+ * `25,4 km` — one decimal, and the decimal is a **comma**.
+ *
+ * Here for the same reason everything else in this file is: `toLocaleString`
+ * would pick the separator off whatever locale data the runtime happens to
+ * carry, and a courier reading `25.4` on one phone and `25,4` on the next is
+ * reading two different conventions for the same round.
+ */
+export function distance(value: number): string {
+  const tenths = Math.round(Math.abs(value) * 10)
+  const sign = value < 0 ? "-" : ""
+  return `${sign}${groups(Math.floor(tenths / 10))},${tenths % 10} km`
 }
 
 /** `42%`, for a fill bar's label. */

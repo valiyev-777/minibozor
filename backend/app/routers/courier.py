@@ -44,6 +44,7 @@ from app.core.config import settings
 from app.deps import CourierUser, SessionDep
 from app.models import (
     AttemptResult,
+    CashHandover,
     DeliveryAttempt,
     Notification,
     NotificationKind,
@@ -56,6 +57,7 @@ from app.models import (
     PickupRunStatus,
     ReturnRequest,
     User,
+    UserRole,
     utcnow,
 )
 
@@ -256,6 +258,9 @@ def earnings(user: CourierUser, session: SessionDep) -> s.CourierEarningsOut:
         if (row.happened_at.year, row.happened_at.month) == (today.year, today.month)
     ]
 
+    collected = sum(row.cash_collected for row in done)
+    handed = _handed_in(session, user.id)
+
     return s.CourierEarningsOut(
         delivered_today=len(day),
         delivered_month=len(month),
@@ -264,9 +269,146 @@ def earnings(user: CourierUser, session: SessionDep) -> s.CourierEarningsOut:
         earned_today=len(day) * fee,
         earned_month=len(month) * fee,
         earned_total=len(done) * fee,
-        cash_on_hand=sum(row.cash_collected for row in done),
+        # Taken at doors less handed back at the warehouse. This used to be the
+        # first half alone, which meant a courier who gave every som to the
+        # office still read as carrying a week's takings — a figure that was
+        # only ever true on their first day.
+        cash_on_hand=max(collected - handed, 0),
+        cash_collected=collected,
+        cash_handed_in=handed,
         failed_attempts=len(failed),
     )
+
+
+# --------------------------------------------------------------------- cash back in
+
+
+@router.get(
+    "/cash/receivers",
+    response_model=list[s.CashReceiverOut],
+    summary="Who at the warehouse may take the cash",
+)
+def cash_receivers(user: CourierUser, session: SessionDep) -> list[s.CashReceiverOut]:
+    """The short list the hand-in screen picks from.
+
+    A courier must name the person who took the money, and naming somebody
+    means choosing them from somewhere. Warehouse and admin, which is exactly
+    the set ``hand_in_cash`` accepts — a picker offering a name the write
+    refuses is a picker that lies.
+    """
+    rows = session.exec(
+        select(User)
+        .where(col(User.role).in_([UserRole.WAREHOUSE, UserRole.ADMIN]))
+        .where(col(User.is_active).is_(True))
+        .order_by(col(User.full_name), col(User.phone))
+    ).all()
+    return [
+        s.CashReceiverOut(
+            id=row.id, full_name=row.full_name, phone=row.phone, role=row.role
+        )
+        for row in rows
+    ]
+
+
+@router.get(
+    "/cash/handovers",
+    response_model=list[s.CashHandoverOut],
+    summary="What I have handed in, newest first",
+)
+def my_handovers(user: CourierUser, session: SessionDep) -> list[s.CashHandoverOut]:
+    """Mine and nobody else's, like the round.
+
+    The receipts the courier can point at when the office's figure and theirs
+    disagree — which is the whole reason these are rows and not a counter.
+    """
+    rows = session.exec(
+        select(CashHandover)
+        .where(CashHandover.courier_id == user.id)
+        .order_by(col(CashHandover.happened_at).desc(), col(CashHandover.id).desc())
+    ).all()
+    on_hand = _cash_on_hand(session, user.id)
+    return [_handover_out(session, row, on_hand) for row in rows]
+
+
+@router.post(
+    "/cash/handovers",
+    response_model=s.CashHandoverOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Naqdni omborga topshirish — the cash goes back",
+)
+def hand_in_cash(
+    payload: s.CashHandoverIn,
+    user: CourierUser,
+    session: SessionDep,
+    idempotency_key: IdempotencyKey,
+) -> s.CashHandoverOut:
+    """Money out of a pocket and into the office, with a time on it.
+
+    **Whose money is not a question the request gets to answer.** The courier
+    is the caller, always, so there is no way to spell "hand in somebody
+    else's cash" — and a courier holding nothing is refused by the arithmetic
+    below rather than by a permission check, which is the same answer arrived
+    at more honestly.
+
+    Refused rather than clamped when it is more than is held. A courier
+    handing over 500 000 while their attempts add up to 300 000 has either
+    mistyped a figure or is carrying money this system does not know about,
+    and both of those want a person to look rather than a receipt that
+    silently records the smaller number.
+
+    Keyed like every other write here: a phone in a warehouse basement queues
+    this and retries, and a second receipt for one envelope is exactly the
+    kind of quiet financial error the keys exist for.
+    """
+    done = idem.replay(session, user, idempotency_key, "cash.handover", payload)
+    if done is not None:
+        return s.CashHandoverOut(**done)
+
+    receiver = session.get(User, payload.received_by_id)
+    if (
+        receiver is None
+        or not receiver.is_active
+        or receiver.role not in (UserRole.WAREHOUSE, UserRole.ADMIN)
+    ):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, i18n.label("cash_receiver_not_found")
+        )
+
+    held = _cash_on_hand(session, user.id)
+    if payload.amount > held:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            i18n.label("cash_more_than_held", held=held, given=payload.amount),
+        )
+
+    row = CashHandover(
+        courier_id=user.id,
+        received_by_id=receiver.id,
+        amount=payload.amount,
+        note=payload.note.strip(),
+    )
+    session.add(row)
+    # Flushed rather than committed: the receipt needs its id to be rendered
+    # into the reply that the idempotency record stores, and the record and the
+    # money have to land in one transaction or a retry hands the cash in twice.
+    session.flush()
+
+    audit.record(
+        session,
+        actor=user,
+        action="cash.handover",
+        entity="cash_handover",
+        entity_id=row.id,
+        field="amount",
+        old=held,
+        new=held - payload.amount,
+        note=f"{payload.amount} so'm · {receiver.full_name or receiver.phone}",
+    )
+
+    out = _handover_out(session, row, held - payload.amount)
+    idem.keep(session, user, idempotency_key, "cash.handover", payload, out)
+    replayed = idem.commit(session, user, idempotency_key, "cash.handover")
+    return s.CashHandoverOut(**replayed) if replayed else out
 
 
 # --------------------------------------------------------------------------- the door
@@ -567,6 +709,62 @@ def _cash_due(order: Order) -> int:
     return order.total
 
 
+def _collected(session: SessionDep, courier_id: int) -> int:
+    """Everything this courier has ever taken at a door."""
+    return int(
+        session.exec(
+            select(func.coalesce(func.sum(DeliveryAttempt.cash_collected), 0))
+            .where(DeliveryAttempt.courier_id == courier_id)
+            .where(DeliveryAttempt.result == AttemptResult.DELIVERED)
+        ).one()
+    )
+
+
+def _handed_in(session: SessionDep, courier_id: int) -> int:
+    """And everything they have handed back."""
+    return int(
+        session.exec(
+            select(func.coalesce(func.sum(CashHandover.amount), 0)).where(
+                CashHandover.courier_id == courier_id
+            )
+        ).one()
+    )
+
+
+def _cash_on_hand(session: SessionDep, courier_id: int) -> int:
+    """What is in the pocket: taken at doors, less handed in.
+
+    Floored at nought rather than allowed to go negative. Negative cash on
+    hand is not a state a person can be in, and an endpoint that reported one
+    would be inviting the phone to draw it — the hand-over door refuses to
+    take more than is held, so the floor is a second lock on a door already
+    bolted rather than a way of hiding a bad figure.
+    """
+    return max(_collected(session, courier_id) - _handed_in(session, courier_id), 0)
+
+
+def _handover_out(
+    session: SessionDep, row: CashHandover, on_hand: int
+) -> s.CashHandoverOut:
+    courier = session.get(User, row.courier_id)
+    receiver = session.get(User, row.received_by_id)
+    return s.CashHandoverOut(
+        id=row.id,
+        amount=row.amount,
+        courier_id=row.courier_id,
+        courier_name=(courier.full_name or courier.phone)
+        if courier
+        else f"#{row.courier_id}",
+        received_by_id=row.received_by_id,
+        received_by_name=(receiver.full_name or receiver.phone)
+        if receiver
+        else f"#{row.received_by_id}",
+        note=row.note,
+        happened_at=row.happened_at,
+        cash_on_hand=on_hand,
+    )
+
+
 def _attempts(session: SessionDep, order_id: int) -> int:
     return int(
         session.exec(
@@ -603,6 +801,11 @@ def _order_out(session: SessionDep, order: Order) -> s.CourierOrderOut:
         recipient_phone=order.recipient_phone,
         address_line=order.address_line,
         address_meta=order.address_meta,
+        # Both null together on a stop whose address was saved without a pin,
+        # and on every order placed before the column existed. The screen says
+        # "no pin" and keeps the stop; it does not guess one.
+        latitude=order.latitude,
+        longitude=order.longitude,
         delivery_kind=order.delivery_kind,
         delivery_day=order.delivery_day,
         delivery_window=window,

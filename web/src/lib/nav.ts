@@ -329,9 +329,18 @@ export function densityFor(role: Role): string {
   return "density-cozy"
 }
 
-/** Where a role lands after signing in. */
+/**
+ * Where a role lands after signing in.
+ *
+ * A courier lands in **their own app** — `/kuryer`, the map — and not in the
+ * rail's `/ishlarim`. The two exist side by side on purpose (see `App.tsx`):
+ * `/ishlarim`, `/tarix` and `/daromad` are the desk view of the same round and
+ * stay reachable from the menu, but the round is driven on a phone, and what a
+ * phone opens on should be the screen built for it.
+ */
 export function homeFor(role: Role): string {
   if (role === "admin") return "/"
   if (role === "warehouse") return "/ombor"
+  if (role === "courier") return "/kuryer"
   return "/ishlarim"
 }

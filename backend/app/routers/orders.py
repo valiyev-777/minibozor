@@ -86,10 +86,28 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
             status.HTTP_400_BAD_REQUEST, i18n.label("address_required")
         )
 
+    # The address, snapshotted — the words and the pin together.
+    #
+    # The coordinates go on for the same reason the text does: the address row
+    # can be edited or deleted the day after this order is placed, and the
+    # order must still say where it went. Without them a courier's map has
+    # nothing to put on it but a street name.
+    #
+    # Null when the customer saved the address without dropping a pin, which
+    # is an ordinary thing to have done. Nothing here invents one.
+    latitude: float | None = None
+    longitude: float | None = None
     if preview.address:
         address_line, address_meta = preview.address.line, preview.address.meta
+        latitude, longitude = preview.address.latitude, preview.address.longitude
     elif preview.pickup_point:
         address_line, address_meta = preview.pickup_point.name, preview.pickup_point.address
+        # Read off the row rather than the preview shape, which does not carry
+        # a pin: the customer's own order screen draws the point on a map too,
+        # and a point can be moved or closed after somebody orders to it.
+        point = session.get(PickupPoint, payload.pickup_point_id)
+        if point is not None:
+            latitude, longitude = point.latitude, point.longitude
     else:
         address_line = address_meta = ""
 
@@ -131,6 +149,8 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         delivery_kind="pickup" if payload.pickup_point_id else "courier",
         address_line=address_line,
         address_meta=address_meta,
+        latitude=latitude,
+        longitude=longitude,
         pickup_point_id=payload.pickup_point_id,
         payment_method=payload.payment_method,
         # Paid because it was, not because of which button was pressed. Cash
