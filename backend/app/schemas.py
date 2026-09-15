@@ -745,9 +745,23 @@ class SupplyOut(BaseModel):
     total_cost: int
     declared_at: datetime
     received_at: datetime | None
-    # How long the sacks have been standing there. The one figure that turns
-    # an unsorted run from a row in a list into something anybody acts on.
+    # When this run happened, and how long ago. The reprint bench lists runs
+    # newest first and a person picking one out reads the date before anything
+    # else — `SUP-000032` on its own is a row nobody can tell from the row
+    # above it. ``age_minutes`` used to be ``received_at - declared_at``,
+    # which was the standing time of a sack in the flow that is gone; a
+    # receipt sets both stamps in the same breath, so it read nought for every
+    # run ever written by this door.
+    created_at: datetime
     age_minutes: int
+    # What came, in the two words that tell one run from another on a list of
+    # them: the card's name and the colour of this particular receipt — one
+    # receipt is one colour, so there is exactly one to name. Off the first
+    # line, because every line of a receipt is the same card in the same
+    # colour and differs only in size.
+    product_title: str = ""
+    colour: str = ""
+    colour_hex: str = ""
 
 
 class LocationOut(BaseModel):
@@ -1313,8 +1327,43 @@ class ReceiptWaitingOut(BaseModel):
     code: str
     product_id: int | None = None
     product_title: str = ""
+    # One receipt is one colour, so the queue can say which one. Two runs of
+    # the same card an hour apart are "Nike Air · Oq" and "Nike Air · Qora",
+    # and a queue that draws both as the card's name is a queue where the
+    # wrong row gets shelved into the right cell.
+    colour: str = ""
+    colour_hex: str = ""
     quantity: int
     age_minutes: int
+
+
+class ReceiptCancelIn(BaseModel):
+    """Why this receipt is being unsaid.
+
+    Free text and not a list of causes: the two the owner described — a count
+    typed wrong and a colour picked wrong — are both "I made a mistake", and
+    what the audit trail needs three months later is the sentence, not which
+    of two buttons somebody pressed. Optional, because the person correcting
+    their own typo ten seconds later is standing at the bench with the goods
+    in their hands and a required box there is a box that fills with "xato".
+    """
+
+    reason: str = Field(default="", max_length=200)
+
+
+class ReceiptCancelledOut(BaseModel):
+    """What the reversal took back out of the receiving area.
+
+    ``quantity`` is what left ``QABUL`` on this call, and nought when the
+    receipt had already been called off — the same politeness the shelve door
+    shows, and for the same reason: a second tap is not a mistake to shout
+    about. ``message`` is the sentence to put on the screen either way.
+    """
+
+    receipt_id: int
+    run_code: str
+    quantity: int
+    message: str = ""
 
 
 class RetireIn(BaseModel):

@@ -2575,6 +2575,19 @@ def test_the_dashboard_answers_with_figures_that_link(
     assert tiles["held_back"]["href"] == "/mahsulotlar?status=draft"
     assert all(tile["href"] for tile in body["tiles"])
 
+    # The tile and the screen it opens are one figure (§6.8). It counted
+    # drafts *holding stock* and linked to a filter listing *all* drafts —
+    # sixteen against twenty-one in a single glance, with no way to tell which
+    # one was lying. An abandoned empty draft is still work waiting: either
+    # publish it or delete it.
+    drafts = client.get(
+        f"{API}/admin/products",
+        params={"status": "draft", "page_size": 1},
+        headers=admin,
+    )
+    assert drafts.status_code == 200, drafts.text
+    assert tiles["held_back"]["value"] == drafts.json()["total"]
+
     # Fourteen days, quiet ones included: a chart that skips empty days draws
     # a shop that was busy every day it was open.
     assert len(body["sales"]) == 14
@@ -4507,6 +4520,62 @@ def test_the_putaway_plan_fills_the_models_own_cell_first_and_then_spills(
     assert _in("B-02-03", made.json()["labels"][0]["variant_id"]) == 50
 
 
+def test_the_plan_names_the_models_own_cell_even_when_it_is_full(
+    client: TestClient, warehouse: dict[str, str]
+) -> None:
+    """A cell with no room left is the case where it most has to be named.
+
+    The plan dropped any cell it could put nothing in — `take` was nought, so
+    the loop stepped over it — and a person carrying ten more pairs of a model
+    that already fills `B-01-03` well past its stated sixty was handed an
+    empty cell in another column and told it was `bo'sh joy`, with nothing
+    anywhere on the screen saying where the other pairs were. That is how one
+    model ends up in two aisles with nobody knowing.
+
+    So: the model's own cells are always emitted, flagged, with their real
+    fullness — and exactly one suggestion for somewhere else after them,
+    because the door this feeds takes one cell code.
+    """
+    made = _pile(
+        client,
+        warehouse,
+        kind="Etik",
+        colour="Marjon",
+        sizes=(("39", 90),),
+        # A cell no other test in the shop this suite shares ever names: the
+        # assertions below are about one cell's exact fullness, and a stray
+        # pile of somebody else's shirts in it would make them about two.
+        code="B-01-03",
+    )
+    assert made.status_code == 201, made.text
+    card = made.json()["product"]["id"]
+
+    plan = client.get(
+        f"{API}/warehouse/putaway-plan",
+        params={"product_id": card, "quantity": 10},
+        headers=warehouse,
+    )
+    assert plan.status_code == 200, plan.text
+    lines = plan.json()["lines"]
+
+    # First line: where the pile is, over-full, taking nothing more.
+    assert lines[0]["code"] == "B-01-03"
+    assert lines[0]["holds_this_model"] is True
+    assert lines[0]["quantity"] == 0
+    assert lines[0]["units"] == 90
+    assert lines[0]["free"] == 0
+
+    # Then one place for the ten, and one only.
+    assert len(lines) == 2
+    assert lines[1]["holds_this_model"] is False
+    assert lines[1]["quantity"] == 10
+    assert sum(line["quantity"] for line in lines) == 10
+
+    # Nothing was written by asking.
+    assert _in("B-01-03", made.json()["labels"][0]["variant_id"]) == 90
+    _assert_the_room_adds_up()
+
+
 def test_a_receipt_writes_a_stub_and_the_shop_cannot_see_it(
     client: TestClient, warehouse: dict[str, str], admin: dict[str, str]
 ) -> None:
@@ -5199,6 +5268,68 @@ def test_a_card_with_no_history_is_deleted_and_one_with_history_is_archived(
     after = client.get(f"{API}/admin/products/{card['id']}", headers=admin)
     assert after.status_code == 200
     assert after.json()["status"] == "archived"
+
+    # And again, on the card that is now archived. This used to answer with
+    # the status machine's sentence — "archived holatidan archived holatiga
+    # o'tib bo'lmadi" — which is about a transition nobody asked for, on a
+    # button that says "o'chirish". The rule this door has is about history,
+    # so the answer says that and says where the card went.
+    twice = client.delete(f"{API}/admin/products/{card['id']}", headers=admin)
+    assert twice.status_code == 200, twice.text
+    said = twice.json()["message"]
+    assert "holatidan" not in said
+    assert "tarixi" in said and "arxivda" in said
+    assert client.get(
+        f"{API}/admin/products/{card['id']}", headers=admin
+    ).json()["status"] == "archived"
+
+
+def test_a_card_can_be_taken_out_of_its_category_by_naming_no_category(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """Explicit null unfiles the card; an absent key leaves it alone.
+
+    The editor sends the whole form, so "no category" arrives as a null — and
+    the door answered it with `404 Turkum topilmadi`, a refusal naming a
+    category nobody had named. `exclude_unset=True` is what tells a field that
+    was cleared from a field that was never sent, and both have to work: the
+    price door next to it patches one field at a time.
+    """
+    _category(client, admin, "sumkalar")
+    _category(client, admin, "koylaklar")
+    card = _card(client, admin, sku="ALFA-UNFILE", category="sumkalar")
+
+    cleared = client.patch(
+        f"{API}/admin/products/{card['id']}",
+        json={"category_slug": None},
+        headers=admin,
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["category_slug"] is None
+
+    # A patch that does not mention the category leaves it where it is.
+    filed = client.patch(
+        f"{API}/admin/products/{card['id']}",
+        json={"category_slug": "koylaklar"},
+        headers=admin,
+    )
+    assert filed.status_code == 200, filed.text
+    renamed = client.patch(
+        f"{API}/admin/products/{card['id']}",
+        json={"title": "Sumka, qayta nomlangan"},
+        headers=admin,
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["category_slug"] == "koylaklar"
+
+    # A slug that was typed and does not exist is still a 404 — the refusal
+    # this one was borrowing is a real refusal in its own case.
+    missing = client.patch(
+        f"{API}/admin/products/{card['id']}",
+        json={"category_slug": "yo-q-turkum"},
+        headers=admin,
+    )
+    assert missing.status_code == 404, missing.text
 
 
 def test_emptying_a_cell_writes_the_goods_off_rather_than_forgetting_them(

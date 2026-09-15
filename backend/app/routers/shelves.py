@@ -61,7 +61,9 @@ from app.models import (
     StockMovement,
     StockMovementKind,
     StockPlacement,
+    Supply,
     SupplyLine,
+    SupplyStatus,
     User,
     utcnow,
 )
@@ -297,24 +299,41 @@ def putaway_plan(
 
     The rule, in this order:
 
-    * the cells that already hold this model, in walk order, each filled to
-      its free room — one model per cell is the discipline and the goods want
-      to be together;
-    * then the emptiest cells, nearest those in walk order, until the
-      quantity is placed. Emptiest means holding least, which is how a cell
-      with nothing in it always comes before one with somebody else's shirts
-      in it; nearest keeps the pile in one aisle instead of at both ends of
-      the room.
+    * **every cell that already holds this model**, in walk order, each filled
+      to its free room — one model per cell is the discipline and the goods
+      want to be together;
+    * then **one** cell for whatever is left: the emptiest, nearest those in
+      walk order. Emptiest means holding least, which is how a cell with
+      nothing in it always comes before one with somebody else's shirts in
+      it; nearest keeps the pile in one aisle instead of at both ends of the
+      room.
+
+    **A cell holding this model is listed even when it is full.** It used to
+    be dropped — its free room was nought, so the line the loop would have
+    written was a line for nothing — and a person carrying ten more pairs of
+    a model that already fills ``B-01-02`` to 307% was sent to ``B-01-01``
+    and told it was empty, with nothing anywhere on the screen saying where
+    the other thirty pairs were. Where the pile already is is the first thing
+    this answer owes them, and a full cell is the case where they most need
+    to be told: they are about to split one model across two aisles, and the
+    plan should be what says so rather than what hides it. Such a line
+    carries ``quantity`` nought and its real fullness.
+
+    **One suggestion for "somewhere else", not a list of them.** The door this
+    feeds — ``POST /receipts/{id}/shelve`` — takes exactly one cell code, so a
+    plan naming four cells is a plan three quarters of which nobody can act
+    on. The spill is one cell and it takes the whole remainder, honestly
+    over-full if that is what it comes to.
 
     A cell with no stated capacity takes whatever is left rather than being
     treated as holding nothing: nobody has measured it, and refusing to use
     it would leave the plan short of a cell that is plainly there.
 
-    **If the building has no room the plan says so and over-fills the last
-    cell anyway.** The goods are standing on the floor. A plan that stops at
-    seventy of eighty does not say where the other ten went, and somebody
-    puts them somewhere without telling anyone; an honest 130% is a cell
-    people walk past and tidy.
+    **If the room has no space the plan says so and over-fills anyway.** The
+    goods are standing on the floor. A plan that stops at seventy of eighty
+    does not say where the other ten went, and somebody puts them somewhere
+    without telling anyone; an honest 130% is a cell people walk past and
+    tidy.
 
     A suggestion throughout. Nothing here writes anything, and the receiving
     screen is free to type over every line of it.
@@ -340,44 +359,52 @@ def putaway_plan(
     anchor = where[own[0].id] if own else 0
     rest.sort(key=lambda cell: (units.get(cell.id, 0), abs(where[cell.id] - anchor)))
 
+    def line(cell: Location, take: int) -> s.PutawayPlanLineOut:
+        held = units.get(cell.id, 0)
+        return s.PutawayPlanLineOut(
+            code=cell.code,
+            quantity=take,
+            free=st.free_room(cell, held),
+            units=held,
+            holds_this_model=cell.id in holders,
+        )
+
     left = quantity
     lines: list[s.PutawayPlanLineOut] = []
-    for cell in own + rest:
-        if left <= 0:
-            break
-        held = units.get(cell.id, 0)
-        free = st.free_room(cell, held)
+
+    # Where the model already is — all of it, room or no room. A cell at 307%
+    # takes nought more and is still the most useful line on the screen.
+    for cell in own:
+        free = st.free_room(cell, units.get(cell.id, 0))
         take = left if free is None else min(left, free)
-        if take <= 0:
-            continue
-        lines.append(
-            s.PutawayPlanLineOut(
-                code=cell.code,
-                quantity=take,
-                free=free,
-                units=held,
-                holds_this_model=cell.id in holders,
-            )
-        )
+        take = max(0, take)
+        lines.append(line(cell, take))
         left -= take
 
+    # And one place for the rest. The first cell with any room in it, in the
+    # order the sort above put them — emptiest, then nearest the model's own
+    # cells — or, when every cell in the building is full, the emptiest of
+    # them anyway: the goods are standing on the floor and the plan has to
+    # name somewhere.
+    spill = next(
+        (cell for cell in rest if st.free_room(cell, units.get(cell.id, 0)) != 0),
+        rest[0] if rest else None,
+    )
+    if spill is not None and (left > 0 or not lines):
+        lines.append(line(spill, max(0, left)))
+        left = 0
+
+    # Over-full is a property of the last line rather than of a remainder the
+    # loop gave up on: the spill takes everything, so what is left to say is
+    # how much more than it holds it was asked to take.
     over = ""
-    if left > 0:
-        # Every cell in the building is full and the van is still outside.
-        last = (own + rest)[-1]
-        if lines and lines[-1].code == last.code:
-            lines[-1].quantity += left
-        else:
-            lines.append(
-                s.PutawayPlanLineOut(
-                    code=last.code,
-                    quantity=left,
-                    free=st.free_room(last, units.get(last.id, 0)),
-                    units=units.get(last.id, 0),
-                    holds_this_model=last.id in holders,
-                )
-            )
-        over = i18n.label("putaway_plan_over_capacity", code=last.code, over=left)
+    last = lines[-1] if lines else None
+    if last is not None and last.free is not None and last.quantity > last.free:
+        over = i18n.label(
+            "putaway_plan_over_capacity",
+            code=last.code,
+            over=last.quantity - last.free,
+        )
 
     return s.PutawayPlanOut(
         quantity=quantity,
@@ -1172,6 +1199,17 @@ def labels(
     # grouped by variant exactly as the lines were written down.
     counted: dict[int, int] = {}
     if supply_id is not None:
+        # A receipt that was called off has no goods to stick anything to.
+        # Printing its sheet anyway is how a sticker ends up on a shoe the
+        # ledger says never arrived — and the reprint bench is exactly the
+        # screen somebody reaches for after a receipt went wrong, so this is
+        # the refusal that has to say which run and why.
+        run = session.get(Supply, supply_id)
+        if run is not None and run.status is SupplyStatus.CANCELLED:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                i18n.label("receipt_cancelled_no_labels", code=run.code),
+            )
         lines = session.exec(
             select(SupplyLine)
             .where(SupplyLine.supply_id == supply_id)

@@ -137,18 +137,21 @@ def dashboard(user: DashboardViewer, session: SessionDep) -> s.DashboardOut:
     )
 
     # ------------------------------------------------- on the shelf, not in the shop
-    # The thing this shop loses money on quietly. Goods are shelved, counted
-    # and findable, and a customer cannot buy them because the card still has
-    # no category, no price or no photograph. Nobody notices, because nothing
-    # is broken — which is exactly why it is on the dashboard and not in a
-    # menu somewhere.
-    held_back = [
-        row
-        for row in session.exec(
-            select(Product).where(Product.status == ProductStatus.DRAFT)
-        ).all()
-        if pr.on_shelf(session, row.id) > 0
-    ]
+    # The thing this shop loses money on quietly. A card written at the
+    # receiving desk has no category, no price and no photograph, so nobody
+    # browsing can find it. Nothing is broken and nobody notices — which is
+    # exactly why it is on the dashboard and not in a menu somewhere.
+    #
+    # **Every draft, not only the ones with stock.** The tile counted drafts
+    # holding goods and linked to `/mahsulotlar?status=draft`, which lists all
+    # of them: sixteen on the tile, twenty-one on the screen it opens, in one
+    # glance, and no way to tell which figure was lying. A figure the office
+    # reads is defined once (§6.8), and the definition that survives is the
+    # one the link can be held to — an abandoned empty draft is still work
+    # waiting to be done, which is either publishing it or deleting it.
+    held_back = session.exec(
+        select(Product).where(Product.status == ProductStatus.DRAFT)
+    ).all()
     oldest = min((row.created_at for row in held_back), default=None)
     tiles.append(
         s.DashboardTileOut(

@@ -277,7 +277,7 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "a category",
     },
     "needs_price": {
-        "uz": "sotuv narxi",
+        "uz": "sotish narxi",
         "ru": "цена продажи",
         "en": "a selling price",
     },
@@ -319,7 +319,7 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "Not ready for sale — missing: {gaps}",
     },
     "move_nowhere": {
-        "uz": "Bir katakdan o'sha katakka ko'chirib bo'lmaydi",
+        "uz": "Bir yacheykadan o'sha yacheykaga ko'chirib bo'lmaydi",
         "ru": "Нельзя переместить в ту же ячейку",
         "en": "That is the cell it is already in",
     },
@@ -332,6 +332,18 @@ LABELS: dict[str, dict[str, str]] = {
         "uz": "Kartaning tarixi bor — o'chirilmadi, arxivga olindi",
         "ru": "У карточки есть история — не удалена, а в архиве",
         "en": "This card has history — archived rather than deleted",
+    },
+    # Deleting a card that is already archived. Its own sentence, because the
+    # one that stood here was the status machine's — "archived holatidan
+    # archived holatiga o'tib bo'lmadi" — which is an answer about a
+    # transition nobody asked for on a door nobody pressed. The rule the
+    # delete door actually has is about history, so it says so, and it says
+    # where the card went.
+    "card_already_archived": {
+        "uz": "Kartaning tarixi bor — o'chirib bo'lmaydi, u allaqachon arxivda",
+        "ru": "У карточки есть история — удалить нельзя, она уже в архиве",
+        "en": "This card has history — it cannot be deleted, and it is already "
+              "archived",
     },
     "card_has_history": {
         "uz": "qoldiq harakati yoki buyurtmasi bor",
@@ -377,7 +389,7 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "has no sizes",
     },
     "receipt_needs_a_name": {
-        "uz": "Tavar nomi yoki turi kerak",
+        "uz": "Tovar nomi yoki turi kerak",
         "ru": "Нужно название или тип товара",
         "en": "The goods need a name or a kind",
     },
@@ -715,23 +727,63 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Эта приёмка уже разложена по полкам",
         "en": "That receipt is already on a shelf",
     },
+    # Calling a receipt off, and the two states that will not have it.
+    #
+    # Each refusal says which of them it is, because they send somebody to two
+    # different places: goods already on a shelf come off it through a move or
+    # a write-off at the cell, and goods that left the receiving area by
+    # another door — sold off QABUL, or carried to the damaged corner — cannot
+    # be unsaid at all, because part of what the receipt booked in is gone.
+    # "Bekor qilib bo'lmaydi" on its own is the answer that makes somebody
+    # ring whoever wrote the screen.
+    "receipt_cancelled": {
+        "uz": "{code} bekor qilindi — {quantity} dona qabuldan chiqarildi",
+        "ru": "{code} отменена — {quantity} шт. сняты с приёмки",
+        "en": "{code} was called off — {quantity} taken back out of receiving",
+    },
+    "receipt_already_cancelled": {
+        "uz": "Bu qabul allaqachon bekor qilingan",
+        "ru": "Эта приёмка уже отменена",
+        "en": "That receipt was already called off",
+    },
+    "receipt_cancel_already_shelved": {
+        "uz": "Bekor qilib bo'lmaydi — bu qabul javonga qo'yilgan. Xato "
+              "bo'lsa, yacheykadan chiqarib, hisobdan chiqaring",
+        "ru": "Отменить нельзя — приёмка уже разложена по полкам. Если это "
+              "ошибка, спишите товар из ячейки",
+        "en": "Too late to call off — this receipt is on a shelf. If it was "
+              "wrong, write it off from the cell",
+    },
+    "receipt_cancel_partly_gone": {
+        "uz": "Bekor qilib bo'lmaydi — bu qabuldan {gone} dona allaqachon "
+              "QABUL dan chiqib ketgan (sotilgan yoki brakka o'tgan)",
+        "ru": "Отменить нельзя — {gone} шт. из этой приёмки уже ушли из зоны "
+              "приёмки (продано или в брак)",
+        "en": "Too late to call off — {gone} of this receipt have already left "
+              "the receiving area (sold, or into the damaged corner)",
+    },
+    "receipt_cancelled_no_labels": {
+        "uz": "{code} bekor qilingan — yorliq chiqarilmaydi",
+        "ru": "{code} отменена — этикетки не печатаются",
+        "en": "{code} was called off — there is nothing to print",
+    },
     "tile_orders_today": {
         "uz": "Bugungi buyurtmalar",
         "ru": "Заказы за сегодня",
         "en": "Orders today",
     },
     "tile_cells_full": {
-        "uz": "To'lgan kataklar",
+        "uz": "To'lgan yacheykalar",
         "ru": "Заполненные ячейки",
         "en": "Cells nearly full",
     },
     "tile_cells_empty": {
-        "uz": "{count} ta bo'sh katak",
+        "uz": "{count} ta bo'sh yacheyka",
         "ru": "{count} пустых ячеек",
         "en": "{count} empty cells",
     },
     "tile_sold_out": {
-        "uz": "Tugagan tavarlar",
+        "uz": "Tugagan tovarlar",
         "ru": "Закончились",
         "en": "Sold out",
     },
@@ -780,13 +832,21 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "{minutes} мин",
         "en": "{minutes} min",
     },
+    # One object, one word. The warehouse met this thing under three names —
+    # `yacheyka` at the receiving desk, `katak` on the dashboard tiles, and
+    # `joy` in this sentence when a stocktake was started on a code that does
+    # not exist — and somebody reading two of them is reading about two
+    # things. The word is `yacheyka` in every Uzbek string the server writes.
+    # Only the *identity* sense moved: `joy` meaning room, as in "bo'sh joy"
+    # and "javonlarda joy yetmaydi", is a different word doing a different
+    # job and is left alone.
     "location_not_found": {
-        "uz": "Bunday joy yo'q: {code}",
+        "uz": "Bunday yacheyka yo'q: {code}",
         "ru": "Такого места нет: {code}",
         "en": "No such place: {code}",
     },
     "putaway_needs_a_cell": {
-        "uz": "Faqat javon katagiga joylashtiriladi",
+        "uz": "Faqat javon yacheykasiga joylashtiriladi",
         "ru": "Разместить можно только в ячейку стеллажа",
         "en": "Goods go into a shelf cell, not into a staging area",
     },
@@ -794,7 +854,7 @@ LABELS: dict[str, dict[str, str]] = {
     # sentence says what to do next: a refusal a warehouse cannot act on is a
     # refusal somebody works around by putting the goods somewhere quiet.
     "cell_retire_needs_a_cell": {
-        "uz": "Faqat javon katagini olib tashlash mumkin — {code} ish joyi, u "
+        "uz": "Faqat javon yacheykasini olib tashlash mumkin — {code} ish joyi, u "
               "har doim kerak",
         "ru": "Убрать можно только ячейку стеллажа — {code} это рабочая зона, "
               "она нужна всегда",
@@ -884,7 +944,7 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "The room has no shelf cells",
     },
     "count_already_open": {
-        "uz": "Bu katak allaqachon sanalmoqda",
+        "uz": "Bu yacheyka allaqachon sanalmoqda",
         "ru": "Эта ячейка уже пересчитывается",
         "en": "Somebody is already counting this cell",
     },
@@ -1282,12 +1342,12 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "Stocktake accuracy",
     },
     "fig_cells_full": {
-        "uz": "To'lgan kataklar",
+        "uz": "To'lgan yacheykalar",
         "ru": "Заполненные ячейки",
         "en": "Cells nearly full",
     },
     "fig_cells_empty": {
-        "uz": "Bo'sh kataklar",
+        "uz": "Bo'sh yacheykalar",
         "ru": "Пустые ячейки",
         "en": "Empty cells",
     },
@@ -1351,7 +1411,7 @@ LABELS: dict[str, dict[str, str]] = {
     },
     # the places goods stand in, as a person would name them
     "kind_bin": {
-        "uz": "Javon kataklari",
+        "uz": "Javon yacheykalari",
         "ru": "Ячейки стеллажей",
         "en": "Shelf cells",
     },

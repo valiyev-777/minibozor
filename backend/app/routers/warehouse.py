@@ -491,6 +491,166 @@ def shelve_receipt(
     return out
 
 
+@router.post(
+    "/receipts/{receipt_id}/cancel",
+    response_model=s.ReceiptCancelledOut,
+    summary="Unsay a receipt while its goods are still on the receiving floor",
+)
+def cancel_receipt(
+    receipt_id: int,
+    payload: s.ReceiptCancelIn,
+    user: WarehouseUser,
+    session: SessionDep,
+    idempotency_key: IdempotencyKey,
+) -> s.ReceiptCancelledOut:
+    """"Typed 20, meant 10" — the way back, while the way back is still open.
+
+    Until this door existed a receipt could not be unsaid. A miscounted pile,
+    a colour picked from the wrong chip, a sack booked in twice: all of them
+    were stock the shop believed in, and the honest answer to the person at
+    the bench was to ring whoever wrote the software. So: one door, open for
+    exactly as long as the mistake is still recoverable.
+
+    **Only while the receipt is whole and still in QABUL.** Every line's
+    quantity must still be standing in the receiving area, untouched. Two
+    things close the door, and the refusal says which:
+
+    * the goods went to a cell — the receipt was shelved, and taking them back
+      out is a move or a write-off *at that cell*, which is where somebody has
+      to walk anyway;
+    * part of the receipt left the receiving area by another door. ``QABUL``
+      is a sellable place, so a receipt can be picked for an order or carried
+      to the damaged corner before anybody shelves it — and once one of those
+      has happened the receipt is no longer a thing that can be said never to
+      have happened.
+
+    **The reversal is a move, not a deletion.** One ``receipt_cancel`` per
+    variant, out of ``QABUL`` and out of the building, so ``StockPlacement``
+    still equals the sum of the movements and the ledger still says what
+    happened and when. Deleting the receipt's rows would leave a shop whose
+    stock figure is right and whose history has a hole in it — and the hole
+    would be exactly where somebody later needs to look.
+
+    Its own movement kind rather than a ``write_off``, because a write-off is
+    read downstream as goods the shop lost. A receipt nobody should have
+    written is not twenty pairs of shoes gone; it is twenty pairs that were
+    never there.
+
+    **The card and its variants stay.** A barcode and an SKU are permanent
+    (§6.5) — the stickers may already be stuck to goods on the table, and a
+    code that stops resolving is worse than a variant holding nought. A card
+    whose only receipt was this one is simply a draft with no stock, which is
+    what it was five minutes before the mistake.
+    """
+    stamp = {"receipt_id": receipt_id, **payload.model_dump()}
+    done = idem.replay(session, user, idempotency_key, "receipt-cancel", stamp)
+    if done is not None:
+        return s.ReceiptCancelledOut(**done)
+
+    run = _supply(session, receipt_id)
+    desk = loc.staging(session, loc.QABUL)
+
+    if run.status is SupplyStatus.CANCELLED:
+        # Answered politely rather than refused, like a second tap at the
+        # shelf: the goods are already not on the books, which is what the
+        # caller wanted.
+        out = s.ReceiptCancelledOut(
+            receipt_id=run.id,
+            run_code=run.code,
+            quantity=0,
+            message=i18n.label("receipt_already_cancelled"),
+        )
+        idem.keep(session, user, idempotency_key, "receipt-cancel", stamp, out)
+        replayed = idem.commit(session, user, idempotency_key, "receipt-cancel")
+        return s.ReceiptCancelledOut(**replayed) if replayed else out
+
+    lines = session.exec(
+        select(SupplyLine)
+        .where(SupplyLine.supply_id == run.id)
+        .order_by(col(SupplyLine.id))
+    ).all()
+
+    # Per variant rather than per line: a receipt may name one size twice —
+    # the same variant on two lines — and one move of the total is one true
+    # row where two would be two halves of it.
+    booked: dict[int, int] = {}
+    for line in lines:
+        booked[line.variant_id] = booked.get(line.variant_id, 0) + line.quantity
+
+    # What of this receipt the ledger still shows standing at the desk: in
+    # less out, counting only movements that name this run. Short of what was
+    # booked means a putaway carried it to a cell.
+    left = _still_at_the_desk(session, desk.id, run.id)
+    if any(left.get(variant_id, 0) < qty for variant_id, qty in booked.items()):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("receipt_cancel_already_shelved"),
+        )
+
+    # And what is physically there now, which is a different question: a pick
+    # or a damage takes goods out of QABUL without naming the run, so the
+    # ledger above can still show them standing while the shelf does not.
+    short = sum(
+        max(0, qty - st.at(session, desk.id, variant_id))
+        for variant_id, qty in booked.items()
+    )
+    if short:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("receipt_cancel_partly_gone", gone=short),
+        )
+
+    reason = payload.reason.strip()
+    quantity = 0
+    products: set[int] = set()
+    for variant_id, qty in booked.items():
+        variant = _variant(session, variant_id)
+        st.move(
+            session,
+            variant=variant,
+            qty=qty,
+            kind=StockMovementKind.RECEIPT_CANCEL,
+            frm=desk,
+            to=None,
+            actor=user,
+            reason=f"{run.code} · bekor qilindi{f' · {reason}' if reason else ''}",
+            supply_id=run.id,
+        )
+        quantity += qty
+        products.add(variant.product_id)
+
+    was = run.status
+    run.status = SupplyStatus.CANCELLED
+    session.add(run)
+
+    audit.record(
+        session,
+        actor=user,
+        action="receipt.cancel",
+        entity="supply",
+        entity_id=run.id,
+        field="status",
+        old=was,
+        new=SupplyStatus.CANCELLED,
+        note=f"{run.code} · {quantity} dona · {reason or run.note}",
+    )
+
+    out = s.ReceiptCancelledOut(
+        receipt_id=run.id,
+        run_code=run.code,
+        quantity=quantity,
+        message=i18n.label("receipt_cancelled", code=run.code, quantity=quantity),
+    )
+    idem.keep(session, user, idempotency_key, "receipt-cancel", stamp, out)
+    replayed = idem.commit(session, user, idempotency_key, "receipt-cancel")
+    if replayed:
+        return s.ReceiptCancelledOut(**replayed)
+    for product_id in sorted(products):
+        pr.refresh(session, product_id)
+    session.commit()
+    return out
+
+
 @router.get(
     "/receipts/waiting",
     response_model=list[s.ReceiptWaitingOut],
@@ -523,6 +683,10 @@ def waiting_receipts(
                 code=run.code,
                 product_id=variant.product_id if variant else None,
                 product_title=run.note,
+                # Off the first line, which is enough: one receipt is one
+                # colour, so every line of it carries the same one.
+                colour=variant.colour if variant else "",
+                colour_hex=variant.colour_hex if variant else "",
                 quantity=quantity,
                 age_minutes=max(
                     0, int((utcnow() - since).total_seconds() // 60)
@@ -581,6 +745,13 @@ def receipts_waiting(session) -> list[tuple[Supply, int]]:
     for supply_id, received in into.items():
         if received - gone.get(supply_id, 0) <= 0:
             continue
+        # A receipt that was called off is nobody's queue. The arithmetic
+        # above already drops it — the reversal is a movement out of the desk
+        # — but the cap below lets two unshelved receipts of one variant claim
+        # the same stragglers, and a cancelled run must not be one of the two.
+        run = session.get(Supply, supply_id)
+        if run is None or run.status is SupplyStatus.CANCELLED:
+            continue
         standing = sum(
             min(left, st.at(session, desk.id, variant_id))
             for variant_id, left in _still_at_the_desk(
@@ -589,9 +760,7 @@ def receipts_waiting(session) -> list[tuple[Supply, int]]:
             if left > 0
         )
         if standing > 0:
-            run = session.get(Supply, supply_id)
-            if run is not None:
-                waiting.append((run, standing))
+            waiting.append((run, standing))
     return waiting
 
 
@@ -1020,10 +1189,21 @@ def _supply_out(session: SessionDep, supply: Supply) -> s.SupplyOut:
             )
         )
     buyer = session.get(User, supply.buyer_id) if supply.buyer_id else None
-    # Standing time is what turns an unsorted run from a row in a list into
-    # something somebody acts on, so it is computed here rather than left to
-    # each client to work out from a timestamp.
-    since = supply.received_at or utcnow()
+    # What came, in the words that tell one run from another. `/yorliqlar`
+    # lists runs to reprint from and had nothing but `SUP-000032` to draw —
+    # thirty rows of a code nobody can read back to a pile of shoes. One
+    # receipt is one colour, so the first line carries the colour of all of
+    # them; the title is on the run itself, written there by the receipt.
+    first = session.get(ProductVariant, lines[0].variant_id) if lines else None
+    product = (
+        session.get(Product, first.product_id) if first is not None else None
+    )
+    # When the run happened, and how long ago — the figure a person scanning
+    # a list of runs reads first. It used to be `received_at - declared_at`,
+    # the standing time of a sack in the flow that is gone: a receipt stamps
+    # both in the same breath, so it read nought for every run this door has
+    # ever written.
+    since = supply.received_at or supply.declared_at
     return s.SupplyOut(
         id=supply.id,
         code=supply.code,
@@ -1036,7 +1216,11 @@ def _supply_out(session: SessionDep, supply: Supply) -> s.SupplyOut:
         total_cost=sum(line.line_cost for line in lines) + supply.transport_cost,
         declared_at=supply.declared_at,
         received_at=supply.received_at,
-        age_minutes=max(0, int((since - supply.declared_at).total_seconds() // 60)),
+        created_at=since,
+        age_minutes=max(0, int((utcnow() - since).total_seconds() // 60)),
+        product_title=supply.note or (product.title if product else ""),
+        colour=first.colour if first is not None else "",
+        colour_hex=first.colour_hex if first is not None else "",
     )
 
 

@@ -168,6 +168,13 @@ class StockMovementKind(StrEnum):
     """
 
     RECEIPT = "receipt"        # van → QABUL, a market run closed
+    # QABUL → out, a receipt unsaid at the bench. Its own kind rather than a
+    # ``write_off``: "typed 20, meant 10" is a receipt that should never have
+    # been written, not twenty pairs of shoes the shop lost. A write-off is
+    # read as a loss — the stock report sums those into "hisobdan chiqarilgan"
+    # and the value lands in the damage figures — and booking a typo there
+    # would invent both a loss and the goods it was a loss of.
+    RECEIPT_CANCEL = "receipt_cancel"
     PUTAWAY = "putaway"        # QABUL → a cell
     MOVE = "move"              # cell → cell, tidying up
     PICK = "pick"              # cell → YIGIM, for an order

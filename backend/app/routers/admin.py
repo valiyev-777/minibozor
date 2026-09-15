@@ -289,6 +289,14 @@ def delete_product(
     ).first()
 
     if moved or ordered:
+        # Already archived, and asked for again. Not a refusal about a
+        # transition: `tr.ensure` stood here and answered a delete with
+        # "archived holatidan archived holatiga o'tib bo'lmadi" — a sentence
+        # about a move from a status to itself that nobody asked for, on a
+        # button that says "o'chirish". The rule this door has is about
+        # history, so the answer says that, and says where the card is.
+        if product.status is ProductStatus.ARCHIVED:
+            return s.Message(message=i18n.label("card_already_archived"))
         tr.ensure(tr.PRODUCT_TRANSITIONS, product.status, ProductStatus.ARCHIVED)
         product.status = ProductStatus.ARCHIVED
         session.add(product)
@@ -356,7 +364,14 @@ def update_product(
     fields = payload.model_dump(exclude_unset=True, exclude={"translations"})
 
     if "category_slug" in fields:
-        product.category_id = _category(session, fields.pop("category_slug")).id
+        # Explicit null unfiles the card; an absent key leaves it where it is,
+        # and `exclude_unset=True` above is what tells the two apart. This
+        # called `_category` whatever the value was, so "take this card out of
+        # its category" was answered with `404 Turkum topilmadi` — a refusal
+        # naming a category nobody had named. The brand line below always had
+        # the shape this one needed.
+        slug = fields.pop("category_slug")
+        product.category_id = _category(session, slug).id if slug else None
     if "brand_slug" in fields:
         slug = fields.pop("brand_slug")
         product.brand_id = _brand(session, slug).id if slug else None
