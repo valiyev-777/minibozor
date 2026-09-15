@@ -64,9 +64,17 @@ def downgrade() -> None:
     with op.batch_alter_table('delivery_slots', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_delivery_slots_day'), ['day'], unique=False)
 
+    # Named, unlike the original. Autogenerate wrote `None` here to mirror the
+    # inline SQLModel declaration, but batch mode rebuilds the table from an
+    # explicit constraint list and refuses an anonymous one outright
+    # (`ValueError: Constraint must have a name`). The upgrade never had to
+    # name it because it drops the column and lets the rebuild take the
+    # constraint with it; coming back the other way, it has to be spelled.
     with op.batch_alter_table('orders', schema=None) as batch_op:
         batch_op.add_column(sa.Column('slot_id', sa.INTEGER(), nullable=True))
-        batch_op.create_foreign_key(None, 'delivery_slots', ['slot_id'], ['id'])
+        batch_op.create_foreign_key(
+            'fk_orders_slot_id', 'delivery_slots', ['slot_id'], ['id']
+        )
 
     # The seat count cannot come back: what each cancelled order gave back was
     # never written down anywhere but the row this dropped. A downgrade gets
