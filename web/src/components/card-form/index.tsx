@@ -293,6 +293,16 @@ function WritingACard({
     Boolean,
   )
   const gridSizes = [...new Set((grid.data ?? []).map((one) => one.size))].filter(Boolean)
+  // §5.2 ·7 is "one block per **chosen** colour", and chosen is not the same as
+  // minted. Ticking three colours in the palette has to open three photograph
+  // slots there and then: a photograph hangs on `product_images.colour`, which
+  // is a name, so nothing is created by drawing the slot and no barcode is
+  // spent. Reading the saved grid instead meant the slots only appeared after
+  // somebody found "Rang × o'lcham to'rini saqlash" further up the page — so
+  // picking a colour looked like it did nothing, which is what it was reported
+  // as. The grid's own colours stay in the list: a colour unticked by mistake
+  // must not take its photographs off the screen with it.
+  const photoColours = [...new Set([...colours, ...gridColours])].filter(Boolean)
   // A colour ticked but not yet on the grid, or a size. The grid is additive on
   // the server — sending it again never renumbers what is already printed —
   // so this is the only thing that has to be true before the button appears.
@@ -335,7 +345,9 @@ function WritingACard({
         <GatePanel
           card={card}
           photographed={photographed}
-          colours={gridColours}
+          // The same list §7 draws slots for, or the gate would report "Oq ✗"
+          // while three colours are chosen and two of them have no slot yet.
+          colours={photoColours}
           publish={publish}
         />
       ) : null}
@@ -602,9 +614,9 @@ function WritingACard({
             hint="Rangsiz rasm — do'konga chiqmaydigan rang."
           >
             <div id="card-form-photos" className="space-y-3">
-              {gridColours.length ? (
+              {photoColours.length ? (
                 <Photos
-                  colours={gridColours}
+                  colours={photoColours}
                   // Split from the card's own gallery below so one photograph
                   // is never drawn in two strips on one screen.
                   images={shots.filter((one) => one.colour)}
@@ -623,7 +635,7 @@ function WritingACard({
               )}
 
               <div className="flex flex-wrap items-center gap-2">
-                {gridColours.map((one) => (
+                {photoColours.map((one) => (
                   <span
                     key={one}
                     className="flex items-center gap-1 text-micro text-ink-soft"

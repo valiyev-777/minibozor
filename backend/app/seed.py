@@ -93,32 +93,39 @@ RETURN_REASONS = [
 # the goods, so the photograph wins the moment there is one. This is what the
 # picker draws before there is.
 COLOURS = [
+    # The ten a market stall actually says out loud, first and in that order.
+    # The rest of the list is grouped by family, which reads well and is the
+    # wrong thing to optimise for: somebody holding a blue shoe wants "Ko'k" at
+    # the top of the modal, not twenty-five swatches down past the metals and
+    # the browns. Shades stay — "To'q ko'k" is a real answer — they just sit
+    # behind the plain word they are a shade of.
     ("Oq", "#ffffff"),
+    ("Qora", "#000000"),
+    ("Ko'k", "#1e88e5"),
+    ("Qizil", "#e53935"),
+    ("Yashil", "#2e7d32"),
+    ("Sariq", "#fdd835"),
+    ("Kulrang", "#808080"),
+    ("Jigarrang", "#6f4e37"),
+    ("Pushti", "#f48fb1"),
+    ("Bej", "#e8d9bf"),
+    # Then the shades and the rarer ones, by family.
     ("Sut rang", "#faf7f0"),
     ("Krem", "#fffdd0"),
-    ("Bej", "#e8d9bf"),
-    ("Qora", "#000000"),
-    ("Kulrang", "#808080"),
     ("Kulrang melanj", "#b5b5b5"),
     ("Kumush", "#c0c0c0"),
     ("Oltin", "#d4af37"),
     ("Bronza", "#cd7f32"),
-    ("Jigarrang", "#6f4e37"),
     ("To'q jigarrang", "#3e2723"),
     ("Xaki", "#78866b"),
-    ("Qizil", "#e53935"),
     ("To'q qizil", "#8b0000"),
     ("Bordo", "#6d071a"),
-    ("Pushti", "#f48fb1"),
     ("To'q pushti", "#d81b60"),
     ("To'q sariq", "#ef6c00"),
-    ("Sariq", "#fdd835"),
     ("Sarg'ish", "#e8d98a"),
     ("Sarg'ish melanj", "#d8cfa8"),
-    ("Yashil", "#2e7d32"),
     ("Och yashil", "#8bc34a"),
     ("To'q yashil", "#1b5e20"),
-    ("Ko'k", "#1e88e5"),
     ("To'q ko'k", "#0d47a1"),
     ("Havorang", "#87ceeb"),
     ("Feruza", "#40e0d0"),
@@ -246,18 +253,29 @@ def _seed_colours(session: Session) -> int:
     Deliberately does not delete. A colour taken out of the palette was taken
     out by somebody, and a deployment is not a reason to put it back.
     """
-    existing = {row.key for row in session.exec(select(Colour)).all()}
+    existing = {row.key: row for row in session.exec(select(Colour)).all()}
     written = 0
-    # Tens, so a shade can later be slotted in beside the colour it is a shade
-    # of without renumbering the palette.
-    sort = (
-        int(session.exec(select(func.max(Colour.sort))).one() or 0) + 10
-        if existing
-        else 0
-    )
+    moved = 0
+    # Tens, and counted from nought through the list above, so the seeded order
+    # is this file's answer every time it runs. A colour an admin added through
+    # "+ yangi rang" is not in the list, keeps the sort it was given, and so
+    # stays where it was put — behind the seeded block, which is where a
+    # one-off colour belongs.
+    sort = 0
     for name, hex_code in COLOURS:
         wanted = colours.key(name)
         if wanted in existing:
+            # Already here, so the swatch and the spelling are left alone — an
+            # admin may have corrected either. The *order* is still the seed's
+            # to own: nothing in the app reorders the palette, so a database
+            # seeded before this list was reordered would keep showing "Ko'k"
+            # twenty-five rows down for ever.
+            held = existing[wanted]
+            if held.sort != sort:
+                held.sort = sort
+                session.add(held)
+                moved += 1
+            sort += 10
             continue
         session.add(
             Colour(
@@ -268,10 +286,10 @@ def _seed_colours(session: Session) -> int:
                 sort=sort,
             )
         )
-        existing.add(wanted)
+        existing[wanted] = None
         written += 1
         sort += 10
-    if written:
+    if written or moved:
         session.commit()
     return written
 

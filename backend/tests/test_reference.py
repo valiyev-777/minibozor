@@ -20,7 +20,7 @@ ends on.
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from app import stock as st
 from app.db import engine
@@ -595,3 +595,71 @@ def test_a_card_names_its_system_and_null_means_sizeless(
         headers=admin,
     )
     assert missing.status_code == 404
+
+
+# --------------------------------------------------------------------------- the order
+
+
+def test_the_palette_leads_with_the_words_a_stall_says_out_loud() -> None:
+    """`Ko'k` is the third swatch, not the twenty-sixth.
+
+    The list was first written grouped by family — whites, neutrals, metals,
+    browns, reds, then finally blues — which reads well and is the wrong thing
+    to optimise. Somebody holding a blue shoe wants the plain word at the top
+    of the modal. Reported from the bench as "rang umuman tushmagan": not that
+    it was missing, that it could not be found.
+    """
+    from app.seed import COLOURS
+
+    first = [name for name, _ in COLOURS[:10]]
+    assert first[:3] == ["Oq", "Qora", "Ko'k"]
+    for plain in ("Qizil", "Yashil", "Sariq", "Kulrang", "Jigarrang"):
+        assert plain in first, f"{plain} is an everyday colour and belongs in the first ten"
+    # A shade never comes before the colour it is a shade of.
+    order = [name for name, _ in COLOURS]
+    for shade, plain in (("To'q ko'k", "Ko'k"), ("To'q qizil", "Qizil"), ("To'q yashil", "Yashil")):
+        assert order.index(shade) > order.index(plain)
+
+
+def test_seeding_again_corrects_the_order_of_a_palette_written_before_it(
+    client: TestClient, admin: dict[str, str]
+) -> None:
+    """The seed owns `sort`, so a database seeded under the old grouping moves.
+
+    Nothing in the app reorders the palette, so without this a shop that
+    installed last week would keep reading the old order for ever — and the
+    complaint that sent us here would come back after a deploy that was
+    supposed to have fixed it.
+    """
+    from app.models import Colour
+    from app.seed import _seed_colours
+
+    with Session(engine) as session:
+        blue = session.exec(select(Colour).where(Colour.name == "Ko'k")).one()
+        settled = blue.sort
+        # Shove it to the back, the way the family-grouped seed had it.
+        blue.sort = 9_000
+        session.add(blue)
+        session.commit()
+
+        _seed_colours(session)
+        session.refresh(blue)
+        assert blue.sort == settled
+
+    # A colour the shop added itself is not in the list and is left where it is.
+    made = client.post(
+        f"{API}/admin/colours",
+        json={"name": "Zangori xos", "hex": "#2f6f6f"},
+        headers=admin,
+    )
+    assert made.status_code == 201, made.text
+    with Session(engine) as session:
+        mine = session.exec(select(Colour).where(Colour.name == "Zangori xos")).one()
+        was = mine.sort
+        _seed_colours(session)
+        session.refresh(mine)
+        assert mine.sort == was
+        seeded_last = session.exec(
+            select(func.max(Colour.sort)).where(Colour.name == "Siyohrang")
+        ).one()
+        assert mine.sort > seeded_last, "a shop's own colour sorts behind the seeded block"
