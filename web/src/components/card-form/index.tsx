@@ -109,19 +109,72 @@ const COUNTRIES = [
   "Polsha",
 ]
 
+/**
+ * The words this form is holding, boiled down to one string.
+ *
+ * Exactly what `saveWords` would send, so trailing spaces and an empty
+ * paragraph in the editor are not "changes" — and so the comparison is against
+ * what the server was actually given rather than against React state.
+ */
+type Words = {
+  title: string
+  subtitle: string
+  description: string
+  brand: string
+  noBrand: boolean
+  model: string
+  noModel: boolean
+  country: string
+  noCountry: boolean
+  folded: Record<string, string>
+  rows: Spec[]
+}
+
+function fingerprint(words: Words): string {
+  return JSON.stringify([
+    words.title.trim(),
+    words.subtitle.trim(),
+    isBlank(words.description) ? "" : tidyHtml(words.description),
+    words.noBrand ? "" : words.brand,
+    words.noModel ? "" : words.model.trim(),
+    words.noCountry ? "" : words.country.trim(),
+    FOLDED.map((key) => (words.folded[key] ?? "").trim()),
+    words.rows
+      .map((row) => [row.key.trim(), row.value.trim()])
+      .filter(([key, value]) => key && value),
+  ])
+}
+
 export type CardFormProps = {
   /** The card being written. Absent = a new card, the /qabul entrance. */
   productId?: number
   /** Which entrance opened it. "receiving" shows only what is knowable with
    *  the goods in your hands; "catalogue" shows the whole form. */
   mode: "receiving" | "catalogue"
+  /** What to call it, before anybody has. The search words somebody typed
+   *  looking for a card that turned out not to exist are the best guess at
+   *  the name of the card they are about to write, and retyping them is the
+   *  step that made people give up. Optional: a form opened cold seeds
+   *  nothing. */
+  initialName?: string
   /** A new card was created. */
   onCreated?: (productId: number) => void
   /** Saved and finished. */
   onDone?: () => void
+  /** The form is holding words nobody has saved. The screen around it owns
+   *  the exits — a Back button, a drawer — and cannot warn about what it
+   *  cannot see. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export function CardForm({ productId, mode, onCreated, onDone }: CardFormProps) {
+export function CardForm({
+  productId,
+  mode,
+  initialName,
+  onCreated,
+  onDone,
+  onDirtyChange,
+}: CardFormProps) {
   // A card made in this sitting. The prop stays the caller's word on which
   // card this is; this is what the form itself is holding once it has made
   // one, so `/qabul` opening with no id still gets the whole form afterwards.
@@ -129,9 +182,10 @@ export function CardForm({ productId, mode, onCreated, onDone }: CardFormProps) 
   const id = productId ?? made
 
   return id ? (
-    <WritingACard id={id} mode={mode} onDone={onDone} />
+    <WritingACard id={id} mode={mode} onDone={onDone} onDirtyChange={onDirtyChange} />
   ) : (
     <StartingACard
+      initialName={initialName}
       onCreated={(newId) => {
         setMade(newId)
         onCreated?.(newId)
@@ -147,10 +201,17 @@ export function CardForm({ productId, mode, onCreated, onDone }: CardFormProps) 
  * has nowhere to put a photograph, and showing ten disabled sections is a
  * screen that reads as broken rather than as sequenced.
  */
-function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
+function StartingACard({
+  initialName,
+  onCreated,
+}: {
+  initialName?: string
+  onCreated: (id: number) => void
+}) {
   const create = useCreateProduct()
   const [category, setCategory] = useState<string | null>(null)
-  const [title, setTitle] = useState("")
+  // Seeded from what the person was searching for when they gave up looking.
+  const [title, setTitle] = useState(initialName ?? "")
   // The snapshot goes in at creation or not at all: the bench may open a card
   // (`POST /admin/products` admits it) but may not edit one afterwards
   // (`PATCH` is CatalogWriter). Kind and make used to be asked here too; the
@@ -162,7 +223,7 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
     <div className="w-full max-w-3xl space-y-4">
       <AsteriskLine />
 
-      <Section step={1} title="Mahsulot toifasi" required>
+      <Section step={1} title="Tovar toifasi" required>
         <CategoryStep value={category} onAccept={setCategory} />
       </Section>
 
@@ -174,37 +235,14 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
           hint="Mijoz shuni o'qiydi va shuni qidiradi."
           aside={<Counter value={title} max={NAME_MAX} />}
         >
-          <div className="flex flex-wrap items-end gap-2">
-            <Input
-              value={title}
-              maxLength={NAME_MAX}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Erkaklar krossovkasi Alfa"
-              aria-label="Tovar nomi"
-              className="h-control-lg min-w-64 flex-1 text-body"
-            />
-            <Button
-              type="button"
-              className="gap-2"
-              disabled={!title.trim() || create.isPending}
-              onClick={() =>
-                create.mutate(
-                  {
-                    sku: "",
-                    title: title.trim(),
-                    category_slug: category,
-                    price: 0,
-                    snapshot_url: snapshot,
-                  },
-                  { onSuccess: (card) => onCreated(card.id) },
-                )
-              }
-            >
-              {create.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Kartani ochish
-            </Button>
-          </div>
-          <Problem error={create.error} />
+          <Input
+            value={title}
+            maxLength={NAME_MAX}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Erkaklar krossovkasi Alfa"
+            aria-label="Tovar nomi"
+            className="h-control-lg text-body"
+          />
         </Section>
       ) : null}
 
@@ -212,7 +250,7 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
         <Section
           step={3}
           title="Tanish uchun rasm"
-          hint="Ixtiyoriy — lekin karta ochilgandan keyin stolda qo'shib bo'lmaydi."
+          hint="Ixtiyoriy — lekin karta ochilgandan keyin stolda qo'shib bo'lmaydi. Tovar ustidan — oq fon shart emas."
         >
           <Capture
             colour=""
@@ -222,6 +260,43 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
             placeholder="rasm olish"
           />
         </Section>
+      ) : null}
+
+      {/* **Last, because it is the irreversible one.** It used to sit beside
+          the name in section 2, above a photograph section nobody had scrolled
+          to yet — so the card was opened, and the snapshot, which can only go
+          in at creation, was lost for good. Nothing that cannot be undone
+          belongs above a field somebody has not seen. */}
+      {category ? (
+        <div className="space-y-2">
+          <Button
+            type="button"
+            size="lg"
+            className="w-full gap-2 sm:w-auto"
+            disabled={!title.trim() || create.isPending}
+            onClick={() =>
+              create.mutate(
+                {
+                  sku: "",
+                  title: title.trim(),
+                  category_slug: category,
+                  price: 0,
+                  snapshot_url: snapshot,
+                },
+                { onSuccess: (card) => onCreated(card.id) },
+              )
+            }
+          >
+            {create.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+            Kartani ochish
+          </Button>
+          <p className="text-micro text-ink-soft">
+            {title.trim()
+              ? "Karta ochilgandan keyin tanish uchun rasm qo'shib bo'lmaydi."
+              : "Avval tovar nomini yozing."}
+          </p>
+          <Problem error={create.error} />
+        </div>
       ) : null}
     </div>
   )
@@ -240,10 +315,12 @@ function WritingACard({
   id,
   mode,
   onDone,
+  onDirtyChange,
 }: {
   id: number
   mode: "receiving" | "catalogue"
   onDone?: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const detail = useProduct(id)
   const specs = useSpecs(id)
@@ -282,11 +359,16 @@ function WritingACard({
   // creates variants with barcodes on them.
   const [colours, setColours] = useState<string[]>([])
   const [sizes, setSizes] = useState<string[]>([])
+  // Why the last tick did not take — see `chooseColours`.
+  const [refusal, setRefusal] = useState<string | null>(null)
 
   // Filled once, when the card and its spec table have both landed. Typing
   // into a field whose value is being reset underneath is the classic form
   // that fights back.
   const [seeded, setSeeded] = useState(false)
+  // The fingerprint of the words as last written to the server — `null` until
+  // the card has landed, because nothing is unsaved before there is anything.
+  const [saved, setSaved] = useState<string | null>(null)
   useEffect(() => {
     if (seeded || !detail.data || !specs.data || !grid.data) return
     setTitle(detail.data.title)
@@ -306,8 +388,66 @@ function WritingACard({
 
     setColours([...new Set(grid.data.map((one) => one.colour))].filter(Boolean))
     setSizes([...new Set(grid.data.map((one) => one.size))].filter(Boolean))
+    // The words as the card holds them — what "unchanged" means from here on.
+    setSaved(
+      fingerprint({
+        title: detail.data.title,
+        subtitle: detail.data.subtitle,
+        description: tidyHtml(detail.data.description),
+        brand: detail.data.brand_slug ?? "",
+        noBrand: false,
+        model: held.get(MODEL) ?? "",
+        noModel: false,
+        country: held.get(COUNTRY) ?? "",
+        noCountry: false,
+        folded: Object.fromEntries(
+          FOLDED.filter((key) => held.get(key)).map((key) => [key, held.get(key) ?? ""]),
+        ),
+        rows: specs.data.filter((row) => !OWNED.includes(row.key)),
+      }),
+    )
     setSeeded(true)
   }, [detail.data, specs.data, grid.data, seeded])
+
+  // ------------------------------------------------------- unsaved or not
+  //
+  // The category, the size system, the grid and the money each save the moment
+  // they are answered, which teaches the screen "it saves itself" — and then a
+  // name and three paragraphs typed into the sections that do *not* save
+  // themselves vanish on the way out, silently. So the form knows whether it
+  // is holding anything, says so on the bar, warns the browser on the way out,
+  // and saves before it publishes.
+  const now = fingerprint({
+    title,
+    subtitle,
+    description,
+    brand,
+    noBrand,
+    model,
+    noModel,
+    country,
+    noCountry,
+    folded,
+    rows,
+  })
+  const dirty = saved !== null && saved !== now
+
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+
+  // Closing the tab, reloading, the phone's back gesture — everything the
+  // browser owns rather than the router.
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      // Still required by Chrome for the native prompt to appear.
+      event.returnValue = ""
+    }
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [dirty])
 
   if (detail.isLoading || !detail.data) {
     return detail.error ? <Problem error={detail.error} /> : <Waiting what="Karta" />
@@ -338,16 +478,71 @@ function WritingACard({
     colours.some((one) => !gridColours.includes(one)) ||
     sizes.some((one) => !gridSizes.includes(one))
 
-  /** Everything the words-and-specs save writes, in one request each. */
-  function saveWords() {
-    file.mutate({
-      title: title.trim() || card.title,
-      subtitle: subtitle.trim(),
-      description: isBlank(description) ? "" : tidyHtml(description),
-      brand_slug: noBrand ? undefined : brand || undefined,
-    })
-    writeSpecs.mutate(
-      [
+  /**
+   * A colour ticked or unticked in the modal, checked against the shelf.
+   *
+   * Unticking `Qora` on a card with five black shoes on a shelf used to shrink
+   * the chip row and change nothing else: the grid kept the colour, the photo
+   * strip kept it, the gate kept it. A colour that has reached the variant
+   * grid has barcodes printed against it and stock counted under it, and it
+   * does not come off the card by unticking a box — so the tick is refused,
+   * out loud, and the person is pointed at the table that can do it.
+   */
+  function chooseColours(next: string[]) {
+    const held = gridColours.filter((one) => !next.includes(one))
+    if (held.length) {
+      const stocked = held.filter((one) =>
+        (grid.data ?? []).some((cell) => cell.colour === one && cell.stock_left > 0),
+      )
+      const named = (list: string[]) => list.map((one) => `«${one}»`).join(", ")
+      setRefusal(
+        stocked.length
+          ? `${named(stocked)} javonda bor — kartadan olib bo'lmaydi. Brak bo'lsa: Rang × o'lcham jadvalida.`
+          : `${named(held)} rang × o'lcham to'rida bor — kartadan olib bo'lmaydi. Quyidagi «Rang × o'lcham» jadvalida olib tashlanadi.`,
+      )
+      // Kept ticked **and in the position they were in**: a refused change
+      // must leave the control showing exactly what it showed before, or the
+      // chip row re-orders itself and reads as though something did happen.
+      next = [
+        ...colours.filter((one) => next.includes(one) || held.includes(one)),
+        ...next.filter((one) => !colours.includes(one)),
+      ]
+    } else {
+      setRefusal(null)
+    }
+
+    const added = next.filter((one) => !colours.includes(one))
+    setColours(next)
+    // A ticked colour opens a photograph slot, and the slot is four sections
+    // further down the page. Somebody who ticks `Oq` and sees nothing happen
+    // is somebody who ticks it again.
+    if (added.length) {
+      window.setTimeout(
+        () =>
+          document
+            .getElementById("card-form-photos")
+            ?.scrollIntoView({ behavior: "smooth", block: "center" }),
+        0,
+      )
+    }
+  }
+
+  /**
+   * Everything the words-and-specs save writes, in one request each — and in
+   * that order, awaited, so a card is never published with half its words
+   * written. Either failure comes back as `false` and is already on screen
+   * through `<Problem>`.
+   */
+  async function saveWords(finish = true): Promise<boolean> {
+    const wanted = now
+    try {
+      await file.mutateAsync({
+        title: title.trim() || card.title,
+        subtitle: subtitle.trim(),
+        description: isBlank(description) ? "" : tidyHtml(description),
+        brand_slug: noBrand ? undefined : brand || undefined,
+      })
+      await writeSpecs.mutateAsync([
         ...(noModel || !model.trim() ? [] : [{ key: MODEL, value: model.trim() }]),
         ...(noCountry || !country.trim()
           ? []
@@ -359,9 +554,28 @@ function WritingACard({
         ...rows
           .map((row) => ({ key: row.key.trim(), value: row.value.trim() }))
           .filter((row) => row.key && row.value),
-      ],
-      { onSuccess: () => onDone?.() },
-    )
+      ])
+    } catch {
+      // Shown by the panel's own `<Problem>`; the bar stays warn-toned,
+      // because the words really are still unsaved.
+      return false
+    }
+    setSaved(wanted)
+    if (finish) onDone?.()
+    return true
+  }
+
+  /**
+   * Chiqarish, with the typed words saved first.
+   *
+   * The gate is about the category, the price and the photographs — none of
+   * which the sticky bar writes — so a card could go into the shop under the
+   * name it had before somebody retyped it. It saves, and only publishes if
+   * the save landed.
+   */
+  async function publishCard() {
+    if (dirty && !(await saveWords(false))) return
+    publish.mutate("active")
   }
 
   return (
@@ -369,7 +583,7 @@ function WritingACard({
       {/* §5.4: the gate panel is at the top of the form and not a panel beside
           it — the three things holding a card out of the shop are the first
           thing somebody opening the card in the catalogue needs to see. */}
-      {full && card.status !== "active" ? (
+      {full ? (
         <GatePanel
           card={card}
           photographed={photographed}
@@ -377,12 +591,14 @@ function WritingACard({
           // while three colours are chosen and two of them have no slot yet.
           colours={photoColours}
           publish={publish}
+          dirty={dirty}
+          onPublish={() => void publishCard()}
         />
       ) : null}
 
       <AsteriskLine />
 
-      <Section step={1} title="Mahsulot toifasi" required>
+      <Section step={1} title="Tovar toifasi" required>
         <div id="card-form-category">
           <CategoryStep
             value={card.category_slug}
@@ -593,12 +809,13 @@ function WritingACard({
       {full ? (
       <Section
         step={6}
-        title="Xususiyatlarni tanlash"
+        title="Rang va o'lcham"
         hint="Rang palitradan tanlanadi, o'lcham esa o'z tizimidan — ikkalasi ham qo'lda yozilmaydi."
       >
         <Attributes
           colours={colours}
-          onColours={setColours}
+          onColours={chooseColours}
+          refusal={refusal}
           system={sized.data?.size_system ?? null}
           sizeless={sized.data ? sized.data.size_system === null && !sizes.length : false}
           onSystem={(slug) => setSystem.mutate(slug)}
@@ -757,19 +974,35 @@ function WritingACard({
           price waits on a button at the bottom of a long form is a card that
           gets published unpriced. */}
       {full ? (
-      <div className="sticky bottom-[var(--bottom-nav)] z-10 rounded-panel border border-line bg-surface/95 px-4 py-3 shadow-raised backdrop-blur">
-        <Button
-          type="button"
-          className="w-full gap-2 sm:w-auto"
-          disabled={file.isPending || writeSpecs.isPending}
-          onClick={saveWords}
+        <div
+          className={cn(
+            "sticky bottom-[var(--bottom-nav)] z-10 rounded-panel border px-4 py-3 shadow-raised backdrop-blur",
+            dirty ? "border-warn/50 bg-warn-soft/95" : "border-line bg-surface/95",
+          )}
         >
-          {file.isPending || writeSpecs.isPending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : null}
-          Saqlash
-        </Button>
-      </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p
+              className={cn(
+                "text-small",
+                dirty ? "font-medium text-warn-ink" : "text-ink-soft",
+              )}
+            >
+              {dirty ? "Saqlanmagan o'zgarishlar" : "Hammasi saqlangan"}
+            </p>
+            <Button
+              type="button"
+              className="w-full gap-2 sm:w-auto"
+              variant={dirty ? "primary" : "secondary"}
+              disabled={file.isPending || writeSpecs.isPending || !dirty}
+              onClick={() => void saveWords()}
+            >
+              {file.isPending || writeSpecs.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
+              Saqlash
+            </Button>
+          </div>
+        </div>
       ) : null}
     </div>
   )

@@ -52,9 +52,20 @@ import { groups, money } from "@/lib/format"
 import { usePublish, useVariants } from "@/lib/queries"
 import type { AdminProduct } from "@/lib/types"
 
-/** The one word for a card's state — on the pill, and in an export. */
+/**
+ * The one word for a card's state — on the pill, and in an export.
+ *
+ * `draft` used to be called `rasmsiz`, which is a lie on the half of that
+ * queue that has photographs and is held back by a price or a category. What
+ * every card in it has in common is not what it is missing but where it is
+ * not: in the shop.
+ */
 export function word(status: AdminProduct["status"]): string {
-  return status === "active" ? "sotuvda" : status === "draft" ? "rasmsiz" : "arxiv"
+  return status === "active"
+    ? "sotuvda"
+    : status === "draft"
+      ? "do'konda yo'q"
+      : "arxiv"
 }
 
 export function Status({ status }: { status: AdminProduct["status"] }) {
@@ -71,6 +82,12 @@ export function ProductCard({
   onOpen: () => void
 }) {
   const publish = usePublish(card.id)
+  // Archiving is the deliberate one: it takes the card out of every list but
+  // «Arxivda», and it is one tap away from `Tahrirlash` in the same menu. Two
+  // taps, and the second one is the sentence — the same shape as deleting a
+  // card. Forgotten when the menu closes, so it never greets the next opening
+  // already asking.
+  const [archiving, setArchiving] = useState(false)
   const next = card.next_statuses
   // The gates are the server's. An item that fires a request certain to be
   // refused is worse than one that opens the form where the gates are listed.
@@ -139,7 +156,7 @@ export function ProductCard({
             ) : null}
           </div>
 
-          <DropdownMenu>
+          <DropdownMenu onOpenChange={(open) => (open ? null : setArchiving(false))}>
             <DropdownMenuTrigger
               onClick={(event) => event.stopPropagation()}
               aria-label="Amallar"
@@ -191,10 +208,19 @@ export function ProductCard({
                 <DropdownMenuItem
                   tone="danger"
                   disabled={publish.isPending}
-                  onSelect={() => publish.mutate("archived")}
+                  onSelect={(event) => {
+                    if (archiving) {
+                      publish.mutate("archived")
+                      return
+                    }
+                    // Keeps the menu open so the question and its answer are
+                    // the same control in the same place.
+                    event.preventDefault()
+                    setArchiving(true)
+                  }}
                 >
                   <Archive />
-                  Arxivga
+                  {archiving ? "Arxivga — aniqmi?" : "Arxivga"}
                 </DropdownMenuItem>
               ) : null}
             </DropdownMenuContent>
@@ -267,7 +293,7 @@ function Labels({ productId }: { productId: number }) {
       }
     >
       <Printer />
-      Yorliq chiqarish
+      Yorliq chop etish
       {grid.isLoading ? (
         <span className="ml-auto text-micro text-ink-faint">yuklanmoqda</span>
       ) : null}

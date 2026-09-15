@@ -25,6 +25,15 @@
  * back from the two figures. That is lossy in one direction only — the sum is
  * always right, the split is a reconstruction — and it is the right trade
  * against adding a column to the ledger's neighbour for a display figure.
+ *
+ * **The table says what is stored; the strip says what is pending.** They used
+ * to be mixed: the `Narx` column printed whatever was typed into the strip, so
+ * pressing `+60%` made twelve rows read `Narx 192 000 · Sotish narxi 0` before
+ * anything had been written, and each row's discount was derived against the
+ * typed figure and jumped to a phantom 36% mid-keystroke. A figure nobody has
+ * saved must not be printed in the column that says what a customer pays: the
+ * pending sum gets a ghosted line of its own above the table, and the columns
+ * do not move until `Qo'yish`.
  */
 
 import { Loader2 } from "lucide-react"
@@ -49,6 +58,10 @@ const after = (list: number, discount: number) =>
 /** Digits only: a price field that accepts `1 2 0.k` is a price field that lies. */
 const digits = (value: string) => value.replace(/\D/g, "")
 
+/** The discount two stored figures work out to, or 0 when there is none. */
+const discountOf = (list: number, price: number) =>
+  list > 0 && price > 0 && list > price ? Math.round((1 - price / list) * 100) : 0
+
 export function PriceTable({ card }: { card: AdminProduct }) {
   const grid = useVariants(card.id)
   const palette = useColours()
@@ -64,24 +77,29 @@ export function PriceTable({ card }: { card: AdminProduct }) {
   const [list, setList] = useState("")
   const [discount, setDiscount] = useState("0")
   const [seeded, setSeeded] = useState(false)
+  // `old_price` is the struck-through figure, which is the list price
+  // whenever there is a discount at all. Never below what the card actually
+  // sells for: a few old cards carry an `old_price` under their `price`, and
+  // a "list price" lower than the selling price is not a discount, it is
+  // rubbish that would print a struck-through figure smaller than the one
+  // beside it.
+  const storedList = Math.max(card.old_price ?? 0, card.price)
+  const storedDiscount = discountOf(storedList, card.price)
   useEffect(() => {
     if (seeded || !grid.data) return
-    // `old_price` is the struck-through figure, which is the list price
-    // whenever there is a discount at all.
-    const stored = card.old_price ?? card.price
-    setList(stored ? String(stored) : "")
-    setDiscount(
-      stored && card.price && stored > card.price
-        ? String(Math.round((1 - card.price / stored) * 100))
-        : "0",
-    )
+    setList(storedList ? String(storedList) : "")
+    setDiscount(String(storedDiscount))
     setSeeded(true)
-  }, [grid.data, card.old_price, card.price, seeded])
+  }, [grid.data, storedList, storedDiscount, seeded])
 
   const listNumber = Number(list) || 0
   const discountNumber = Math.min(90, Math.max(0, Number(discount) || 0))
   const selling = after(listNumber, discountNumber)
   const markup = cost > 0 && selling > 0 ? Math.round((selling / cost - 1) * 100) : 0
+  // Typed but not written. The strip is a proposal until `Qo'yish`, and the
+  // table below is what the shop is actually charging right now.
+  const pending =
+    seeded && (listNumber !== storedList || discountNumber !== storedDiscount)
 
   // Which row is being overridden, and with what. One at a time: a table of
   // twelve open inputs is twelve unsaved edits nobody can account for.
@@ -163,6 +181,24 @@ export function PriceTable({ card }: { card: AdminProduct }) {
         </div>
       </div>
 
+      {/* The pending figure, drawn as pending: dashed, faint, and above the
+          table rather than inside it. */}
+      {pending ? (
+        <p className="rounded-control border border-dashed border-warn/50 bg-warn-soft/40 px-3 py-2 text-micro text-warn-ink">
+          Hali qo'yilmagan: narx{" "}
+          <span className="tabular">{listNumber ? money(listNumber) : "—"}</span>
+          {discountNumber > 0 ? (
+            <>
+              {" · chegirma "}
+              <span className="tabular">{discountNumber}%</span>
+            </>
+          ) : null}
+          {" · sotish narxi "}
+          <span className="font-medium tabular">{selling ? money(selling) : "—"}</span>
+          . Quyidagi jadval «Qo'yish» bosilgunicha hozirgi narxni ko'rsatadi.
+        </p>
+      ) : null}
+
       <Problem error={grid.error || priceCard.error || reprice.error} />
 
       {rows.length === 0 ? (
@@ -185,12 +221,13 @@ export function PriceTable({ card }: { card: AdminProduct }) {
             </thead>
             <tbody>
               {rows.map((row, at) => {
-                // What this row's own discount works out to, read back off the
-                // money it sells for against the card's list price.
-                const own =
-                  listNumber > 0 && row.price > 0 && listNumber > row.price
-                    ? Math.round((1 - row.price / listNumber) * 100)
-                    : 0
+                // This row's list price, off what is stored and nothing else.
+                // A variant carries one figure — the money it sells for — so
+                // the struck-through price is the card's, and it applies to a
+                // row that is still selling at the card's own price. A row
+                // repriced on its own is sold at that price, full stop.
+                const rowList = row.price === card.price ? storedList : row.price
+                const own = discountOf(rowList, row.price)
                 const editing = override?.id === row.id
                 const typed = Number(editing ? override.price : "") || 0
                 return (
@@ -216,39 +253,30 @@ export function PriceTable({ card }: { card: AdminProduct }) {
                     <td className="px-3 py-2 text-right tabular text-ink-soft">
                       {cost > 0 ? money(cost) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      {editing ? (
-                        <Input
-                          autoFocus
-                          value={override.price}
-                          onChange={(event) =>
-                            setOverride({ id: row.id, price: digits(event.target.value) })
-                          }
-                          inputMode="numeric"
-                          aria-label={`${row.label} — narx`}
-                          className="h-control-sm w-28 text-right tabular"
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setOverride({ id: row.id, price: String(listNumber || row.price) })
-                          }
-                          className="tabular underline-offset-4 hover:underline"
-                        >
-                          {money(listNumber || row.price)}
-                        </button>
-                      )}
-                    </td>
+                    <td className="px-3 py-2 text-right tabular">{money(rowList)}</td>
                     <td className="px-3 py-2 text-right tabular text-ink-soft">
-                      {editing ? "0%" : own ? `${own}%` : "0%"}
+                      {own ? `${own}%` : "0%"}
                     </td>
+                    {/* The one figure this row can be overridden with is the
+                        money it sells for, so that is the cell that opens —
+                        seeded from the row's own stored price and not from
+                        whatever the strip above is holding. */}
                     <td className="px-3 py-2 text-right">
                       {editing ? (
                         <span className="flex items-center justify-end gap-2">
-                          <span className="font-medium tabular">
-                            {typed ? money(thousand(typed)) : "—"}
-                          </span>
+                          <Input
+                            autoFocus
+                            value={override.price}
+                            onChange={(event) =>
+                              setOverride({
+                                id: row.id,
+                                price: digits(event.target.value),
+                              })
+                            }
+                            inputMode="numeric"
+                            aria-label={`${row.label} — sotish narxi`}
+                            className="h-control-sm w-28 text-right tabular"
+                          />
                           <Button
                             type="button"
                             size="sm"
@@ -272,7 +300,15 @@ export function PriceTable({ card }: { card: AdminProduct }) {
                           </Button>
                         </span>
                       ) : (
-                        <span className="font-medium tabular">{money(row.price)}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOverride({ id: row.id, price: String(row.price || "") })
+                          }
+                          className="font-medium tabular underline-offset-4 hover:underline"
+                        >
+                          {money(row.price)}
+                        </button>
                       )}
                     </td>
                   </tr>

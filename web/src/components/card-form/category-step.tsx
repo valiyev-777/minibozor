@@ -9,8 +9,11 @@
  * → Erkaklar → Krossovka` is four decisions, each one narrowing the next, and
  * the shape that says so is one select per level.
  *
- * **Accept, then collapse.** The selects stay until somebody presses *Qabul
- * qilish*, and then they become a breadcrumb with *O'zgartirish* beside it.
+ * **Accept, then collapse.** The selects stay until somebody presses
+ * *Tanlash*, and then they become a breadcrumb with *O'zgartirish* beside it.
+ * The button used to say *Qabul qilish* — which on a screen whose neighbour is
+ * the receiving desk reads as "book these goods in" rather than "this is the
+ * category I mean".
  * That is not politeness: the rest of the form only appears once the category
  * is settled, because the category is what decides the sizes and the
  * attributes, and a form that re-offers itself every time a select moves is a
@@ -162,7 +165,7 @@ export function CategoryStep({
         }}
       >
         {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-        Qabul qilish
+        Tanlash
       </Button>
     </div>
   )

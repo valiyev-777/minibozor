@@ -29,7 +29,6 @@
  */
 
 import {
-  Archive,
   Image as ImageIcon,
   LayoutGrid,
   Loader2,
@@ -68,7 +67,6 @@ import {
   useDeleteCard,
   useProduct,
   useProducts,
-  usePublish,
   useRetireVariant,
   useVariants,
 } from "@/lib/queries"
@@ -77,7 +75,7 @@ import type { AdminProduct, AdminVariant } from "@/lib/types"
 export function ProductsPage() {
   const [params, setParams] = useSearchParams()
   const status = params.get("status") ?? ""
-  // What the dashboard's "Tugagan tavarlar" tile lands on. The tile linked to
+  // What the dashboard's "Tugagan tovarlar" tile lands on. The tile linked to
   // `?low=1`, which nothing on either side read: the count was right and the
   // list it sent you to was the whole catalogue.
   const stock = params.get("stock") ?? ""
@@ -142,7 +140,12 @@ export function ProductsPage() {
               onChange={(key) => setParams(key ? { status: key } : {})}
               options={[
                 { key: "", label: "Hammasi" },
-                { key: "draft", label: "Rasmsiz" },
+                // Not "Rasmsiz": half this queue has photographs and is held
+                // back by a price or a category, and a filter that names one
+                // of the three gates is a filter that lies about the other
+                // two. What every card in it has in common is where it is
+                // not.
+                { key: "draft", label: "Do'konda yo'q" },
                 { key: "active", label: "Sotuvda" },
                 { key: "archived", label: "Arxivda" },
               ]}
@@ -496,7 +499,7 @@ function VariantRow({
               "shrink-0 text-micro text-warn-ink underline decoration-dotted underline-offset-2 hover:decoration-solid",
               damaging && "font-medium decoration-solid",
             )}>
-            Brakka chiqarish
+            Brakka o'tkazish
           </button>
         ) : null}
         <RetireLine variant={variant} onSet={onRetire} busy={retiring} />
@@ -512,9 +515,9 @@ function VariantRow({
 /**
  * The goods, in the row — a 40px square where a count used to be.
  *
- * **Why the empty square is the point.** A card with no photograph is the
- * `Rasmsiz` queue: the whole reason the list has a filter for it, and the one
- * thing holding goods out of the shop. A dashed warn-toned box beside a title
+ * **Why the empty square is the point.** A card with no photograph is most of
+ * the `Do'konda yo'q` queue, and a photograph is one of the three things
+ * holding goods out of the shop. A dashed warn-toned box beside a title
  * says that at a glance, in a way "0" in a grey column never did.
  *
  * **Where the picture comes from.** `cover_url` — the catalogue cover, the
@@ -523,8 +526,8 @@ function VariantRow({
  * trainers apart and is never shown to a customer, so showing it here would put
  * a different picture in the office's list than the one on sale.
  *
- * The server sends `""` for a card with no photographs, which is the `Rasmsiz`
- * queue and draws the warn-toned box above.
+ * The server sends `""` for a card with no photographs, which draws the
+ * warn-toned box above.
  */
 function Thumb({ row }: { row: AdminProduct }) {
   const shot = row.cover_url ?? ""
@@ -542,8 +545,8 @@ function Thumb({ row }: { row: AdminProduct }) {
 
   return (
     <span
-      aria-label={row.image_count ? "rasm bor" : "rasmsiz"}
-      title={row.image_count ? `${groups(row.image_count)} ta rasm` : "rasmsiz"}
+      aria-label={row.image_count ? "rasm bor" : "rasm yo'q"}
+      title={row.image_count ? `${groups(row.image_count)} ta rasm` : "rasm yo'q"}
       className={cn(
         "grid size-10 shrink-0 place-items-center rounded-control border border-dashed",
         row.image_count
@@ -614,64 +617,71 @@ function DeleteCard({
 function Card({ id, onBack }: { id: number; onBack: () => void }) {
   const card = useProduct(id)
   const grid = useVariants(id)
-  const publish = usePublish(id)
   const retire = useRetireVariant(id)
+  // The form below is the only thing that knows whether anything typed into it
+  // is still unwritten, and this screen owns the way out of it.
+  const [dirty, setDirty] = useState(false)
+  const [leaving, setLeaving] = useState(false)
 
   const product = card.data
-  const live = product?.status === "active"
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4">
+      {/* **The way back first, the red one last.** These two used to be drawn
+          the other way round, so at 390px — where the actions take the whole
+          width and wrap — the first thing under a person's thumb on a card
+          they had just finished writing was `O'chirish`. *Sotuvdan olish* is
+          not here at all any more: it lives in the publishing panel at the top
+          of the form, which is the one place this card's state is decided. */}
       <PageHeader
         title={product?.title ?? "Karta"}
         subtitle={product ? `${product.sku} · ${money(product.price)}` : ""}
       >
-        {/* Taking a card back out of the shop is the one act on this screen
-            that is not part of writing it, so it is a header action rather
-            than a bar across the foot of the form. */}
-        {live ? (
+        {leaving ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-micro text-warn-ink">
+              Saqlanmagan o'zgarishlar bor — chiqilsinmi?
+            </span>
+            <Button variant="secondary" size="sm" onClick={onBack}>
+              Ha, chiqaman
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setLeaving(false)}>
+              Yo'q
+            </Button>
+          </div>
+        ) : (
           <Button
             variant="ghost"
-            size="sm"
-            className="gap-1"
-            disabled={publish.isPending}
-            onClick={() => publish.mutate("archived")}
+            onClick={() => (dirty ? setLeaving(true) : onBack())}
           >
-            {publish.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Archive className="size-4" />
-            )}
-            Sotuvdan olish
+            Ro'yxatga
           </Button>
-        ) : null}
+        )}
         <DeleteCard id={id} title={product?.title ?? ""} onGone={onBack} />
-        <Button variant="ghost" onClick={onBack}>
-          Ro'yxatga
-        </Button>
       </PageHeader>
 
-      <Problem error={card.error || publish.error || retire.error} />
+      <Problem error={card.error || retire.error} />
 
       {/* The whole card, in the one form the receiving desk also opens — the
           publish gate at its top, then the words, the specs, the photographs
           and the price, in one column. There is no "Tahrirlash" button any
           more: a card that is open is a card being written. */}
-      <CardForm productId={id} mode="catalogue" />
+      <CardForm productId={id} mode="catalogue" onDirtyChange={setDirty} />
 
       <Panel title="Rang × o'lcham">
         {grid.isLoading ? <Waiting /> : null}
         {grid.data?.length === 0 ? (
           <Empty bare what="To'r hali yaratilmagan." />
         ) : null}
-        {/* Where a colour comes from, said once and here: the receiving desk.
-            Somebody publishing a card asked whether they were meant to be
-            adding colours on this screen — nothing on it invents one, and a
-            colour with no goods behind it would be a shop window offering
-            something the room does not have. */}
+        {/* Where a colour comes from, said once and here — and it now says
+            what is true. This note used to read "colours and sizes are written
+            at the receiving desk", directly under a section of the form above
+            it that edits exactly those two things, so the screen contradicted
+            itself by eight inches. */}
         <p className="mb-2 text-micro text-ink-faint">
-          Ranglar va o'lchamlar qabulda yoziladi. Bu yerda faqat rasm, narx va
-          sotuvga chiqarish.
+          Rang va o'lcham yuqoridagi 6-bo'limda tanlanadi; qabulda tovar
+          kelganda ham yoziladi. Bu jadval — o'sha to'rning o'zi: qoldiq,
+          shtrix-kod, brak va sotuvdan olish.
         </p>
         <Problem error={grid.error} />
         <ul className="divide-y">

@@ -55,9 +55,14 @@ export function Attributes({
   onSizes,
   saving = false,
   error,
+  refusal,
 }: {
   colours: string[]
   onColours: (colours: string[]) => void
+  /** Why the last tick did not take. The form owns the rule — a colour that
+   *  is already on the variant grid cannot be taken off the card here — and
+   *  this is where the refusal is said, beside the control that was pressed. */
+  refusal?: string | null
   /** What this card is numbered in, or `null` when nothing is named yet. */
   system: SizeSystem | null
   /** The card has said it has no sizes at all — a cap, a bag. */
@@ -139,6 +144,15 @@ export function Attributes({
           ) : null}
           {saving ? <Loader2 className="size-4 animate-spin text-ink-faint" /> : null}
         </div>
+        {/* A control that does nothing and says nothing is worse than one that
+            refuses: unticking a colour the shelf is holding used to shrink the
+            chip row and leave the colour on the grid, the photographs and the
+            gate. */}
+        {refusal ? (
+          <p className="mt-2 rounded-control bg-warn-soft p-2 text-micro text-warn-ink">
+            {refusal}
+          </p>
+        ) : null}
       </div>
 
       {/* ---------------------------------------------------------- o'lcham */}
@@ -198,36 +212,7 @@ export function Attributes({
           a 47 booked in before the list was shortened is on a shelf, and a
           form that stops showing it is a form that quietly un-picks it. */}
       {system ? (
-        <div>
-          <p className="mb-1.5 text-small font-medium">
-            {system.name} — <span className="font-normal text-ink-soft">kartada bor o'lchamlar</span>
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {[...new Set([...system.values, ...sizes])]
-              .map(tidySize)
-              .sort(bySize)
-              .map((size) => {
-                const on = sizes.includes(size)
-                return (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() =>
-                      onSizes(
-                        on ? sizes.filter((one) => one !== size) : [...sizes, size],
-                      )
-                    }
-                    className={cn(
-                      "h-control min-w-11 rounded-control border border-line px-2 text-small tabular transition-colors hover:bg-line-soft",
-                      on && "border-brand bg-brand font-medium text-brand-ink",
-                    )}
-                  >
-                    {size}
-                  </button>
-                )
-              })}
-          </div>
-        </div>
+        <SizeChips system={system} sizes={sizes} onSizes={onSizes} />
       ) : null}
 
       <Problem error={error} />
@@ -238,6 +223,82 @@ export function Attributes({
         chosen={colours}
         onDone={onColours}
       />
+    </div>
+  )
+}
+
+/**
+ * The named system's own values, and — separately — what the card is carrying
+ * that the system has never heard of.
+ *
+ * Switching a shoe from EUR to UK used to draw `6 6.5 … 12 42 43`: twelve UK
+ * values with two orphan EUR chips at the end, in the same ink, in the same
+ * box, as if 42 were a UK size. They are still drawn — a 42 booked in before
+ * somebody renamed the system is on a shelf, and a form that stops showing it
+ * is a form that quietly un-picks it — but under their own heading, muted, so
+ * a leftover reads as a leftover.
+ */
+function SizeChips({
+  system,
+  sizes,
+  onSizes,
+}: {
+  system: SizeSystem
+  sizes: string[]
+  onSizes: (sizes: string[]) => void
+}) {
+  const offered = system.values.map(tidySize)
+  const known = new Set(offered)
+  const carried = [...new Set(sizes.map(tidySize))]
+    .filter((one) => !known.has(one))
+    .sort(bySize)
+
+  const chip = (size: string, old: boolean) => {
+    const on = sizes.map(tidySize).includes(size)
+    return (
+      <button
+        key={size}
+        type="button"
+        onClick={() =>
+          onSizes(on ? sizes.filter((one) => tidySize(one) !== size) : [...sizes, size])
+        }
+        className={cn(
+          "h-control min-w-11 rounded-control border px-2 text-small tabular transition-colors hover:bg-line-soft",
+          old ? "border-dashed border-line text-ink-soft" : "border-line",
+          on && "border-brand bg-brand font-medium text-brand-ink",
+          on && old && "border-brand/60 bg-brand-soft text-brand-deep",
+        )}
+      >
+        {size}
+      </button>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="mb-1.5 text-small font-medium">
+          {system.name} —{" "}
+          <span className="font-normal text-ink-soft">kartada bor o'lchamlar</span>
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {[...new Set(offered)].sort(bySize).map((size) => chip(size, false))}
+        </div>
+      </div>
+
+      {carried.length ? (
+        <div>
+          <p className="mb-1.5 text-small font-medium text-ink-soft">
+            Eski tizimdan qolgan{" "}
+            <span className="font-normal text-ink-faint">
+              — «{system.name}» ro'yxatida yo'q, lekin kartada bor
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {carried.map((size) => chip(size, true))}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

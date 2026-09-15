@@ -48,7 +48,7 @@ import { tokens } from "@/lib/api"
 import { cn } from "@/lib/cn"
 import type { AdminImage, Media } from "@/lib/types"
 
-const GUIDE = "oq fonda · bitta tavar · qo'l ko'rinmasin"
+const GUIDE = "oq fonda · bitta tovar · qo'l ko'rinmasin"
 
 /** One door for every photograph, shared by the tiles and by `Capture`.
  *  Not through `api()`: this one posts a multipart body rather than JSON, and
@@ -418,6 +418,38 @@ export function Photos({
               </button>
             </div>
 
+            {/* **Every strip has its own pair.** There used to be one Kamera
+                and one Fayl at the foot of the whole list, acting on whichever
+                strip happened to be selected — so two `Fayl` uploads in a row
+                both landed on `Oq`, and the only way to aim at the second
+                colour was to click a tile first, which opens the camera. The
+                target colour is now always the strip being touched. */}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="gap-2"
+                onClick={() => pick(one, camera)}
+              >
+                <Camera className="size-4" />
+                Kamera
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="gap-2"
+                onClick={() => pick(one, gallery)}
+              >
+                <ImagePlus className="size-4" />
+                Fayl
+              </Button>
+              <span className="text-micro text-ink-soft">
+                {cardGallery ? "umumiy rasmlarga" : `«${name(one)}» rangiga`}
+              </span>
+            </div>
+
             {/* The quiet mistake, said out loud on the strip it happened to.
                 One tap turns "I appended by accident" into "that is the one I
                 meant", which is the whole complaint. */}
@@ -485,35 +517,6 @@ export function Photos({
           </div>
         )
       })}
-
-      {/* The gallery route, which the add tile does not give on a phone: there
-          `capture` opens the camera, and the picture the wholesaler sent is in
-          the gallery. Both act on the strip that is selected. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="gap-2"
-          onClick={() => pick(colour, camera)}
-        >
-          <Camera className="size-4" />
-          Kamera
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="gap-2"
-          onClick={() => pick(colour, gallery)}
-        >
-          <ImagePlus className="size-4" />
-          Fayl
-        </Button>
-        <span className="text-micro text-ink-soft">
-          {cardGallery ? "kartaning umumiy rasmlariga" : `«${name(colour)}» rangiga`}
-        </span>
-      </div>
 
       <p className="text-micro text-ink-faint">
         {GUIDE} · faylni rang qatoriga tashlash ham bo'ladi
