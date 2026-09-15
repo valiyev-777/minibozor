@@ -1,9 +1,16 @@
 ---
 name: backoffice-design
-description: The Mini Bozor back-office design system — palette, type, density, chrome and component recipes ported from the react-backoffice-boilerplate. Load before writing or restyling anything in web/ (screens, panels, tables, forms, the shell) so a new screen is drawn in the same language as the rest.
+description: The Mini Bozor design system for web/ — the back office's palette, type, density, chrome and component recipes ported from the react-backoffice-boilerplate, plus the courier surface, which is a deliberate second visual language. Load before writing or restyling anything in web/ (screens, panels, tables, forms, either shell) so a new screen is drawn in the same language as the rest of the surface it belongs to.
 ---
 
 # Back-office design
+
+**Two surfaces, one system.** Everything in this document is the back office —
+admin and warehouse, read at a desk or at a shelf. The courier's app is a
+second visual language on the same tokens and the same file; it is described at
+the end, under **The courier surface**, and a screen belongs to exactly one of
+the two. Read that section before touching anything under
+`web/src/pages/kuryer/` or `web/src/components/kuryer/`.
 
 One visual language for `web/`, ported from `react-backoffice-boilerplate`
 (Ant Design + Tailwind v4). We do **not** use Ant Design — the look is
@@ -209,3 +216,108 @@ search box and the collapse chevron before calling a chrome change done.
 
 Label sheets and cell labels are a real output. Page furniture carries
 `no-print`; `@media print` drops it and whitens the page.
+
+## The courier surface — the second visual language
+
+`web/src/pages/kuryer/` and `web/src/components/kuryer/` are **not** the back
+office and must not be drawn in it. This is a deliberate departure, made once,
+and everything above stops applying at the `/kuryer` route.
+
+**Why.** The back office is a page of cards on a grey field with a rail down
+the left: a desk tool, read sitting down, at arm's length, on a monitor. The
+courier's app is a map held in one hand outdoors, in daylight, by somebody who
+is walking and carrying a parcel. That difference is not a density — it is a
+different shape of screen:
+
+- A map has **no canvas** to put a card on. The chrome has to float over
+  somebody else's imagery, which is what glass and a hairline are for.
+- There is **no rail and no breadcrumb**, because there are four destinations
+  and a tab bar under the thumb is how a phone navigates. A breadcrumb for four
+  screens is a label.
+- There is **no `PageHeader` card**. The screen's name is set large at the top
+  of the scroll and nothing boxes it.
+- The screens **own the viewport and scroll inside themselves**, because a
+  bottom sheet that scrolls its stop list while the map behind it stays put is
+  not something a document-scrolling page can do.
+
+So the courier role has **its own shell** — `web/src/components/kuryer/shell.tsx`
+— a sibling of `components/shell.tsx` in `App.tsx`, never nested inside it. The
+other roles' rail, top bar and phone bottom bar are untouched by any of this and
+must not regress.
+
+**What is shared:** the session, the query client, the `.dark` class on
+`<html>`, the toaster, `lib/format` (never `Intl`, on either surface), the
+density variables, and the token file. Two languages, one system.
+
+### Where its tokens live
+
+In `shared/theme.css`, in a documented `kuryer-*` group inside the same
+`@theme` block, with a dark restatement in the same `.dark` block as everything
+else. **The rule at the top of this document is unchanged**: a courier screen
+never writes a hex either, and there is none anywhere under those two
+directories. The group was added because the system did not have these colours,
+which is what "the system is wrong and gets a token" means in practice.
+
+| Meaning | Token family |
+| --- | --- |
+| An act the courier can take | `kuryer-act` (+ `-ink`, `-deep`, `-soft`, `-edge`) |
+| A thing that happened | `kuryer-done` (+ the same four) |
+| Money in a pocket | `kuryer-cash` (+ `-ink`, `-soft`, `-edge`) |
+| Stop — offline, a door that did not open | `kuryer-halt` (+ `-ink`, `-soft`, `-edge`) |
+| The wash behind everything | `kuryer-ground`, `kuryer-ground-deep` |
+| Text | `kuryer-ink`, `-ink-soft`, `-ink-faint` |
+| Surfaces | `kuryer-card` (opaque), `kuryer-glass`, `kuryer-glass-strong`, `kuryer-sheet`, `kuryer-glass-edge` |
+| Furniture | `kuryer-grab`, `kuryer-hair`, `kuryer-quiet` |
+
+**These are not the back office's tokens renamed.** `brand` is a `#2585ff`
+chosen to sit on white paper at a desk; `act` is the iOS `#0a84ff`, which is
+what a floating pill over a map needs to stay blue in sun. `warn` means "not
+yet" and `cash` means "an amount somebody is carrying" — one is a state and the
+other is a sum, and the day they diverge a shared token would have been wrong.
+Green still means *it happened* and nothing else, on both surfaces.
+
+Radii are a second family, named the same way: `sheet` (34px), `glass` (28px),
+`tile` (24px), `slab` (20px), `nub` (15px). Shadows likewise —
+`shadow-kuryer-card`, `-glass`, `-float`, `-sheet`, and the two coloured ones,
+`-act` and `-done`. Those two are the **only** place in this system a shadow is
+allowed a hue: it is the glow under a filled button that is lit.
+
+One extra type size, `--text-kuryer-title` (30px), for a screen's own name —
+smaller than `.figure` and `.display`, which stay what they are, because the
+sum under the heading is the thing being read. It is fixed rather than restated
+per density: the courier surface is always `density-comfortable`, at every
+width, by construction.
+
+### The recipes
+
+- **`.kuryer-glass`** — the fill *and* the blur, as one class, and they must
+  never be separated: an 78%-opaque pane without `blur(22px) saturate(180%)`
+  behind it has road names running through its text. `.kuryer-glass-strong` is
+  the same thing at 94%, for a pane that scrolling content passes **under**.
+  `.kuryer-sheet` is the bottom sheet: more blur, hairline on the top edge only.
+- **Heights are still tokens.** `h-control-lg` (64px here) is a screen's
+  primary action, `h-control-md` a secondary, `h-control-sm` a small one. The
+  artboard drew 58/50/46; the token is the rule. The one exception is the 44px
+  round glass button floating over a map, which is not in a row of its own.
+- **One filled `act` slab per screen**, exactly as the office has one `primary`
+  button per screen, for the same reason.
+- **`.kuryer-tabs`** is the courier's `--bottom-nav`: the height of the
+  floating tab bar plus its gap plus the home indicator. Its own token, because
+  the two shells are siblings and a screen that reads the wrong one ends either
+  under a bar or above a stripe of nothing. The tab bar is `z-[900]` and every
+  sheet sits below it.
+- **The map** is `leaflet` used directly, over OpenStreetMap tiles, and it is
+  treated as a **convenience the whole time**. No network, no tiles, or no
+  coordinates each say which of the three it is and hand the screen to the stop
+  list — a courier in a basement still has to finish the round. Tiles are never
+  precached; `.kuryer-tiles` is the class the dark theme's filter hangs off,
+  and `.kuryer-route` / `.kuryer-pin-*` are how Leaflet's own nodes read tokens.
+
+### Dark
+
+The artboard is a light iOS mockup and has no dark. It exists anyway, because
+this app has a theme switch and a courier works after sunset: the wash and the
+glass invert into the same navy ramp as everything else, the three hues keep
+their identity and only their inks move, and the tiles themselves are filtered.
+Check both themes on the map, the sheet, the glass panes and the tab bar before
+calling a courier change done — the same rule as the rail.

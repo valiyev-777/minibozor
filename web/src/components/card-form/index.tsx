@@ -660,6 +660,7 @@ function WritingACard({
             </dl>
             <Photos
               colours={[""]}
+              cardGallery
               images={shots.filter((one) => !one.colour)}
               live={card.status === "active"}
               onAdd={(colour, url) => addImage.mutate({ url, colour })}
