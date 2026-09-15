@@ -51,8 +51,9 @@ import {
   Printer,
   Search,
   Sparkles,
+  Undo2,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { CardForm } from "@/components/card-form"
 import { Swatch } from "@/components/card-form/bits"
@@ -66,6 +67,7 @@ import { cn } from "@/lib/cn"
 import { age, bySize, groups, money, tidySize, units } from "@/lib/format"
 import {
   useAddColour,
+  useCancelReceipt,
   useColours,
   useProduct,
   useProducts,
@@ -84,6 +86,7 @@ import {
   type ReceiptShelved,
   type WaitingReceipt,
 } from "@/lib/queries"
+import { useSession } from "@/lib/session"
 import type { AdminProduct, SizeSystem } from "@/lib/types"
 
 // A receipt that has stood this long is the thing this shop actually loses
@@ -132,8 +135,78 @@ type Open = {
   quantity: number
   product_id: number | null
   product_title: string
+  /** One receipt is one colour, and the header says which — two runs of the
+   *  same card an hour apart are otherwise the same line twice. */
+  colour: string
+  colourHex: string
   receipt: Receipt | null
 }
+
+// ------------------------------------------------- the draft, kept over a reload
+
+/**
+ * Where the half-written receipt lives between renders of the browser.
+ *
+ * A card picked, a colour, forty-by-seven typed in and a cost: that is a
+ * counted sack, and until this existed a reload — a dropped phone, a browser
+ * deciding to reclaim a background tab, a thumb on the wrong edge — threw it
+ * away without saying anything. The screen came back blank and the sack had
+ * to be counted again.
+ *
+ * Deliberately `localStorage` and not the server: nothing here has happened
+ * yet. A draft is one person's unfinished sentence at one bench, and a server
+ * that knew about it would have to decide when it expires, whose it is and
+ * what a second bench sees — three questions nobody asked.
+ */
+const DRAFT_KEY = "mb.qabul.draft"
+
+type Kept = { draft: Draft; open: Open | null }
+
+/** Every access is wrapped: a browser in private mode, a full quota or a
+ *  policy that blocks site data all throw from the getter itself, and a
+ *  receiving screen that will not load because of a storage rule is worse
+ *  than one that forgets. */
+function readDraft(): Kept | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return null
+    const got = JSON.parse(raw) as Partial<Kept> | null
+    if (!got || typeof got !== "object") return null
+    const draft = { ...EMPTY, ...(got.draft ?? {}) }
+    const open = got.open ?? null
+    // Nothing worth restoring is nothing to say a word about.
+    if (!draft.product && !open) return null
+    return { draft, open }
+  } catch {
+    return null
+  }
+}
+
+function keepDraft(kept: Kept | null) {
+  try {
+    if (!kept) localStorage.removeItem(DRAFT_KEY)
+    else localStorage.setItem(DRAFT_KEY, JSON.stringify(kept))
+  } catch {
+    // Storage refused. The screen goes on working; it just forgets.
+  }
+}
+
+/**
+ * `b0102` → `B-01-02`.
+ *
+ * A gun reads the dashes off the label and a thumb on a phone does not type
+ * them. Anything that is not a letter and four digits is left exactly as
+ * written — guessing at a code nobody recognises is how goods land in a cell
+ * somebody else's shirts are in.
+ */
+function tidyCell(code: string): string {
+  const up = code.trim().toUpperCase().replace(/\s+/g, "")
+  const plain = /^([A-Z])(\d{2})(\d{2})$/.exec(up)
+  return plain ? `${plain[1]}-${plain[2]}-${plain[3]}` : up
+}
+
+/** The shape a cell code comes in, for the one extra line under a refusal. */
+const CELL_SHAPE = /^[A-Z]-\d{2}-\d{2}$/
 
 /** The lines with a count on them, in typed order, as the server takes them. */
 function linesOut(lines: SizeLine[]): { size: string; quantity: number }[] {
@@ -147,9 +220,17 @@ function countOf(lines: SizeLine[]): number {
 }
 
 export function QabulPage() {
-  const [draft, setDraft] = useState<Draft>(EMPTY)
-  const [open, setOpen] = useState<Open | null>(null)
+  // Read once, before the first paint, so the restored draft is what the
+  // screen has always shown rather than something that appears a frame later
+  // — and so the mirror below never writes an empty draft over a full one.
+  const first = useMemo(readDraft, [])
+  const [draft, setDraft] = useState<Draft>(() => first?.draft ?? EMPTY)
+  const [open, setOpen] = useState<Open | null>(() => first?.open ?? null)
+  const [restored, setRestored] = useState(() => first !== null)
   const [done, setDone] = useState<{ answer: ReceiptShelved; from: Open } | null>(null)
+  // What the cancel door said back, in its own words — shown plainly rather
+  // than shouted, because unsaying a receipt is a thing somebody meant.
+  const [unsaid, setUnsaid] = useState("")
   // What the last scan could not be used for, said beside the scan target —
   // a scan that silently does nothing reads as a broken scanner.
   const [scanSaid, setScanSaid] = useState("")
@@ -160,7 +241,33 @@ export function QabulPage() {
 
   const receive = useReceive()
   const shelve = useShelveReceipt()
+  const cancel = useCancelReceipt()
   const named = useProduct(fillFrom?.id ?? null)
+
+  // The mirror. Every change to the half-written receipt, and to the receipt
+  // whose cell question is still open, goes straight to storage — the moment
+  // worth surviving is the one nobody knew was the last one.
+  //
+  // The open receipt is kept *without* its sticker sheet on purpose: the
+  // label roll prints on mount, and a restored one would fire the browser's
+  // print dialog at somebody who only reloaded the page. Reopened it behaves
+  // like a row from the queue — the stickers are there to be reprinted, on a
+  // tap, which is what a reprint is.
+  //
+  // What counts as worth keeping is work somebody did: a colour picked, a
+  // pile counted, or a receipt standing with its cell question open. A card
+  // merely named is one search away and restoring it would put "tugallanmagan
+  // qabul" over a screen where nothing is unfinished — which is also how the
+  // draft clears itself after a successful Qabul, since booking takes the
+  // colour and the counts off it and shelving closes the receipt.
+  const worthKeeping = Boolean(open) || Boolean(draft.colour) || countOf(draft.lines) > 0
+  useEffect(() => {
+    if (!worthKeeping) {
+      keepDraft(null)
+      return
+    }
+    keepDraft({ draft, open: open ? { ...open, receipt: null } : null })
+  }, [draft, open, worthKeeping])
 
   useEffect(() => {
     if (!fillFrom || !named.data || named.data.id !== fillFrom.id) return
@@ -174,6 +281,11 @@ export function QabulPage() {
       // written this minute knows none, and the palette asks for it.
       colour: fillFrom.colour,
       colourHex: "",
+      // The second receipt of a card does not retype the cost (§7.7a). What
+      // it last cost at the market is the shop's own figure, written at this
+      // bench with the sack open, and it stays editable because the market
+      // moves. Only when the person has not already typed one.
+      unitCost: was.unitCost || (card.last_cost > 0 ? String(card.last_cost) : ""),
     }))
     setFillFrom(null)
     setDone(null)
@@ -184,6 +296,37 @@ export function QabulPage() {
     setOpen(null)
     setDone(null)
     setScanSaid("")
+    setRestored(false)
+    setUnsaid("")
+  }
+
+  /**
+   * "Typed 20, meant 10." The goods are un-booked and the ledger says so.
+   *
+   * Two taps got us here, which is the whole guard: this is not a button
+   * anybody presses by accident, and once it is pressed the answer is the
+   * server's own sentence rather than a word of ours.
+   */
+  function unsay(id: number, wasOpen: boolean) {
+    if (cancel.isPending) return
+    setScanSaid("")
+    cancel.mutate(
+      { id },
+      {
+        onSuccess: (answer) => {
+          setUnsaid(answer.message)
+          // The receipt on screen is gone, so the screen goes back to the
+          // question it opens with rather than leaving a header describing a
+          // pile that is no longer on the books.
+          if (wasOpen) {
+            setOpen(null)
+            setDone(null)
+            setDraft(EMPTY)
+            setRestored(false)
+          }
+        },
+      },
+    )
   }
 
   /** The second colour of the same goods: the card, the kind, the brand and
@@ -194,6 +337,8 @@ export function QabulPage() {
     setOpen(null)
     setDone(null)
     setScanSaid("")
+    setUnsaid("")
+    setRestored(false)
     setDraft((was) => ({
       ...EMPTY,
       product: receipt.product,
@@ -206,7 +351,7 @@ export function QabulPage() {
   function putAway(at: Open, code: string) {
     if (shelve.isPending) return
     shelve.mutate(
-      { id: at.id, location_code: code.trim().toUpperCase() },
+      { id: at.id, location_code: tidyCell(code) },
       {
         onSuccess: (answer) => {
           setDone({ answer, from: at })
@@ -259,16 +404,47 @@ export function QabulPage() {
     <div className="space-y-4">
       <PageHeader title="Qabul" subtitle="Stolda yoziladi — yacheyka javon oldida" />
 
+      {/* One quiet line, not a celebration: nothing happened, the screen
+          simply did not throw the sack away. And a way out beside it, because
+          a restored draft somebody has finished with is a form they have to
+          clear field by field. */}
+      {restored ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-panel border border-line bg-line-soft px-3 py-2">
+          <span className="min-w-0 flex-1 text-small text-ink-soft">
+            Tugallanmagan qabul tiklandi
+          </span>
+          <Button type="button" variant="ghost" size="sm" onClick={restart}>
+            Tashlab yuborish
+          </Button>
+        </div>
+      ) : null}
+
+      {/* What the cancel door said — in its own words, and readable until the
+          next act rather than for three seconds in a corner. */}
+      {unsaid ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-panel border border-line bg-surface px-3 py-2">
+          <Undo2 className="size-4 shrink-0 text-ink-faint" />
+          <span className="min-w-0 flex-1 text-small">{unsaid}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setUnsaid("")}>
+            Yopish
+          </Button>
+        </div>
+      ) : null}
+
       {/* The scanner, always listening — on both moments, because the two
           things it answers are the two halves of this screen: a goods sticker
           fills the card, a cell label finishes the shelving. */}
       <Panel bare>
         <div className="flex flex-wrap items-center gap-3 p-3">
-          <ScanTarget onAnswer={onScan} paused={busy} />
+          <ScanTarget onAnswer={onScan} paused={busy} moment={open ? "cell" : "goods"} />
           <p className="min-w-0 flex-1 text-micro text-ink-faint">
             {open
               ? "Yacheyka yorlig'ini skanerlang — tavar o'sha zahoti joylashadi."
-              : "Tavar yorlig'ini skanerlang — kartasi o'zi to'ladi."}
+              : "Tovar yorlig'ini skanerlang — kartasi o'zi to'ladi."}
           </p>
         </div>
         {scanSaid ? (
@@ -286,6 +462,8 @@ export function QabulPage() {
           onPutAway={(code) => putAway(open, code)}
           onAnotherColour={open.receipt ? () => anotherColour(open.receipt!) : undefined}
           onLater={() => setOpen(null)}
+          cancelling={cancel.isPending}
+          onCancel={() => unsay(open.id, true)}
         />
       ) : done ? (
         <Shelved
@@ -305,18 +483,33 @@ export function QabulPage() {
           onCreated={(id) => setFillFrom({ id, colour: "" })}
           onBooked={(receipt) => {
             setDone(null)
+            setUnsaid("")
+            setRestored(false)
             setOpen({
               id: receipt.run_id,
               code: receipt.run_code,
               quantity: receipt.quantity,
               product_id: receipt.product.id,
               product_title: receipt.product.title,
+              colour: draft.colour,
+              colourHex: draft.colourHex,
               receipt,
             })
             // The card the receipt wrote, back onto the draft: "yana bir
             // rang" for a brand-new card must land on this card, not open a
             // second one — the exact duplicate this screen warns about.
-            setDraft((was) => ({ ...was, product: receipt.product }))
+            //
+            // The colour and the counts go, though, and that is the mirror
+            // being honest: those numbers are now a receipt that exists, and
+            // a reload that brought them back as a draft would offer to book
+            // the same sack twice.
+            setDraft((was) => ({
+              ...was,
+              product: receipt.product,
+              colour: "",
+              colourHex: "",
+              lines: [],
+            }))
           }}
         />
       )}
@@ -326,15 +519,20 @@ export function QabulPage() {
           two. Hidden while a receipt is open — one question at a time. */}
       {!open ? (
         <WaitingQueue
+          cancelling={cancel.isPending}
+          onCancel={(row) => unsay(row.id, false)}
           onOpen={(row) => {
             setDone(null)
             setScanSaid("")
+            setUnsaid("")
             setOpen({
               id: row.id,
               code: row.code,
               quantity: row.quantity,
               product_id: row.product_id,
               product_title: row.product_title,
+              colour: row.colour,
+              colourHex: row.colour_hex,
               receipt: null,
             })
           }}
@@ -346,11 +544,38 @@ export function QabulPage() {
 
 // ------------------------------------------------------------ moment 1 · stolda
 
-/** Said under the running total while the bar's button is dead. */
+/** Said under the running total, as the secondary cue. */
 const MISSING_HINT = {
   colour: "rangini tanlang",
   count: "nechta kelganini yozing",
   cost: "tannarx yozilmagan",
+}
+
+/**
+ * And said **beside the field**, which is the one that gets read.
+ *
+ * The button used to be `disabled` with the words above in grey micro-text in
+ * the sticky bar. Pressing it did nothing, and a control that does nothing
+ * when pressed is a control somebody presses three more times and then calls
+ * about. So the button is live whenever there is a draft, and a press with
+ * something missing walks the screen to the missing thing and says this over
+ * it.
+ */
+const MISSING_SAID = {
+  colour: "Rangini tanlang — bitta qabul, bitta rang.",
+  count: "Nechta kelganini yozing — hech bo'lmasa bitta o'lcham.",
+  cost: "Tannarx yozilmagan — bir dona qancha turdi?",
+}
+
+type Missing = keyof typeof MISSING_HINT
+
+/** The words the form says next to a field it is waiting for. */
+function Nag({ what }: { what: Missing }) {
+  return (
+    <p role="alert" className="text-small font-medium text-danger">
+      {MISSING_SAID[what]}
+    </p>
+  )
 }
 
 function MomentOne({
@@ -386,7 +611,7 @@ function MomentOne({
 
   const total = countOf(draft.lines)
   const cost = Number(draft.unitCost) || 0
-  const missing: keyof typeof MISSING_HINT | null =
+  const missing: Missing | null =
     needsColour && !draft.colour.trim()
       ? "colour"
       : total === 0
@@ -394,12 +619,41 @@ function MomentOne({
         : cost <= 0
           ? "cost"
           : null
-  const ready = draft.product !== null && !missing && !receive.isPending
   const hint = missing ? MISSING_HINT[missing] : money(total * cost)
+
+  // Where each answer lives, so a press on a live button can walk to the one
+  // that is missing instead of leaving somebody to find it.
+  const colourAt = useRef<HTMLDivElement>(null)
+  const countAt = useRef<HTMLDivElement>(null)
+  const costAt = useRef<HTMLInputElement>(null)
+  const [asked, setAsked] = useState<Missing | null>(null)
+  // The complaint stands only while it is still true: filling the field it
+  // names is the answer to it, and an alert that outlives its cause is the
+  // next thing people learn to read past.
+  const nagging = asked && asked === missing ? asked : null
+
+  function walkTo(what: Missing) {
+    setAsked(what)
+    const at =
+      what === "cost" ? costAt.current : what === "colour" ? colourAt.current : countAt.current
+    at?.scrollIntoView({ behavior: "smooth", block: "center" })
+    // `preventScroll`, or the focus jumps there instantly and the smooth
+    // scroll above finishes by pulling the page back.
+    const hand =
+      what === "cost"
+        ? costAt.current
+        : at?.querySelector<HTMLElement>("input, button, [tabindex]")
+    hand?.focus({ preventScroll: true })
+  }
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (!ready || !draft.product) return
+    if (!draft.product || receive.isPending) return
+    if (missing) {
+      walkTo(missing)
+      return
+    }
+    setAsked(null)
     receive.mutate(
       {
         // Always a card that exists. The door still takes kind/brand and will
@@ -424,7 +678,16 @@ function MomentOne({
       ) : (
         <IdentifyCard
           onPick={(product) =>
-            setDraft((was) => ({ ...was, product, kind: product.kind }))
+            setDraft((was) => ({
+              ...was,
+              product,
+              kind: product.kind,
+              // The second receipt of a card does not retype the cost
+              // (§7.7a). It stays editable — the market moves — and a cost
+              // already typed on this draft is never overwritten.
+              unitCost:
+                was.unitCost || (product.last_cost > 0 ? String(product.last_cost) : ""),
+            }))
           }
           onCreated={onCreated}
         />
@@ -439,6 +702,9 @@ function MomentOne({
             ownColours={own}
             needsColour={needsColour}
             lines={draft.lines}
+            colourAt={colourAt}
+            countAt={countAt}
+            nagging={nagging}
             onColour={(colour, hex) =>
               setDraft((was) => ({ ...was, colour, colourHex: hex }))
             }
@@ -456,6 +722,7 @@ function MomentOne({
                     as `85 000` by somebody in a hurry — the one mistake on
                     this form nothing downstream can catch. */}
                 <Input
+                  ref={costAt}
                   value={draft.unitCost ? groups(Number(draft.unitCost)) : ""}
                   onChange={(event) =>
                     set("unitCost", event.target.value.replace(/\D/g, ""))
@@ -463,7 +730,13 @@ function MomentOne({
                   inputMode="numeric"
                   placeholder="85 000"
                   aria-label="Tannarx"
+                  aria-invalid={nagging === "cost"}
                   className="h-control-lg tabular text-body" />
+                {nagging === "cost" ? (
+                  <span className="mt-1 block">
+                    <Nag what="cost" />
+                  </span>
+                ) : null}
               </label>
               {/* The trip, in one column: where it was bought and what the
                   van cost. The fare is per trip and the cost above is per
@@ -518,7 +791,15 @@ function MomentOne({
               </div>
               <div className="truncate text-micro tabular text-ink-faint">{hint}</div>
             </div>
-            <Button size="lg" type="submit" disabled={!ready} className="gap-2">
+            {/* Live whenever there is a draft. A grey button is a screen
+                refusing to say why, and the person cannot see the reason from
+                here anyway — the missing field is usually scrolled off. Press
+                it and it walks you there. */}
+            <Button
+              size="lg"
+              type="submit"
+              disabled={receive.isPending}
+              className="gap-2">
               {receive.isPending ? (
                 <Loader2 className="size-5 animate-spin" />
               ) : (
@@ -680,6 +961,11 @@ function IdentifyCard({
             ) : (
               <CardForm
                 mode="receiving"
+                // The words already typed into the search box: somebody who
+                // wrote "Krossovka Nike" and found nothing should not have to
+                // write it a second time into the form that opened *because*
+                // they wrote it.
+                initialName={asked}
                 onCreated={(id) => {
                   setMade(true)
                   onCreated(id)
@@ -781,6 +1067,9 @@ function Counts({
   ownColours,
   needsColour,
   lines,
+  colourAt,
+  countAt,
+  nagging,
   onColour,
   onLines,
 }: {
@@ -790,6 +1079,10 @@ function Counts({
   ownColours: string[]
   needsColour: boolean
   lines: SizeLine[]
+  /** Where the form walks to when Qabul is pressed with these unanswered. */
+  colourAt: React.RefObject<HTMLDivElement | null>
+  countAt: React.RefObject<HTMLDivElement | null>
+  nagging: Missing | null
   onColour: (colour: string, hex: string) => void
   onLines: (lines: SizeLine[]) => void
 }) {
@@ -798,6 +1091,9 @@ function Counts({
   const sized = useProductSizeSystem(product.id)
   const [adding, setAdding] = useState("")
   const [typing, setTyping] = useState(false)
+  // A size typed by hand that the card's own run of sizes does not contain,
+  // waiting for a yes. See `add` below.
+  const [odd, setOdd] = useState("")
 
   // Some things have no size: a cap, a bag. The question is answered before
   // it is asked — and `chose` is a hand on the wheel: once somebody has said
@@ -858,15 +1154,34 @@ function Counts({
     return [...seen].sort(bySize)
   }, [grid.data, vocab.data, kind, colour, lines, system])
 
+  /** The values the card's named run actually offers, for telling a 43 typed
+   *  onto a UK card apart from a 9 that belongs there. */
+  const inSystem = useMemo(
+    () => new Set((system?.values ?? []).map(tidySize)),
+    [system],
+  )
+
   // One spelling, so `xl` typed in a hurry does not stand beside `XL` as a
   // second size, a second variant and a second barcode. Appended, never
   // sorted: typed order is print order.
-  function add(size: string) {
+  //
+  // And a size the card's own run does not contain is **asked about** rather
+  // than taken: `+ boshqa` on a card numbered in UK accepted a European 43
+  // silently, and the chip row then mixed two scales with nothing on screen
+  // saying which was which. It still goes in if the person says so — the run
+  // is what the card is usually numbered in, not a law — but they say so.
+  function add(size: string, anyway = false) {
     const wanted = tidySize(size)
-    if (wanted && !lines.some((line) => line.size === wanted)) {
+    setAdding("")
+    if (!wanted) return
+    if (!anyway && system && !inSystem.has(wanted)) {
+      setOdd(wanted)
+      return
+    }
+    setOdd("")
+    if (!lines.some((line) => line.size === wanted)) {
       onLines([...lines, { size: wanted, qty: "1" }])
     }
-    setAdding("")
   }
 
   const write = (index: number, qty: string) =>
@@ -878,7 +1193,14 @@ function Counts({
     <Panel title="Nechta keldi?">
       <div className="space-y-3">
         {needsColour ? (
-          <ColourPick own={ownColours} value={colour} onPick={onColour} />
+          <div ref={colourAt}>
+            <ColourPick own={ownColours} value={colour} onPick={onColour} />
+            {nagging === "colour" ? (
+              <div className="mt-1.5">
+                <Nag what="colour" />
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
         <SizeRun
@@ -899,6 +1221,7 @@ function Counts({
           }}
         />
 
+        <div ref={countAt} className="space-y-3">
         {sizeless ? (
           <label className="flex items-center gap-2">
             <Input
@@ -909,6 +1232,7 @@ function Counts({
               inputMode="numeric"
               placeholder="12"
               aria-label="Nechta keldi"
+              aria-invalid={nagging === "count"}
               className="h-control-lg w-28 tabular text-body"
             />
             <span className="text-small text-ink-soft">dona keldi</span>
@@ -934,15 +1258,26 @@ function Counts({
               <span className="mr-1 text-micro text-ink-soft">
                 {lines.length ? "Yana o'lcham:" : "Qanday o'lchamlar keldi?"}
               </span>
-              {suggested.map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={() => add(size)}
-                  className="h-control rounded-control border px-3 text-small">
-                  {size}
-                </button>
-              ))}
+              {suggested.map((size) => {
+                // Already on the card but outside its run: real stock, so it
+                // is still offered — and set apart, the way the card form
+                // draws "Eski tizimdan qolgan", so nobody reads a mixed row
+                // as one scale.
+                const outside = Boolean(system) && !inSystem.has(size)
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => add(size, true)}
+                    title={outside ? "Eski tizimdan qolgan" : undefined}
+                    className={cn(
+                      "h-control rounded-control border px-3 text-small",
+                      outside && "border-dashed border-line text-ink-faint",
+                    )}>
+                    {size}
+                  </button>
+                )
+              })}
               {typing ? (
                 <Input
                   autoFocus
@@ -970,8 +1305,36 @@ function Counts({
                 </button>
               )}
             </div>
+
+            {/* Asked, not refused. The person with the goods in their hands
+                is the one who can see what is printed on the box. */}
+            {odd ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-control bg-warn-soft p-2">
+                <p className="min-w-0 flex-1 text-micro text-warn-ink">
+                  <b className="tabular">{odd}</b> — «{system?.name}» qatorida yo'q.
+                  Baribir qo'shilsinmi?
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => add(odd, true)}>
+                  Ha, qo'shilsin
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setOdd("")}>
+                  Yo'q
+                </Button>
+              </div>
+            ) : null}
           </>
         )}
+
+        {nagging === "count" ? <Nag what="count" /> : null}
+        </div>
 
         {total > 0 ? (
           <p className="text-small text-ink-soft">
@@ -1393,6 +1756,8 @@ function MomentTwo({
   onPutAway,
   onAnotherColour,
   onLater,
+  cancelling,
+  onCancel,
 }: {
   open: Open
   pending: boolean
@@ -1402,11 +1767,24 @@ function MomentTwo({
    *  the form to be kept. */
   onAnotherColour?: () => void
   onLater: () => void
+  cancelling: boolean
+  onCancel: () => void
 }) {
   const [code, setCode] = useState("")
   // Where this model already lives, offered as taps — the person at the
   // shelf should not have to remember which cell held the 42s.
   const plan = usePutawayPlan(open.product_id, open.quantity)
+
+  // The model's own cells first — one model per cell is the discipline, and a
+  // full one is the line that most needs saying: it is the sentence telling
+  // somebody they are about to split one model across two aisles.
+  const cells = useMemo(() => {
+    const lines = plan.data?.lines ?? []
+    return [
+      ...lines.filter((line) => line.holds_this_model),
+      ...lines.filter((line) => !line.holds_this_model),
+    ]
+  }, [plan.data])
 
   return (
     <div className="space-y-3">
@@ -1416,11 +1794,15 @@ function MomentTwo({
             <Package className="size-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-body font-semibold tabular">
-              {units(open.quantity)} · yorliqlangan · javonga qo'yilmagan
+            <div className="flex items-center gap-1.5 text-body font-semibold tabular">
+              {open.colour ? <Swatch hex={open.colourHex || undefined} /> : null}
+              <span className="truncate">
+                {units(open.quantity)} · yorliqlangan · javonga qo'yilmagan
+              </span>
             </div>
             <div className="truncate text-micro tabular text-ink-faint">
-              {open.product_title || "—"} · {open.code}
+              {open.product_title || "—"}
+              {open.colour ? ` · ${open.colour}` : ""} · {open.code}
             </div>
           </div>
           {onAnotherColour ? (
@@ -1441,36 +1823,64 @@ function MomentTwo({
             Yoki kodini yozing:
           </p>
 
-          {plan.data?.lines.length ? (
+          {/* A suggestion **fills the box** and stops there. It used to move
+              twenty units on one tap, with no confirmation — a chip the size
+              of a thumb, on a phone, held at a shelf. `Javonga qo'ydim` is
+              the one thing on this screen that moves goods. */}
+          {cells.length ? (
             <div className="flex flex-wrap items-center gap-1">
               <span className="mr-1 text-micro text-ink-soft">Taklif:</span>
-              {plan.data.lines.map((line) => (
-                <button
-                  key={line.code}
-                  type="button"
-                  disabled={pending}
-                  onClick={() => onPutAway(line.code)}
-                  className="flex h-control items-center gap-1.5 rounded-control border border-brand bg-brand-soft px-3 text-small font-medium tabular text-brand-deep transition-colors hover:bg-brand hover:text-brand-ink">
-                  <MapPin className="size-3.5" />
-                  {line.code}
-                  <span className="text-micro opacity-80">
-                    {line.holds_this_model ? "shu model shu yerda" : "bo'sh joy"}
-                  </span>
-                </button>
-              ))}
+              {cells.map((line) => {
+                const full = line.holds_this_model && line.free === 0
+                // A chip whose code is in the box is the answer about to be
+                // given, full cell or not — the border says so even where the
+                // fill is muted.
+                const picked = line.code === code
+                return (
+                  <button
+                    key={line.code}
+                    type="button"
+                    onClick={() => setCode(line.code)}
+                    className={cn(
+                      "flex h-control items-center gap-1.5 rounded-control border px-3 text-small font-medium tabular transition-colors",
+                      picked ? "border-brand" : full ? "border-line" : "border-brand",
+                      full
+                        ? "bg-line-soft text-ink-faint"
+                        : picked
+                          ? "bg-brand text-brand-ink"
+                          : "bg-brand-soft text-brand-deep hover:bg-brand hover:text-brand-ink",
+                    )}>
+                    <MapPin className="size-3.5" />
+                    {line.code}
+                    <span className="text-micro opacity-80">
+                      {line.holds_this_model
+                        ? full
+                          ? "shu model shu yerda — to'lgan"
+                          : "shu model shu yerda"
+                        : "bo'sh joy"}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           ) : null}
 
           <form
-            className="flex items-center gap-2"
+            className="flex flex-wrap items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault()
-              if (code.trim()) onPutAway(code)
+              if (!code.trim() || pending) return
+              // Shown as it will be sent: `b0102` becomes `B-01-02` in the
+              // box, so the next one is typed the way the label reads.
+              const wanted = tidyCell(code)
+              setCode(wanted)
+              onPutAway(wanted)
             }}
           >
             <Input
               value={code}
               onChange={(event) => setCode(event.target.value.toUpperCase())}
+              onBlur={() => setCode((was) => tidyCell(was))}
               placeholder="B-01-02"
               aria-label="Yacheyka kodi"
               className="h-control-lg w-40 tabular text-body" />
@@ -1485,18 +1895,84 @@ function MomentTwo({
           </form>
 
           <Problem error={error} />
+          {/* One line more under a refusal, and only when the code is not in
+              the shape a cell label carries — otherwise it is noise over a
+              cell that is simply closed. */}
+          {error && code.trim() && !CELL_SHAPE.test(tidyCell(code)) ? (
+            <p className="text-micro text-ink-soft">Kod B-01-02 ko'rinishida bo'ladi</p>
+          ) : null}
 
-          {/* The question may wait: QABUL is a sellable place, nothing is
-              lost, and the queue below holds it with its age. */}
-          <button
-            type="button"
-            onClick={onLater}
-            className="text-micro text-ink-faint hover:text-ink">
-            Keyinroq — navbatda qoladi
-          </button>
+          {/* Two ways out, and they are not the same act. The question may
+              wait — QABUL is a sellable place, nothing is lost, and the queue
+              below holds it with its age. Unsaying the receipt takes the
+              goods back off the books, so it asks twice. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={onLater}
+              className="text-micro text-ink-faint hover:text-ink">
+              Keyinroq — navbatda qoladi
+            </button>
+            <span className="ms-auto">
+              <Unsay pending={cancelling} onConfirm={onCancel} />
+            </span>
+          </div>
         </div>
       </Panel>
     </div>
+  )
+}
+
+/**
+ * "Bekor qilish", and then "Rostdan?".
+ *
+ * Two taps because it un-books goods: the pile on the table stops being stock
+ * the shop believes in. A single ghost button at the end of a queue row, on a
+ * phone, is one mis-tap away from a receipt somebody spent five minutes
+ * counting. The second tap forgets itself after a few seconds, so a screen
+ * left open at the bench is not a screen armed.
+ */
+function Unsay({ pending, onConfirm }: { pending: boolean; onConfirm: () => void }) {
+  const [sure, setSure] = useState(false)
+
+  useEffect(() => {
+    if (!sure) return
+    const timer = window.setTimeout(() => setSure(false), 6000)
+    return () => window.clearTimeout(timer)
+  }, [sure])
+
+  if (!sure) {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => setSure(true)}>
+        Bekor qilish
+      </Button>
+    )
+  }
+
+  return (
+    <span className="flex items-center gap-1">
+      <span className="text-micro text-ink-soft">Rostdan?</span>
+      <Button
+        type="button"
+        variant="danger"
+        size="sm"
+        disabled={pending}
+        className="gap-1"
+        onClick={() => {
+          setSure(false)
+          onConfirm()
+        }}>
+        {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+        Ha, bekor
+      </Button>
+      <Button type="button" variant="ghost" size="sm" onClick={() => setSure(false)}>
+        Yo'q
+      </Button>
+    </span>
   )
 }
 
@@ -1555,9 +2031,16 @@ function Labels({ open }: { open: Open }) {
         ) : null}
         {/* The five-minute support call every shop makes once, answered in
             the screen's own words. */}
+        {/* Two lines, because the shop prints from both. The desktop terms
+            stay in English — they are what is written on the button — but the
+            sentence around them says what they are, and the phone gets its
+            own line rather than being told to look for a checkbox it has not
+            got. */}
         <p className="text-micro text-ink-faint">
-          Birinchi marta chop etishda brauzer oynasida: <b>Headers and footers</b>{" "}
-          belgisini oling, <b>Margins</b> ni <b>None</b> qiling. Har dona uchun
+          Kompyuterda: sarlavha-izohni (<b>Headers and footers</b>) o'chiring,
+          chetlarni (<b>Margins</b>) <b>None</b> qiling.
+          <br />
+          Telefonda: chop etish oynasida chetlarni «Yo'q» qiling. Har dona uchun
           bitta yorliq — 58 × 40 mm.
         </p>
       </div>
@@ -1583,6 +2066,12 @@ function Shelved({
 }) {
   const { answer, from } = done
   const unready = from.receipt?.product.unready ?? []
+  // `/mahsulotlar` is the catalogue, and the catalogue is the owner's screen:
+  // a warehouse session following this link met a 404 at the end of the one
+  // sentence on the page that was trying to be helpful. So the bench is told
+  // whose job it is instead, which is the true answer either way.
+  const { staff } = useSession()
+  const owns = staff?.role === "admin"
 
   return (
     <div className="space-y-3 rounded-panel border border-good bg-good-soft p-3">
@@ -1614,11 +2103,15 @@ function Shelved({
         <p className="text-micro text-ink-soft">
           Do'konga chiqarish kartaning o'zida — kerak:{" "}
           {unready.map((gap) => gap.label).join(", ")}.{" "}
-          <a
-            href="/mahsulotlar?status=draft"
-            className="font-medium text-brand-deep underline">
-            Kartani ochish
-          </a>
+          {owns ? (
+            <a
+              href="/mahsulotlar?status=draft"
+              className="font-medium text-brand-deep underline">
+              Kartani ochish
+            </a>
+          ) : (
+            "Rasm va narxni egasi qo'yadi"
+          )}
         </p>
       ) : null}
 
@@ -1649,7 +2142,15 @@ function Shelved({
  * question that was left for later, kept with its age. Each row opens
  * straight into its own moment two; reprint lives there too.
  */
-function WaitingQueue({ onOpen }: { onOpen: (row: WaitingReceipt) => void }) {
+function WaitingQueue({
+  onOpen,
+  onCancel,
+  cancelling,
+}: {
+  onOpen: (row: WaitingReceipt) => void
+  onCancel: (row: WaitingReceipt) => void
+  cancelling: boolean
+}) {
   const waiting = useWaitingReceipts()
   const rows = waiting.data ?? []
 
@@ -1661,11 +2162,15 @@ function WaitingQueue({ onOpen }: { onOpen: (row: WaitingReceipt) => void }) {
         {rows.map((row) => {
           const overnight = row.age_minutes >= OVERNIGHT_MINUTES
           return (
-            <li key={row.id}>
+            // The row is the opening tap and the way out sits beside it, not
+            // inside it: a button inside a button is not a thing a browser
+            // can draw, and this one has to be reachable without opening the
+            // receipt first.
+            <li key={row.id} className="flex flex-wrap items-center gap-2 pe-3">
               <button
                 type="button"
                 onClick={() => onOpen(row)}
-                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 p-3 text-left transition-colors hover:bg-line-soft">
+                className="flex min-w-0 flex-1 basis-64 flex-wrap items-center gap-x-3 gap-y-1 p-3 text-left transition-colors hover:bg-line-soft">
                 <span
                   className={cn(
                     "grid size-9 shrink-0 place-items-center rounded-control",
@@ -1680,15 +2185,29 @@ function WaitingQueue({ onOpen }: { onOpen: (row: WaitingReceipt) => void }) {
                     goods rather than squeezing the name that says which
                     receipt this is down to `Krossovka · Walk0…`. */}
                 <span className="min-w-0 flex-1 basis-40">
-                  <span className="block text-small font-medium">
+                  {/* The name wraps rather than ellipsises — a row cut to
+                      `Krossovka · Walk0…` is a row nobody can tell from the
+                      one under it. */}
+                  <span className="block text-small font-medium [overflow-wrap:anywhere]">
                     {row.product_title || row.code}
                   </span>
+                  {/* One receipt is one colour, and two runs of one card an
+                      hour apart are otherwise the same row twice. */}
                   <span
                     className={cn(
-                      "block text-micro tabular",
+                      "flex flex-wrap items-center gap-x-1.5 text-micro tabular",
                       overnight ? "text-danger" : "text-ink-faint",
                     )}>
-                    {units(row.quantity)} · {row.code} · {age(row.age_minutes)} turgan
+                    {row.colour ? (
+                      <>
+                        <Swatch hex={row.colour_hex || undefined} className="size-3" />
+                        <span className="font-medium">{row.colour}</span>
+                        <span>·</span>
+                      </>
+                    ) : null}
+                    <span>
+                      {units(row.quantity)} · {row.code} · {age(row.age_minutes)} turgan
+                    </span>
                   </span>
                 </span>
                 <span className="ms-auto flex shrink-0 items-center gap-1 text-micro font-medium text-brand-deep">
@@ -1696,6 +2215,9 @@ function WaitingQueue({ onOpen }: { onOpen: (row: WaitingReceipt) => void }) {
                   <ArrowRight className="size-3.5" />
                 </span>
               </button>
+              <span className="ms-auto shrink-0">
+                <Unsay pending={cancelling} onConfirm={() => onCancel(row)} />
+              </span>
             </li>
           )
         })}

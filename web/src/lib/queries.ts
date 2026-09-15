@@ -71,6 +71,8 @@ import type {
   ColourSwatch,
   ProductSizeSystem,
   SizeSystem,
+  ReceiptWaiting,
+  ReceiptCancelled,
 } from "@/lib/types"
 
 export const keys = {
@@ -1570,15 +1572,10 @@ export type ReceiptShelved = {
   message: string
 }
 
-/** One receipt whose goods are labelled and still standing in QABUL. */
-export type WaitingReceipt = {
-  id: number
-  code: string
-  product_id: number | null
-  product_title: string
-  quantity: number
-  age_minutes: number
-}
+/** One receipt whose goods are labelled and still standing in QABUL. Shaped
+ *  in `lib/types` now that the queue draws its colour too; the old name stays
+ *  because four screens import it. */
+export type WaitingReceipt = ReceiptWaiting
 
 /**
  * Moment one, at the bench: what came, how many, what it cost — and nothing
@@ -1630,6 +1627,10 @@ export function useReceive() {
 export function useShelveReceipt() {
   const client = useQueryClient()
   return useMutation({
+    // Quiet on failure: the receiving screen prints the refusal inline, right
+    // under the cell box it was typed into, and a toast saying the same words
+    // in the far corner is the same sentence read twice.
+    meta: { quiet: true },
     mutationFn: (input: { id: number; location_code: string }) =>
       api<ReceiptShelved>(`/warehouse/receipts/${input.id}/shelve`, {
         body: { location_code: input.location_code },
@@ -1671,6 +1672,40 @@ export function useRunLabels(runId: number | null) {
     queryFn: () =>
       api<{ products: ReceiptLabel[] }>(`/warehouse/labels?supply_id=${runId}`),
     enabled: Boolean(runId),
+  })
+}
+
+/**
+ * "Typed 20, meant 10" — the way back, while the way back is still open.
+ *
+ * Only while the receipt is whole and still standing in QABUL: once the goods
+ * went to a cell, or part of them left by another door, the server refuses
+ * with a sentence saying which, and the screen shows that sentence. A second
+ * call on a receipt already unsaid is a 200 with `quantity: 0` rather than a
+ * refusal — a second tap is not a mistake to shout about.
+ *
+ * Idempotent, because un-booking twenty pairs twice on warehouse wifi would
+ * be forty pairs walking out of a building that holds twenty.
+ */
+export function useCancelReceipt() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: number; reason?: string }) =>
+      api<ReceiptCancelled>(`/warehouse/receipts/${input.id}/cancel`, {
+        body: { reason: input.reason ?? "" },
+        idempotencyKey: idempotencyKey(),
+      }),
+    // The same list the receipt itself touched, because this is that receipt
+    // run backwards: the room, the queue, the catalogue, the market runs and
+    // the figures on the dashboard.
+    onSuccess: () =>
+      invalidate(client, [
+        keys.locations,
+        keys.receiptsWaiting,
+        ["products"],
+        ["supplies"],
+        keys.dashboard,
+      ]),
   })
 }
 

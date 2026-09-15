@@ -28,13 +28,20 @@ import "./index.css"
  * is noise. Moving an order along changes one word in one row, and *that* is
  * worth a sentence. So success is opt-in, by the mutation declaring
  * `meta: { done: "…" }` beside itself.
+ *
+ * And a refusal is worth saying **once**. A few writes ask their question in
+ * one box and print the answer under that box — the cell code at the shelf is
+ * the one that matters — and for those the toast is the same sentence read a
+ * second time in the far corner of the screen. Those declare
+ * `meta: { quiet: true }` and own their own refusal.
  */
 const mutations = new MutationCache({
   onSuccess: (_data, _variables, _context, mutation) => {
     const done = mutation.meta?.done
     if (typeof done === "string" && done) toast.success(done)
   },
-  onError: (error) => {
+  onError: (error, _variables, _context, mutation) => {
+    if (mutation.meta?.quiet) return
     toast.error(error instanceof Error ? error.message : "Nimadir noto'g'ri ketdi.")
   },
 })

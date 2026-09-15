@@ -1211,3 +1211,41 @@ export type AdminBrand = {
   product_count: number
   aliases: string[]
 }
+
+// ------------------------------------------------------ receiving (receipts)
+
+/**
+ * One receipt whose goods are labelled and still standing in QABUL — the
+ * second moment's queue.
+ *
+ * It carries the colour because one receipt is one colour: two runs of the
+ * same card an hour apart are "Nike Air · Oq" and "Nike Air · Qora", and a
+ * queue that draws both as the card's name is a queue where the wrong row
+ * gets shelved into the right cell. `colour_hex` is the palette's own value,
+ * so the row shows a swatch rather than a word somebody has to trust.
+ */
+export type ReceiptWaiting = {
+  id: number
+  code: string
+  product_id: number | null
+  product_title: string
+  colour: string
+  colour_hex: string
+  quantity: number
+  age_minutes: number
+}
+
+/**
+ * What came back out of the receiving area when a receipt was unsaid.
+ *
+ * `quantity` is what moved on *this* call and nought when the receipt had
+ * already been cancelled — the same politeness the shelve door shows, for the
+ * same reason: a second tap is not a mistake to shout about. `message` is the
+ * sentence to put on the screen either way.
+ */
+export type ReceiptCancelled = {
+  receipt_id: number
+  run_code: string
+  quantity: number
+  message: string
+}

@@ -53,10 +53,19 @@ function fieldHasFocus(): boolean {
 export function ScanTarget({
   onAnswer,
   paused = false,
+  moment,
 }: {
   onAnswer: (answer: ScanAnswer) => void
   /** Silences the wedge and the camera — for a screen whose moment is over. */
   paused?: boolean
+  /**
+   * What the screen is asking for right now, in a word of the screen's own
+   * choosing. When it changes, whatever this component last said stops
+   * applying and is cleared: "kamera skaneri yo'q" is an answer to a tap on
+   * the camera, not a property of the room, and leaving it standing under a
+   * question it no longer answers is how a person learns to read past it.
+   */
+  moment?: string
 }) {
   const scan = useScan()
   const [camera, setCamera] = useState(false)
@@ -77,12 +86,33 @@ export function ScanTarget({
   submit.current = (code: string) => {
     const trimmed = code.trim()
     if (!trimmed) return
+    // A new scan answers whatever the last one said.
+    setSaid("")
     mutate(trimmed, { onSuccess: (got) => answer.current(got) })
   }
+
+  // The screen moved on, so the last message is about a question nobody is
+  // asking any more.
+  useEffect(() => {
+    setSaid("")
+  }, [moment, paused])
+
+  // And so has the person: reaching for any field on the screen is them
+  // getting on with it by hand, which is exactly what "kodni qo'lda yozing"
+  // asked for. The message has been read; leaving it standing under the box
+  // they are now typing into is how people learn to read past this line.
+  useEffect(() => {
+    const moved = () => setSaid("")
+    document.addEventListener("focusin", moved)
+    return () => document.removeEventListener("focusin", moved)
+  }, [])
 
   useEffect(() => {
     if (paused) return
     const listen = (event: KeyboardEvent) => {
+      // Typing anywhere is the person getting on with it — a message about
+      // the camera is no longer what they are looking at.
+      setSaid("")
       if (fieldHasFocus()) {
         buffer.current = ""
         return
@@ -135,6 +165,9 @@ export function ScanTarget({
         )}
         Skaner
       </span>
+      {/* Square and wordless where the row is tight, named where there is
+          room: an unlabelled icon beside another unlabelled icon is two
+          guesses, and this one opens the phone's camera. */}
       <Button
         type="button"
         variant="secondary"
@@ -142,8 +175,10 @@ export function ScanTarget({
         aria-label="Kamera bilan skanerlash"
         disabled={paused}
         onClick={openCamera}
+        className="gap-1.5 sm:w-auto sm:px-3.5"
       >
         <Camera />
+        <span className="hidden text-small sm:inline">Kamera</span>
       </Button>
       {said ? <span className="text-micro text-danger">{said}</span> : null}
       {camera && !paused ? (
@@ -187,7 +222,10 @@ export function ScanBar({
   return (
     <Panel bare className="no-print">
       <div className="flex flex-wrap items-center gap-3 p-3">
-        <ScanTarget onAnswer={onAnswer} paused={paused} />
+        {/* The hint *is* the moment: it is the sentence saying what a scan
+            does here, so when it changes the screen is asking something else
+            and the reader's last message goes with it. */}
+        <ScanTarget onAnswer={onAnswer} paused={paused} moment={hint} />
         <p className="min-w-0 flex-1 text-micro text-ink-faint">{hint}</p>
       </div>
       {said ? (
