@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// Shared by screens 19–24: the six steps edit one draft order rather than
+/// Shared by screens 19–24: the five steps edit one draft order rather than
 /// passing arguments between destinations.
 @Observable
 final class CheckoutModel {
@@ -11,12 +11,10 @@ final class CheckoutModel {
 
     var addresses: [AddressDTO] = []
     var pickupPoints: [PickupPointDTO] = []
-    var slotDays: [SlotDayDTO] = []
     var cards: [CardDTO] = []
 
     var addressId: Int?
     var pickupPointId: Int?
-    var slotId: Int?
     var cardId: Int?
     var paymentMethod = "card"
     var promoCode: String?
@@ -27,14 +25,12 @@ final class CheckoutModel {
     private let orders = OrderRepository()
     private let cart = CartRepository.shared
 
+    /// Somewhere for it to go and something to pay with. There is no window to
+    /// book any more, so an order with an address on it is one the courier can
+    /// take.
     var ready: Bool {
         (addressId != nil || pickupPointId != nil)
-            && (pickupPointId != nil || slotId != nil)
             && (paymentMethod == "cash" || cardId != nil)
-    }
-
-    var selectedSlot: SlotDTO? {
-        slotDays.flatMap(\.slots).first { $0.id == slotId }
     }
 
     @MainActor
@@ -44,12 +40,10 @@ final class CheckoutModel {
 
         async let addressList = orders.addresses()
         async let cardList = orders.cards()
-        async let slotList = orders.slots()
         async let pickupList = orders.pickupPoints()
 
         addresses = (await addressList).value ?? []
         cards = (await cardList).value ?? []
-        slotDays = (await slotList).value ?? []
         pickupPoints = (await pickupList).value ?? []
 
         if addressId == nil {
@@ -58,9 +52,6 @@ final class CheckoutModel {
         if cardId == nil {
             cardId = cards.first { $0.isDefault && !$0.isExpired }?.id
                 ?? cards.first { !$0.isExpired }?.id
-        }
-        if slotId == nil {
-            slotId = slotDays.flatMap(\.slots).first(where: \.available)?.id
         }
         await refreshPreview()
     }
@@ -85,12 +76,6 @@ final class CheckoutModel {
     @MainActor func selectPickup(_ id: Int) async {
         pickupPointId = id
         addressId = nil
-        slotId = nil
-        await refreshPreview()
-    }
-
-    @MainActor func selectSlot(_ id: Int) async {
-        slotId = id
         await refreshPreview()
     }
 
@@ -162,7 +147,6 @@ final class CheckoutModel {
         CheckoutRequest(
             addressId: addressId,
             pickupPointId: pickupPointId,
-            slotId: slotId,
             paymentMethod: paymentMethod,
             paymentCardId: cardId,
             promoCode: promoCode

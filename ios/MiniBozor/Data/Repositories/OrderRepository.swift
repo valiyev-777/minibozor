@@ -24,11 +24,7 @@ struct OrderRepository {
 
     // Delivery
 
-    func slots(days: Int = 3) async -> Outcome<[SlotDayDTO]> {
-        await run {
-            try await api.get("delivery/slots", query: [URLQueryItem(name: "days", value: String(days))])
-        }
-    }
+    // `delivery/slots` is gone: nothing is booked into a window any more.
 
     func pickupPoints() async -> Outcome<[PickupPointDTO]> {
         await run { try await api.get("delivery/pickup-points") }

@@ -41,7 +41,7 @@ object Routes {
     const val ADDRESS_PICKER = "address_picker"
     /** Adding one; reachable from checkout and from the profile alike. */
     const val ADDRESS_FORM = "address_form"                 // 20
-    const val DELIVERY_TIME = "delivery_time"              // 21
+    // 21 was the delivery-window picker. There are no windows to pick.
     const val CONFIRM = "confirm"                          // 23
     const val ORDER_PLACED = "order_placed/{orderId}"      // 24
     fun orderPlaced(orderId: Int) = "order_placed/$orderId"

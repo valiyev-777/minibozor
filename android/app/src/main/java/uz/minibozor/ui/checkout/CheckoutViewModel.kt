@@ -14,8 +14,6 @@ import uz.minibozor.data.remote.dto.AddressRequest
 import uz.minibozor.data.remote.dto.CheckoutPreviewDto
 import uz.minibozor.data.remote.dto.CheckoutRequest
 import uz.minibozor.data.remote.dto.PickupPointDto
-import uz.minibozor.data.remote.dto.SlotDayDto
-import uz.minibozor.data.remote.dto.SlotDto
 import uz.minibozor.data.repository.CartRepository
 import uz.minibozor.data.repository.OrderRepository
 import javax.inject.Inject
@@ -24,9 +22,8 @@ import javax.inject.Inject
  * Courier or counter.
  *
  * It was never a choice the customer made — it was inferred from which of
- * `addressId` and `pickupPointId` happened to be set, which meant the screen
- * could show a delivery time slot for an order being collected in person, and
- * nothing on it ever said which of the two was happening.
+ * `addressId` and `pickupPointId` happened to be set, and nothing on the screen
+ * ever said which of the two was happening.
  */
 enum class DeliveryMethod { Courier, Pickup }
 
@@ -47,7 +44,7 @@ enum class DeliveryMethod { Courier, Pickup }
  * to go and do. A step that is never missing would be a button that says
  * "next" and does nothing; a step that is always missing would be worse.
  */
-enum class CheckoutStep { Address, Time, Payment }
+enum class CheckoutStep { Address, Payment }
 
 data class CheckoutState(
     val loading: Boolean = true,
@@ -55,10 +52,8 @@ data class CheckoutState(
     val preview: CheckoutPreviewDto? = null,
     val addresses: List<AddressDto> = emptyList(),
     val pickupPoints: List<PickupPointDto> = emptyList(),
-    val slotDays: List<SlotDayDto> = emptyList(),
     val addressId: Int? = null,
     val pickupPointId: Int? = null,
-    val slotId: Int? = null,
     val paymentMethod: String = "card",
     val cards: List<CardDto> = emptyList(),
     val cardId: Int? = null,
@@ -67,9 +62,6 @@ data class CheckoutState(
     val placing: Boolean = false,
     val placedOrderId: Int? = null,
 ) {
-    val selectedSlot: SlotDto?
-        get() = slotDays.flatMap { it.slots }.firstOrNull { it.id == slotId }
-
     val selectedAddress: AddressDto?
         get() = addresses.firstOrNull { it.id == addressId }
 
@@ -86,17 +78,15 @@ data class CheckoutState(
     /** In order, so the first of them is the one to ask for next. */
     val missing: List<CheckoutStep>
         get() = buildList {
+            // Somewhere for it to go, and that is the whole of the delivery
+            // question now: there is no window to book, so an order with an
+            // address on it is an order the courier can take.
             when (delivery) {
-                DeliveryMethod.Courier -> {
-                    if (addressId == null) add(CheckoutStep.Address)
-                    if (slotId == null) add(CheckoutStep.Time)
-                }
-                // Nothing to schedule when the customer is coming to fetch it.
+                DeliveryMethod.Courier -> if (addressId == null) add(CheckoutStep.Address)
                 DeliveryMethod.Pickup -> if (pickupPointId == null) add(CheckoutStep.Address)
             }
             // Last, because it is the last thing anybody wants to be asked
-            // about: where it goes and when comes first, and then what pays
-            // for it.
+            // about: where it goes comes first, and then what pays for it.
             if (paymentMethod != "cash" && cardId == null) add(CheckoutStep.Payment)
         }
 
@@ -107,7 +97,7 @@ data class CheckoutState(
 }
 
 /**
- * Shared by screens 19–24. Scoped to the checkout nav graph so the four steps
+ * Shared by screens 19–24. Scoped to the checkout nav graph so the three steps
  * edit one draft order rather than passing arguments between destinations.
  */
 @HiltViewModel
@@ -128,7 +118,6 @@ class CheckoutViewModel @Inject constructor(
             _state.update { it.copy(loading = true, error = null) }
 
             val addresses = (orders.addresses() as? Outcome.Success)?.data.orEmpty()
-            val slotDays = (orders.slots(3) as? Outcome.Success)?.data.orEmpty()
             val pickups = (orders.pickupPoints() as? Outcome.Success)?.data.orEmpty()
             val cards = (orders.cards() as? Outcome.Success)?.data.orEmpty()
 
@@ -142,12 +131,9 @@ class CheckoutViewModel @Inject constructor(
                     // berish" — the checkout asked for a preview with no code
                     // on it and quietly charged the full amount.
                     promoCode = it.promoCode ?: cart.promoCode.value,
-                    slotDays = slotDays,
                     pickupPoints = pickups,
                     addressId = it.addressId ?: addresses.firstOrNull { a -> a.isDefault }?.id
                         ?: addresses.firstOrNull()?.id,
-                    slotId = it.slotId ?: slotDays.flatMap { d -> d.slots }
-                        .firstOrNull { s -> s.available }?.id,
                     cards = cards,
                     // The default, or the first one that can be charged. A
                     // shopper with one saved card should not have to choose it.
@@ -164,16 +150,15 @@ class CheckoutViewModel @Inject constructor(
      * Courier or counter, as a choice rather than a side effect.
      *
      * Switching drops what belonged to the other one: an address means nothing
-     * to a pickup order, and a delivery slot means nothing to either the
-     * counter or an order with nowhere to go yet.
+     * to a pickup order, and a counter means nothing to one being carried to
+     * the door.
      */
     fun selectDelivery(method: DeliveryMethod) {
         if (_state.value.delivery == method) return
         _state.update {
             when (method) {
                 DeliveryMethod.Courier -> it.copy(delivery = method, pickupPointId = null)
-                DeliveryMethod.Pickup ->
-                    it.copy(delivery = method, addressId = null, slotId = null)
+                DeliveryMethod.Pickup -> it.copy(delivery = method, addressId = null)
             }
         }
         refreshPreview()
@@ -192,14 +177,8 @@ class CheckoutViewModel @Inject constructor(
                 delivery = DeliveryMethod.Pickup,
                 pickupPointId = id,
                 addressId = null,
-                slotId = null,
             )
         }
-        refreshPreview()
-    }
-
-    fun selectSlot(id: Int) {
-        _state.update { it.copy(slotId = id) }
         refreshPreview()
     }
 
@@ -302,7 +281,6 @@ class CheckoutViewModel @Inject constructor(
     private fun CheckoutState.request() = CheckoutRequest(
         addressId = addressId,
         pickupPointId = pickupPointId,
-        slotId = slotId,
         paymentMethod = paymentMethod,
         // Only on a card order. The server refuses a cash order that names a
         // card, and rightly: a client that sends both has not decided.

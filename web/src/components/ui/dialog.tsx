@@ -65,10 +65,11 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        // `rail` rather than a hex: the near-black the sidebar is painted in
-        // is the one dark this system owns, and an overlay written as a
-        // literal is an overlay that stops matching the day the rail moves.
-        "fixed inset-0 z-50 bg-rail/60 backdrop-blur-[2px]",
+        // `scrim`, not `rail`. It used to borrow the rail, which worked only
+        // while the rail was a constant near-black; the rail follows the theme
+        // now, and 60% of a white rail over a white page dims nothing. One
+        // token for every ground a dialog, a camera or a scanner sits on.
+        "fixed inset-0 z-50 bg-scrim/60 backdrop-blur-[2px]",
         "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className,
       )}

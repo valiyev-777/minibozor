@@ -21,7 +21,6 @@
 "bekor_qilish" = "Bekor qilish";
 "bekor_qilishni_tasdiqlash" = "Bekor qilishni tasdiqlash";
 "bepul" = "Bepul";
-"bepul_yetkazishgacha" = "Yana %1$@ qo'shsangiz — bepul yetkazish";
 "bildirishnoma_sozlamalari" = "Bildirishnoma sozlamalari";
 "bildirishnoma_yoq" = "Bildirishnoma yo'q";
 "bildirishnomalar" = "Bildirishnomalar";
@@ -30,7 +29,6 @@
 "boshqa_turkumlarni_korish" = "Boshqa turkumlarni ko'rish";
 "brend" = "Brend";
 "bu_filtr_boyicha_sharh_topilmadi" = "Bu filtr bo'yicha sharh topilmadi.";
-"bu_kunga_bosh_oraliq_qolmadi" = "Bu kunga bo'sh oraliq qolmadi.";
 "bu_turkumni_toldirib_borayapmiz_tez_kunda" = "Bu turkumni to'ldirib borayapmiz. Tez kunda birinchi tovarlar paydo bo'ladi.";
 "bugun" = "Bugun";
 "buyurtma" = "Buyurtma";
@@ -132,7 +130,6 @@
 "kodni_tasdiqlang" = "Kodni tasdiqlang";
 "kop_soraladigan_savollar" = "Ko'p so'raladigan savollar";
 "korsatish_n" = "Ko'rsatish · %1$@ ta";
-"kuryer_yetkazishdan_30_daqiqa_oldin" = "Kuryer yetkazishdan 30 daqiqa oldin qo'ng'iroq qiladi.";
 "kuryerga_izoh" = "Kuryerga izoh";
 "kuryerga_topshirishda" = "Kuryerga topshirishda";
 "kutilmoqda" = "Kutilmoqda";
@@ -328,8 +325,6 @@
 "yetkazish_muddati_va_narxi_hududga_qarab" = "Yetkazish muddati va narxi hududga qarab o'zgaradi";
 "yetkazish_uchun_birinchi_manzilingizni" = "Yetkazish uchun birinchi manzilingizni qo'shing.";
 "yetkazish_va_kafolat" = "Yetkazish va kafolat";
-"yetkazish_vaqti" = "Yetkazish vaqti";
-"yetkazish_vaqtini_tanlang" = "Yetkazish vaqtini tanlang";
 "yigildi_yolda_yetkazildi" = "Yig'ildi, yo'lda, yetkazildi";
 "yoki_punktdan_olib_ketish" = "Yoki punktdan olib ketish";
 "yoki_tezkor_kirish" = "  yoki tezkor kirish  ";

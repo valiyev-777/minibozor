@@ -156,7 +156,7 @@ fun MbSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     }
 }
 
-/** Radio row — delivery slot, payment method, cancel reason, language. */
+/** Radio row — payment method, cancel reason, language. */
 @Composable
 fun MbRadioRow(
     label: String,

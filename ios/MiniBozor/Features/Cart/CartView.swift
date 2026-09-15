@@ -162,12 +162,6 @@ struct CartView: View {
                 value: totals.deliveryFee == 0 ? L("bepul") : Format.sum(totals.deliveryFee),
                 valueColor: totals.deliveryFee == 0 ? MB.color.success : MB.color.ink
             )
-            if totals.deliveryFee > 0 {
-                let left = max(0, totals.freeDeliveryThreshold - totals.subtotal)
-                Text(L("bepul_yetkazishgacha", Format.sum(left)))
-                    .mbFont(MB.type.caption)
-                    .foregroundStyle(MB.color.textQuaternary)
-            }
             MBDivider().padding(.vertical, 8)
             MBTotalRow(label: L("jami"), value: Format.sum(totals.total), strong: true)
             Spacer().frame(height: 12)

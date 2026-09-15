@@ -174,8 +174,7 @@ interface MiniBozorApi {
     @DELETE("addresses/{id}")
     suspend fun deleteAddress(@Path("id") id: Int): MessageDto
 
-    @GET("delivery/slots")
-    suspend fun slots(@Query("days") days: Int = 3): List<SlotDayDto>
+    // `delivery/slots` is gone: nothing is booked into a window any more.
 
     @GET("delivery/pickup-points")
     suspend fun pickupPoints(): List<PickupPointDto>

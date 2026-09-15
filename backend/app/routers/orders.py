@@ -3,8 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import i18n, inventory
-from app import payments
+from app import i18n, inventory, payments
 from app import products as pr
 from app import schemas as s
 from app import services as sv
@@ -14,7 +13,6 @@ from app.models import (
     CancelReason,
     CardStatus,
     CartItem,
-    DeliverySlot,
     Notification,
     NotificationKind,
     Order,
@@ -50,24 +48,17 @@ def checkout_preview(
 
     address = _resolve_address(session, user.id, payload.address_id)
     pickup = session.get(PickupPoint, payload.pickup_point_id) if payload.pickup_point_id else None
-    slot = session.get(DeliverySlot, payload.slot_id) if payload.slot_id else None
 
-    # A slot's price is a surcharge — the picker shows it as "+9 000" — so it
-    # adds to the standard fee rather than replacing it. Replacing it made every
-    # daytime slot, priced at nothing, deliver the whole order free.
-    delivery_fee = 0 if pickup else cart.totals.delivery_fee + (slot.price if slot else 0)
     totals = sv.cart_totals(
         selected,
         discount=cart.totals.discount,
         promo_code=cart.totals.promo_code,
-        delivery_fee=delivery_fee,
     )
 
     return s.CheckoutPreviewOut(
         items=selected,
         address=sv.address_out(address) if address else None,
         pickup_point=sv.pickup_out(pickup) if pickup else None,
-        slot=sv.slot_out(slot) if slot else None,
         totals=totals,
         # Read here so the confirm screen can print "•• 9012" before anybody
         # presses anything. Resolved rather than trusted: a card id from a
@@ -94,8 +85,6 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, i18n.label("address_required")
         )
-
-    slot = session.get(DeliverySlot, payload.slot_id) if payload.slot_id else None
 
     if preview.address:
         address_line, address_meta = preview.address.line, preview.address.meta
@@ -143,10 +132,6 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
         address_line=address_line,
         address_meta=address_meta,
         pickup_point_id=payload.pickup_point_id,
-        slot_id=slot.id if slot else None,
-        delivery_day=slot.day if slot else None,
-        delivery_start=slot.start_time if slot else None,
-        delivery_end=slot.end_time if slot else None,
         payment_method=payload.payment_method,
         # Paid because it was, not because of which button was pressed. Cash
         # is settled at the door by the courier, and stays false until then.
@@ -223,10 +208,6 @@ def create_order(payload: s.CheckoutIn, user: CurrentUser, session: SessionDep) 
     for cart_item in sv.cart_items(session, user):
         if cart_item.selected:
             session.delete(cart_item)
-
-    if slot and slot.capacity_left > 0:
-        slot.capacity_left -= 1
-        session.add(slot)
 
     session.add(
         Notification(

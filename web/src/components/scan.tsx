@@ -304,7 +304,7 @@ function CameraEye({
   // A portal, so a header that clips or transforms its children cannot pin
   // the viewfinder inside itself.
   return createPortal(
-    <div className="no-print fixed inset-0 z-50 grid place-items-center bg-rail/70 p-4">
+    <div className="no-print fixed inset-0 z-50 grid place-items-center bg-scrim/70 p-4">
       <div className="w-full max-w-sm space-y-2 rounded-panel border border-line bg-surface p-3 shadow-raised">
         <div className="flex items-center justify-between gap-2">
           <span className="text-small font-semibold">Kamera bilan skanerlash</span>
@@ -322,7 +322,7 @@ function CameraEye({
               ref={video}
               muted
               playsInline
-              className="aspect-[4/3] w-full rounded-control bg-rail object-cover"
+              className="aspect-[4/3] w-full rounded-control bg-scrim object-cover"
             />
             <p className="text-micro text-ink-soft">
               Kodni ramkaga tuting — o'qilgan zahoti oyna o'zi yopiladi.

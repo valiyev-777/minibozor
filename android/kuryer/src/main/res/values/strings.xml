@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Mini Bozor Kuryer</string>
+    <string name="offline_title">Server topilmadi</string>
+    <string name="offline_body">Do\'kon serveriga ulanib bo\'lmadi. Wi-Fi yoqilganini tekshiring.</string>
+    <string name="retry">Qayta urinish</string>
+    <string name="address">Server manzili</string>
+</resources>

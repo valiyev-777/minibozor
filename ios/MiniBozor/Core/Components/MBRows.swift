@@ -116,7 +116,7 @@ struct MBSwitch: View {
     }
 }
 
-/// Radio row — delivery slot, payment method, cancel reason, language.
+/// Radio row — payment method, cancel reason, language.
 struct MBRadioRow<Leading: View>: View {
     let label: String
     var subtitle: String?

@@ -232,18 +232,6 @@ fun CartScreen(
                                         MbTheme.colors.success
                                     } else MbTheme.colors.ink,
                                 )
-                                if (cart.totals.deliveryFee > 0) {
-                                    val left =
-                                        cart.totals.freeDeliveryThreshold - cart.totals.subtotal
-                                    MbText(
-                                        stringResource(
-                                            R.string.bepul_yetkazishgacha,
-                                            left.coerceAtLeast(0).sum(),
-                                        ),
-                                        MbTheme.type.caption,
-                                        MbTheme.colors.textQuaternary,
-                                    )
-                                }
                                 MbDivider(Modifier.padding(vertical = 8.dp))
                                 MbTotalRow(
                                     stringResource(R.string.jami),

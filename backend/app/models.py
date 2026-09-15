@@ -624,19 +624,6 @@ class PickupPoint(SQLModel, table=True):
     active: bool = True
 
 
-class DeliverySlot(SQLModel, table=True):
-    __tablename__ = "delivery_slots"
-
-    id: int | None = Field(default=None, primary_key=True)
-    day: date = Field(index=True)
-    start_time: str                 # "09:00"
-    end_time: str                   # "13:00"
-    note: str = ""                  # "Ertalabki yetkazish"
-    price: int = 0                  # 0 == "Bepul"
-    express: bool = False
-    capacity_left: int = 20
-
-
 # --------------------------------------------------------------------------- payment
 
 
@@ -687,10 +674,11 @@ class Order(SQLModel, table=True):
     address_meta: str = ""
     pickup_point_id: int | None = Field(default=None, foreign_key="pickup_points.id")
 
-    # Which window was booked, as well as its hours. The hours are a snapshot
-    # and stay readable after the window is gone; the id is what makes the
-    # seat returnable, and without it a cancelled order held its slot for ever.
-    slot_id: int | None = Field(default=None, foreign_key="delivery_slots.id")
+    # When the order is promised, as a snapshot rather than a booking. Nothing
+    # writes these now that the shop has stopped offering windows to choose
+    # from — ``services.order_eta_label`` says "being worked out" when the day
+    # is null — but the courier list and the operator panel already read them,
+    # so a later version that brings windows back has somewhere to put them.
     delivery_day: date | None = None
     delivery_start: str | None = None
     delivery_end: str | None = None
@@ -722,6 +710,9 @@ class Order(SQLModel, table=True):
     courier_sequence: int = 0
 
     subtotal: int = 0
+    # Always zero: the shop delivers free. The column stays because the charge
+    # is a price the owner may want back, and a kept column means the orders
+    # already placed still add up when it returns.
     delivery_fee: int = 0
     discount: int = 0
     total: int = 0

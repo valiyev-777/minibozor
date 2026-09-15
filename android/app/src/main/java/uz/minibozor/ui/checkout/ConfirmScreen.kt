@@ -85,14 +85,6 @@ fun ConfirmScreen(
                         contentPadding = 10.dp,
                     )
                     MbDivider(inset = 62.dp)
-                    MbListRow(
-                        label = preview.slot?.label ?: stringResource(R.string.punktdan_olish),
-                        glyph = "clock",
-                        subtitle = preview.slot?.note,
-                        showChevron = false,
-                        contentPadding = 10.dp,
-                    )
-                    MbDivider(inset = 62.dp)
                     // Which card, by name, because this is the screen where
                     // pressing the button takes the money.
                     //

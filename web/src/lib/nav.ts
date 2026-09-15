@@ -25,6 +25,7 @@ import type { LucideIcon } from "lucide-react"
 import {
   Boxes,
   ClipboardList,
+  FolderTree,
   Home,
   Layers,
   ListOrdered,
@@ -64,18 +65,17 @@ export function isGroup(item: NavItem): boolean {
  * signs in here works in this building and reads it. */
 const ADMIN: NavItem[] = [
   { to: "/", label: "Boshqaruv", icon: Home },
-  {
-    to: "#katalog",
-    label: "Katalog",
-    icon: Boxes,
-    children: [
-      // The held-back count rides here now that publishing lives on the card:
-      // goods on a shelf no customer can buy break nothing and error nowhere,
-      // so a figure in the rail is the only thing that gets the queue worked.
-      { to: "/mahsulotlar", label: "Mahsulotlar", badge: "held_back" },
-      { to: "/kategoriyalar", label: "Kategoriyalar" },
-    ],
-  },
+  // `Katalog` was a drawer over two screens and the owner asked for the first
+  // one out of it. Taking `Mahsulotlar` out left `Kategoriyalar` alone behind
+  // a click, and a drawer holding one thing is strictly worse than the thing —
+  // so the drawer is gone and both stand on their own.
+  //
+  // The held-back count rides on `Mahsulotlar` now that publishing lives on
+  // the card: goods on a shelf no customer can buy break nothing and error
+  // nowhere, so a figure in the rail is the only thing that gets the queue
+  // worked — and it was one level down, which is where a count goes unread.
+  { to: "/mahsulotlar", label: "Mahsulotlar", icon: Boxes, badge: "held_back" },
+  { to: "/kategoriyalar", label: "Kategoriyalar", icon: FolderTree },
   // Everything about an order's journey, including the half that runs
   // backwards. A return is not a kind of order and not a kind of receiving —
   // it is a customer waiting for an answer, and it was the one flow in the
@@ -88,7 +88,6 @@ const ADMIN: NavItem[] = [
       { to: "/buyurtmalar", label: "Buyurtmalar" },
       { to: "/qaytarishlar", label: "Qaytarishlar" },
       { to: "/olib-kelish", label: "Olib kelish" },
-      { to: "/yetkazish-oynalari", label: "Yetkazish oynalari" },
     ],
   },
   {
@@ -241,12 +240,88 @@ export function matchNav(items: NavItem[], pathname: string): NavLeaf | undefine
   return best
 }
 
+/* ------------------------------------------------------------ the phone's bar
+ *
+ * On a phone the menu is a row across the bottom, under the thumb, and not a
+ * drawer behind a button in the far top-left corner. A courier has three
+ * destinations and switches between them all day while standing up; three taps
+ * behind a hamburger is the wrong shape for that, and it is the wrong shape
+ * for the bench too.
+ *
+ * Four targets is what fits, and the number is a measurement rather than a
+ * taste: on a 390px screen four slots are 97px each, which holds the longest
+ * word in this menu (`Kategoriyalar`, 83px at the phone's label size) without
+ * an ellipsis, and five would not. The office has seven top-level items and
+ * the bench has seven screens, so the last slot becomes a door to the rest.
+ */
+export const BAR_SLOTS = 4
+
+/**
+ * One target on the bottom bar. `covers` is every route it stands for, which
+ * is how a slot knows it is the current one — a group's slot is lit by any of
+ * its children.
+ */
+export type BarSlot = {
+  to: string
+  label: string
+  icon?: LucideIcon
+  badge?: string
+  covers: string[]
+}
+
+/**
+ * The menu as a row of at most five targets, and whether anything was left
+ * over.
+ *
+ * A group is a door in the rail; down here it is **its first screen**, because
+ * a bar slot that opens a submenu is a menu inside a menu and the drawer
+ * behind `Yana` already holds the whole thing flat.
+ *
+ * When the screen somebody is actually on did not fit, it takes the last
+ * visible slot. A bar that never shows where you are is a bar people stop
+ * reading — and without it `/jurnal` would light nothing at all.
+ */
+export function barSlots(
+  items: NavItem[],
+  at?: NavLeaf,
+): { slots: BarSlot[]; more: boolean } {
+  const all: BarSlot[] = items.map((item) => {
+    const kids = item.children ?? []
+    return {
+      to: kids.length ? kids[0].to : item.to,
+      label: item.label,
+      icon: item.icon,
+      // A count filed one level down is a count nobody sees on a phone, since
+      // the drawer it lives in is shut: it rides up to the slot.
+      badge: item.badge ?? kids.find((kid) => kid.badge)?.badge,
+      covers: kids.length ? kids.map((kid) => kid.to) : [item.to],
+    }
+  })
+
+  if (all.length <= BAR_SLOTS) return { slots: all, more: false }
+
+  const slots = all.slice(0, BAR_SLOTS - 1)
+  const here = at?.item.to
+  if (here && !slots.some((slot) => slot.covers.includes(here))) {
+    const mine = all.find((slot) => slot.covers.includes(here))
+    if (mine) slots[slots.length - 1] = mine
+  }
+  return { slots, more: true }
+}
+
 /**
  * The density class for a role, from `shared/theme.css`.
  *
  * Not a preference. A row read at arm's length at a desk wants to be small
  * so that more of them fit; a button pressed with a glove on wants to be
  * 64px whatever anybody's taste is.
+ *
+ * **Role decides this only on a desk.** On a phone every role is comfortable —
+ * see the shell — because a warehouse worker holding a phone at the shelves
+ * has the same thumb and the same eyes as a courier, and `density-compact` on
+ * a 390px screen is a 36px target and 14px type held at arm's length outdoors.
+ * That is the existing third density rather than a fourth one for phones:
+ * there is only one thing "read standing up, one-handed" means.
  */
 export function densityFor(role: Role): string {
   if (role === "admin") return "density-compact"

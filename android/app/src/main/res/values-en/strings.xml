@@ -29,7 +29,6 @@
     <string name="boshqa_turkumlarni_korish">Browse other categories</string>
     <string name="brend">Brand</string>
     <string name="bu_filtr_boyicha_sharh_topilmadi">No reviews match this filter.</string>
-    <string name="bu_kunga_bosh_oraliq_qolmadi">No slots left for this day.</string>
     <string name="bu_turkumni_toldirib_borayapmiz_tez_kunda">We\'re still filling this category. The first products are coming soon.</string>
     <string name="buyurtma">Order</string>
     <string name="buyurtma_bergach_holati_shu_yerda_korinadi">Once you place an order, its status shows up here.</string>
@@ -106,7 +105,6 @@
     <string name="kodni_qayta_yuborish_2">"Resend code — "</string>
     <string name="kodni_tasdiqlang">Confirm the code</string>
     <string name="kop_soraladigan_savollar">Frequently asked questions</string>
-    <string name="kuryer_yetkazishdan_30_daqiqa_oldin">The courier calls 30 minutes before delivery.</string>
     <string name="kuryerga_izoh">Note for the courier</string>
     <string name="kuryerga_topshirishda">When handed to the courier</string>
     <string name="kutilmoqda">Pending</string>
@@ -185,7 +183,6 @@
     <string name="sozlamalar">Settings</string>
     <string name="tahrirlash">Edit</string>
     <string name="tanlangan_til_darhol_qollanadi_turkum">The language applies straight away. Category names and order statuses use it too.</string>
-    <string name="tanlash">Choose</string>
     <string name="tasdiqlash">Confirm</string>
     <string name="tasdiqlash_kodi">Verification code</string>
     <string name="tavsif">Description</string>
@@ -233,8 +230,6 @@
     <string name="yetkazish_manzili">Delivery address</string>
     <string name="yetkazish_muddati_va_narxi_hududga_qarab">Delivery time and cost depend on the region</string>
     <string name="yetkazish_uchun_birinchi_manzilingizni">Add your first delivery address.</string>
-    <string name="yetkazish_vaqti">Delivery time</string>
-    <string name="yetkazish_vaqtini_tanlang">Choose a delivery time</string>
     <string name="yigildi_yolda_yetkazildi">Picked, on the way, delivered</string>
     <string name="yoki_punktdan_olib_ketish">Or collect from a pick-up point</string>
     <string name="yoki_tezkor_kirish">"  or sign in quickly  "</string>
@@ -308,7 +303,6 @@
     <string name="onboarding_4_chip">12,000+ products</string>
 
     <string name="tovarlar_soni">Products (%1$d)</string>
-    <string name="bepul_yetkazishgacha">Add %1$s more for free delivery</string>
     <string name="korsatish_n">Show · %1$s</string>
     <string name="filtr_n">Filter · %1$d</string>
     <string name="n_km">%1$s km</string>
@@ -393,19 +387,14 @@
     <string name="punkt_tanlanmagan">No pickup point yet</string>
     <string name="ozingizga_qulay_punktni_tanlang">Pick the point that suits you</string>
     <string name="punkt_tanlash">Choose a point</string>
-    <string name="yetkazish_vaqti_qisqa">Delivery time</string>
-    <string name="manzil_kiritilgandan_keyin">Available once there is an address</string>
     <string name="karta_qoshilmagan">No card yet</string>
     <string name="karta_yoki_naqd">Card or cash</string>
-    <string name="aniqlanadi">to be confirmed</string>
     <string name="korish">View</string>
-    <string name="yetkazish_narxi_manzildan_keyin">Delivery is priced once there is an address</string>
     <string name="hammasi_tayyor">Everything is ready</string>
     <plurals name="n_qadam_qoldi">
         <item quantity="one">%1$d step left before ordering</item>
         <item quantity="other">%1$d steps left before ordering</item>
     </plurals>
-    <string name="yetkazish_narxi_punktdan_keyin">Delivery is priced once there is a pickup point</string>
 
     <!-- cart: what the ticks mean, and the promo code -->
     <string name="hammasini_tanlash">Select all</string>

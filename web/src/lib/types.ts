@@ -257,6 +257,10 @@ export type AdminProduct = {
   /** The identification photograph, over the open sack. Never shown to a
    *  customer: it is what tells two black trainers apart in a search result. */
   snapshot_url: string
+  /** The catalogue photograph the customer meets first — the cover of the
+   *  card's first colour, by the same ordering the apps read. `""` when the
+   *  card has none, which is the `Rasmsiz` queue. */
+  cover_url: string
   unready: Gap[]
   /** What it is missing to read like a shop rather than a stub. Not a gate. */
   listing_gaps: Gap[]
@@ -492,27 +496,6 @@ export type OrderDetail = {
 /** A curated cancel or return reason. Five of each, in a table, and the panel
  *  has been writing free text beside them. */
 export type Reason = { id: number; label: string; requires_comment: boolean }
-
-// ------------------------------------------------------- delivery windows
-
-/**
- * One window on one day.
- *
- * **`capacity_left` is what is left, not the size of the window** — there is
- * no total anywhere, so a screen cannot say "12 of 20 taken" without
- * inventing the 20. `price` is a surcharge added to the delivery fee, and
- * nought reads as free.
- */
-export type StaffSlot = {
-  id: number
-  day: string
-  start_time: string
-  end_time: string
-  note: string
-  price: number
-  express: boolean
-  capacity_left: number
-}
 
 // --------------------------------------------------------- pickup runs
 

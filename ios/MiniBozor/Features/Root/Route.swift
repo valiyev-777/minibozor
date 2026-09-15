@@ -12,7 +12,7 @@ enum Route: Hashable {
 
     case checkout                                  // 19
     case addressForm                               // 20
-    case deliveryTime                              // 21
+    // 21 was the delivery-window picker. There are no windows to pick.
     case paymentMethod                             // 22
     case confirm                                   // 23
     case orderPlaced(orderId: Int)                 // 24

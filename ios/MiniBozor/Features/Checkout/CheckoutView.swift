@@ -58,15 +58,6 @@ struct CheckoutView: View {
             .padding(.horizontal, 10)
             MBDivider(inset: 62)
             MBListRow(
-                preview.slot?.label ?? L("yetkazish_vaqtini_tanlang"),
-                glyph: "clock",
-                subtitle: preview.slot?.note
-            ) {
-                router.push(.deliveryTime)
-            }
-            .padding(.horizontal, 10)
-            MBDivider(inset: 62)
-            MBListRow(
                 paymentTitle(preview),
                 glyph: "card",
                 subtitle: model.paymentMethod == "cash"
@@ -111,6 +102,8 @@ struct CheckoutView: View {
                     valueColor: MB.color.success
                 )
             }
+            // Free, and the fee is still read off the preview so the day one
+            // comes back this line prints it without being touched.
             MBTotalRow(
                 label: L("yetkazish"),
                 value: totals.deliveryFee == 0 ? L("bepul") : Format.sum(totals.deliveryFee),

@@ -21,7 +21,6 @@
 "bekor_qilish" = "Отменить";
 "bekor_qilishni_tasdiqlash" = "Подтвердить отмену";
 "bepul" = "Бесплатно";
-"bepul_yetkazishgacha" = "Добавьте ещё на %1$@ — доставка бесплатно";
 "bildirishnoma_sozlamalari" = "Настройки уведомлений";
 "bildirishnoma_yoq" = "Уведомлений нет";
 "bildirishnomalar" = "Уведомления";
@@ -30,7 +29,6 @@
 "boshqa_turkumlarni_korish" = "Посмотреть другие категории";
 "brend" = "Бренд";
 "bu_filtr_boyicha_sharh_topilmadi" = "По этому фильтру отзывов нет.";
-"bu_kunga_bosh_oraliq_qolmadi" = "На этот день свободных интервалов не осталось.";
 "bu_turkumni_toldirib_borayapmiz_tez_kunda" = "Мы наполняем эту категорию. Скоро появятся первые товары.";
 "bugun" = "Сегодня";
 "buyurtma" = "Заказ";
@@ -132,7 +130,6 @@
 "kodni_tasdiqlang" = "Подтвердите код";
 "kop_soraladigan_savollar" = "Частые вопросы";
 "korsatish_n" = "Показать · %1$@ шт.";
-"kuryer_yetkazishdan_30_daqiqa_oldin" = "Курьер позвонит за 30 минут до доставки.";
 "kuryerga_izoh" = "Комментарий курьеру";
 "kuryerga_topshirishda" = "При передаче курьеру";
 "kutilmoqda" = "Ожидается";
@@ -328,8 +325,6 @@
 "yetkazish_muddati_va_narxi_hududga_qarab" = "Сроки и стоимость доставки зависят от региона";
 "yetkazish_uchun_birinchi_manzilingizni" = "Добавьте первый адрес для доставки.";
 "yetkazish_va_kafolat" = "Доставка и гарантия";
-"yetkazish_vaqti" = "Время доставки";
-"yetkazish_vaqtini_tanlang" = "Выберите время доставки";
 "yigildi_yolda_yetkazildi" = "Собран, в пути, доставлен";
 "yoki_punktdan_olib_ketish" = "Или самовывоз из пункта";
 "yoki_tezkor_kirish" = "  или быстрый вход  ";

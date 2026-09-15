@@ -305,13 +305,18 @@ export function DataTable<T>({
   return (
     <section
       className={cn(
-        "rounded-panel border border-panel-edge bg-surface p-4",
+        // `min-w-0`: this lands in grids (`xl:grid-cols-2` on the reports)
+        // and a grid item's default minimum is its *content*, which for a
+        // fourteen-column table is far wider than a phone. Without it the
+        // card pushed the whole page sideways instead of letting the table
+        // scroll inside the container that exists for exactly that.
+        "min-w-0 rounded-panel border border-panel-edge bg-surface p-4",
         className,
       )}
     >
       {/* ---------------------------------------------------------- toolbar */}
       <div className="no-print flex min-h-11 flex-wrap items-center justify-between gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 max-md:w-full">
           <h2 className="truncate text-small font-semibold tracking-tight">{title}</h2>
           <p className="truncate text-micro text-ink-soft">
             {loading
@@ -320,7 +325,12 @@ export function DataTable<T>({
           </p>
         </div>
 
-        <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+        {/* Right-aligned at a desk, where the title anchors the left of the
+            row. On a phone the row is a stack, and a stack of ragged
+            right-aligned chips reads as four unrelated things — so the
+            controls line up on the left edge like everything else and the
+            search takes the width it wants. */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3 max-md:w-full max-md:justify-start">
           {beforeSearch}
 
           {filters.length > 0 ? (
@@ -343,7 +353,7 @@ export function DataTable<T>({
           ) : null}
 
           {searchable ? (
-          <div className="relative">
+          <div className="relative max-md:w-full">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
             <input
               ref={field}
@@ -353,7 +363,7 @@ export function DataTable<T>({
               placeholder={searchPlaceholder}
               aria-label={searchPlaceholder}
               className={cn(
-                "h-control w-56 rounded-control border border-transparent bg-line-soft ps-9 pe-11 text-small text-ink",
+                "h-control w-56 rounded-control border border-transparent bg-line-soft ps-9 pe-11 text-small text-ink max-md:w-full",
                 "outline-none transition-[background-color,border-color,box-shadow]",
                 "placeholder:text-ink-faint",
                 "focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand/25",

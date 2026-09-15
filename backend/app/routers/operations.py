@@ -2,9 +2,8 @@
 
 Several flows had a status column the data model was happy to move and no way
 to move it. A return request was submitted and never answered; an order was
-placed and stayed placed however long ago that was; a delivery window's
-capacity only ever went down. Each of those is one decision away from working,
-and this is where the decisions live.
+placed and stayed placed however long ago that was. Each of those is one
+decision away from working, and this is where the decisions live.
 
 The returns half of the file is read by two: the office decides the money and
 the warehouse says what arrived in the parcel. See ``app.returns``.
@@ -26,8 +25,6 @@ transaction as the change, so a disputed figure names a person and a moment.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
@@ -46,7 +43,6 @@ from app.deps import (
     WarehouseUser,
 )
 from app.models import (
-    DeliverySlot,
     Notification,
     NotificationKind,
     Order,
@@ -737,125 +733,6 @@ def _next_pickup_code(session: SessionDep) -> str:
     return f"PCK-{int(last) + 1:06d}"
 
 
-# --------------------------------------------------------------------- delivery windows
-
-
-@router.get(
-    "/delivery/slots",
-    response_model=list[s.StaffSlotOut],
-    summary="Every window in a date range, full ones included",
-)
-def list_slots(
-    user: OperatorUser,
-    session: SessionDep,
-    from_day: date | None = Query(None, description="default: today"),
-    to_day: date | None = Query(None, description="default: a fortnight out"),
-) -> list[s.StaffSlotOut]:
-    start = from_day or date.today()
-    end = to_day or start + timedelta(days=14)
-    rows = session.exec(
-        select(DeliverySlot)
-        .where(DeliverySlot.day >= start, DeliverySlot.day <= end)
-        .order_by(col(DeliverySlot.day), col(DeliverySlot.start_time))
-    ).all()
-    # Unlike the customer's list this keeps the windows that have sold out and
-    # the ones whose hour has passed: a window nobody can choose is exactly
-    # what an operator is looking for.
-    return [_slot_out(sl) for sl in rows]
-
-
-@router.post(
-    "/delivery/slots",
-    response_model=list[s.StaffSlotOut],
-    status_code=status.HTTP_201_CREATED,
-    summary="Open windows across a range of days",
-)
-def create_slots(
-    payload: s.SlotCreateIn, user: OperatorUser, session: SessionDep
-) -> list[s.StaffSlotOut]:
-    created: list[DeliverySlot] = []
-    for day in sorted(set(payload.days)):
-        existing = {
-            (row.start_time, row.end_time)
-            for row in session.exec(
-                select(DeliverySlot).where(DeliverySlot.day == day)
-            ).all()
-        }
-        for window in payload.windows:
-            if (window.start_time, window.end_time) in existing:
-                continue
-            slot = DeliverySlot(
-                day=day,
-                start_time=window.start_time,
-                end_time=window.end_time,
-                note=window.note,
-                price=window.price,
-                express=window.express,
-                capacity_left=window.capacity,
-            )
-            session.add(slot)
-            created.append(slot)
-            existing.add((window.start_time, window.end_time))
-
-    session.commit()
-    for slot in created:
-        session.refresh(slot)
-        audit.record(
-            session,
-            actor=user,
-            action="slot.create",
-            entity="delivery_slot",
-            entity_id=slot.id,
-            field="capacity_left",
-            old=None,
-            new=slot.capacity_left,
-            note=f"{slot.day} {slot.start_time}–{slot.end_time}",
-        )
-    session.commit()
-    return [_slot_out(sl) for sl in created]
-
-
-@router.patch(
-    "/delivery/slots/{slot_id}",
-    response_model=s.StaffSlotOut,
-    summary="Change a window's capacity or its surcharge",
-)
-def update_slot(
-    slot_id: int, payload: s.SlotUpdateIn, user: OperatorUser, session: SessionDep
-) -> s.StaffSlotOut:
-    slot = session.get(DeliverySlot, slot_id)
-    if slot is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("slot_not_found"))
-
-    # Capacity is how many orders may still be promised this window, and the
-    # surcharge is money on every one of them. Both are logged; the note and
-    # the express flag are wording and are not.
-    for field, new in (("capacity_left", payload.capacity_left), ("price", payload.price)):
-        if new is None or new == getattr(slot, field):
-            continue
-        audit.record(
-            session,
-            actor=user,
-            action=f"slot.{field}",
-            entity="delivery_slot",
-            entity_id=slot.id,
-            field=field,
-            old=getattr(slot, field),
-            new=new,
-        )
-        setattr(slot, field, new)
-
-    if payload.note is not None:
-        slot.note = payload.note
-    if payload.express is not None:
-        slot.express = payload.express
-
-    session.add(slot)
-    session.commit()
-    session.refresh(slot)
-    return _slot_out(slot)
-
-
 # --------------------------------------------------------------------------- helpers
 
 
@@ -950,17 +827,4 @@ def _order_row(session: SessionDep, o: Order, reader: UserRole) -> s.StaffOrderO
         courier_name=courier.full_name if courier else "",
         courier_sequence=o.courier_sequence,
         created_at=o.created_at,
-    )
-
-
-def _slot_out(sl: DeliverySlot) -> s.StaffSlotOut:
-    return s.StaffSlotOut(
-        id=sl.id,
-        day=sl.day,
-        start_time=sl.start_time,
-        end_time=sl.end_time,
-        note=sl.note,
-        price=sl.price,
-        express=sl.express,
-        capacity_left=sl.capacity_left,
     )

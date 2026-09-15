@@ -391,7 +391,7 @@ function MomentOne({
   }
 
   return (
-    <form className="space-y-3 pb-28" onSubmit={submit}>
+    <form className="space-y-3" onSubmit={submit}>
       {draft.named ? (
         <Named draft={draft} onChange={() => setDraft(() => EMPTY)} />
       ) : (
@@ -471,8 +471,14 @@ function MomentOne({
       {/* The bar stays put: reaching the button must not mean scrolling past
           the whole form with goods in the other hand. No cell on it — the
           cell is the second moment's question, asked at the shelf. */}
+      {/* `sticky`, not `fixed`. Fixed meant guessing where the rail ends —
+          `md:left-60` was 240px against a 264px rail, so the bar sat under it
+          — and on a phone it sat under the bottom navigation as well. Sticky
+          inside the page is measured by the layout instead, and `--bottom-nav`
+          is the one number that says how much of the foot the navigation has
+          taken (zero on a desk). */}
       {draft.named ? (
-        <div className="fixed inset-x-0 bottom-0 border-t bg-surface p-3 md:left-60">
+        <div className="sticky bottom-(--bottom-nav) z-20 -mx-(--gap-page) border-y border-line bg-surface p-3 shadow-raised">
           <div className="mx-auto flex max-w-4xl items-center gap-3">
             <div className="min-w-0 flex-1">
               <div
@@ -608,10 +614,8 @@ function IdentifyCard({
                 <Sparkles className="size-5" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-body font-semibold">
-                  Yangi tavar
-                </span>
-                <span className="block truncate text-micro text-ink-faint">
+                <span className="block text-body font-semibold">Yangi tavar</span>
+                <span className="block text-micro text-ink-faint">
                   Birinchi marta keldi — kartasi shu yerda ochiladi
                 </span>
               </span>
@@ -1407,7 +1411,7 @@ function WaitingQueue({ onOpen }: { onOpen: (row: WaitingReceipt) => void }) {
               <button
                 type="button"
                 onClick={() => onOpen(row)}
-                className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-line-soft">
+                className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 p-3 text-left transition-colors hover:bg-line-soft">
                 <span
                   className={cn(
                     "grid size-9 shrink-0 place-items-center rounded-control",
@@ -1417,19 +1421,23 @@ function WaitingQueue({ onOpen }: { onOpen: (row: WaitingReceipt) => void }) {
                   )}>
                   <Package className="size-4" />
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-small font-medium">
+                {/* `basis-40` with a wrapping row: on a desk the prompt sits
+                    at the end of the line, and on a phone it drops under the
+                    goods rather than squeezing the name that says which
+                    receipt this is down to `Krossovka · Walk0…`. */}
+                <span className="min-w-0 flex-1 basis-40">
+                  <span className="block text-small font-medium">
                     {row.product_title || row.code}
                   </span>
                   <span
                     className={cn(
-                      "block truncate text-micro tabular",
+                      "block text-micro tabular",
                       overnight ? "text-danger" : "text-ink-faint",
                     )}>
                     {units(row.quantity)} · {row.code} · {age(row.age_minutes)} turgan
                   </span>
                 </span>
-                <span className="flex shrink-0 items-center gap-1 text-micro font-medium text-brand-deep">
+                <span className="ms-auto flex shrink-0 items-center gap-1 text-micro font-medium text-brand-deep">
                   Qaysi yacheyka?
                   <ArrowRight className="size-3.5" />
                 </span>

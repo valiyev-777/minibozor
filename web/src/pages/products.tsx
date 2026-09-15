@@ -1,10 +1,22 @@
 /**
  * Mahsulotlar — the catalogue, and the one screen that puts a card in the shop.
  *
- * **The list leads with what is missing.** A card held back for want of a
+ * **The list leads with the goods.** The row opens with the picture, not with
+ * a count of pictures: a catalogue of black trainers is unreadable as titles,
+ * and "3" told nobody anything they could act on. The square is empty and
+ * warn-toned exactly when the card is in the `Rasmsiz` queue, which is the one
+ * thing on this screen anybody has to do something about.
+ *
+ * **And it leads with what is missing.** A card held back for want of a
  * photograph is the row somebody has to act on, so the status says which
  * colour is missing rather than the word "draft" — and the dashboard's own
  * tile links straight here with the filter already applied.
+ *
+ * **The photographs are one panel.** There used to be two on this screen, a
+ * row of colour tiles and a gallery under it, disagreeing with each other
+ * about which picture was the cover. See `Photos` in `photo-step.tsx`: one
+ * strip per colour, in the publish gate on a held-back card and in its own
+ * panel once the card is on sale — never both at once.
  *
  * **Publishing lives on the card.** The separate "Sotuvga chiqarish" screen is
  * gone with the seller role that owned it: a card that is not on sale opens
@@ -48,7 +60,7 @@ import { Code } from "@/components/copy"
 import { DataTable, useTableState } from "@/components/data-table"
 import { Filing, Pricing, Specs, Words } from "@/components/card-editor"
 import type { Tone } from "@/components/page"
-import { PhotoStep, mediaUrl } from "@/components/photo-step"
+import { Photos, mediaUrl } from "@/components/photo-step"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/cn"
@@ -60,12 +72,13 @@ import {
   useDeleteCard,
   useDeleteImage,
   useImages,
+  useMakeCover,
   useProducts,
   usePublish,
   useRetireVariant,
   useVariants,
 } from "@/lib/queries"
-import type { AdminImage, AdminProduct, AdminVariant } from "@/lib/types"
+import type { AdminProduct, AdminVariant } from "@/lib/types"
 
 export function ProductsPage() {
   const [params, setParams] = useSearchParams()
@@ -137,6 +150,21 @@ export function ProductsPage() {
           </div>
         }
         columns={[
+          // The picture leads the row. It was a count in the fourth column —
+          // "3", "0", "1" — which is a figure about photographs rather than a
+          // look at the goods, and the one thing a person scanning a catalogue
+          // of black trainers actually reads.
+          {
+            key: "image_count",
+            header: "Rasm",
+            width: "1%",
+            sortable: true,
+            sortValue: (row) => row.image_count,
+            cell: (row) => <Thumb row={row} />,
+            // A picture exports as nothing; the count is what a spreadsheet
+            // can hold, and it is what this column used to be.
+            export: (row) => groups(row.image_count),
+          },
           {
             key: "title",
             header: "Karta",
@@ -172,14 +200,6 @@ export function ProductsPage() {
             sortable: true,
             sortValue: (row) => row.variant_count,
             cell: (row) => groups(row.variant_count),
-          },
-          {
-            key: "image_count",
-            header: "Rasm",
-            numeric: true,
-            sortable: true,
-            sortValue: (row) => row.image_count,
-            cell: (row) => groups(row.image_count),
           },
           {
             key: "price",
@@ -386,15 +406,22 @@ function VariantRow({
 
   return (
     <li className={cn("py-2", variant.retired && "opacity-55")}>
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1">
+      {/* **Two lines on a phone, one at a desk.** Five inflexible children in
+          a non-wrapping row is a row that cannot get narrower than its
+          contents: at 390px the price was drawn on top of the SKU and the
+          colour·size label broke into stacked fragments. `basis-full` gives
+          the name and the code a line of their own below `sm`, and the four
+          short things — price, count, Brak, Olib tashlash — share the line
+          under it and may wrap again between themselves if they must. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="min-w-0 flex-1 basis-full sm:basis-0">
           <div className="text-small font-medium">
             {variant.label}
             {variant.retired ? (
               <Pill className="ml-2 font-normal">sotuvda emas</Pill>
             ) : null}
           </div>
-          <div className="text-micro tabular text-ink-faint">
+          <div className="truncate text-micro tabular text-ink-faint">
             {variant.sku} · {variant.barcode}
           </div>
         </div>
@@ -413,15 +440,19 @@ function VariantRow({
         {/* Nothing to press on a size the shelf does not hold: the server
             refuses more than is there, and a button that is always refused is
             worse than no button. */}
+        {/* A verb, and in the warn ink even at rest. It used to read "Brak" in
+            the same grey as "javonda bor" beside it — an action dressed as a
+            state, which people read as "this size *is* damaged" on a row where
+            nothing had been written off. */}
         {variant.stock_left > 0 ? (
           <button
             type="button"
             onClick={() => setDamaging((was) => !was)}
             className={cn(
-              "shrink-0 text-micro text-ink-soft hover:text-warn-ink",
-              damaging && "font-medium text-warn-ink",
+              "shrink-0 text-micro text-warn-ink underline decoration-dotted underline-offset-2 hover:decoration-solid",
+              damaging && "font-medium decoration-solid",
             )}>
-            Brak
+            Brakka chiqarish
           </button>
         ) : null}
         <RetireLine variant={variant} onSet={onRetire} busy={retiring} />
@@ -431,6 +462,53 @@ function VariantRow({
         <Damage variant={variant} onDone={() => setDamaging(false)} />
       ) : null}
     </li>
+  )
+}
+
+/**
+ * The goods, in the row — a 40px square where a count used to be.
+ *
+ * **Why the empty square is the point.** A card with no photograph is the
+ * `Rasmsiz` queue: the whole reason the list has a filter for it, and the one
+ * thing holding goods out of the shop. A dashed warn-toned box beside a title
+ * says that at a glance, in a way "0" in a grey column never did.
+ *
+ * **Where the picture comes from.** `cover_url` — the catalogue cover, the
+ * photograph the customer meets, chosen by the same ordering the apps read. Not
+ * the identification snapshot: that one is taken at the bench to tell two black
+ * trainers apart and is never shown to a customer, so showing it here would put
+ * a different picture in the office's list than the one on sale.
+ *
+ * The server sends `""` for a card with no photographs, which is the `Rasmsiz`
+ * queue and draws the warn-toned box above.
+ */
+function Thumb({ row }: { row: AdminProduct }) {
+  const shot = row.cover_url ?? ""
+
+  if (shot) {
+    return (
+      <img
+        src={mediaUrl(shot)}
+        alt=""
+        loading="lazy"
+        className="size-10 shrink-0 rounded-control border border-line bg-canvas object-cover"
+      />
+    )
+  }
+
+  return (
+    <span
+      aria-label={row.image_count ? "rasm bor" : "rasmsiz"}
+      title={row.image_count ? `${groups(row.image_count)} ta rasm` : "rasmsiz"}
+      className={cn(
+        "grid size-10 shrink-0 place-items-center rounded-control border border-dashed",
+        row.image_count
+          ? "border-line text-ink-faint"
+          : "border-warn/50 bg-warn-soft text-warn-ink",
+      )}
+    >
+      <ImageIcon className="size-4" />
+    </span>
   )
 }
 
@@ -505,6 +583,8 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
   const grid = useVariants(id)
   const images = useImages(id)
   const addImage = useAddImage(id)
+  const deleteImage = useDeleteImage(id)
+  const makeCover = useMakeCover(id)
   const publish = usePublish(id)
   const retire = useRetireVariant(id)
   const [editing, setEditing] = useState(false)
@@ -514,9 +594,27 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
   const colours = [...new Set((grid.data ?? []).map((one) => one.colour))].filter(
     Boolean,
   )
-  const taken = Object.fromEntries(
-    (images.data ?? []).map((image) => [image.colour, image.url]),
-  )
+  const shots = images.data ?? []
+  // Which colours have a photograph at all — the publish gate's ✓ and ✗, and
+  // nothing else. It used to be a map of colour to url built with
+  // `Object.fromEntries`, which keeps the **last** photograph of a colour —
+  // so the tiles showed one picture and the gallery beside them called a
+  // different one the cover. One question, one answer.
+  const photographed = new Set(shots.map((image) => image.colour))
+
+  // Everything the one photo panel needs, in both of the places it appears:
+  // inside the publish gate on a held-back card, and as its own panel once the
+  // card is on sale.
+  const panel = {
+    colours: colours.length ? colours : [""],
+    images: shots,
+    live,
+    onAdd: (colour: string, url: string) => addImage.mutate({ url, colour }),
+    onCover: (imageId: number) => makeCover.mutate(imageId),
+    onDelete: (imageId: number) => deleteImage.mutate(imageId),
+    covering: makeCover.isPending,
+    deleting: deleteImage.isPending,
+  }
 
   return (
     <div className="space-y-4">
@@ -544,9 +642,8 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
       {product && !live ? (
         <PublishPanel
           card={product}
-          colours={colours.length ? colours : [""]}
-          taken={taken}
-          onTaken={(colour, url) => addImage.mutate({ url, colour })}
+          photographed={photographed}
+          panel={panel}
           publish={publish}
         />
       ) : null}
@@ -572,6 +669,8 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
           images.error ||
           publish.error ||
           addImage.error ||
+          deleteImage.error ||
+          makeCover.error ||
           retire.error
         }
       />
@@ -604,21 +703,16 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
         </ul>
       </Panel>
 
-      {/* On a held-back card the tiles live in the publish panel above; this
-          panel is then only the gallery — extra shots, covers, deletion. */}
-      {live || (images.data ?? []).length > 0 ? (
+      {/* One panel, and only where it is not already on the screen: a
+          held-back card carries the same component inside its publish gate,
+          and two of it would be the pair of contradictory answers this
+          rebuild exists to remove. */}
+      {live ? (
         <Panel
-          title="Rasmlar — har rangga bittadan"
+          title="Rasmlar"
           aside={<ImageIcon className="size-4 text-ink-faint" />}
         >
-          {live ? (
-            <PhotoStep
-              colours={colours.length ? colours : [""]}
-              taken={taken}
-              onTaken={(colour, url) => addImage.mutate({ url, colour })}
-            />
-          ) : null}
-          <Gallery productId={id} images={images.data ?? []} live={live} />
+          <Photos {...panel} />
         </Panel>
       ) : null}
 
@@ -653,15 +747,15 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
  */
 function PublishPanel({
   card,
-  colours,
-  taken,
-  onTaken,
+  photographed,
+  panel,
   publish,
 }: {
   card: AdminProduct
-  colours: string[]
-  taken: Record<string, string>
-  onTaken: (colour: string, url: string) => void
+  /** Which colours have a photograph — the gate's ✓ and ✗, and nothing else. */
+  photographed: Set<string>
+  /** Everything the one photo component needs, built once on the card. */
+  panel: React.ComponentProps<typeof Photos>
   publish: ReturnType<typeof usePublish>
 }) {
   const categories = useCategories()
@@ -726,11 +820,11 @@ function PublishPanel({
         <Gate
           ok={!gate.has("needs_photo")}
           name="Rasm"
-          value={colours
-            .map((one) => `${one || "umumiy"} ${taken[one] ? "✓" : "✗"}`)
+          value={panel.colours
+            .map((one) => `${one || "umumiy"} ${photographed.has(one) ? "✓" : "✗"}`)
             .join(" · ")}
         >
-          <PhotoStep colours={colours} taken={taken} onTaken={onTaken} />
+          <Photos {...panel} />
         </Gate>
       </div>
 
@@ -805,158 +899,6 @@ function Gate({
         />
       </button>
       {open ? <div className="pb-3 pl-7">{children}</div> : null}
-    </div>
-  )
-}
-
-/**
- * The photographs, and the way back off the card.
- *
- * The door has always existed — the panel simply threw `image.id` away as a
- * React key and had nothing to name to it, so **a photograph of the wrong
- * garment was permanent**: the only way out was deleting the card.
- *
- * **The first photograph of a colour, by `sort`, is that colour's cover**, and
- * there is no reorder endpoint. Which makes "use that one instead" sayable
- * only as "delete the ones in front of it" — said on the panel, because
- * nobody is going to deduce it from a row of squares.
- *
- * **And the last photograph of a colour is not an ordinary deletion.** On a
- * card that is on sale, taking it down takes the card out of the shop: the
- * server demotes it to draft, deliberately, because a card that stayed on sale
- * only because a picture was deleted rather than never taken is the same grey
- * square to a customer. That one is warned about by name. The ordinary one is
- * not — a warning that every deletion triggers is a warning nobody reads.
- */
-function Gallery({
-  productId,
-  images,
-  live,
-}: {
-  productId: number
-  images: AdminImage[]
-  live: boolean
-}) {
-  const remove = useDeleteImage(productId)
-  const [asked, setAsked] = useState<number | null>(null)
-
-  if (!images.length) return null
-
-  // Grouped by colour, and inside a colour by `sort` — the way the apps read
-  // it. Not the order the list arrived in: the cover badge is a claim about
-  // what the customer sees, and "delete the ones in front of it" is only
-  // followable if a colour's photographs are next to each other.
-  const seen: string[] = []
-  for (const image of images) {
-    if (!seen.includes(image.colour)) seen.push(image.colour)
-  }
-  const order = [...images].sort(
-    (one, two) =>
-      seen.indexOf(one.colour) - seen.indexOf(two.colour) ||
-      one.sort - two.sort ||
-      one.id - two.id,
-  )
-  const cover = new Map<string, number>()
-  const held = new Map<string, number>()
-  for (const image of order) {
-    if (!cover.has(image.colour)) cover.set(image.colour, image.id)
-    held.set(image.colour, (held.get(image.colour) ?? 0) + 1)
-  }
-  const stacked = [...held.values()].some((many) => many > 1)
-
-  const going = order.find((one) => one.id === asked) ?? null
-  const last = going ? held.get(going.colour) === 1 : false
-  const falls = Boolean(going && last && live)
-  const name = (colour: string) => colour || "umumiy"
-
-  return (
-    <div className="mt-3 space-y-2">
-      <div className="flex flex-wrap gap-2">
-        {order.map((image) => (
-          <figure key={image.id} className="w-20">
-            <div className="relative">
-              <img
-                src={mediaUrl(image.url)}
-                alt={image.colour}
-                className={cn(
-                  "aspect-square w-full rounded-control object-cover",
-                  asked === image.id && "ring-2 ring-danger",
-                )} />
-              <button
-                type="button"
-                aria-label={`${name(image.colour)} rasmini o'chirish`}
-                onClick={() =>
-                  setAsked(asked === image.id ? null : image.id)
-                }
-                className="absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-surface/90 text-ink-soft shadow-panel transition-colors hover:text-danger">
-                <Trash2 className="size-3" />
-              </button>
-            </div>
-            <figcaption className="truncate text-center text-micro text-ink-faint">
-              {name(image.colour)}
-            </figcaption>
-            {/* Under the tile rather than over it: a badge inside 80 pixels
-                either covers the goods or gets clipped, and the one thing
-                this label must do is be readable. */}
-            {cover.get(image.colour) === image.id ? (
-              <div className="text-center text-micro font-medium text-brand-deep">
-                muqova
-              </div>
-            ) : null}
-          </figure>
-        ))}
-      </div>
-
-      {/* Only where it can be acted on: one photograph per colour is the
-          normal card, and on that card the sentence is noise. */}
-      {stacked ? (
-        <p className="text-micro text-ink-faint">
-          Har rangning birinchi rasmi — muqova. Tartibni almashtirib bo'lmaydi:
-          boshqasini muqova qilish uchun oldidagilarini o'chirish kerak.
-        </p>
-      ) : null}
-
-      {/* Two taps, and the second one is the sentence — the same way the card
-          itself is deleted on this screen. */}
-      {going ? (
-        <div
-          className={cn(
-            "flex flex-wrap items-center gap-2 rounded-control border p-2",
-            falls ? "border-danger bg-danger-soft" : "border-panel-edge",
-          )}
-        >
-          <span
-            className={cn(
-              "min-w-40 flex-1 text-micro",
-              falls ? "text-danger" : "text-ink-soft",
-            )}>
-            {falls
-              ? `«${name(going.colour)}» rangining oxirgi rasmi. O'chirilsa karta sotuvdan tushadi — rasmsiz rang do'konga chiqmaydi.`
-              : `«${name(going.colour)}» rasmi o'chiriladi — aniqmi?`}
-          </span>
-          <Button
-            variant="danger"
-            size="sm"
-            disabled={remove.isPending}
-            onClick={() =>
-              remove.mutate(going.id, { onSuccess: () => setAsked(null) })
-            }
-          >
-            {remove.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : falls ? (
-              "Ha, sotuvdan tushsin"
-            ) : (
-              "Ha"
-            )}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setAsked(null)}>
-            Yo'q
-          </Button>
-        </div>
-      ) : null}
-
-      <Problem error={remove.error} />
     </div>
   )
 }

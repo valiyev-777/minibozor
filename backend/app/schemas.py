@@ -425,9 +425,11 @@ class CartTotalsOut(BaseModel):
     items_count: int
     subtotal: int
     discount: int
+    # Always zero — the shop delivers free. Still a line of its own because a
+    # basket that names the cost of delivery, even at nothing, is one a charge
+    # can come back to without every client learning a new shape.
     delivery_fee: int
     total: int
-    free_delivery_threshold: int
     promo_code: str | None = None
 
 
@@ -490,26 +492,6 @@ class PickupPointOut(BaseModel):
     address: str
     hours: str
     distance_km: float | None
-
-
-class SlotOut(BaseModel):
-    id: int
-    day: date
-    start_time: str
-    end_time: str
-    label: str
-    note: str
-    price: int
-    express: bool
-    available: bool
-
-
-class SlotDayOut(BaseModel):
-    day: date
-    weekday_label: str
-    day_label: str
-    month_label: str
-    slots: list[SlotOut]
 
 
 # --------------------------------------------------------------------------- orders
@@ -638,7 +620,6 @@ class CardIn(BaseModel):
 class CheckoutIn(BaseModel):
     address_id: int | None = None
     pickup_point_id: int | None = None
-    slot_id: int | None = None
     payment_method: PaymentMethod = PaymentMethod.CARD
     # Which card pays for it. Required when the method is ``card`` and refused
     # when it is ``cash``: an order cannot be charged to a card nobody named,
@@ -654,7 +635,6 @@ class CheckoutPreviewOut(BaseModel):
     items: list[CartItemOut]
     address: AddressOut | None
     pickup_point: PickupPointOut | None
-    slot: SlotOut | None
     totals: CartTotalsOut
     # The card the order would be charged to, so the confirm screen can name it
     # before anybody presses anything.
@@ -1580,6 +1560,17 @@ class AdminProductOut(BaseModel):
     category_slug: str | None
     brand_slug: str | None
     snapshot_url: str
+    # The card's cover photograph — the first by `sort`, then `id`, which is
+    # the ordering `services.colour_cover` and the apps read, so the catalogue
+    # table and the phone show the same picture. Empty string, not null, on a
+    # card nobody has photographed: that is the `Rasmsiz` queue, and the list
+    # draws its own empty state rather than a broken tile.
+    #
+    # Distinct from `snapshot_url` above, which is the receiving desk's photo
+    # over the open sack and is never shown to a customer. Without this field
+    # the catalogue table fell back to it, which put the wrong picture — a
+    # heap in a bag — in the shop's own list.
+    cover_url: str = ""
     # Why this card is not in the shop. Empty means it is ready, whether or
     # not anybody has published it yet.
     unready: list[GapOut] = []
@@ -2585,56 +2576,6 @@ class StaffOrderOut(BaseModel):
 class OrderStatusIn(BaseModel):
     status: OrderStatus
     note: str = ""
-
-
-class StaffSlotOut(BaseModel):
-    id: int
-    day: date
-    start_time: str
-    end_time: str
-    note: str
-    price: int
-    express: bool
-    capacity_left: int
-
-
-class SlotWindowIn(BaseModel):
-    start_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$", examples=["09:00"])
-    end_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$", examples=["13:00"])
-    note: str = ""
-    price: int = Field(0, ge=0)
-    express: bool = False
-    capacity: int = Field(20, ge=0)
-
-
-class SlotCreateIn(BaseModel):
-    """Open the same windows across a set of days.
-
-    A day at a time would mean four calls per day and twenty-eight to fill a
-    week, which is why the shop ran out of slots in the first place. Days that
-    already have a window with the same hours are left alone, so "top up the
-    next fortnight" can be run again tomorrow without doubling anything.
-    """
-
-    days: list[date] = Field(min_length=1, max_length=60)
-    windows: list[SlotWindowIn] = Field(min_length=1, max_length=12)
-
-    @field_validator("windows")
-    @classmethod
-    def _ends_after_it_starts(cls, windows: list[SlotWindowIn]) -> list[SlotWindowIn]:
-        for w in windows:
-            if w.end_time <= w.start_time:
-                raise ValueError("a window has to end after it starts")
-        return windows
-
-
-class SlotUpdateIn(BaseModel):
-    """Only what is given is changed — an absent field is not "set to nothing"."""
-
-    capacity_left: int | None = Field(None, ge=0)
-    price: int | None = Field(None, ge=0)
-    note: str | None = None
-    express: bool | None = None
 
 
 # --------------------------------------------------------------------------- reports

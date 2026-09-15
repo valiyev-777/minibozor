@@ -4,10 +4,22 @@
 marketplace and the API is now one company with one warehouse, so parts of them
 no longer compile and parts of them would fail at runtime.
 
-**Neither has been compiled.** This machine has no JDK, no Android SDK and no
-Swift toolchain, which is stated in the brief and is why this file exists
-instead of a green build. Everything below was read out of the source and
-checked against the running API's OpenAPI document, not against a compiler.
+**When this was written, neither had been compiled** — no JDK, no Android SDK
+and no Swift toolchain, which is why the file exists instead of a green build.
+Everything in §1–§3 was read out of the source and checked against the running
+API's OpenAPI document, not against a compiler.
+
+That is no longer true of **android/**: the toolchain is on this machine now
+and the app builds. Compile before claiming anything about it —
+
+```bash
+export JAVA_HOME=/snap/android-studio/241/jbr
+export PATH=$JAVA_HOME/bin:$PATH
+~/.gradle/wrapper/dists/gradle-8.10.2-bin/*/gradle-8.10.2/bin/gradle \
+  --offline :app:compileDebugKotlin
+```
+
+**ios/** still has no Swift toolchain here, so it is read, never built.
 
 ---
 
@@ -22,6 +34,10 @@ checked against the running API's OpenAPI document, not against a compiler.
 | `POST /payment-cards` | ” |
 | `POST /payment-cards/{id}/default` | ” |
 | `DELETE /payment-cards/{id}` | ” |
+| `GET /delivery/slots` | No windows are booked. Delivery is free and the shop says when, not the customer. |
+
+The four `payment-cards` rows are **out of date**: the card vault came back and
+`/payment-cards` is served again. Read them as history, not as the contract.
 
 Both apps also still call the review endpoints (`products/{id}/reviews`,
 `reviews/tags`, `me/reviews`, …) and `POST /cart/promo`. **Those went before
@@ -52,8 +68,11 @@ at once.
 variant, which *is* the colour-and-size pair. Two ids could disagree with each
 other; one cannot.
 
-**`CheckoutIn`** — `payment_card_id` is gone. **`CheckoutPreviewOut`** — `card`
-is gone.
+**`CheckoutIn`** — `payment_card_id` is gone, and so is `slot_id`.
+**`CheckoutPreviewOut`** — `card` is gone, and so is `slot`.
+
+**`CartTotalsOut`** — `delivery_fee` stays and is always nought, because a
+charge may come back in a later version. `free_delivery_threshold` is gone.
 
 **`ProfileOverviewOut`** — `cards_count` is still answered, at nought, so the
 profile screen keeps its tile rather than crashing on a missing key.
@@ -61,10 +80,11 @@ profile screen keeps its tile rather than crashing on a missing key.
 ### What did *not* change
 
 Auth and the OTP flow, the catalogue's listing and filter shapes, search,
-favourites, addresses, delivery slots and pickup points, orders, returns,
-notifications, help and legal. The base URL and the `adb reverse` tunnel are
-untouched: `http://localhost:8000/api/v1` from a handset, `10.0.2.2` from an
-emulator.
+favourites, addresses, **pickup points**, orders, returns, notifications, help
+and legal. The base URL and the `adb reverse` tunnel are untouched:
+`http://localhost:8000/api/v1` from a handset, `10.0.2.2` from an emulator.
+
+Delivery slots used to be on that list and are not any more — see §2a.
 
 ---
 
@@ -90,10 +110,54 @@ Mechanical, and each one verifiable by reading:
 * `Data/Repositories/CatalogRepository.swift`,
   `Data/Repositories/OrderRepository.swift` — the same removals.
 
-The tree therefore **does not compile**, and that is deliberate. A DTO left
+The tree therefore **did not compile**, and that was deliberate. A DTO left
 matching a dead contract compiles and then fails at runtime against the live
 API, in front of a customer, with a decoding error nobody can place. Failing at
 the call sites is the same information delivered where the work is.
+
+Most of that list has since been worked through — and cards came back, so
+`CardDto`, `CardRequest` and the checkout's card picker are live again rather
+than deleted. As of 2026-09-15 `android/` compiles clean.
+
+---
+
+## 2a. The delivery window is gone — 2026-09-15
+
+Delivery is free, in every app, on every order, and the customer no longer
+picks an hour for it. `GET /delivery/slots` is off the API, the checkout no
+longer sends `slot_id`, and screen 21 — the day chips and the time windows —
+has been deleted on both platforms:
+`android/ui/checkout/DeliveryTimeScreen.kt`,
+`ios/Features/Checkout/DeliveryTimeView.swift`, with `SlotDto`/`SlotDayDto`
+and `SlotDTO`/`SlotDayDTO`, the route, the repository call, and the strings
+that only that screen used.
+
+The checkout is one step shorter: **address (or pickup point) → payment →
+confirm**. The readiness rules were relaxed with the step — Android's
+`CheckoutStep.Time` is gone from the enum and from `missing`, iOS dropped the
+`slotId != nil` clause from `ready` — because a step deleted from the screen
+and left in the rule is a Tasdiqlash button that never lights up.
+
+`delivery_fee` **stays** in the payload, at nought, so a charge can come back
+in a later version without a client change. A zero fee prints **Bepul /
+Бесплатно / Free**, and the "add X more for free delivery" nudge went from
+both baskets — there is no threshold left to cross.
+`free_delivery_threshold` is gone from both DTOs, because the server stopped
+answering it in the same pass — checked against `backend/app/schemas.py`, not
+assumed. Nothing would break if it came back: the Kotlin decoder is configured
+with `ignoreUnknownKeys` and Swift's ignores extra keys by default.
+
+Pickup points are untouched. So is the order's ETA: the server still sends
+`eta_label`, and with no window booked it reads "Yetkazish sanasi
+aniqlanmoqda" / "Дата доставки уточняется" / "Delivery date being confirmed" —
+which is why the orders list, the order detail and the "order placed" screen
+still print it.
+
+**android/ was compiled** — `:app:compileDebugKotlin` is green, which also
+proves no screen is left asking for a string that was deleted from all three
+`strings.xml`. **ios/ was not**, there being no Swift toolchain here; every
+deleted symbol was grepped for across both trees instead, and nothing refers
+to one.
 
 ---
 

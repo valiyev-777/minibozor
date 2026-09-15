@@ -71,7 +71,6 @@ fun CheckoutScreen(
     viewModel: CheckoutViewModel,
     onBack: () -> Unit,
     onEditAddress: () -> Unit,
-    onEditTime: () -> Unit,
     /** The card form, reached straight from here — there is no list in between. */
     onAddCard: () -> Unit,
     onOpenCart: () -> Unit,
@@ -128,14 +127,12 @@ fun CheckoutScreen(
                             CheckoutStep.Address ->
                                 if (courier) stringResource(R.string.manzil_qoshish)
                                 else stringResource(R.string.punkt_tanlash)
-                            CheckoutStep.Time -> stringResource(R.string.yetkazish_vaqti_qisqa)
                             CheckoutStep.Payment -> stringResource(R.string.karta_qoshish)
                             null -> stringResource(R.string.davom_etish)
                         },
                         onClick = {
                             when (state.nextStep) {
                                 CheckoutStep.Address -> onEditAddress()
-                                CheckoutStep.Time -> onEditTime()
                                 CheckoutStep.Payment -> onAddCard()
                                 null -> onConfirm()
                             }
@@ -167,9 +164,9 @@ fun CheckoutScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // Something went wrong after the screen had already been priced —
-            // a card that would not select, a slot that had just filled up.
-            // The last good preview stays on the screen, with the reason it is
-            // the last one over it.
+            // a card that would not select, an address the server would not
+            // take. The last good preview stays on the screen, with the reason
+            // it is the last one over it.
             if (state.error != null) {
                 item {
                     MbCard(padding = 12.dp, background = MbTheme.colors.dangerBg) {
@@ -280,39 +277,6 @@ fun CheckoutScreen(
                         },
                         onClick = onEditAddress,
                     )
-
-                    // Only a courier order has a time to choose, and only once
-                    // there is somewhere to take it. Locked rather than hidden:
-                    // a step that vanishes and comes back is a step nobody
-                    // knows is coming.
-                    if (courier) {
-                        val hasAddress = state.addressId != null
-                        Spacer(Modifier.height(10.dp))
-                        StepRow(
-                            glyph = "clock",
-                            title = preview.slot?.label
-                                ?: stringResource(R.string.yetkazish_vaqti_qisqa),
-                            subtitle = preview.slot?.note ?: stringResource(
-                                // Three states, not two: waiting on the address,
-                                // ready to be asked, and answered. Telling
-                                // someone who has just typed their address that
-                                // the step needs an address is the screen not
-                                // keeping up with them.
-                                if (hasAddress) {
-                                    R.string.yetkazish_vaqtini_tanlang
-                                } else {
-                                    R.string.manzil_kiritilgandan_keyin
-                                }
-                            ),
-                            action = if (hasAddress && preview.slot == null) {
-                                stringResource(R.string.tanlash)
-                            } else {
-                                null
-                            },
-                            enabled = hasAddress,
-                            onClick = onEditTime,
-                        )
-                    }
                 }
             }
 
@@ -414,28 +378,19 @@ fun CheckoutScreen(
                             valueColor = MbTheme.colors.danger,
                         )
                     }
-                    // "aniqlanadi" rather than a confident nothing. Printing
-                    // "bepul" against an order with no address on it is a price
-                    // the shop has not worked out yet, and a customer who reads
-                    // it as a promise has been told something untrue.
-                    // Priced once the shop knows where this is going — which
-                    // is an address for a courier and a counter for a pickup.
-                    // Neither is "somewhere", and a fee against neither is a
-                    // number carried over from the last time it did know.
-                    val priced =
-                        if (courier) state.addressId != null else state.pickupPointId != null
+                    // Free, and said so from the first draft rather than held
+                    // back until there is an address: the shop charges nothing
+                    // to carry an order, so there is nothing left for the
+                    // screen to work out. The fee is still read off the
+                    // preview, so the day one comes back this line prints it
+                    // without being touched.
                     MbTotalRow(
                         stringResource(R.string.yetkazish),
-                        when {
-                            !priced -> stringResource(R.string.aniqlanadi)
-                            preview.totals.deliveryFee == 0L -> stringResource(R.string.bepul)
-                            else -> preview.totals.deliveryFee.sum()
-                        },
-                        valueColor = when {
-                            !priced -> MbTheme.colors.disabled
-                            preview.totals.deliveryFee == 0L -> MbTheme.colors.success
-                            else -> MbTheme.colors.ink
-                        },
+                        if (preview.totals.deliveryFee == 0L) stringResource(R.string.bepul)
+                        else preview.totals.deliveryFee.sum(),
+                        valueColor = if (preview.totals.deliveryFee == 0L) {
+                            MbTheme.colors.success
+                        } else MbTheme.colors.ink,
                     )
                     MbDivider(Modifier.padding(vertical = 8.dp))
                     MbTotalRow(
@@ -443,20 +398,6 @@ fun CheckoutScreen(
                         preview.totals.total.sum(),
                         strong = true,
                     )
-                    if (!priced) {
-                        Spacer(Modifier.height(6.dp))
-                        MbText(
-                            stringResource(
-                                if (courier) {
-                                    R.string.yetkazish_narxi_manzildan_keyin
-                                } else {
-                                    R.string.yetkazish_narxi_punktdan_keyin
-                                }
-                            ),
-                            MbTheme.type.meta,
-                            MbTheme.colors.icon,
-                        )
-                    }
                 }
             }
         }

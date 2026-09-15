@@ -41,7 +41,6 @@ import uz.minibozor.ui.checkout.AddressPickerScreen
 import uz.minibozor.ui.checkout.CheckoutScreen
 import uz.minibozor.ui.checkout.CheckoutViewModel
 import uz.minibozor.ui.checkout.ConfirmScreen
-import uz.minibozor.ui.checkout.DeliveryTimeScreen
 import uz.minibozor.ui.checkout.OrderPlacedScreen
 import uz.minibozor.ui.home.HomeScreen
 import uz.minibozor.ui.onboarding.OnboardingScreen
@@ -360,7 +359,6 @@ fun MiniBozorNavHost(
                     viewModel = vm,
                     onBack = { navController.popBackStack() },
                     onEditAddress = { navController.navigate(Routes.ADDRESS_PICKER) },
-                    onEditTime = { navController.navigate(Routes.DELIVERY_TIME) },
                     onAddCard = { navController.navigate(Routes.ADD_CARD) },
                     onOpenCart = { navController.popBackStack() },
                     onConfirm = { navController.navigate(Routes.CONFIRM) },
@@ -372,14 +370,6 @@ fun MiniBozorNavHost(
                     viewModel = entry.checkoutViewModel(navController),
                     onBack = { navController.popBackStack() },
                     onAddNew = { navController.navigate(Routes.ADDRESS_FORM) },
-                )
-            }
-
-            composable(Routes.DELIVERY_TIME) { entry ->
-                DeliveryTimeScreen(
-                    viewModel = entry.checkoutViewModel(navController),
-                    onBack = { navController.popBackStack() },
-                    onDone = { navController.popBackStack() },
                 )
             }
 

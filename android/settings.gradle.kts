@@ -25,3 +25,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "MiniBozor"
 include(":app")
+// The courier's own package: a WebView onto the web app's courier role, not a
+// second implementation of it. See `kuryer/build.gradle.kts`.
+include(":kuryer")

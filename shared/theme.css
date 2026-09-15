@@ -113,18 +113,41 @@
   --color-surface: #ffffff;
   --color-canvas: #f1f3f6;
 
-  /* The rail. Near-black rather than the dark navy it was: against the
-   * brand blue, a navy sidebar reads as a *lighter shade of the accent* and
-   * the accent stops being the loudest thing on the screen. */
-  --color-rail: #090e14;
-  --color-rail-ink: #f3f4f6;
+  /* ------------------------------------------------------------------ the rail
+   *
+   * **It follows the theme.** It did not: it was near-black in both, on the
+   * argument that a rail the same value as the page behind it stops being a
+   * rail. The owner looked at a black column on a white app and called it a
+   * fault — *"mavzuga ergashsin"* — and that decision stands over the
+   * argument. So in light the rail is white and the page behind it is grey,
+   * which is the other way a column separates itself from a page, and in dark
+   * it is the near-black it always was.
+   *
+   * That means the rail can no longer be painted with `white/10` and
+   * `text-white`, which is what every piece of furniture inside it was doing.
+   * It has its own small family instead — resting ink, selected ink, hairline,
+   * hover fill, selected fill — so one flip of these six lines repaints the
+   * column, the menu search, the phone's sheet and the sign-in wall together
+   * rather than leaving grey text on a white rail somewhere.
+   */
+  --color-rail: #ffffff;
+  --color-rail-ink: #4b5c76;
+  --color-rail-ink-strong: #121c25;
+  --color-rail-edge: #e2e5e8;
+  --color-rail-hover: #f3f5f4;
+  --color-rail-active: #e8f0fe;
 
-  /* One step up from the rail, for the only thing that floats above it: the
-   * menu search's results. A dropdown painted in `rail` on a `rail` column
-   * is not a dropdown, it is the rail with different words in it — and this
-   * is the one place in the app where a surface has to separate itself from
-   * a near-black background rather than from a white one. */
-  --color-rail-raised: #131c28;
+  /* The only thing that floats above the rail: the menu search's results. A
+   * dropdown painted in `rail` on a `rail` column is not a dropdown, it is the
+   * rail with different words in it — in light that separation is the shadow
+   * and the hairline, in dark it is a step up in lightness. */
+  --color-rail-raised: #ffffff;
+
+  /* The ground a modal, a camera or a scanner sits on. Its own token because
+   * it used to borrow `rail` — which worked only while `rail` was a constant
+   * near-black, and a 60% white scrim over a white page is not a scrim. Dark
+   * in both themes: a dialog dims what is behind it either way. */
+  --color-scrim: #090e14;
 
   /* The edge of a card, which in the house system is **not there**.
    *
@@ -331,6 +354,17 @@ body {
   --color-surface: #141d2a;
   --color-canvas: #0c1017;
 
+  /* The rail keeps the near-black it always had — darker than the page, which
+   * is the whole point of the ramp described above. Only its own furniture is
+   * restated, in the translucent whites this column was always painted in. */
+  --color-rail: #090e14;
+  --color-rail-ink: #f3f4f6;
+  --color-rail-ink-strong: #ffffff;
+  --color-rail-edge: rgb(255 255 255 / 0.1);
+  --color-rail-hover: rgb(255 255 255 / 0.06);
+  --color-rail-active: rgb(37 133 255 / 0.18);
+  --color-rail-raised: #131c28;
+
   --color-brand: #2585ff;
   --color-brand-soft: rgb(37 133 255 / 0.16);
   --color-brand-ink: #ffffff;
@@ -377,4 +411,41 @@ body {
  * under the home indicator. */
 .pb-safe {
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* Exactly the home indicator and nothing else — for a bar that is already
+ * sitting on the bottom edge and only needs to not be under the gesture
+ * area. */
+.pb-inset {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ------------------------------------------------------------ the phone's foot
+ *
+ * A phone's primary navigation runs across the bottom of the window, so every
+ * screen owes it that much room at the foot — and a screen that puts its own
+ * bar down there (`/qabul`'s "Qabul", the shelf map's selection) has to sit on
+ * top of it rather than under it.
+ *
+ * One token, declared beside the densities because it is measured in the
+ * density's own control height. The shell's padding reads it and so do those
+ * bars, so the two can never disagree about how tall the navigation is. Zero
+ * on a desk, where the navigation is a column down the left.
+ */
+.density-compact,
+.density-cozy,
+.density-comfortable {
+  /* The bar itself: a 24px glyph over a label that is allowed two lines,
+   * because `Ombor xaritasi` does not fit across a quarter of a phone on one
+   * and an ellipsis in a menu is a menu you have to learn. */
+  --nav-bar: calc(var(--control-lg) + 0.75rem);
+  --bottom-nav: 0px;
+}
+
+@media (width < 48rem) {
+  .density-compact,
+  .density-cozy,
+  .density-comfortable {
+    --bottom-nav: calc(var(--nav-bar) + env(safe-area-inset-bottom));
+  }
 }

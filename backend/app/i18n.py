@@ -409,16 +409,6 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Заявка не найдена",
         "en": "Request not found",
     },
-    "slot_not_found": {
-        "uz": "Yetkazish oynasi topilmadi",
-        "ru": "Интервал доставки не найден",
-        "en": "Delivery window not found",
-    },
-    "slot_window_invalid": {
-        "uz": "Oynaning tugash vaqti boshlanishidan keyin bo'lishi kerak",
-        "ru": "Конец интервала должен быть позже начала",
-        "en": "A window has to end after it starts",
-    },
     "order_repeats": {
         "uz": "Tartibda takrorlangan qator bor",
         "ru": "В порядке есть повторяющаяся строка",
@@ -1045,32 +1035,6 @@ LABELS: dict[str, dict[str, str]] = {
     "event_cancelled": {"uz": "Bekor qilindi", "ru": "Заказ отменён",
                         "en": "Order cancelled"},
     "event_returned": {"uz": "Qaytarildi", "ru": "Возвращён", "en": "Returned"},
-    # delivery slots
-    "slot_express": {
-        "uz": "2 soat ichida",
-        "ru": "В течение 2 часов",
-        "en": "Within 2 hours",
-    },
-    "slot_note_morning": {
-        "uz": "Ertalabki yetkazish",
-        "ru": "Утренняя доставка",
-        "en": "Morning delivery",
-    },
-    "slot_note_popular": {
-        "uz": "Eng ko'p tanlanadigan oraliq",
-        "ru": "Самый популярный интервал",
-        "en": "The most-chosen window",
-    },
-    "slot_note_evening": {
-        "uz": "Ish kunidan keyin",
-        "ru": "После рабочего дня",
-        "en": "After work",
-    },
-    "slot_note_express": {
-        "uz": "Tezkor yetkazish · Toshkent markazi",
-        "ru": "Экспресс-доставка · центр Ташкента",
-        "en": "Express delivery · central Tashkent",
-    },
     # payment
     "cash_courier": {"uz": "Naqd pul · kuryerga", "ru": "Наличные · курьеру",
                      "en": "Cash · to the courier"},
@@ -1110,8 +1074,8 @@ LABELS: dict[str, dict[str, str]] = {
                                    "en": "Across Tashkent"},
     "flag_free_delivery": {"uz": "Bepul yetkazish", "ru": "Бесплатная доставка",
                            "en": "Free delivery"},
-    "flag_free_delivery_sub": {"uz": "250 000 so'mdan yuqori", "ru": "от 250 000 сум",
-                               "en": "Over 250,000 UZS"},
+    "flag_free_delivery_sub": {"uz": "Har qanday buyurtmaga", "ru": "На любой заказ",
+                               "en": "On every order"},
     "flag_discounted": {"uz": "Chegirmada", "ru": "Со скидкой", "en": "On sale"},
     "flag_discounted_sub": {"uz": "Faqat arzonlashgan tovarlar",
                             "ru": "Только уценённые товары",
@@ -1432,23 +1396,6 @@ WEEKDAYS: dict[str, list[str]] = {
 
 # Uzbek writes 22-avgust, Russian 22 августа, English 22 August.
 DATE_FORMAT = {"uz": "{day}-{month}", "ru": "{day} {month}", "en": "{day} {month}"}
-
-
-# The notes the seed writes on a slot, mapped to the labels above. Keyed on the
-# Uzbek text because a slot's id changes every time the week is re-seeded, so a
-# translation row keyed on the row would not survive.
-SLOT_NOTES: dict[str, str] = {
-    "Ertalabki yetkazish": "slot_note_morning",
-    "Eng ko'p tanlanadigan oraliq": "slot_note_popular",
-    "Ish kunidan keyin": "slot_note_evening",
-    "Tezkor yetkazish · Toshkent markazi": "slot_note_express",
-}
-
-
-def slot_note(note: str) -> str:
-    """A slot's note in the active language, or the note itself if unknown."""
-    key = SLOT_NOTES.get(note)
-    return label(key) if key else note
 
 
 def label(key: str, **fmt: object) -> str:

@@ -54,7 +54,6 @@ import type {
   Reason,
   Shelf,
   StaffReturn,
-  StaffSlot,
   ShelfMap,
   StaffMember,
   StaffOrder,
@@ -1322,59 +1321,6 @@ export function useCancelReasons() {
   })
 }
 
-// ----------------------------------------------------------- delivery windows
-
-/** Every window in a range, **including the sold-out and the past ones** —
- *  which is the whole difference from the customer's list. */
-export function useSlots(fromDay: string, toDay: string) {
-  return useQuery({
-    queryKey: ["slots", fromDay, toDay],
-    queryFn: () =>
-      api<StaffSlot[]>(`/admin/delivery/slots?from_day=${fromDay}&to_day=${toDay}`),
-  })
-}
-
-/**
- * Open windows across days.
- *
- * Days times windows, and **idempotent per day and hours**: a day that
- * already has that window is skipped, so "top up the next fortnight" is
- * re-runnable. It answers with only what it actually created, so an empty
- * list means everything already existed — not a failure.
- */
-export function useCreateSlots() {
-  const client = useQueryClient()
-  return useMutation({
-    meta: { done: "Oynalar ochildi" },
-    mutationFn: (input: {
-      days: string[]
-      windows: {
-        start_time: string
-        end_time: string
-        note?: string
-        price?: number
-        express?: boolean
-        capacity?: number
-      }[]
-    }) => api<StaffSlot[]>("/admin/delivery/slots", { body: input }),
-    onSuccess: () => invalidate(client, [["slots"]]),
-  })
-}
-
-export function useUpdateSlot(id: number) {
-  const client = useQueryClient()
-  return useMutation({
-    meta: { done: "Oyna saqlandi" },
-    mutationFn: (input: {
-      capacity_left?: number
-      price?: number
-      note?: string
-      express?: boolean
-    }) => api<StaffSlot>(`/admin/delivery/slots/${id}`, { method: "PATCH", body: input }),
-    onSuccess: () => invalidate(client, [["slots"]]),
-  })
-}
-
 // -------------------------------------------------------------- pickup runs
 
 export function usePickups(status: string) {
@@ -1432,6 +1378,41 @@ export function useDeleteImage(productId: number) {
         method: "DELETE",
       }),
     onSuccess: () => invalidate(client, [keys.images(productId), ["products"]]),
+  })
+}
+
+/**
+ * Make one photograph the cover of its colour.
+ *
+ * The cover is the first photograph of a colour by `sort`, and until this door
+ * existed the only way to say "use that one instead" was to delete the ones in
+ * front of it — which is how a good shot got thrown away to promote a better
+ * one.
+ *
+ * **The answer is the whole card, not the one row that moved.** The server
+ * renumbers every image densely — colour block by colour block — because `sort`
+ * was written as `0` by everything that has ever hung a picture and some read
+ * paths break that tie by `id`. So the response is written straight into the
+ * cache in the order it arrived: re-sorting it here with rules of our own is
+ * how the panel and the shop end up disagreeing about which picture is first.
+ *
+ * Admin only — stricter than the list, the add and the delete beside it, which
+ * the bench may also call. The control is not drawn on a session that would be
+ * refused rather than drawn and answered with a 403.
+ */
+export function useMakeCover(productId: number) {
+  const client = useQueryClient()
+  return useMutation({
+    meta: { done: "Muqova almashtirildi" },
+    mutationFn: (imageId: number) =>
+      api<AdminImage[]>(`/admin/products/${productId}/images/${imageId}/cover`, {
+        method: "PUT",
+      }),
+    onSuccess: (images) => {
+      client.setQueryData(keys.images(productId), images)
+      // And the card list, whose row carries the cover and the held-back gates.
+      invalidate(client, [["products"]])
+    },
   })
 }
 

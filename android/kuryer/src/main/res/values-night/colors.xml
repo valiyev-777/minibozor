@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The web app's own dark canvas, so the strip above the page and the
+         page are one colour rather than two dark greys. -->
+    <color name="canvas">#0C1017</color>
+</resources>

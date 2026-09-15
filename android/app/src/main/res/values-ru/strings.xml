@@ -29,7 +29,6 @@
     <string name="boshqa_turkumlarni_korish">Посмотреть другие категории</string>
     <string name="brend">Бренд</string>
     <string name="bu_filtr_boyicha_sharh_topilmadi">По этому фильтру отзывов нет.</string>
-    <string name="bu_kunga_bosh_oraliq_qolmadi">На этот день свободных интервалов не осталось.</string>
     <string name="bu_turkumni_toldirib_borayapmiz_tez_kunda">Мы наполняем эту категорию. Скоро появятся первые товары.</string>
     <string name="buyurtma">Заказ</string>
     <string name="buyurtma_bergach_holati_shu_yerda_korinadi">После оформления заказа его статус появится здесь.</string>
@@ -106,7 +105,6 @@
     <string name="kodni_qayta_yuborish_2">"Отправить код повторно — "</string>
     <string name="kodni_tasdiqlang">Подтвердите код</string>
     <string name="kop_soraladigan_savollar">Частые вопросы</string>
-    <string name="kuryer_yetkazishdan_30_daqiqa_oldin">Курьер позвонит за 30 минут до доставки.</string>
     <string name="kuryerga_izoh">Комментарий курьеру</string>
     <string name="kuryerga_topshirishda">При передаче курьеру</string>
     <string name="kutilmoqda">Ожидается</string>
@@ -185,7 +183,6 @@
     <string name="sozlamalar">Настройки</string>
     <string name="tahrirlash">Изменить</string>
     <string name="tanlangan_til_darhol_qollanadi_turkum">Выбранный язык применяется сразу. Названия категорий и статусы заказов тоже будут на нём.</string>
-    <string name="tanlash">Выбрать</string>
     <string name="tasdiqlash">Подтвердить</string>
     <string name="tasdiqlash_kodi">Код подтверждения</string>
     <string name="tavsif">Описание</string>
@@ -233,8 +230,6 @@
     <string name="yetkazish_manzili">Адрес доставки</string>
     <string name="yetkazish_muddati_va_narxi_hududga_qarab">Сроки и стоимость доставки зависят от региона</string>
     <string name="yetkazish_uchun_birinchi_manzilingizni">Добавьте первый адрес для доставки.</string>
-    <string name="yetkazish_vaqti">Время доставки</string>
-    <string name="yetkazish_vaqtini_tanlang">Выберите время доставки</string>
     <string name="yigildi_yolda_yetkazildi">Собран, в пути, доставлен</string>
     <string name="yoki_punktdan_olib_ketish">Или самовывоз из пункта</string>
     <string name="yoki_tezkor_kirish">"  или быстрый вход  "</string>
@@ -308,7 +303,6 @@
     <string name="onboarding_4_chip">12 000+ товаров</string>
 
     <string name="tovarlar_soni">Товары (%1$d)</string>
-    <string name="bepul_yetkazishgacha">Добавьте ещё на %1$s — доставка бесплатно</string>
     <string name="korsatish_n">Показать · %1$s шт.</string>
     <string name="filtr_n">Фильтр · %1$d</string>
     <string name="n_km">%1$s км</string>
@@ -405,13 +399,9 @@
     <string name="punkt_tanlanmagan">Пункт не выбран</string>
     <string name="ozingizga_qulay_punktni_tanlang">Выберите удобный пункт выдачи</string>
     <string name="punkt_tanlash">Выбрать пункт</string>
-    <string name="yetkazish_vaqti_qisqa">Время доставки</string>
-    <string name="manzil_kiritilgandan_keyin">Можно выбрать после указания адреса</string>
     <string name="karta_qoshilmagan">Карта не добавлена</string>
     <string name="karta_yoki_naqd">Карта или наличные</string>
-    <string name="aniqlanadi">уточняется</string>
     <string name="korish">Посмотреть</string>
-    <string name="yetkazish_narxi_manzildan_keyin">Стоимость доставки станет известна после указания адреса</string>
     <string name="hammasi_tayyor">Всё готово</string>
     <plurals name="n_qadam_qoldi">
         <item quantity="one">До заказа остался %1$d шаг</item>
@@ -419,7 +409,6 @@
         <item quantity="many">До заказа осталось %1$d шагов</item>
         <item quantity="other">До заказа осталось %1$d шага</item>
     </plurals>
-    <string name="yetkazish_narxi_punktdan_keyin">Стоимость доставки станет известна после выбора пункта</string>
 
     <!-- корзина: что значат галочки, и промокод -->
     <string name="hammasini_tanlash">Выбрать все</string>

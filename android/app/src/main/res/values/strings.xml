@@ -30,7 +30,6 @@
     <string name="boshqa_turkumlarni_korish">Boshqa turkumlarni ko\'rish</string>
     <string name="brend">Brend</string>
     <string name="bu_filtr_boyicha_sharh_topilmadi">Bu filtr bo\'yicha sharh topilmadi.</string>
-    <string name="bu_kunga_bosh_oraliq_qolmadi">Bu kunga bo\'sh oraliq qolmadi.</string>
     <string name="bu_turkumni_toldirib_borayapmiz_tez_kunda">Bu turkumni to\'ldirib borayapmiz. Tez kunda birinchi tovarlar paydo bo\'ladi.</string>
     <string name="buyurtma">Buyurtma</string>
     <string name="buyurtma_bergach_holati_shu_yerda_korinadi">Buyurtma bergach, holati shu yerda ko\'rinadi.</string>
@@ -111,7 +110,6 @@
     <string name="kodni_qayta_yuborish_2">"Kodni qayta yuborish — "</string>
     <string name="kodni_tasdiqlang">Kodni tasdiqlang</string>
     <string name="kop_soraladigan_savollar">Ko\'p so\'raladigan savollar</string>
-    <string name="kuryer_yetkazishdan_30_daqiqa_oldin">Kuryer yetkazishdan 30 daqiqa oldin qo\'ng\'iroq qiladi.</string>
     <string name="kuryerga_izoh">Kuryerga izoh</string>
     <string name="kuryerga_topshirishda">Kuryerga topshirishda</string>
     <string name="kutilmoqda">Kutilmoqda</string>
@@ -193,7 +191,6 @@
     <string name="sozlamalar">Sozlamalar</string>
     <string name="tahrirlash">Tahrirlash</string>
     <string name="tanlangan_til_darhol_qollanadi_turkum">Tanlangan til darhol qo\'llanadi. Turkum nomlari va buyurtma holatlari ham shu tilda ko\'rsatiladi.</string>
-    <string name="tanlash">Tanlash</string>
     <string name="tasdiqlash">Tasdiqlash</string>
     <string name="tasdiqlash_kodi">Tasdiqlash kodi</string>
     <string name="tavsif">Tavsif</string>
@@ -241,8 +238,6 @@
     <string name="yetkazish_manzili">Yetkazish manzili</string>
     <string name="yetkazish_muddati_va_narxi_hududga_qarab">Yetkazish muddati va narxi hududga qarab o\'zgaradi</string>
     <string name="yetkazish_uchun_birinchi_manzilingizni">Yetkazish uchun birinchi manzilingizni qo\'shing.</string>
-    <string name="yetkazish_vaqti">Yetkazish vaqti</string>
-    <string name="yetkazish_vaqtini_tanlang">Yetkazish vaqtini tanlang</string>
     <string name="yigildi_yolda_yetkazildi">Yig\'ildi, yo\'lda, yetkazildi</string>
     <string name="yoki_punktdan_olib_ketish">Yoki punktdan olib ketish</string>
     <string name="yoki_tezkor_kirish">"  yoki tezkor kirish  "</string>
@@ -326,7 +321,6 @@
 
     <!-- ─────────── Text with values in it ─────────── -->
     <string name="tovarlar_soni">Tovarlar (%1$d)</string>
-    <string name="bepul_yetkazishgacha">Yana %1$s qo\'shsangiz — bepul yetkazish</string>
     <string name="korsatish_n">Ko\'rsatish · %1$s ta</string>
     <string name="filtr_n">Filtr · %1$d</string>
     <string name="n_km">%1$s km</string>
@@ -415,19 +409,14 @@
     <string name="punkt_tanlanmagan">Punkt tanlanmagan</string>
     <string name="ozingizga_qulay_punktni_tanlang">O\'zingizga qulay punktni tanlang</string>
     <string name="punkt_tanlash">Punkt tanlash</string>
-    <string name="yetkazish_vaqti_qisqa">Yetkazish vaqti</string>
-    <string name="manzil_kiritilgandan_keyin">Manzil kiritilgandan keyin tanlanadi</string>
     <string name="karta_qoshilmagan">Karta qo\'shilmagan</string>
     <string name="karta_yoki_naqd">Karta yoki naqd pul</string>
-    <string name="aniqlanadi">aniqlanadi</string>
     <string name="korish">Ko\'rish</string>
-    <string name="yetkazish_narxi_manzildan_keyin">Yetkazish narxi manzil kiritilgandan keyin aniqlanadi</string>
     <string name="hammasi_tayyor">Hammasi tayyor</string>
     <plurals name="n_qadam_qoldi">
         <item quantity="one">Buyurtma uchun %1$d qadam qoldi</item>
         <item quantity="other">Buyurtma uchun %1$d qadam qoldi</item>
     </plurals>
-    <string name="yetkazish_narxi_punktdan_keyin">Yetkazish narxi punkt tanlangandan keyin aniqlanadi</string>
 
     <!-- savat: what the ticks mean, and the promo code -->
     <string name="hammasini_tanlash">Hammasini tanlash</string>

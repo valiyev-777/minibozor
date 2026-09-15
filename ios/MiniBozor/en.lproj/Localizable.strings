@@ -21,7 +21,6 @@
 "bekor_qilish" = "Cancel";
 "bekor_qilishni_tasdiqlash" = "Confirm cancellation";
 "bepul" = "Free";
-"bepul_yetkazishgacha" = "Add %1$@ more for free delivery";
 "bildirishnoma_sozlamalari" = "Notification settings";
 "bildirishnoma_yoq" = "No notifications";
 "bildirishnomalar" = "Notifications";
@@ -30,7 +29,6 @@
 "boshqa_turkumlarni_korish" = "Browse other categories";
 "brend" = "Brand";
 "bu_filtr_boyicha_sharh_topilmadi" = "No reviews match this filter.";
-"bu_kunga_bosh_oraliq_qolmadi" = "No slots left for this day.";
 "bu_turkumni_toldirib_borayapmiz_tez_kunda" = "We're still filling this category. The first products are coming soon.";
 "bugun" = "Today";
 "buyurtma" = "Order";
@@ -132,7 +130,6 @@
 "kodni_tasdiqlang" = "Confirm the code";
 "kop_soraladigan_savollar" = "Frequently asked questions";
 "korsatish_n" = "Show · %1$@";
-"kuryer_yetkazishdan_30_daqiqa_oldin" = "The courier calls 30 minutes before delivery.";
 "kuryerga_izoh" = "Note for the courier";
 "kuryerga_topshirishda" = "When handed to the courier";
 "kutilmoqda" = "Pending";
@@ -328,8 +325,6 @@
 "yetkazish_muddati_va_narxi_hududga_qarab" = "Delivery time and cost depend on the region";
 "yetkazish_uchun_birinchi_manzilingizni" = "Add your first delivery address.";
 "yetkazish_va_kafolat" = "Delivery and warranty";
-"yetkazish_vaqti" = "Delivery time";
-"yetkazish_vaqtini_tanlang" = "Choose a delivery time";
 "yigildi_yolda_yetkazildi" = "Picked, on the way, delivered";
 "yoki_punktdan_olib_ketish" = "Or collect from a pick-up point";
 "yoki_tezkor_kirish" = "  or sign in quickly  ";

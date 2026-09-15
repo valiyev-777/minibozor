@@ -18,7 +18,6 @@ import { DashboardPage } from "@/pages/dashboard"
 import { OrdersPage } from "@/pages/orders"
 import { PickupsPage } from "@/pages/pickups"
 import { ReturnsPage } from "@/pages/returns"
-import { SlotsPage } from "@/pages/delivery"
 import { AuditPage } from "@/pages/audit"
 import { CustomersPage } from "@/pages/customers"
 import { CategoriesPage, CouriersPage } from "@/pages/people"
@@ -86,9 +85,6 @@ export function App() {
         ) : null}
         {may("/olib-kelish") ? (
           <Route path="/olib-kelish" element={<PickupsPage />} />
-        ) : null}
-        {may("/yetkazish-oynalari") ? (
-          <Route path="/yetkazish-oynalari" element={<SlotsPage />} />
         ) : null}
         {may("/buyurtmalar") ? (
           <Route path="/buyurtmalar" element={<OrdersPage />} />

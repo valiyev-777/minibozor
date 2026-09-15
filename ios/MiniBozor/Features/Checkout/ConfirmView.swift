@@ -65,14 +65,6 @@ struct ConfirmView: View {
             .padding(.horizontal, 10)
             MBDivider(inset: 62)
             MBListRow(
-                preview.slot?.label ?? L("punktdan_olish"),
-                glyph: "clock",
-                subtitle: preview.slot?.note,
-                showChevron: false
-            )
-            .padding(.horizontal, 10)
-            MBDivider(inset: 62)
-            MBListRow(
                 model.paymentMethod == "cash"
                     ? L("naqd_pul") : "Karta ···· \(preview.card?.last4 ?? "")",
                 glyph: "card",

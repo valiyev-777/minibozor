@@ -367,9 +367,11 @@ struct CartTotalsDTO: Decodable, Hashable {
     let itemsCount: Int
     let subtotal: Int
     let discount: Int
+    /// Nought for now, and kept because a charge may come back.
     let deliveryFee: Int
     let total: Int
-    let freeDeliveryThreshold: Int
+    // `freeDeliveryThreshold` went with the nudge it fed. There is no
+    // threshold to cross when every order is carried for nothing.
     let promoCode: String?
 }
 
@@ -437,26 +439,9 @@ struct PickupPointDTO: Decodable, Identifiable, Hashable {
     let distanceKm: Double?
 }
 
-struct SlotDTO: Decodable, Identifiable, Hashable {
-    let id: Int
-    let day: String
-    let startTime: String
-    let endTime: String
-    let label: String
-    let note: String
-    let price: Int
-    let express: Bool
-    let available: Bool
-}
-
-struct SlotDayDTO: Decodable, Identifiable, Hashable {
-    var id: String { day }
-    let day: String
-    let weekdayLabel: String
-    let dayLabel: String
-    let monthLabel: String
-    let slots: [SlotDTO]
-}
+// There are no delivery windows to book. `GET /delivery/slots` is gone and the
+// checkout no longer names one, so `SlotDTO` and `SlotDayDTO` went with the
+// screen that drew them.
 
 // MARK: - Payment
 //
@@ -535,7 +520,6 @@ struct OrderDTO: Decodable, Identifiable {
 struct CheckoutRequest: Encodable {
     var addressId: Int?
     var pickupPointId: Int?
-    var slotId: Int?
     var paymentMethod: String = "card"
     var recipientName: String = ""
     var recipientPhone: String = ""
@@ -547,7 +531,6 @@ struct CheckoutPreviewDTO: Decodable {
     let items: [CartItemDTO]
     let address: AddressDTO?
     let pickupPoint: PickupPointDTO?
-    let slot: SlotDTO?
     let totals: CartTotalsDTO
 }
 

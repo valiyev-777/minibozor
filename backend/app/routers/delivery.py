@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
-
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, status
 from sqlmodel import col, select
 
 from app import i18n
 from app import schemas as s
 from app import services as sv
 from app.deps import CurrentUser, SessionDep
-from app.models import Address, DeliverySlot, PickupPoint
+from app.models import Address, PickupPoint
 
 router = APIRouter(tags=["delivery"])
 
@@ -68,49 +66,6 @@ def delete_address(address_id: int, user: CurrentUser, session: SessionDep) -> s
     session.delete(address)
     session.commit()
     return s.Message(message=i18n.label("address_removed"))
-
-
-# --------------------------------------------------------------------------- slots
-
-
-@router.get(
-    "/delivery/slots",
-    response_model=list[s.SlotDayOut],
-    summary="Screen 21 — delivery day and time",
-)
-def delivery_slots(session: SessionDep, days: int = Query(3, ge=1, le=14)) -> list[s.SlotDayOut]:
-    today = date.today()
-    window = [today + timedelta(days=n) for n in range(days)]
-    # The standard windows, for any day in this range that has none. Nothing
-    # seeded them and the office's door for opening them is a door somebody has
-    # to walk through — so until they did, the checkout could not be completed
-    # at all. See ``services.ensure_slots``.
-    sv.ensure_slots(session, window)
-    rows = session.exec(
-        select(DeliverySlot)
-        .where(col(DeliverySlot.day).in_(window))
-        .order_by(col(DeliverySlot.day), col(DeliverySlot.start_time))
-    ).all()
-
-    # A window that has already begun is not a choice. Filtered here rather
-    # than at seed time so the list stays right as the day goes on.
-    now = datetime.now().time()
-    grouped: dict[date, list[DeliverySlot]] = {d: [] for d in window}
-    for row in rows:
-        if row.day == today and time.fromisoformat(row.start_time) <= now:
-            continue
-        grouped.setdefault(row.day, []).append(row)
-
-    return [
-        s.SlotDayOut(
-            day=day,
-            weekday_label=sv.uz_weekday_label(day, today),
-            day_label=str(day.day),
-            month_label=i18n.month_name(day.month),
-            slots=[sv.slot_out(sl) for sl in grouped[day]],
-        )
-        for day in window
-    ]
 
 
 @router.get(

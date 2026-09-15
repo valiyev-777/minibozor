@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The shop's server has no certificate. Cleartext is allowed for private
+  addresses only — the wifi by the shelves and the cable — so a mistyped public
+  address cannot quietly send a courier's session over plain http.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">192.168.100.58</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

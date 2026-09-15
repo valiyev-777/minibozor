@@ -470,8 +470,10 @@ function MoveBar({
 }) {
   const whole = moving.kind === "line" ? moving.line.qty : moving.units
 
+  // `--bottom-nav` is the height of the phone's bottom navigation and zero on
+  // a desk, so this clears the menu on a phone and is the same 8px gap here.
   return (
-    <div className="no-print sticky bottom-2 z-30 space-y-2">
+    <div className="no-print sticky bottom-[calc(var(--bottom-nav)+0.5rem)] z-30 space-y-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-panel border border-brand bg-surface p-3 shadow-raised">
         <span className="grid size-10 shrink-0 place-items-center rounded-control bg-brand-soft text-brand-deep">
           <ArrowRight className="size-5" />

@@ -878,6 +878,68 @@ def delete_image(
     return s.Message(message=i18n.label("deleted"))
 
 
+@router.put(
+    "/products/{product_id}/images/{image_id}/cover",
+    response_model=list[s.AdminImageOut],
+    summary="Make a photograph the cover of its colour",
+)
+def set_image_cover(
+    product_id: int,
+    image_id: int,
+    # The admin's alone. Which photograph a customer sees first is the shop
+    # window, not the shelf, and the bench's business with a card ends when
+    # the goods are on it.
+    user: CatalogWriter,
+    session: SessionDep,
+) -> list[s.AdminImageOut]:
+    """Promote one photograph to the front of its own colour.
+
+    Before this door the only way to change a cover was to delete every
+    photograph in front of it — four shots of a jacket and the good one third
+    meant throwing two away. A cover-setter rather than a general reorder
+    because "make this one the cover" is the whole of what anybody asks for:
+    the rest of a colour's pictures are a strip nobody arranges.
+
+    **The whole card is renumbered, not just the promoted colour.** ``sort``
+    is written as ``0`` by everything that has ever hung a picture, so in real
+    data every row ties and the order is whatever ``id`` falls out as. Some
+    read paths break that tie by ``id`` and some order by ``sort`` alone — see
+    ``services.card_images`` — so numbering one colour ``0,1,2`` and leaving
+    the other at ``0,0`` would interleave the two colours on the customer's
+    swipe strip. Renumbering the card densely, colour-block by colour-block in
+    the order the blocks already stood, makes every one of those reads agree.
+    The other colours keep their order and their place; only their integers
+    move, and nothing else reads those integers.
+    """
+    product = _product(session, product_id)
+    chosen = session.get(ProductImage, image_id)
+    if chosen is None or chosen.product_id != product.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("image_not_found"))
+
+    # Grouped in the order the colours already stood, which is why this is read
+    # before the promotion: a card's first colour stays its first colour even
+    # when the photograph promoted is the one that used to be behind.
+    groups: dict[str, list[ProductImage]] = {}
+    for row in _image_rows(session, product.id):
+        groups.setdefault(row.colour, []).append(row)
+    # Stable, so the rest of the colour keeps the order it was in.
+    groups[chosen.colour].sort(key=lambda row: row.id != chosen.id)
+
+    place = 0
+    moved = False
+    for group in groups.values():
+        for row in group:
+            if row.sort != place:
+                row.sort = place
+                session.add(row)
+                moved = True
+            place += 1
+    # A photograph already at the front of a tidy card is not a write.
+    if moved:
+        session.commit()
+    return list_images(product_id, user, session)
+
+
 @router.get(
     "/categories",
     response_model=list[s.AdminCategoryOut],

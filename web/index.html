@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#2585ff" />
+    <!-- The page's own colour, not the brand blue: a coloured strip above a
+         white page reads as another app's chrome on top of this one. The
+         script below rewrites it for the dark theme. -->
+    <meta name="theme-color" content="#f1f3f6" />
     <title>Mini Bozor</title>
     <!-- The theme is decided before React exists, because the alternative is
          a white page for one frame on the way to a dark one — which reads as
@@ -12,7 +15,7 @@
          on. -->
     <script>
       try {
-        var mode = localStorage.getItem("mb:theme") || "light"
+        var mode = localStorage.getItem("mb:theme") || "system"
         var dark =
           mode === "dark" ||
           (mode === "system" &&

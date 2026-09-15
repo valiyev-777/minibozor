@@ -17,6 +17,7 @@
 import { AlertCircle, Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/cn"
+import { usePublishTitle } from "@/lib/page-title"
 
 /**
  * The head of a screen, and it is a **card** rather than bare text on the
@@ -27,6 +28,14 @@ import { cn } from "@/lib/cn"
  * object with an edge round it, so the band across the top of every screen is
  * the same band and the eye stops re-finding it per page. A heading floating
  * over a grid of cards reads as a caption for the first card.
+ *
+ * **On a phone the title is not here.** It goes to the top bar, which was
+ * printing its own copy of it a centimetre above — the two of them together
+ * spent about a fifth of a 390 × 844 window before any content, and on
+ * `/ishlarim` the content was two sentences. What is left down here is
+ * whatever the screen put *beside* its title: the filters and the one act the
+ * screen exists for, which belong with the content and not in a fixed bar. A
+ * header with nothing but a title draws nothing at all.
  */
 export function PageHeader({
   title,
@@ -37,9 +46,16 @@ export function PageHeader({
   subtitle?: string
   children?: React.ReactNode
 }) {
+  usePublishTitle(title, subtitle)
+
   return (
-    <header className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-panel border border-panel-edge bg-surface px-4 py-3">
-      <div className="min-w-0">
+    <header
+      className={cn(
+        "mb-4 flex flex-wrap items-center justify-between gap-3 rounded-panel border border-panel-edge bg-surface px-4 py-3",
+        children ? "" : "max-md:hidden",
+      )}
+    >
+      <div className="min-w-0 max-md:hidden">
         {/* Capped, unlike the figure token it borrows from. A courier's
             density triples every size on the screen, which is right for a
             pick count read in daylight and wrong for a page title — at
@@ -53,7 +69,9 @@ export function PageHeader({
         ) : null}
       </div>
       {children ? (
-        <div className="flex flex-wrap items-center gap-2">{children}</div>
+        <div className="flex flex-wrap items-center gap-2 max-md:w-full">
+          {children}
+        </div>
       ) : null}
     </header>
   )
@@ -260,9 +278,18 @@ export function Stat({
           </span>
         ) : null}
         <div className="min-w-0 flex-1">
+          {/* It **wraps**; it does not truncate.
+           *
+           * A figure is the one thing on the tile that must be read exactly,
+           * and `15 000 so'm` in a half-width tile on a 390px phone came out
+           * as `15 00…`. An ellipsised sum is not a tidier sum, it is a wrong
+           * one — so the tile gets taller and the grid row equalises. The
+           * groups inside a number are joined by a non-breaking space (see
+           * `lib/format`), so `15 000` never splits: the only place this can
+           * break is before the unit. */}
           <div
             className={cn(
-              "figure truncate",
+              "figure [overflow-wrap:anywhere]",
               tone === "danger" && "text-danger",
               tone === "good" && "text-good",
               tone === "warn" && "text-warn-ink",
@@ -270,12 +297,10 @@ export function Stat({
           >
             {value}
           </div>
-          {hint ? (
-            <div className="truncate text-micro text-ink-faint">{hint}</div>
-          ) : null}
+          {hint ? <div className="text-micro text-ink-faint">{hint}</div> : null}
         </div>
       </div>
-      <div className="truncate text-micro font-medium text-ink-soft">{label}</div>
+      <div className="text-micro font-medium text-ink-soft">{label}</div>
     </div>
   )
 }

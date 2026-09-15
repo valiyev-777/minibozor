@@ -148,8 +148,6 @@ struct RouteView: View {
             CheckoutView()
         case .addressForm:
             AddressFormView()
-        case .deliveryTime:
-            DeliveryTimeView()
         case .paymentMethod:
             PaymentMethodView()
         case .confirm:

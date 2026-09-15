@@ -41,7 +41,10 @@ export function Toaster() {
       // to stack up while somebody books in a sack of forty.
       duration={4000}
       gap={8}
-      offset={16}
+      // Clear of the phone's bottom navigation: a toast that lands on the
+      // menu hides the menu and takes the tap meant for it. `--bottom-nav`
+      // is zero on a desk, so this is the same 16px there.
+      offset="calc(1rem + var(--bottom-nav))"
       toastOptions={{
         unstyled: true,
         classNames: {

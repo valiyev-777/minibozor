@@ -31,7 +31,11 @@ const ThemeContext = createContext<ThemeState | null>(null)
 
 function stored(): ThemeMode {
   const value = localStorage.getItem(KEY)
-  return value === "light" || value === "dark" || value === "system" ? value : "light"
+  // Nobody has chosen yet → follow the machine. It used to default to `light`,
+  // which made "follow the system" something you had to go and ask for: a
+  // phone set to dark opened a white app and stayed white, and the setting
+  // looked broken because nothing about it was discoverable.
+  return value === "light" || value === "dark" || value === "system" ? value : "system"
 }
 
 function systemPrefersDark(): boolean {
@@ -61,7 +65,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // told too, or the app ends up in a dark window with a bright hat on.
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", resolved === "dark" ? "#090e14" : "#2585ff")
+      ?.setAttribute("content", resolved === "dark" ? "#0c1017" : "#f1f3f6")
   }, [resolved])
 
   const setMode = useCallback((next: ThemeMode) => {

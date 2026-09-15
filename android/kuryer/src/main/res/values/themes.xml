@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      No action bar: the web app draws its own header, and two headers is the
+      thing people install an app to get away from.
+
+      The status bar takes the **page's own colour**, not the brand blue it
+      used to. A coloured strip above a white page reads as a second app's
+      chrome sitting on top of this one; matching the canvas makes the page
+      start at the top of the glass. `values-night` gives the dark answer, so
+      the strip follows the phone's theme the same way the web app now does.
+    -->
+    <style name="Theme.Kuryer" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@color/canvas</item>
+        <item name="android:navigationBarColor">@color/canvas</item>
+        <!-- Dark glyphs, because the bar behind them is light. -->
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/canvas</item>
+    </style>
+</resources>

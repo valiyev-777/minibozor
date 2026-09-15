@@ -21,8 +21,6 @@ class OrderRepository @Inject constructor(private val api: MiniBozorApi) {
     suspend fun deleteAddress(id: Int): Outcome<Unit> =
         apiCall { api.deleteAddress(id) }.let { if (it is Outcome.Failure) it else Outcome.Success(Unit) }
 
-    suspend fun slots(days: Int = 3): Outcome<List<SlotDayDto>> = apiCall { api.slots(days) }
-
     suspend fun pickupPoints(): Outcome<List<PickupPointDto>> = apiCall { api.pickupPoints() }
 
     suspend fun cards(): Outcome<List<CardDto>> = apiCall { api.cards() }

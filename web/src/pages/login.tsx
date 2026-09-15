@@ -13,16 +13,19 @@
 
 import { useState } from "react"
 
+import { cn } from "@/lib/cn"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ApiError, api } from "@/lib/api"
 import { useSession } from "@/lib/session"
+import { useIsPhone } from "@/lib/viewport"
 
 type Asked = { dev_code?: string | null; expires_in?: number }
 
 export function LoginPage() {
   const { signIn } = useSession()
+  const narrow = useIsPhone()
   const [phone, setPhone] = useState("+998")
   const [code, setCode] = useState("")
   const [sent, setSent] = useState(false)
@@ -66,38 +69,45 @@ export function LoginPage() {
   }
 
   return (
-    <div className="density-cozy grid min-h-full md:grid-cols-2">
+    <div
+      className={cn(
+        "grid min-h-full md:grid-cols-2",
+        // The courier signs in standing on a pavement on the same phone the
+        // rest of the app is comfortable on. The density starts at the door.
+        narrow ? "density-comfortable" : "density-cozy",
+      )}
+    >
       {/* ------------------------------------------------------------- the wall
        *
-       * The half of the screen that is not the form. It is the same near-black
-       * as the rail with the same blurred wash of the accent behind the mark,
-       * so signing in is recognisably the front door of *this* building — and
-       * so the first thing anybody sees each morning is not a white page with
-       * a box floating in the middle of it.
+       * The half of the screen that is not the form. It is painted in the same
+       * `rail` as the menu, with the same blurred wash of the accent behind the
+       * mark, so signing in is recognisably the front door of *this* building.
+       * The rail follows the theme now, so this wall does too — a light wall
+       * against the grey page in the day, near-black at night.
        *
        * Hidden on a phone. A decorative half-screen on a 5" display is the
        * form pushed below the fold. */}
-      <aside className="relative hidden flex-col justify-between overflow-hidden bg-rail p-10 text-rail-ink md:flex">
+      <aside className="relative hidden flex-col justify-between overflow-hidden border-e border-rail-edge bg-rail p-10 text-rail-ink md:flex">
         <div
           aria-hidden
-          className="pointer-events-none absolute -left-24 -top-24 size-96 rounded-full bg-brand opacity-50 blur-[120px]"
+          className="pointer-events-none absolute -left-24 -top-24 size-96 rounded-full bg-brand opacity-20 blur-[120px] dark:opacity-50"
         />
         <div className="relative z-10 flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-control bg-brand text-body font-bold text-brand-ink">
             MB
           </span>
-          <span className="text-body font-semibold tracking-tight text-rail-ink">
+          <span className="text-body font-semibold tracking-tight text-rail-ink-strong">
             Mini Bozor
           </span>
         </div>
         <div className="relative z-10 max-w-sm">
-          <p className="display text-rail-ink">Ombor. Do'kon. Yo'l.</p>
-          <p className="mt-3 text-small text-rail-ink/70">
+          <p className="display text-rail-ink-strong">Ombor. Do'kon. Yo'l.</p>
+          <p className="mt-3 text-small text-rail-ink">
             Bitta hisob — uchala ish uchun. Nima qila olishingizni rolingiz
             hal qiladi.
           </p>
         </div>
-        <p className="relative z-10 text-micro text-rail-ink/50">
+        <p className="relative z-10 text-micro text-rail-ink/80">
           Xodimlar uchun. Xarid uchun Mini Bozor ilovasi bor.
         </p>
       </aside>

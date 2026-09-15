@@ -249,18 +249,19 @@ function Slot({
   const inside = (
     <>
       <div className="flex items-center gap-1">
-        <span className="caption truncate">{label}</span>
+        <span className="caption">{label}</span>
         {to ? (
           <ArrowUpRight className="size-3 shrink-0 text-ink-faint opacity-0 transition-opacity group-hover:opacity-100" />
         ) : null}
       </div>
-      <div className={cn("mt-1.5 truncate", lead ? "display" : "figure")}>
+      {/* Wraps, never truncates: an ellipsised sum is a wrong sum. */}
+      <div className={cn("mt-1.5 [overflow-wrap:anywhere]", lead ? "display" : "figure")}>
         {figureText(figure)}
       </div>
       <div className="mt-1.5 flex min-h-4 flex-wrap items-center">
         <Delta figure={figure} />
       </div>
-      <div className="mt-1 truncate text-micro text-ink-faint">{hint}</div>
+      <div className="mt-1 text-micro text-ink-faint">{hint}</div>
     </>
   )
 
@@ -335,11 +336,9 @@ function Task({ tile }: { tile: DashboardTile }) {
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-small font-medium text-ink">
-          {tile.label}
-        </span>
+        <span className="block text-small font-medium text-ink">{tile.label}</span>
         {tile.hint ? (
-          <span className="block truncate text-micro text-ink-faint">{tile.hint}</span>
+          <span className="block text-micro text-ink-faint">{tile.hint}</span>
         ) : null}
       </span>
 

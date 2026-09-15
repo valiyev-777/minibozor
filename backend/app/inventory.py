@@ -1,10 +1,9 @@
 """What an order does to the room.
 
-Placing an order used to move four counts and cancelling one moved none of
-them back: the goods vanished, the order stayed "sold", and the freed delivery
-window was never offered to anybody else. So both halves live here, they read
-the same snapshot, and every count that moves writes an audit row in the
-caller's transaction.
+Placing an order used to move several counts and cancelling one moved none of
+them back: the goods vanished and the order stayed "sold". So both halves live
+here, they read the same snapshot, and every count that moves writes an audit
+row in the caller's transaction.
 
 **Money does not move goods.** That is the change this file exists to carry.
 An order being paid for used to take the goods off the shelf; now it holds
@@ -36,7 +35,6 @@ from app import locations as loc
 from app import products as pr
 from app import stock as st
 from app.models import (
-    DeliverySlot,
     Location,
     Order,
     OrderItem,
@@ -164,14 +162,13 @@ def restore_order(
     """Everything a cancelled order took, back where it came from.
 
     Which is less than it used to be. The goods never left — being sold
-    stopped moving them — so what is owed is the sold count, the delivery
-    window, and putting back anything already fetched for this order that is
-    standing in the packing area or in a courier's bag.
+    stopped moving them — so what is owed is the sold count and putting back
+    anything already fetched for this order that is standing in the packing
+    area or in a courier's bag.
     """
     for item in order_items(session, order):
         _unpick(session, item, order, actor=actor, note=note)
         _unsell(session, item, actor=actor, action=action, note=note)
-    _give_back_seat(session, order, actor=actor, action=action, note=note)
 
 
 def came_back(
@@ -317,31 +314,3 @@ def _unsell(
             new=now,
             note=note,
         )
-
-
-def _give_back_seat(
-    session: Session,
-    order: Order,
-    *,
-    actor: User | None,
-    action: str,
-    note: str,
-) -> None:
-    if order.slot_id is None:
-        return
-    slot = session.get(DeliverySlot, order.slot_id)
-    if slot is None:
-        return
-    audit.record(
-        session,
-        actor=actor,
-        action=action,
-        entity="delivery_slot",
-        entity_id=slot.id,
-        field="capacity_left",
-        old=slot.capacity_left,
-        new=slot.capacity_left + 1,
-        note=note or f"{slot.day} {slot.start_time}–{slot.end_time}",
-    )
-    slot.capacity_left += 1
-    session.add(slot)

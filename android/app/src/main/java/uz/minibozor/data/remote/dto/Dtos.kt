@@ -434,9 +434,11 @@ data class CartTotalsDto(
     @SerialName("items_count") val itemsCount: Int,
     val subtotal: Long,
     val discount: Long,
+    /** Nought for now, and kept because a charge may come back. */
     @SerialName("delivery_fee") val deliveryFee: Long,
     val total: Long,
-    @SerialName("free_delivery_threshold") val freeDeliveryThreshold: Int,
+    // `free_delivery_threshold` went with the nudge it fed. There is no
+    // threshold to cross when every order is carried for nothing.
     @SerialName("promo_code") val promoCode: String? = null,
 )
 
@@ -508,29 +510,9 @@ data class PickupPointDto(
     @SerialName("distance_km") val distanceKm: Double? = null,
 )
 
-@Immutable
-@Serializable
-data class SlotDto(
-    val id: Int,
-    val day: String,
-    @SerialName("start_time") val startTime: String,
-    @SerialName("end_time") val endTime: String,
-    val label: String,
-    val note: String = "",
-    val price: Long = 0,
-    val express: Boolean = false,
-    val available: Boolean = true,
-)
-
-@Immutable
-@Serializable
-data class SlotDayDto(
-    val day: String,
-    @SerialName("weekday_label") val weekdayLabel: String,
-    @SerialName("day_label") val dayLabel: String,
-    @SerialName("month_label") val monthLabel: String,
-    val slots: List<SlotDto>,
-)
+// There are no delivery windows to book. `GET /delivery/slots` is gone and the
+// checkout no longer names one, so `SlotDto` and `SlotDayDto` went with the
+// screen that drew them.
 
 // -------------------------------------------------------------------- payment
 //
@@ -660,7 +642,6 @@ data class OrderDto(
 data class CheckoutRequest(
     @SerialName("address_id") val addressId: Int? = null,
     @SerialName("pickup_point_id") val pickupPointId: Int? = null,
-    @SerialName("slot_id") val slotId: Int? = null,
     @SerialName("payment_method") val paymentMethod: String = "card",
     /** Which card pays for it. Required by the server when the method is `card`. */
     @SerialName("payment_card_id") val paymentCardId: Int? = null,
@@ -676,7 +657,6 @@ data class CheckoutPreviewDto(
     val items: List<CartItemDto>,
     val address: AddressDto? = null,
     @SerialName("pickup_point") val pickupPoint: PickupPointDto? = null,
-    val slot: SlotDto? = null,
     val totals: CartTotalsDto,
     /** The card the order would be charged to, so the confirm screen can name it. */
     val card: CardDto? = null,

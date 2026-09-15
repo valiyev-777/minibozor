@@ -19,7 +19,7 @@
  * parcel again.
  */
 
-import { Banknote, MapPin, Phone } from "lucide-react"
+import { Banknote, ClipboardCheck, MapPin, PackageSearch, Phone, Truck } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Empty, PageHeader, Panel, Pill, Problem, Stat, Waiting } from "@/components/page"
@@ -76,13 +76,21 @@ export function MyWorkPage() {
           ))}
         </section>
       ) : (
-        <Empty what="Qo'lingizda parcel yo'q." />
+        <Empty
+          icon={Truck}
+          title="Qo'lingizda buyurtma yo'q"
+          what="Pastdagi ro'yxatdan tayyor buyurtmani o'zingiz oling."
+        />
       )}
 
       <section className="space-y-2">
         <h2 className="text-small font-semibold">Olish mumkin</h2>
         {board.data?.length === 0 ? (
-          <Empty what="Tayyor buyurtma yo'q — yig'ilmoqda." />
+          <Empty
+            icon={PackageSearch}
+            title="Tayyor buyurtma yo'q"
+            what="Ombor yig'ib bo'lgach shu yerda ko'rinadi."
+          />
         ) : null}
         {(board.data ?? []).map((order) => (
           <Panel key={order.id}>
@@ -248,7 +256,11 @@ export function CourierHistoryPage() {
       <Problem error={round.error} />
       {round.isLoading ? <Waiting /> : null}
       {!round.isLoading && done.length === 0 ? (
-        <Empty what="Hali yetkazilgan buyurtma yo'q." />
+        <Empty
+          icon={ClipboardCheck}
+          title="Hali yetkazilgan buyurtma yo'q"
+          what="Yetkazganlaringiz shu yerda to'planib boradi."
+        />
       ) : null}
 
       <ul className="space-y-2">
@@ -285,7 +297,7 @@ export function EarningsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Daromad" subtitle="Har yetkazilgan parcel uchun" />
+      <PageHeader title="Daromad" subtitle="Har yetkazilgan buyurtma uchun" />
       <Problem error={earnings.error} />
       {earnings.isLoading ? <Waiting /> : null}
 
@@ -299,7 +311,7 @@ export function EarningsPage() {
               value={`${groups(earnings.data.delivered_today)} ta`}
             />
             <Stat
-              label="Bitta parcel"
+              label="Bitta buyurtma"
               value={money(earnings.data.fee_per_delivery)}
             />
           </div>

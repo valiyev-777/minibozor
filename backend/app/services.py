@@ -18,7 +18,6 @@ from app.models import (
     CartItem,
     Category,
     DeliveryAttempt,
-    DeliverySlot,
     Favorite,
     Order,
     OrderEvent,
@@ -34,18 +33,6 @@ from app.models import (
     ProductVariant,
     User,
 )
-
-# Above a typical basket and below an unusual one, so the fee is a real line on
-# most orders and a reason to add one more thing on some.
-#
-# 3 000 000 was set against the seeded marketplace catalogue, where it was
-# roughly a median basket. This shop's dearest thing is 638 000 — so nothing
-# would ever have reached it, and the app was telling customers about a free
-# delivery they could not get. **This is the owner's number, not a technical
-# one:** it is one line, and it should be set to about three of whatever the
-# shop mostly sells.
-FREE_DELIVERY_THRESHOLD = 500_000
-STANDARD_DELIVERY_FEE = 19_000
 
 UZ_MONTHS = [
     "yanvar", "fevral", "mart", "aprel", "may", "iyun",
@@ -297,11 +284,18 @@ def admin_product_out(session: Session, product: Product) -> s.AdminProductOut:
         session.get(Category, product.category_id) if product.category_id else None
     )
     brand = session.get(Brand, product.brand_id) if product.brand_id else None
+    # The rows rather than a `COUNT(*)`, because the table wants the cover as
+    # well as the tally and this is called once per card on a page of thirty.
+    # One query answering both questions is the same number of round trips the
+    # count alone cost; a card has a handful of photographs, so reading them
+    # instead of counting them is cheaper than the second query would be.
+    #
+    # Ordered the way `colour_cover` and the apps order: `sort`, then `id`.
     images = session.exec(
-        select(func.count())
-        .select_from(ProductImage)
+        select(ProductImage)
         .where(ProductImage.product_id == product.id)
-    ).one()
+        .order_by(col(ProductImage.sort), col(ProductImage.id))
+    ).all()
     variants = session.exec(
         select(func.count())
         .select_from(ProductVariant)
@@ -318,6 +312,7 @@ def admin_product_out(session: Session, product: Product) -> s.AdminProductOut:
         category_slug=category.slug if category else None,
         brand_slug=brand.slug if brand else None,
         snapshot_url=product.snapshot_url,
+        cover_url=(media_url(images[0].url) or "") if images else "",
         unready=[
             s.GapOut(key=gap, label=i18n.label(gap))
             for gap in pr.unready(session, product.id)
@@ -335,7 +330,7 @@ def admin_product_out(session: Session, product: Product) -> s.AdminProductOut:
         # card still says "sotuvda" — so the first anybody hears of it is a
         # customer ordering black.
         sold_out=pr.sold_out(session, product.id),
-        image_count=int(images),
+        image_count=len(images),
         variant_count=int(variants),
         created_at=product.created_at,
     )
@@ -449,61 +444,6 @@ def cart_items(session: Session, user: User) -> list[CartItem]:
     ).all()
 
 
-# The windows a small shop delivers in. Free, because the fee is on the order
-# and not on the hour: charging more for the afternoon is a thing a shop with
-# several vans does, and there is one courier here.
-STANDARD_WINDOWS: tuple[tuple[str, str, str], ...] = (
-    ("09:00", "13:00", "Ertalab"),
-    ("13:00", "18:00", "Kunduzi"),
-    ("18:00", "21:00", "Kechqurun"),
-)
-SLOT_CAPACITY = 20
-
-
-def ensure_slots(session: Session, days: list[date]) -> None:
-    """The standard windows exist for every day in the window asked about.
-
-    Nothing wrote a ``delivery_slots`` row. The office has a door for opening
-    windows across a range of days — and until somebody walked through it the
-    checkout could not be completed at all: no slot meant no delivery time,
-    which meant a button that said "Yetkazish vaqti" and a screen with nothing
-    on it. A shop cannot take its first order.
-
-    Created on read rather than seeded once, because a seeded fortnight runs
-    out in a fortnight and the failure is silent. This is safe where
-    ``locations.staging`` refuses to do the same thing: a slot is keyed by the
-    day and the hour, so writing one that is already there is a no-op, and a
-    day nobody delivers on is a day with no orders rather than a second
-    receiving area nothing can see.
-
-    The office's own windows win: this only fills a day that has none, so a
-    day somebody has deliberately emptied or repriced is left alone.
-    """
-    have = {
-        row.day
-        for row in session.exec(
-            select(DeliverySlot).where(col(DeliverySlot.day).in_(days))
-        ).all()
-    }
-    missing = [day for day in days if day not in have]
-    if not missing:
-        return
-
-    for day in missing:
-        for start, end, note in STANDARD_WINDOWS:
-            session.add(
-                DeliverySlot(
-                    day=day,
-                    start_time=start,
-                    end_time=end,
-                    note=note,
-                    price=0,
-                    capacity_left=SLOT_CAPACITY,
-                )
-            )
-    session.commit()
-
-
 def variant_label(variant: ProductVariant) -> str:
     """"Qora · 42", or whichever half of it exists.
 
@@ -602,13 +542,18 @@ def cart_totals(
     *,
     discount: int = 0,
     promo_code: str | None = None,
-    delivery_fee: int | None = None,
 ) -> s.CartTotalsOut:
+    """The basket's money. Delivery is free, at any size and to anywhere.
+
+    There was a threshold and a standard fee, and both are gone — the owner
+    wants one answer to "how much is delivery", and it is "nothing". The line
+    itself stays on the order and in this shape, always zero, because a charge
+    is a price a shop may want back: turning it on again is this function and
+    nothing above it.
+    """
     selected = [i for i in items if i.selected and i.in_stock]
     subtotal = sum(i.line_total for i in selected)
-    if delivery_fee is None:
-        free = subtotal >= FREE_DELIVERY_THRESHOLD or subtotal == 0
-        delivery_fee = 0 if free else STANDARD_DELIVERY_FEE
+    delivery_fee = 0
     total = max(subtotal - discount, 0) + delivery_fee
     return s.CartTotalsOut(
         items_count=sum(i.quantity for i in selected),
@@ -616,7 +561,6 @@ def cart_totals(
         discount=discount,
         delivery_fee=delivery_fee,
         total=total,
-        free_delivery_threshold=FREE_DELIVERY_THRESHOLD,
         promo_code=promo_code,
     )
 
@@ -654,24 +598,6 @@ def address_out(a: Address) -> s.AddressOut:
 def pickup_out(p: PickupPoint) -> s.PickupPointOut:
     return s.PickupPointOut(
         id=p.id, name=p.name, address=p.address, hours=p.hours, distance_km=p.distance_km
-    )
-
-
-def slot_out(sl: DeliverySlot) -> s.SlotOut:
-    label = (
-        i18n.label("slot_express") if sl.express
-        else f"{sl.start_time} – {sl.end_time}"
-    )
-    return s.SlotOut(
-        id=sl.id,
-        day=sl.day,
-        start_time=sl.start_time,
-        end_time=sl.end_time,
-        label=label,
-        note=i18n.slot_note(sl.note),
-        price=sl.price,
-        express=sl.express,
-        available=sl.capacity_left > 0,
     )
 
 
