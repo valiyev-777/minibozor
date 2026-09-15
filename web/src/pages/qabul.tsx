@@ -23,6 +23,22 @@
  * A scanner is always listening (a gun on the bench, the phone camera at the
  * shelf): a goods sticker fills the card in, a cell label finishes moment
  * two in one scan.
+ *
+ * **Where the card form sits in this** (§5.4, §7.8). "Nima keldi?" has two
+ * answers and they are not the same shape. A card the shop already has is
+ * *found* — typed, scanned, or narrowed with the learned Tur/Brend chips —
+ * and that is the fast path the bench uses all day. A card the shop has never
+ * had is *written*, and writing one is the card form's job, not this screen's:
+ * **Yangi tavar** opens `<CardForm mode="receiving">`, which asks the category
+ * first because it decides everything under it, then the name.
+ *
+ * The boundary is drawn there, at the card's identity. Everything the *receipt*
+ * knows and the card does not — which of its colours came, how many of each
+ * size, what one cost, where it was bought — stays here, because those are
+ * facts about this morning rather than about the goods. What changed is that
+ * the colour is no longer a word typed at the bench: it is picked from §5.3's
+ * palette, with its swatch, and the sizes are offered by the run of sizes the
+ * card is numbered in.
  */
 
 import {
@@ -38,21 +54,28 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
+import { CardForm } from "@/components/card-form"
+import { Swatch } from "@/components/card-form/bits"
 import { LabelRoll } from "@/components/label-roll"
-import { PageHeader, Panel, Problem, Segmented, Waiting } from "@/components/page"
-import { Capture, mediaUrl } from "@/components/photo-step"
+import { PageHeader, Panel, Problem, Waiting } from "@/components/page"
+import { mediaUrl } from "@/components/photo-step"
 import { ScanTarget, type ScanAnswer } from "@/components/scan"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/cn"
 import { age, bySize, groups, money, tidySize, units } from "@/lib/format"
 import {
+  useAddColour,
+  useColours,
   useProduct,
   useProducts,
+  useProductSizeSystem,
   usePutawayPlan,
   useReceive,
   useRunLabels,
+  useSetProductSizeSystem,
   useShelveReceipt,
+  useSizeSystems,
   useSupplies,
   useVariants,
   useVocab,
@@ -61,7 +84,7 @@ import {
   type ReceiptShelved,
   type WaitingReceipt,
 } from "@/lib/queries"
-import type { AdminProduct } from "@/lib/types"
+import type { AdminProduct, SizeSystem } from "@/lib/types"
 
 // A receipt that has stood this long is the thing this shop actually loses
 // money on: goods in the building that the shelf map has not heard of.
@@ -73,32 +96,31 @@ const OVERNIGHT_MINUTES = 14 * 60
 type SizeLine = { size: string; qty: string }
 
 type Draft = {
+  /** The card. Always a real one by the time anything else is asked: found,
+   *  scanned, or just written by the card form. */
   product: AdminProduct | null
   kind: string
-  brand: string
-  snapshot: string
   /** One colour — the whole receipt's. A second colour is a second receipt. */
   colour: string
+  /** The palette's own hex for that colour, carried onto the variant so the
+   *  swatch on the card is the one somebody pointed at. */
+  colourHex: string
   lines: SizeLine[]
   unitCost: string
   place: string
   /** What the van cost — the whole trip's. Sent once, not per colour. */
   fare: string
-  /** Whether moment one's first half is answered — the goods have a card. */
-  named: boolean
 }
 
 const EMPTY: Draft = {
   product: null,
   kind: "",
-  brand: "",
-  snapshot: "",
   colour: "",
+  colourHex: "",
   lines: [],
   unitCost: "",
   place: "",
   fare: "",
-  named: false,
 }
 
 /** The receipt whose second moment is on screen. `receipt` is present when it
@@ -131,31 +153,31 @@ export function QabulPage() {
   // What the last scan could not be used for, said beside the scan target —
   // a scan that silently does nothing reads as a broken scanner.
   const [scanSaid, setScanSaid] = useState("")
-  // A scanned goods sticker names a product; the full card is fetched and
-  // filled in — even when the variant has no places yet.
-  const [scanFill, setScanFill] = useState<{ id: number; colour: string } | null>(null)
+  // A card named by its id rather than held in the hand: a scanned goods
+  // sticker, or a card the form has just written. Both arrive as an id and
+  // both want the whole card on the draft, so they share one door.
+  const [fillFrom, setFillFrom] = useState<{ id: number; colour: string } | null>(null)
 
   const receive = useReceive()
   const shelve = useShelveReceipt()
-  const scanned = useProduct(scanFill?.id ?? null)
+  const named = useProduct(fillFrom?.id ?? null)
 
   useEffect(() => {
-    if (!scanFill || !scanned.data || scanned.data.id !== scanFill.id) return
-    const card = scanned.data
+    if (!fillFrom || !named.data || named.data.id !== fillFrom.id) return
+    const card = named.data
     setDraft((was) => ({
       ...was,
       product: card,
       kind: card.kind,
-      brand: "",
-      snapshot: "",
       // The sticker knows its colour; presetting it saves a tap and stays
-      // editable — more of the white may really be more of the black.
-      colour: scanFill.colour,
-      named: true,
+      // editable — more of the white may really be more of the black. A card
+      // written this minute knows none, and the palette asks for it.
+      colour: fillFrom.colour,
+      colourHex: "",
     }))
-    setScanFill(null)
+    setFillFrom(null)
     setDone(null)
-  }, [scanFill, scanned.data])
+  }, [fillFrom, named.data])
 
   function restart() {
     setDraft(EMPTY)
@@ -178,7 +200,6 @@ export function QabulPage() {
       kind: receipt.product.kind,
       unitCost: was.unitCost,
       place: was.place,
-      named: true,
     }))
   }
 
@@ -226,7 +247,7 @@ export function QabulPage() {
         )
         return
       }
-      setScanFill({ id: answer.variant.product_id, colour: answer.variant.colour })
+      setFillFrom({ id: answer.variant.product_id, colour: answer.variant.colour })
       return
     }
     setScanSaid(`«${answer.code}» hech narsaga to'g'ri kelmadi — nomini yozib qidiring.`)
@@ -279,6 +300,9 @@ export function QabulPage() {
           draft={draft}
           setDraft={setDraft}
           receive={receive}
+          // The card form answers with an id; the draft wants the whole card,
+          // which is the same fetch a scanned sticker needs.
+          onCreated={(id) => setFillFrom({ id, colour: "" })}
           onBooked={(receipt) => {
             setDone(null)
             setOpen({
@@ -333,11 +357,13 @@ function MomentOne({
   draft,
   setDraft,
   receive,
+  onCreated,
   onBooked,
 }: {
   draft: Draft
   setDraft: (next: (was: Draft) => Draft) => void
   receive: ReturnType<typeof useReceive>
+  onCreated: (productId: number) => void
   onBooked: (receipt: Receipt) => void
 }) {
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
@@ -351,7 +377,12 @@ function MomentOne({
     () => [...new Set((grid.data ?? []).map((cell) => cell.colour))].filter(Boolean),
     [grid.data],
   )
-  const needsColour = draft.product !== null && own.length > 0
+  // Only a card whose variants are *deliberately* colourless is let through
+  // without one — everything else, a new card included, picks from the
+  // palette. A colour typed at the bench is how `qora`, `Qora` and `QORA`
+  // became three colours, and the palette only stops that if it is the way in.
+  const colourless = Boolean(grid.data && grid.data.length > 0 && own.length === 0)
+  const needsColour = !colourless
 
   const total = countOf(draft.lines)
   const cost = Number(draft.unitCost) || 0
@@ -363,24 +394,20 @@ function MomentOne({
         : cost <= 0
           ? "cost"
           : null
-  const ready = draft.named && !missing && !receive.isPending
+  const ready = draft.product !== null && !missing && !receive.isPending
   const hint = missing ? MISSING_HINT[missing] : money(total * cost)
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (!ready) return
+    if (!ready || !draft.product) return
     receive.mutate(
       {
-        // Either the card that exists, or the words a new one is written
-        // from — never both, so a scan cannot half-overwrite a typed card.
-        ...(draft.product
-          ? { product_id: draft.product.id }
-          : {
-              kind: draft.kind.trim(),
-              brand: draft.brand.trim(),
-              snapshot_url: draft.snapshot,
-            }),
+        // Always a card that exists. The door still takes kind/brand and will
+        // write a card from them, but §5.4 put that job in the card form —
+        // two ways of writing a card is how two cards for one shoe happen.
+        product_id: draft.product.id,
         colour: draft.colour.trim(),
+        colour_hex: draft.colourHex,
         sizes: linesOut(draft.lines),
         unit_cost: cost,
         place: draft.place.trim(),
@@ -392,28 +419,29 @@ function MomentOne({
 
   return (
     <form className="space-y-3" onSubmit={submit}>
-      {draft.named ? (
-        <Named draft={draft} onChange={() => setDraft(() => EMPTY)} />
+      {draft.product ? (
+        <Named product={draft.product} onChange={() => setDraft(() => EMPTY)} />
       ) : (
         <IdentifyCard
-          draft={draft}
-          onSet={set}
           onPick={(product) =>
-            setDraft((was) => ({ ...was, product, kind: product.kind, named: true }))
+            setDraft((was) => ({ ...was, product, kind: product.kind }))
           }
-          onNamed={() => set("named", true)}
+          onCreated={onCreated}
         />
       )}
 
-      {draft.named ? (
+      {draft.product ? (
         <>
           <Counts
             product={draft.product}
             kind={draft.kind}
             colour={draft.colour}
             ownColours={own}
+            needsColour={needsColour}
             lines={draft.lines}
-            onColour={(colour) => set("colour", colour)}
+            onColour={(colour, hex) =>
+              setDraft((was) => ({ ...was, colour, colourHex: hex }))
+            }
             onLines={(lines) => set("lines", lines)}
           />
 
@@ -477,7 +505,7 @@ function MomentOne({
           inside the page is measured by the layout instead, and `--bottom-nav`
           is the one number that says how much of the foot the navigation has
           taken (zero on a desk). */}
-      {draft.named ? (
+      {draft.product ? (
         <div className="sticky bottom-(--bottom-nav) z-20 -mx-(--gap-page) border-y border-line bg-surface p-3 shadow-raised">
           <div className="mx-auto flex max-w-4xl items-center gap-3">
             <div className="min-w-0 flex-1">
@@ -509,10 +537,13 @@ function MomentOne({
  * Step one, answered, on one line. A tick, not a green panel: answering
  * "which goods" is the first field of a form, not a success.
  */
-function Named({ draft, onChange }: { draft: Draft; onChange: () => void }) {
-  const title =
-    draft.product?.title ?? [draft.kind, draft.brand].filter(Boolean).join(" · ")
-
+function Named({
+  product,
+  onChange,
+}: {
+  product: AdminProduct
+  onChange: () => void
+}) {
   return (
     <Panel>
       <div className="flex items-center gap-3">
@@ -520,12 +551,10 @@ function Named({ draft, onChange }: { draft: Draft; onChange: () => void }) {
           <Check className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-body font-semibold">{title}</div>
-          {draft.product ? (
-            <div className="truncate text-micro tabular text-ink-faint">
-              {draft.product.sku} · javonda {draft.product.stock_left} dona
-            </div>
-          ) : null}
+          <div className="truncate text-body font-semibold">{product.title}</div>
+          <div className="truncate text-micro tabular text-ink-faint">
+            {product.sku} · javonda {product.stock_left} dona
+          </div>
         </div>
         <Button type="button" variant="secondary" size="sm" onClick={onChange}>
           O'zgartirish
@@ -536,27 +565,41 @@ function Named({ draft, onChange }: { draft: Draft; onChange: () => void }) {
 }
 
 /**
- * Which card. One panel for both answers: goods we have had are a search —
- * or a scan, which lands here already filled — and goods we have not are a
- * card written from kind + brand. The colour is not asked here: it belongs
- * to the count, and it is the part "yana bir rang" retypes.
+ * Which card. One panel, two answers of different shapes.
+ *
+ * **Found** is the fast path and what the bench does all day: type a word,
+ * scan a sticker already stuck on one of the shoes, or tap the learned
+ * `Tur` / `Brend` chips, which narrow the same search rather than opening
+ * anything — the server matches every word in any order against the title and
+ * the code, so `Krossovka` + `Nike` finds `Krossovka · Nike · Qora`.
+ *
+ * **Written** is the card form (§5.4). It used to be two chip rows and a
+ * photograph here, which wrote a card out of `kind` + `brand` + a colour typed
+ * into a box — and the box is the whole reason the palette exists. So the
+ * button opens `<CardForm mode="receiving">` instead: category first, then the
+ * name. The moment the card exists the form hands back its id and the receipt
+ * takes over with the colour, the sizes and the cost.
  */
 function IdentifyCard({
-  draft,
-  onSet,
   onPick,
-  onNamed,
+  onCreated,
 }: {
-  draft: Draft
-  onSet: <K extends keyof Draft>(key: K, value: Draft[K]) => void
   onPick: (product: AdminProduct) => void
-  onNamed: () => void
+  onCreated: (productId: number) => void
 }) {
   const [needle, setNeedle] = useState("")
+  const [kind, setKind] = useState("")
+  const [brand, setBrand] = useState("")
   const [writing, setWriting] = useState(false)
+  const [made, setMade] = useState(false)
   const vocab = useVocab()
-  const found = useProducts(writing ? "" : needle, "")
-  const results = needle.trim() && !writing ? (found.data?.items ?? []).slice(0, 8) : []
+  // The typed words and the tapped chips are one search, not two.
+  const asked = [needle, kind, brand]
+    .map((word) => word.trim())
+    .filter(Boolean)
+    .join(" ")
+  const found = useProducts(writing ? "" : asked, "")
+  const results = asked && !writing ? (found.data?.items ?? []).slice(0, 8) : []
 
   return (
     <Panel title="Nima keldi?">
@@ -574,7 +617,22 @@ function IdentifyCard({
                 className="h-control-lg pl-8 text-body" />
             </div>
 
-            {needle.trim() && found.isLoading ? <Waiting what="Kartalar" /> : null}
+            {/* The vocabulary the receipts have taught, as taps. Not a second
+                way to write a card any more — a shorter way to find one. */}
+            <Chips
+              label="Tur"
+              options={vocab.data?.kinds ?? []}
+              value={kind}
+              onChange={setKind}
+              placeholder="Krossovka" />
+            <Chips
+              label="Brend"
+              options={vocab.data?.brands ?? []}
+              value={brand}
+              onChange={setBrand}
+              placeholder="Nike" />
+
+            {asked && found.isLoading ? <Waiting what="Kartalar" /> : null}
 
             {results.length ? (
               <ul className="divide-y">
@@ -600,7 +658,7 @@ function IdentifyCard({
               </ul>
             ) : null}
 
-            {needle.trim() && found.data?.items.length === 0 ? (
+            {asked && found.data?.items.length === 0 ? (
               <p className="text-small text-ink-soft">
                 Bunday karta yo'q — quyidan yangi karta oching.
               </p>
@@ -624,35 +682,32 @@ function IdentifyCard({
           </>
         ) : (
           <>
-            <Chips
-              label="Tur"
-              options={vocab.data?.kinds ?? []}
-              value={draft.kind}
-              onChange={(value) => onSet("kind", value)}
-              placeholder="Krossovka" />
-            <Chips
-              label="Brend"
-              options={vocab.data?.brands ?? []}
-              value={draft.brand}
-              onChange={(value) => onSet("brand", value)}
-              placeholder="Nike"
-              none="brendsiz" />
+            {/* The duplicate guard, kept, and now fed by the words the person
+                typed into the search box before giving up on it. It asks
+                rather than merges: a kind and a make are not identity — Nike
+                sells more than one trainer. */}
+            <Maybe kind={asked} onPick={onPick} />
 
-            {draft.kind.trim() ? (
-              <>
-                <Maybe kind={draft.kind} brand={draft.brand} onPick={onPick} />
-                <Capture
-                  colour=""
-                  current={draft.snapshot || undefined}
-                  onTaken={(_, url) => onSet("snapshot", url)}
-                  guide="tanish uchun — mijozga ko'rinmaydi"
-                  placeholder="rasm" />
-                <Button size="lg" type="button" className="w-full gap-2" onClick={onNamed}>
-                  Davom etish
-                  <ArrowRight className="size-5" />
-                </Button>
-              </>
-            ) : null}
+            {/* §5.4's first entrance. `mode="receiving"` draws only what is
+                knowable with the goods in your hands, and it is mounted here
+                rather than in a modal so the screen stays one column down to
+                the Qabul bar.
+
+                Swapped for the wait the moment the card lands: the parent is
+                fetching it to put on the draft, and the form's next section
+                flashing up in that half-second reads as the screen changing
+                its mind about what it is asking. */}
+            {made ? (
+              <Waiting what="Karta" />
+            ) : (
+              <CardForm
+                mode="receiving"
+                onCreated={(id) => {
+                  setMade(true)
+                  onCreated(id)
+                }}
+              />
+            )}
 
             <button
               type="button"
@@ -673,18 +728,9 @@ function IdentifyCard({
  * more than one trainer — and a wrong match costs a returned order where a
  * duplicate costs a merge.
  */
-function Maybe({
-  kind,
-  brand,
-  onPick,
-}: {
-  kind: string
-  brand: string
-  onPick: (product: AdminProduct) => void
-}) {
-  const needle = [kind, brand].filter(Boolean).join(" ")
-  const found = useProducts(needle, "")
-  const like = (found.data?.items ?? []).slice(0, 3)
+function Maybe({ kind, onPick }: { kind: string; onPick: (p: AdminProduct) => void }) {
+  const found = useProducts(kind, "")
+  const like = kind ? (found.data?.items ?? []).slice(0, 3) : []
 
   if (!like.length) return null
 
@@ -740,14 +786,12 @@ function Chips({
   value,
   onChange,
   placeholder,
-  none,
 }: {
   label: string
   options: string[]
   value: string
   onChange: (value: string) => void
   placeholder: string
-  none?: string
 }) {
   const [writing, setWriting] = useState(false)
   // The value first, always, even when it is not one of the learned options —
@@ -776,11 +820,6 @@ function Chips({
             {one}
           </button>
         ))}
-        {none && !value ? (
-          <span className="inline-flex h-control items-center rounded-control border border-dashed px-3 text-small text-ink-faint">
-            {none}
-          </span>
-        ) : null}
         {typing ? (
           <Input
             autoFocus={writing}
@@ -821,46 +860,56 @@ function Chips({
  * the card and the cost carried between them. The size→quantity table stays
  * in the order it is typed, because that is the order the stickers print in
  * and the order the piles sit on the table.
+ *
+ * **Neither answer is typed any more.** The colour comes off §5.3's palette,
+ * with its swatch, and the sizes are offered by the run of sizes the card is
+ * numbered in. Those are the two boxes that produced `qora` / `Qora` / `QORA`
+ * and a European 43 sitting beside a UK 9 on one card.
  */
 function Counts({
   product,
   kind,
   colour,
   ownColours,
+  needsColour,
   lines,
   onColour,
   onLines,
 }: {
-  product: AdminProduct | null
+  product: AdminProduct
   kind: string
   colour: string
   ownColours: string[]
+  needsColour: boolean
   lines: SizeLine[]
-  onColour: (colour: string) => void
+  onColour: (colour: string, hex: string) => void
   onLines: (lines: SizeLine[]) => void
 }) {
   const vocab = useVocab()
-  const grid = useVariants(product?.id ?? null)
+  const grid = useVariants(product.id)
+  const sized = useProductSizeSystem(product.id)
   const [adding, setAdding] = useState("")
   const [typing, setTyping] = useState(false)
 
   // Some things have no size: a cap, a bag. The question is answered before
-  // it is asked — from the card when there is one, otherwise from what this
-  // kind has always arrived as — and `chose` is a hand on the wheel: once
-  // somebody has said which it is, nothing overrules them.
+  // it is asked — and `chose` is a hand on the wheel: once somebody has said
+  // which it is, nothing overrules them.
+  //
+  // The card's own answer is read in this order because the three sources
+  // disagree about what "nothing" means. A named system is the card saying
+  // *sized* outright (§6.3). Failing that, variants already on the card are
+  // the only evidence that survives a reload. `size_system: null` alone is
+  // **not** read as sizeless here: every card written before the systems
+  // existed is null, and reading those as sizeless would drop the size column
+  // off half the catalogue.
   const [chose, setChose] = useState<boolean | null>(null)
+  const system = sized.data?.size_system ?? null
   const cardIsSizeless =
     (grid.data ?? []).length > 0 && (grid.data ?? []).every((cell) => !cell.size)
   const kindIsSizeless = (vocab.data?.sizeless ?? []).includes(kind)
-  const sizeless = chose ?? (product ? cardIsSizeless : kindIsSizeless)
-
-  // A question with one answer is a tap for nothing: a card that only ever
-  // came in black starts with black picked.
-  const only = ownColours.length === 1 ? ownColours[0] : null
-  useEffect(() => {
-    if (only !== null && !colour) onColour(only)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [only])
+  const sizeless =
+    chose ??
+    (system ? false : (grid.data ?? []).length > 0 ? cardIsSizeless : kindIsSizeless)
 
   // What a colour and size already holds, so a second count of the same size
   // reads as an addition rather than a figure about to be overwritten.
@@ -880,22 +929,26 @@ function Counts({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stale])
 
-  const colourOptions = useMemo(() => {
-    const seen = new Set([...ownColours, ...(vocab.data?.colours ?? [])])
-    return [...seen].slice(0, 12)
-  }, [ownColours, vocab.data])
-
-  /** Sizes worth offering: the card's own in this colour, and what this kind
-   *  last arrived in — minus the ones already on the table. */
+  /** Sizes worth offering: the run this card is numbered in, whatever it
+   *  already carries in this colour, and what this kind last arrived in —
+   *  minus the ones already on the table. */
   const suggested = useMemo(() => {
     const mine = (grid.data ?? [])
       .filter((cell) => !colour || cell.colour === colour)
       .map((cell) => cell.size)
-    const seen = new Set([...mine, ...(vocab.data?.sizes[kind] ?? [])].map(tidySize))
+    const seen = new Set(
+      [
+        ...(system?.values ?? []),
+        ...mine,
+        // Only when nothing is named: a card numbered in EUR must not be
+        // offered the UK 9 the vocabulary learnt from a different card.
+        ...(system ? [] : (vocab.data?.sizes[kind] ?? [])),
+      ].map(tidySize),
+    )
     seen.delete("")
     for (const line of lines) seen.delete(line.size)
     return [...seen].sort(bySize)
-  }, [grid.data, vocab.data, kind, colour, lines])
+  }, [grid.data, vocab.data, kind, colour, lines, system])
 
   // One spelling, so `xl` typed in a hurry does not stand beside `XL` as a
   // second size, a second variant and a second barcode. Appended, never
@@ -914,32 +967,29 @@ function Counts({
   const total = countOf(lines)
 
   return (
-    <Panel
-      title="Nechta keldi?"
-      aside={
-        <Segmented
-          label="O'lcham bormi?"
-          value={sizeless ? "sizeless" : "sized"}
-          onChange={(next) => {
-            const on = next === "sizeless"
-            if (on === sizeless) return
-            setChose(on)
+    <Panel title="Nechta keldi?">
+      <div className="space-y-3">
+        {needsColour ? (
+          <ColourPick own={ownColours} value={colour} onPick={onColour} />
+        ) : null}
+
+        <SizeRun
+          productId={product.id}
+          system={system}
+          sizeless={sizeless}
+          waiting={sized.isLoading}
+          mustChoose={
+            chose === null &&
+            !system &&
+            !kindIsSizeless &&
+            grid.data !== undefined &&
+            grid.data.length === 0
+          }
+          onSystem={(slug) => {
+            setChose(slug === null)
             onLines([])
           }}
-          options={[
-            { key: "sized", label: "O'lchamli" },
-            { key: "sizeless", label: "O'lchamsiz" },
-          ]}
         />
-      }
-    >
-      <div className="space-y-3">
-        <Chips
-          label="Rang — bitta qabul, bitta rang"
-          options={colourOptions}
-          value={colour}
-          onChange={onColour}
-          placeholder="Oq" />
 
         {sizeless ? (
           <label className="flex items-center gap-2">
@@ -1023,6 +1073,289 @@ function Counts({
         ) : null}
       </div>
     </Panel>
+  )
+}
+
+/**
+ * The receipt's one colour, off the palette (§5.3).
+ *
+ * **One, not several.** The card may come in six colours; this morning's sack
+ * is one of them, and white shoes and black shoes are two receipts with two
+ * sheets of stickers. So this is a row of single-choice chips and never the
+ * card form's tick-list — a ticked pair here would print one sheet of labels
+ * for two sacks and put both counts on whichever colour was read first.
+ *
+ * The card's own colours come first and on their own: a card that has only
+ * ever come in black is one tap, and the other thirty-one are behind
+ * **Boshqa rang**. A card with none — one written a minute ago by the form —
+ * gets the whole palette straight away, because there is nothing to shorten.
+ */
+function ColourPick({
+  own,
+  value,
+  onPick,
+}: {
+  own: string[]
+  value: string
+  onPick: (colour: string, hex: string) => void
+}) {
+  const palette = useColours()
+  const add = useAddColour()
+  const [wide, setWide] = useState(false)
+  const [query, setQuery] = useState("")
+  const [adding, setAdding] = useState("")
+  const [writing, setWriting] = useState(false)
+
+  const rows = palette.data ?? []
+  const hex = useMemo(() => new Map(rows.map((row) => [row.name, row.hex])), [rows])
+
+  // A question with one answer is a tap for nothing: a card that only ever
+  // came in black starts with black picked.
+  const only = own.length === 1 ? own[0] : null
+  useEffect(() => {
+    if (only !== null && !value) onPick(only, hex.get(only) ?? "")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [only, hex])
+
+  /** A colour the shop has not sold before, into the palette and onto this
+   *  receipt in one act — the second half is the point: nobody adds a colour
+   *  for its own sake, they add it because a sack of it is on the table. */
+  function keep() {
+    const wanted = adding.trim()
+    if (!wanted || add.isPending) return
+    add.mutate(
+      { name: wanted },
+      {
+        onSuccess: (made) => {
+          setAdding("")
+          setWriting(false)
+          setQuery("")
+          onPick(made.name, made.hex)
+        },
+      },
+    )
+  }
+
+  const showing = own.length > 0 && !wide
+  const shown = useMemo(() => {
+    const names = showing ? own : rows.map((row) => row.name)
+    // A colour on the card that the palette has never heard of still needs a
+    // chip, or a card written before the palette existed could not be received.
+    const all = showing ? names : [...own.filter((one) => !hex.has(one)), ...names]
+    const wanted = query.trim().toLowerCase()
+    return wanted ? all.filter((one) => one.toLowerCase().includes(wanted)) : all
+  }, [showing, own, rows, hex, query])
+
+  return (
+    <div>
+      <span className="mb-1 block text-micro text-ink-soft">
+        Rang — bitta qabul, bitta rang
+      </span>
+
+      {!showing && rows.length > 12 ? (
+        <div className="relative mb-1">
+          <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Rang qidirish"
+            aria-label="Rang qidirish"
+            className="h-control pl-8" />
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap gap-1">
+        {shown.map((one) => (
+          <button
+            key={one}
+            type="button"
+            onClick={() => onPick(one === value ? "" : one, hex.get(one) ?? "")}
+            className={cn(
+              "flex h-control items-center gap-2 rounded-control border px-3 text-small",
+              one === value && "border-brand bg-brand text-brand-ink",
+            )}
+          >
+            <Swatch hex={hex.get(one)} />
+            {one}
+          </button>
+        ))}
+
+        {showing ? (
+          <button
+            type="button"
+            onClick={() => setWide(true)}
+            className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep">
+            Boshqa rang
+          </button>
+        ) : null}
+
+        {!showing && !writing ? (
+          <button
+            type="button"
+            onClick={() => setWriting(true)}
+            className="h-control rounded-control border border-dashed px-3 text-small text-brand-deep">
+            + yangi rang
+          </button>
+        ) : null}
+      </div>
+
+      {/* Added from here, not from a settings screen. Somebody at a bench with
+          a sack of a colour the shop has never sold will not go and find the
+          owner — they will type it into whatever box accepts it, which is how
+          three spellings of one colour happened. The door is guarded
+          `CatalogReader` for exactly this. */}
+      {writing ? (
+        <div className="mt-2 flex items-end gap-2">
+          <label className="min-w-0 flex-1">
+            <span className="mb-1 block text-micro text-ink-soft">Yangi rang nomi</span>
+            <Input
+              autoFocus
+              value={adding}
+              onChange={(event) => setAdding(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter adds the colour and stops there — it must not reach
+                // the receipt form and submit a half-written receipt.
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                keep()
+              }}
+              placeholder="Feruza"
+              aria-label="Yangi rang nomi"
+              className="h-control" />
+          </label>
+          <Button
+            type="button"
+            variant="secondary"
+            className="gap-1"
+            disabled={!adding.trim() || add.isPending}
+            onClick={keep}
+          >
+            {add.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Plus className="size-4" />
+            )}
+            Qo'shish
+          </Button>
+        </div>
+      ) : null}
+
+      <Problem error={palette.error || add.error} />
+    </div>
+  )
+}
+
+/**
+ * Which run of sizes this card is numbered in — §5.3's size systems, at the
+ * bench (§7.8).
+ *
+ * The systems arrive with `family` and `scale` apart, so *Erkaklar poyabzali*
+ * is drawn once with EUR / UK / US / RUS under it rather than as four
+ * unrelated strings that happen to share a prefix.
+ *
+ * **O'lchamsiz is one of the answers, not a separate switch.** §6.3 says a
+ * card is sized or sizeless and never both, so saying so is the same act as
+ * naming a system and writes `slug: null` deliberately. It was a segmented
+ * control beside the panel title; two controls for one either/or is two places
+ * to answer the same question.
+ */
+function SizeRun({
+  productId,
+  system,
+  sizeless,
+  waiting,
+  mustChoose,
+  onSystem,
+}: {
+  productId: number
+  system: SizeSystem | null
+  sizeless: boolean
+  waiting: boolean
+  /** A card with nothing to go on — written this minute, no variants, no
+   *  learned habit. The run of sizes is the next thing it needs, so it is
+   *  asked outright rather than hidden behind a word. */
+  mustChoose: boolean
+  onSystem: (slug: string | null) => void
+}) {
+  const systems = useSizeSystems()
+  const write = useSetProductSizeSystem(productId)
+  const [offering, setOffering] = useState(false)
+  const showing = offering || mustChoose
+
+  // Grouped in the server's order, which is the order the picker draws them.
+  const families = useMemo(() => {
+    const held = new Map<string, SizeSystem[]>()
+    for (const one of systems.data ?? []) {
+      const family = one.family || one.name
+      held.set(family, [...(held.get(family) ?? []), one])
+    }
+    return [...held]
+  }, [systems.data])
+
+  function choose(slug: string | null) {
+    setOffering(false)
+    onSystem(slug)
+    write.mutate(slug)
+  }
+
+  const said = system ? system.name : sizeless ? "O'lchamsiz" : "Tanlanmagan"
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-micro text-ink-soft">O'lcham tizimi</span>
+        <span className="text-small font-medium">{waiting ? "…" : said}</span>
+        {write.isPending ? (
+          <Loader2 className="size-4 animate-spin text-ink-faint" />
+        ) : null}
+        {mustChoose ? (
+          <span className="text-micro text-ink-faint">
+            o'lchamlar shundan taklif qilinadi
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setOffering((was) => !was)}
+            className="text-micro text-brand-deep hover:underline">
+            {system || sizeless ? "O'zgartirish" : "Tanlash"}
+          </button>
+        )}
+      </div>
+
+      {showing ? (
+        <div className="mt-2 space-y-2 rounded-control border border-line p-3">
+          {families.map(([family, runs]) => (
+            <div key={family} className="flex flex-wrap items-center gap-1">
+              <span className="mr-1 w-full text-small sm:w-auto">{family}</span>
+              {runs.map((run) => (
+                <button
+                  key={run.slug}
+                  type="button"
+                  onClick={() => choose(run.slug)}
+                  className={cn(
+                    "h-control rounded-control border border-line px-3 text-small hover:bg-line-soft",
+                    system?.slug === run.slug && "border-brand bg-brand-soft",
+                  )}
+                >
+                  {run.scale || run.name}
+                </button>
+              ))}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => choose(null)}
+            className={cn(
+              "h-control rounded-control border border-line px-3 text-small hover:bg-line-soft",
+              sizeless && "border-brand bg-brand-soft",
+            )}
+          >
+            O'lchamsiz — bu tavarda o'lcham yo'q
+          </button>
+          <Problem error={systems.error || write.error} />
+        </div>
+      ) : null}
+    </div>
   )
 }
 

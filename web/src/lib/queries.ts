@@ -854,6 +854,15 @@ export function useCreateProduct() {
       title: string
       category_slug: string
       price: number
+      /** The receiving desk's word — "Krossovka". Not the category: it is what
+       *  the learned vocabulary chips are grown from, so a card written without
+       *  one teaches the next receipt nothing. */
+      kind?: string
+      brand_slug?: string | null
+      /** The snapshot over the open sack. `PATCH /admin/products/{id}` is
+       *  admin-only, so anything the bench is to record about a card has to go
+       *  in at creation or not at all. */
+      snapshot_url?: string
     }) => api<AdminProduct>("/admin/products", { body: input }),
     onSuccess: () => invalidate(client, [["products"]]),
   })

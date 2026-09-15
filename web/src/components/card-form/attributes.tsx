@@ -86,19 +86,40 @@ export function Attributes({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
+        {/* The chip is the way back into the palette, not only a receipt for
+            it. Adding a seventh colour used to mean taking the chip off — and
+            `onColours([])` on a card with a live variant grid clears every
+            colour it sells in. Two sibling buttons rather than one inside the
+            other: a chip that opens the picker and a cross that empties it are
+            two acts, and only one of them should ever happen by accident. */}
         {colours.length ? (
-          <span className="flex h-control items-center gap-2 rounded-control border border-line px-2 text-small">
-            <span className="font-medium">Rang</span>
-            <span className="flex items-center gap-1">
-              {colours.map((name) => (
-                <Swatch key={name} hex={hex.get(name)} />
-              ))}
-            </span>
+          <span className="flex h-control items-center rounded-control border border-line text-small">
+            <button
+              type="button"
+              aria-label="Ranglarni tanlash"
+              onClick={() => setPicking(true)}
+              className={cn(
+                "flex h-full items-center gap-2 rounded-s-control ps-2 pe-1",
+                "transition-colors hover:bg-line-soft",
+                "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
+              )}
+            >
+              <span className="font-medium">Rang</span>
+              <span className="flex items-center gap-1">
+                {colours.map((name) => (
+                  <Swatch key={name} hex={hex.get(name)} />
+                ))}
+              </span>
+            </button>
             <button
               type="button"
               aria-label="Rangni o'chirish"
               onClick={() => onColours([])}
-              className="text-ink-faint hover:text-danger"
+              className={cn(
+                "flex h-full items-center rounded-e-control ps-1 pe-2 text-ink-faint",
+                "transition-colors hover:text-danger",
+                "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
+              )}
             >
               <X className="size-3.5" />
             </button>

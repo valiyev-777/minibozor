@@ -40,7 +40,7 @@ import { Download, Filter as FilterGlyph, Search, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 
-import { Empty, Problem, type Tone } from "@/components/page"
+import { Empty, Problem, type Tone, Waiting } from "@/components/page"
 import { cn } from "@/lib/cn"
 import { groups } from "@/lib/format"
 
@@ -189,6 +189,7 @@ export function DataTable<T>({
   search,
   searchable = true,
   exportable = true,
+  body,
   className,
 }: {
   title: string
@@ -232,6 +233,22 @@ export function DataTable<T>({
   searchable?: boolean
   /** A list nobody would take away from the screen — a pick queue, a shelf. */
   exportable?: boolean
+  /**
+   * Draw the records some other way than as rows.
+   *
+   * The catalogue is scanned rather than read, so it is a grid of photographs
+   * — but everything *above* the records is the same list screen as the other
+   * ten: one search box, one filter drawer, one export, one address bar. That
+   * toolbar is what makes a filtered list a link somebody can send, so a
+   * screen with its own idea of a record keeps it and replaces this much.
+   *
+   * It is handed the page of records the table would have drawn, already
+   * searched, sorted and sliced, and the waiting, empty and paging states
+   * stay the table's — a screen that renders its own rows should not have to
+   * re-invent what "nothing matched" looks like. Omitted, the table draws its
+   * table, which is what every other caller wants.
+   */
+  body?: (rows: T[]) => React.ReactNode
   className?: string
 }) {
   const state = useTableState(namespace)
@@ -299,8 +316,7 @@ export function DataTable<T>({
   )
   const first = (state.page - 1) * state.size
 
-  const body = columns
-  const span = body.length + 1 + (indicator ? 1 : 0)
+  const span = columns.length + 1 + (indicator ? 1 : 0)
 
   return (
     <section
@@ -441,147 +457,159 @@ export function DataTable<T>({
       ) : null}
 
       {/* ------------------------------------------------------------- rows */}
-      <div className="scroll-slim mt-4 overflow-x-auto">
-        <table className="table-striped w-full border-collapse text-small">
-          <thead>
-            <tr
-              className={cn(
-                "bg-line-soft text-micro font-medium text-ink-soft",
-                // The header is a band inside the card, not a lid on it: its
-                // outer corners are the control radius so it sits in the
-                // padding rather than butting up against nothing.
-                "[&>th:first-child]:rounded-s-control [&>th:last-child]:rounded-e-control",
-              )}
-            >
-              {indicator ? <th className="w-1 px-0" /> : null}
-              <th className="w-1 whitespace-nowrap px-2 py-2.5 text-center font-medium">
-                №
-              </th>
-              {body.map((column) => (
-                <th
-                  key={column.key}
-                  style={column.width ? { width: column.width } : undefined}
-                  className={cn(
-                    "whitespace-nowrap px-4 py-2.5 font-medium",
-                    column.numeric || column.align === "end"
-                      ? "text-right"
-                      : column.align === "center"
-                        ? "text-center"
-                        : "text-left",
-                  )}
-                >
-                  {column.sortable ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        state.setSort(
-                          column.key,
-                          state.sort === column.key && state.direction === "asc"
-                            ? "desc"
-                            : "asc",
-                        )
-                      }
-                      className={cn(
-                        "inline-flex items-center gap-1 transition-colors hover:text-ink",
-                        state.sort === column.key && "text-brand",
-                      )}
-                    >
-                      {column.header}
-                      <span aria-hidden className="text-micro">
-                        {state.sort === column.key
-                          ? state.direction === "asc"
-                            ? "↑"
-                            : "↓"
-                          : "↕"}
-                      </span>
-                    </button>
-                  ) : (
-                    column.header
-                  )}
+      {body ? (
+        <div className="mt-4">
+          {loading ? (
+            <Waiting />
+          ) : page.length === 0 ? (
+            <Empty icon={empty.icon} title={empty.title} what={empty.what} />
+          ) : (
+            body(page)
+          )}
+        </div>
+      ) : (
+        <div className="scroll-slim mt-4 overflow-x-auto">
+          <table className="table-striped w-full border-collapse text-small">
+            <thead>
+              <tr
+                className={cn(
+                  "bg-line-soft text-micro font-medium text-ink-soft",
+                  // The header is a band inside the card, not a lid on it: its
+                  // outer corners are the control radius so it sits in the
+                  // padding rather than butting up against nothing.
+                  "[&>th:first-child]:rounded-s-control [&>th:last-child]:rounded-e-control",
+                )}
+              >
+                {indicator ? <th className="w-1 px-0" /> : null}
+                <th className="w-1 whitespace-nowrap px-2 py-2.5 text-center font-medium">
+                  №
                 </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {loading ? (
-              <Skeleton columns={body.length + (indicator ? 1 : 0)} />
-            ) : page.length === 0 ? (
-              // Not a row: the stripe and the hover belong to records, and
-              // a tinted band behind an empty state reads as one grey row.
-              <tr className="bg-surface!">
-                <td colSpan={span}>
-                  <Empty
-                    bare
-                    icon={empty.icon}
-                    title={empty.title}
-                    what={empty.what}
-                  />
-                </td>
-              </tr>
-            ) : (
-              page.map((row, at) => (
-                // A row that opens a panel is reachable from the keyboard, and
-                // that is not only for whoever cannot use a mouse: a panel
-                // opened from an element that cannot hold focus has nowhere to
-                // put focus back when it closes, so `Esc` out of a customer
-                // used to drop the caret on `<body>` and the next `Tab`
-                // started again at the top of the rail.
-                <tr
-                  key={rowKey(row, at)}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  tabIndex={onRowClick ? 0 : undefined}
-                  onKeyDown={
-                    onRowClick
-                      ? (event) => {
-                          if (event.key !== "Enter" && event.key !== " ") return
-                          if (event.target !== event.currentTarget) return
-                          event.preventDefault()
-                          onRowClick(row)
+                {columns.map((column) => (
+                  <th
+                    key={column.key}
+                    style={column.width ? { width: column.width } : undefined}
+                    className={cn(
+                      "whitespace-nowrap px-4 py-2.5 font-medium",
+                      column.numeric || column.align === "end"
+                        ? "text-right"
+                        : column.align === "center"
+                          ? "text-center"
+                          : "text-left",
+                    )}
+                  >
+                    {column.sortable ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          state.setSort(
+                            column.key,
+                            state.sort === column.key && state.direction === "asc"
+                              ? "desc"
+                              : "asc",
+                          )
                         }
-                      : undefined
-                  }
-                  className={cn(
-                    "transition-colors",
-                    onRowClick &&
-                      "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
-                  )}
-                >
-                  {indicator ? (
-                    <td className="w-1 px-0 align-middle">
-                      <Bar tone={indicator.of(row)} />
-                    </td>
-                  ) : null}
-                  <td className="w-1 whitespace-nowrap px-2 py-cell text-center text-ink-soft tabular">
-                    {first + at + 1}.
-                  </td>
-                  {body.map((column) => {
-                    const value = column.cell(row, first + at)
-                    return (
-                      <td
-                        key={column.key}
                         className={cn(
-                          "px-4 py-cell align-middle",
-                          column.numeric && "text-right tabular",
-                          !column.numeric && column.align === "end" && "text-right",
-                          column.align === "center" && "text-center",
-                          column.className,
+                          "inline-flex items-center gap-1 transition-colors hover:text-ink",
+                          state.sort === column.key && "text-brand",
                         )}
                       >
-                        {value === null || value === undefined || value === "" ? (
-                          <span className="text-ink-faint">—</span>
-                        ) : (
-                          value
-                        )}
-                      </td>
-                    )
-                  })}
+                        {column.header}
+                        <span aria-hidden className="text-micro">
+                          {state.sort === column.key
+                            ? state.direction === "asc"
+                              ? "↑"
+                              : "↓"
+                            : "↕"}
+                        </span>
+                      </button>
+                    ) : (
+                      column.header
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading ? (
+                <Skeleton columns={columns.length + (indicator ? 1 : 0)} />
+              ) : page.length === 0 ? (
+                // Not a row: the stripe and the hover belong to records, and
+                // a tinted band behind an empty state reads as one grey row.
+                <tr className="bg-surface!">
+                  <td colSpan={span}>
+                    <Empty
+                      bare
+                      icon={empty.icon}
+                      title={empty.title}
+                      what={empty.what}
+                    />
+                  </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                page.map((row, at) => (
+                  // A row that opens a panel is reachable from the keyboard, and
+                  // that is not only for whoever cannot use a mouse: a panel
+                  // opened from an element that cannot hold focus has nowhere to
+                  // put focus back when it closes, so `Esc` out of a customer
+                  // used to drop the caret on `<body>` and the next `Tab`
+                  // started again at the top of the rail.
+                  <tr
+                    key={rowKey(row, at)}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    tabIndex={onRowClick ? 0 : undefined}
+                    onKeyDown={
+                      onRowClick
+                        ? (event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return
+                            if (event.target !== event.currentTarget) return
+                            event.preventDefault()
+                            onRowClick(row)
+                          }
+                        : undefined
+                    }
+                    className={cn(
+                      "transition-colors",
+                      onRowClick &&
+                        "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
+                    )}
+                  >
+                    {indicator ? (
+                      <td className="w-1 px-0 align-middle">
+                        <Bar tone={indicator.of(row)} />
+                      </td>
+                    ) : null}
+                    <td className="w-1 whitespace-nowrap px-2 py-cell text-center text-ink-soft tabular">
+                      {first + at + 1}.
+                    </td>
+                    {columns.map((column) => {
+                      const value = column.cell(row, first + at)
+                      return (
+                        <td
+                          key={column.key}
+                          className={cn(
+                            "px-4 py-cell align-middle",
+                            column.numeric && "text-right tabular",
+                            !column.numeric && column.align === "end" && "text-right",
+                            column.align === "center" && "text-center",
+                            column.className,
+                          )}
+                        >
+                          {value === null || value === undefined || value === "" ? (
+                            <span className="text-ink-faint">—</span>
+                          ) : (
+                            value
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* -------------------------------------------------- legend and pager */}
       {(indicator && page.length > 0) || (!loading && state.size < records) ? (

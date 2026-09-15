@@ -85,7 +85,6 @@ export function ProductsPage() {
   const [openId, setOpenId] = useState<number | null>(null)
   const [view, setView] = useCatalogueView()
   const products = useProducts(state.q, status, stock)
-  const cards = products.data?.items ?? []
 
   if (openId) return <Card id={openId} onBack={() => setOpenId(null)} />
 
@@ -94,14 +93,18 @@ export function ProductsPage() {
       <PageHeader title="Mahsulotlar" subtitle="Kataloq — kompaniyaniki" />
 
       {/* The toolbar is the table's in both views — one search box, one set of
-          filters, one export, one address bar. There is no slot for a body
-          other than rows, so on the card view the table keeps its toolbar and
-          its rows region is collapsed; the cards are drawn under it from the
-          same page of records. */}
+          filters, one export, one address bar. Only the records are drawn
+          differently, so the card view hands the table a `body` and the table
+          keeps everything else. It used to hide the rows with a selector
+          against the table's own internals, which left every catalogue row in
+          the document: read aloud by a screen reader, tabbed into, and
+          clickable by anything driving the page. */}
       <DataTable<AdminProduct>
-        className={cn(
-          view === "grid" && "[&>.scroll-slim]:hidden [&>.scroll-slim~div]:hidden",
-        )}
+        body={
+          view === "grid"
+            ? (rows) => <ProductGrid cards={rows} onOpen={setOpenId} />
+            : undefined
+        }
         title="Mahsulotlar"
         rows={products.data?.items ?? []}
         total={products.data?.total}
@@ -255,23 +258,6 @@ export function ProductsPage() {
           },
         ]}
       />
-
-      {/* The cards, under the toolbar that chose them. Loading and emptiness
-          are drawn here because the table's own versions of both are inside
-          the rows region this view collapses. */}
-      {view === "grid" ? (
-        products.isLoading ? (
-          <Waiting />
-        ) : cards.length === 0 ? (
-          <Empty
-            icon={PackageSearch}
-            title="Bunday karta yo'q"
-            what="Kartalar qabul ekranida yoziladi."
-          />
-        ) : (
-          <ProductGrid cards={cards} onOpen={setOpenId} />
-        )
-      ) : null}
     </div>
   )
 }

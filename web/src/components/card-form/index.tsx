@@ -43,7 +43,7 @@ import { GatePanel } from "@/components/card-form/gate-panel"
 import { PriceTable } from "@/components/card-form/price-table"
 import { RichText, isBlank, tidyHtml } from "@/components/card-form/rich-text"
 import { Empty, Problem, Waiting } from "@/components/page"
-import { Photos } from "@/components/photo-step"
+import { Capture, Photos } from "@/components/photo-step"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/cn"
@@ -63,6 +63,7 @@ import {
   useSetProductSizeSystem,
   useSpecs,
   useVariants,
+  useVocab,
   useWriteSpecs,
 } from "@/lib/queries"
 import type { Spec } from "@/lib/types"
@@ -149,8 +150,18 @@ export function CardForm({ productId, mode, onCreated, onDone }: CardFormProps) 
  */
 function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
   const create = useCreateProduct()
+  const vocab = useVocab()
+  const brands = useBrands()
   const [category, setCategory] = useState<string | null>(null)
   const [title, setTitle] = useState("")
+  // Everything below goes in at creation or not at all: the bench may open a
+  // card (`POST /admin/products` admits it) but may not edit one afterwards
+  // (`PATCH` is CatalogWriter). So the three things the old chip flow captured
+  // — the kind, the make and the snapshot over the open sack — are asked here.
+  const [kind, setKind] = useState("")
+  const [brand, setBrand] = useState<string | null>(null)
+  const [noBrand, setNoBrand] = useState(false)
+  const [snapshot, setSnapshot] = useState("")
 
   return (
     <div className="space-y-5">
@@ -183,7 +194,15 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
               disabled={!title.trim() || create.isPending}
               onClick={() =>
                 create.mutate(
-                  { sku: "", title: title.trim(), category_slug: category, price: 0 },
+                  {
+                    sku: "",
+                    title: title.trim(),
+                    category_slug: category,
+                    price: 0,
+                    kind: kind.trim(),
+                    brand_slug: noBrand ? null : brand,
+                    snapshot_url: snapshot,
+                  },
                   { onSuccess: (card) => onCreated(card.id) },
                 )
               }
@@ -193,6 +212,83 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
             </Button>
           </div>
           <Problem error={create.error} />
+        </Section>
+      ) : null}
+
+      {category ? (
+        <Section
+          step={3}
+          title="Tur · Brend · Rasm"
+          hint="Uchalasi ham ixtiyoriy — lekin karta ochilgandan keyin stolda o'zgartirib bo'lmaydi."
+        >
+          <div className="space-y-3">
+            <div>
+              <p className="mb-1 text-micro text-ink-soft">Tur</p>
+              <div className="flex flex-wrap items-center gap-2">
+                {(vocab.data?.kinds ?? []).slice(0, 8).map((one) => (
+                  <Button
+                    key={one}
+                    type="button"
+                    size="sm"
+                    variant={kind === one ? "primary" : "secondary"}
+                    onClick={() => setKind(kind === one ? "" : one)}
+                  >
+                    {one}
+                  </Button>
+                ))}
+                <Input
+                  value={kind}
+                  maxLength={60}
+                  onChange={(event) => setKind(event.target.value)}
+                  placeholder="Krossovka"
+                  aria-label="Tur"
+                  className="h-control w-40"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="w-full text-micro text-ink-soft sm:w-auto">Brend</p>
+              <select
+                value={brand ?? ""}
+                disabled={noBrand}
+                onChange={(event) => setBrand(event.target.value || null)}
+                aria-label="Brend"
+                className="h-control min-w-48 rounded-control border border-line bg-surface px-2 text-small disabled:opacity-50"
+              >
+                <option value="">Tanlang</option>
+                {(brands.data ?? []).map((one) => (
+                  <option key={one.slug} value={one.slug}>
+                    {one.name}
+                  </option>
+                ))}
+              </select>
+              <label className="flex items-center gap-2 text-small">
+                <input
+                  type="checkbox"
+                  checked={noBrand}
+                  onChange={(event) => {
+                    setNoBrand(event.target.checked)
+                    if (event.target.checked) setBrand(null)
+                  }}
+                />
+                Mavjud emas
+              </label>
+            </div>
+
+            <div>
+              <p className="mb-1 text-micro text-ink-soft">
+                Tanish uchun rasm — qopning ustidan, oq fon shart emas
+              </p>
+              <Capture
+                colour=""
+                current={snapshot || undefined}
+                onTaken={(_, url) => setSnapshot(url)}
+                guide="Shu tovarni keyin tanish uchun. Do'kon rasmi emas."
+                placeholder="rasm olish"
+              />
+            </div>
+          </div>
         </Section>
       ) : null}
     </div>
