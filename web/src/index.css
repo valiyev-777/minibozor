@@ -103,17 +103,10 @@
     font-family: var(--font-sans);
   }
 
-  /* Printing is a real output here — label sheets and cell labels — so the
-   * page furniture gets out of the way rather than being screenshotted. */
-  @media print {
-    .no-print {
-      display: none !important;
-    }
-
-    body {
-      background: white;
-    }
-  }
+  /* Printing is a real output here — the label roll and the cell labels — so
+   * the page furniture gets out of the way rather than being screenshotted.
+   * The rules live at the bottom of this file, unlayered, next to the sticker
+   * itself: `.no-print`, `.print-only` and everything `@page`. */
 }
 
 @layer components {
@@ -160,5 +153,177 @@
   .scroll-slim::-webkit-scrollbar-thumb {
     background-color: var(--color-brand);
     border-radius: 999px;
+  }
+}
+
+/* ------------------------------------------------------------- the label roll
+ *
+ * A 58 mm thermal printer, one sticker per page, printed once per unit. The
+ * two numbers that say how big a page is are NOT here — they are `LABEL_STOCK`
+ * in `src/components/label-roll.tsx`, which writes `@page` and the page box at
+ * runtime, because `@page` cannot read a custom property and the alternative
+ * is the paper size written twice in two files that quietly drift apart. What
+ * is here is everything that does not change when a shop buys a different
+ * roll.
+ *
+ * Deliberately outside `@layer`, so an unlayered rule beats every utility on
+ * the element: what goes on a sticker is not a place for a cascade argument.
+ *
+ * Millimetres throughout, and black on white regardless of the theme — a
+ * thermal head prints one colour on one paper, and a dark-mode sticker is a
+ * black rectangle and a wasted roll.
+ */
+
+.print-only {
+  display: none;
+}
+
+.label-page {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1mm;
+  overflow: hidden;
+  padding: 2mm 2.5mm;
+  background: white;
+  color: black;
+  font-family: var(--font-sans);
+}
+
+.label-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2mm;
+  min-width: 0;
+}
+
+/* The size is the biggest thing on the sticker: somebody sorting a shelf
+ * reads it from half a metre away and scans only when they need certainty. */
+.label-size {
+  font-size: 11mm;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.label-size-long {
+  font-size: 6.5mm;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.label-colour {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 4mm;
+  font-weight: 500;
+  line-height: 1;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Full width, because a gun reads a wide symbol from further away and the
+ * bench is not a laboratory. */
+.label-bars {
+  display: block;
+  width: 100%;
+  height: 15mm;
+  object-fit: contain;
+  object-position: center;
+}
+
+.label-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2mm;
+  font-size: 2.8mm;
+  line-height: 1.1;
+}
+
+.label-sku {
+  min-width: 0;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Not an identity — a counting aid. 10/10 is the only check there is that
+ * every unit got a sticker. */
+.label-count {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* A shelf-edge label is read from the aisle, so the code is the sticker. */
+.label-page-cell {
+  align-items: center;
+  justify-content: center;
+  gap: 2mm;
+  text-align: center;
+}
+
+.cell-code {
+  font-size: 13mm;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.cell-code-long {
+  font-size: 9mm;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* `@page` already says margin: 0, and a browser's own 8 px on the body on
+   * top of it would push every sticker down and off its own label. */
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+
+  /* When a roll is on the page, the roll *is* the print job. The screen it
+   * was launched from — a receipt, a search, the shelf map — is not what a
+   * 58 mm thermal printer is for, and a person who has to untick two boxes
+   * once should not also have to choose a page range every time. */
+  body:has(.label-roll) #root {
+    display: none !important;
+  }
+
+  /* One sticker per page, so the driver advances the roll between them. The
+   * last one does not push a blank page out after it. */
+  .label-page {
+    break-inside: avoid;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .label-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  /* The browser is told to keep the bars black even in its ink-saving mood:
+   * a barcode printed in grey is a barcode nothing reads. */
+  .label-bars {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 }

@@ -418,10 +418,10 @@ function RailGroup({
 /**
  * The number beside a menu item, from the dashboard tile of the same key.
  *
- * A queue nobody can see the length of is a queue that grows. "Sotuvga
- * chiqarish" holds goods that are on a shelf and unsellable, which breaks
- * nothing and errors nowhere — so the only thing that makes it get worked is
- * a figure somebody walks past.
+ * A queue nobody can see the length of is a queue that grows. The held-back
+ * cards in "Mahsulotlar" are goods on a shelf that no customer can buy, which
+ * breaks nothing and errors nowhere — so the only thing that makes the queue
+ * get worked is a figure somebody walks past.
  *
  * On a collapsed rail there is no room for the figure, and a queue that
  * disappears when the rail narrows is the same queue nobody can see. It
@@ -662,7 +662,6 @@ function initials(name: string): string {
 function roleWord(role: string): string {
   if (role === "admin") return "Administrator"
   if (role === "warehouse") return "Ombor xodimi"
-  if (role === "seller") return "Sotuvchi"
   if (role === "courier") return "Kuryer"
   return role
 }

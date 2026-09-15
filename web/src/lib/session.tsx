@@ -12,7 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 
 import { api, tokens } from "@/lib/api"
 
-export type Role = "admin" | "warehouse" | "seller" | "courier" | "customer"
+export type Role = "admin" | "warehouse" | "courier" | "customer"
 
 export type Staff = {
   id: number

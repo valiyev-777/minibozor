@@ -63,7 +63,8 @@ Sizes are **tokens that move with density**, never literals:
 One class on the shell, from `densityFor(role)` in `web/src/lib/nav.ts`:
 
 - `.density-compact` — admin. 14px body, 36px control. Hundreds of rows at a desk.
-- `.density-cozy` — seller / warehouse. 15px body, 40px control.
+- `.density-cozy` — warehouse. 15px body, 40px control. Also the fallback, so
+  a role added later is cozy until somebody decides otherwise.
 - `.density-comfortable` — courier. 18px body, 56px control, 64px primary.
 
 A component reads `h-control` / `h-control-sm` / `h-control-lg` (and

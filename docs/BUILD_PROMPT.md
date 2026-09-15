@@ -46,7 +46,7 @@ have been deleted. They are replaced by **one** web app (see §6).
 Environment facts you must not rediscover:
 
 - Python lives in `backend/.venv` — it has `pip` and `uv`. There is no global python.
-- Postgres runs via `cd backend && docker compose up -d`, on host port **5434**.
+- Postgres runs via `docker compose up -d db` from the repository root, on host port **5434**.
   Credentials come from `backend/.env` (gitignored).
 - `MB_DATABASE_URL` selects SQLite or Postgres; one codebase runs on both.
 - The API refuses to start if the Alembic revision is behind head. Keep that.
@@ -412,6 +412,11 @@ Stop and report after each one.
 
 ## 8b. What the receiving desk became (2026-09-09, built and walked)
 
+> Parts of this section were superseded on 2026-09-15 — the receiving door,
+> the printer and the publishing screen. **§8d is what is true now**; the
+> bullets below have been corrected in place where they would otherwise send
+> somebody at an endpoint that no longer exists.
+
 The brief above described `Qabul` as two stages with a sorting table. It was
 built that way and it had a dead end in it: writing a card needed a category,
 the seed writes none, and the warehouse role may read categories but not write
@@ -421,11 +426,10 @@ any further work must not undo:
 - **A card can be a stub.** `Product.category_id` is nullable and `price`
   starts at 0. `app.products.unready` names the three gaps — category, price,
   a photograph per colour — and `POST .../status` refuses on all three.
-- **`POST /warehouse/piles` is the receiving door.** One request writes or
+- **`POST /warehouse/receipts` is the receiving door.** One request writes or
   reuses the card, generates the codes, makes the cells for the sizes that
-  arrived, and moves the goods to the cell that was typed. One movement, from
-  the outside world to where the goods are. An empty cell code means the
-  receiving area and is not an error.
+  arrived, and receives the goods into `QABUL`. It does not ask for a cell —
+  that is `POST /warehouse/receipts/{id}/shelve`, answered at the shelf (§8d).
 - **The vocabulary is learned, not configured.** `GET /warehouse/vocab`
   answers with the kinds, makes, colours and per-kind sizes that have come
   through the door. No vocabulary screen. `+ yangi` writes a brand the first
@@ -433,19 +437,19 @@ any further work must not undo:
   two cards.
 - **`Product.kind`** is the desk's word ("Krossovka"), not the category, and
   it is what the chips are built from. **`Product.snapshot_url`** is the
-  identification photograph taken over the open sack — never shown to a
+  identification photograph taken at the bench — never shown to a
   customer; its job is telling two black trainers apart in a search result.
-- **`/sotuvga-chiqarish`** is the queue of stubs, in the **admin** menu only:
-  filing a card needs a category and writing a category is the office's, so
-  putting it in the warehouse menu would be a screen whose first control
-  refuses. Its count rides in the rail and on the dashboard.
-- **Cost is captured at the bench** (`PileIn.unit_cost`, required) and the
+- **The queue of stubs** is the `Rasmsiz` filter on `/mahsulotlar`; the screen
+  `/sotuvga-chiqarish` that used to hold it is deleted (§8d). Its count still
+  rides in the rail and on the dashboard, linking to
+  `/mahsulotlar?status=draft`.
+- **Cost is captured at the bench** (`ReceiptIn.unit_cost`, required) and the
   selling price at the desk (`POST .../products/{id}/price`, every cell at
   once). A guessed cost is worse than an empty one: it reaches the profit
   report looking like a fact.
-- **There is no printer yet.** The codes are shown large enough to write on the
-  box with a marker; a print button is additive when hardware arrives, and the
-  code format does not change.
+- **The printer arrived** on 2026-09-15: a 58 mm thermal roll, one sticker per
+  unit, printed by the receipt itself (§8d). The code format did not change,
+  as promised here.
 - **Counts add, and nothing saves until submit.** Both were bugs in the screen
   this replaced.
 
@@ -453,21 +457,21 @@ any further work must not undo:
 what happens. Every defect in the list above was found that way and none of
 them by the test suite, because each phase's tests passed in isolation.
 
-## 8c. The seller, and the shop window (2026-09-09)
+## 8c. The shop window (2026-09-09, the role removed 2026-09-15)
 
 The brief says "no sellers". That still holds for the *marketplace* seller —
 `Seller`, offers, settlement, payouts and statements are gone, and a test
-proves no such endpoint exists. But there is now a `seller` **role**, and it is
-a shop assistant rather than an outside merchant.
+proves no such endpoint exists. A `seller` **role** was added here as a shop
+assistant; it was deleted on 2026-09-15 (§8d). There is one shop, and the
+person who photographs the goods is the person who sells them. What survives
+of this section is the part about the card, not the part about who holds it.
 
 - **The bench's business with a card ends when the goods are on a shelf.** The
-  warehouse writes the stub through `POST /warehouse/piles` and may not price
-  goods or put them on sale: `deps.CatalogWriter` (seller + admin) guards the
-  price, the words, the specs and the status switch.
-- **`/sotuvga-chiqarish` is the seller's screen**, in the seller's menu and not
-  the office's. The route stays registered for an admin without the menu item,
-  because the dashboard tile links there and what is in the queue is money
-  standing still.
+  warehouse writes the stub through `POST /warehouse/receipts` and may not
+  price goods or put them on sale: `deps.CatalogWriter` — **admin only** now —
+  guards the price, the words, the specs and the status switch. The bench
+  keeps `CatalogReader`, so it still reads categories and hangs the
+  identification snapshot.
 - **Two lists.** `unready` is refused: a category, a price, a photograph per
   colour. `listing_gaps` is not: a subtitle, a description, a specification
   table, a second photograph. The apps hide a block whose field is empty — no
@@ -477,7 +481,52 @@ a shop assistant rather than an outside merchant.
 - `GET`/`PUT .../products/{id}/specs` exist now. The schema was there and the
   door was not: the cabinet that used to call it went with the sellers, and the
   phone had been rendering an empty block ever since.
-- Dev accounts: admin `…001`, warehouse `…002`, courier `…003`, seller `…004`.
+- Dev accounts: admin `…001`, warehouse `…002`, courier `…003`.
+
+## 8d. Receiving, labelling and publishing rebuilt (2026-09-15)
+
+The desk worked and nobody used it. The full argument is in
+`docs/RECEIVING_REBUILD.md`; this is what the code now does, and what further
+work must not undo.
+
+- **Receiving is two moments, not two screens.** `POST /warehouse/receipts`
+  takes one card, **one colour**, a size→quantity table in the order it was
+  typed, and the cost — and writes a `RECEIPT` movement into `QABUL`. No cell
+  is asked for at the bench: asking somebody who has not walked anywhere yet
+  where they will end up gets a guess, and a guess in the cell field is stock
+  in the wrong place. `POST /warehouse/receipts/{id}/shelve` answers that one
+  question at the shelf, usually by scanning the cell's own label. A mistyped
+  or retired cell is refused and the goods stay in `QABUL`; a receipt already
+  shelved answers politely rather than moving anything twice.
+- **Nothing is lost between the two moments.** `QABUL` is a `RECEIVING`
+  location and `RECEIVING` is in `models.SELLABLE_KINDS`: goods standing there
+  can be sold and picked. The cell makes them quick to find, not real.
+  `GET /warehouse/receipts/waiting` and the dashboard tile
+  `labelled_unshelved` carry the unanswered question across a reload.
+- **One sticker per unit, on a 58 mm thermal roll.** The receipt answers with
+  its label lines and their `copies`; `web/src/components/label-roll.tsx`
+  prints one 58 × 40 mm page per unit, grouped in the order the sizes were
+  typed, each numbered `n/copies`. The size is the biggest thing on the
+  sticker, the price is not on it at all, and the barcode is the variant's own
+  — twenty identical shoes carry twenty identical stickers, because a sticker
+  is not a serial number.
+- **The warehouse is scanner-first.** `GET /warehouse/scan?code=…` is one
+  router for a barcode, a SKU or a cell code and always answers 200 with a
+  typed verdict (`variant` / `cell` / `none`) — a zero-stock variant answers
+  too, which is why `where-is` could not simply be reused.
+  `web/src/components/scan.tsx` is the one component: a document-level
+  keyboard-wedge listener for the gun (a focused field always wins) and a
+  `BarcodeDetector` camera button for the phone. Manual entry stays on every
+  screen: there is one scanner and four people.
+- **Publishing lives on the card.** `/sotuvga-chiqarish` is deleted. A card
+  that is not on sale opens with one panel in `/mahsulotlar` holding the three
+  gates — category, price, a photograph per colour — each editable in place,
+  and one button that says what is missing until it is not.
+- **`UserRole.SELLER` is gone**, including from the Postgres enum (revision
+  `8a32e11a5130` moves any account holding it to admin first, because the type
+  cannot simply drop a value).
+- **The words `qop`, `pilla` and `saralash` are gone from every screen.** The
+  sack was how the goods arrived in the car, not what they are.
 
 ## 9. What to ask about
 

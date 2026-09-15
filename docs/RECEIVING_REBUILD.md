@@ -286,8 +286,11 @@ almost nothing together because they end at the same place — a string.
   - `/sanash` — a variant adds one to the counted quantity of its row.
 - Manual entry stays everywhere. There is one scanner and four people.
 
-`GET /warehouse/find` already resolves a name, a SKU or a barcode; the new
-endpoint should reuse it rather than grow a second search.
+*(Corrected while building: there is no `GET /warehouse/find`.)*
+`GET /warehouse/where-is` already resolves a name, a SKU or a barcode; the new
+endpoint reuses its exact-match leg rather than growing a second search — but
+it could not simply be called, because it resolves no cell code and drops a
+variant with no placements, and the scan router needs both.
 
 ---
 
@@ -356,9 +359,11 @@ This is the part that is "juda noqulay" today and it is worth real work:
 
 Do not "simplify" any of these away:
 
-1. Stock is a ledger. Receiving writes one `RECEIPT` movement into the named
-   cell. `StockPlacement` must equal the sum of movements; the suite asserts
-   it after every operation.
+1. Stock is a ledger. *(Corrected while building: this rule was written from
+   the old one-movement flow and §2 deliberately reverses it.)* Receiving
+   writes a `RECEIPT` movement into `QABUL`, and shelving writes a `PUTAWAY`
+   out of it into the cell. `StockPlacement` must equal the sum of movements;
+   the suite asserts it after every operation.
 2. Colour and size are two fields. Never one glued string.
 3. One card is sized **or** sizeless, never both.
 4. `xl` and `XL` are one size — tidied at every door that writes a variant.

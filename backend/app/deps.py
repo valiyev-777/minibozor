@@ -109,16 +109,12 @@ AdminUser = Annotated[User, Depends(require_role(UserRole.ADMIN))]
 OperatorUser = AdminUser
 
 # Who may put a picture on the server. Everyone whose work produces one: an
-# admin writing a card, the receiving desk photographing a pile it has just
-# sorted, a courier standing on a doorstep. Not a customer — their review
+# admin writing a card, the receiving desk photographing goods it has just
+# booked in, a courier standing on a doorstep. Not a customer — their review
 # photos come in through the review endpoint, which knows what they are for.
 MediaUploader = Annotated[
     User,
-    Depends(
-        require_role(
-            UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.SELLER, UserRole.COURIER
-        )
-    ),
+    Depends(require_role(UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.COURIER)),
 ]
 
 # Counting the shelf. A stock figure changes when something is booked in or
@@ -144,51 +140,43 @@ ReturnViewer = Annotated[
     User, Depends(require_role(UserRole.WAREHOUSE, UserRole.ADMIN))
 ]
 
-# Reading the order queue. Three jobs on one list, which is why it is one
-# endpoint with a status filter rather than three renderings of `orders`: the
-# office runs it, the warehouse picks from it, and the shop assistant is the
-# one who picks up the telephone. A customer ringing to ask where their order
-# is used to be a question only the owner could answer, which meant the owner
-# answered the telephone all day.
+# Reading the order queue. Two jobs on one list, which is why it is one
+# endpoint with a status filter rather than two renderings of `orders`: the
+# office runs it and the warehouse picks from it. Whoever answers the
+# telephone is one of those two people — there is nobody else here.
 OrderViewer = Annotated[
     User,
-    Depends(require_role(UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.SELLER)),
+    Depends(require_role(UserRole.ADMIN, UserRole.WAREHOUSE)),
 ]
 
 # Reading the catalogue's own vocabulary — the categories and brands a card
-# can be filed under. The receiving desk picks from both while sorting a
-# sack, so reading is theirs; *writing* one is not, and stays `AdminUser` on
-# the same paths.
+# can be filed under. The receiving desk picks from both while booking goods
+# in, so reading is theirs.
 CatalogReader = Annotated[
-    User, Depends(require_role(UserRole.WAREHOUSE, UserRole.SELLER, UserRole.ADMIN))
+    User, Depends(require_role(UserRole.WAREHOUSE, UserRole.ADMIN))
 ]
 
 # Writing the shop window: the photographs, the words, the price, and the
-# switch that puts a card on sale. The seller's whole job, and the admin
-# because they own the place — but not the warehouse, whose business with a
-# card ends when the goods are on a shelf.
-CatalogWriter = Annotated[
-    User, Depends(require_role(UserRole.SELLER, UserRole.ADMIN))
-]
+# switch that puts a card on sale. The admin's alone, because there is one
+# shop and its owner is the person who publishes — but not the warehouse,
+# whose business with a card ends when the goods are on a shelf.
+CatalogWriter = Annotated[User, Depends(require_role(UserRole.ADMIN))]
 
 # The shop's own figures. Everybody who works here except the courier, whose
-# screens are their own round and nothing else: the seller's menu carries the
-# publishing queue's count, and that count comes from here — a badge that
-# 403s is a badge that never appears, on the one queue nothing else reminds
-# anybody about.
+# screens are their own round and nothing else: the menu badges — the
+# publishing queue, the unshelved receipts — come from here, and a badge that
+# 403s is a badge that never appears.
 DashboardViewer = Annotated[
     User,
-    Depends(require_role(UserRole.ADMIN, UserRole.WAREHOUSE, UserRole.SELLER)),
+    Depends(require_role(UserRole.ADMIN, UserRole.WAREHOUSE)),
 ]
 
-# Moving an order along. The warehouse and the shop assistant join the office
-# here because most of the moves are theirs: a picker marks an order picked,
-# and the assistant on the telephone is the one who hears that it arrived.
-# Which moves each of them may make is decided inside the endpoint, because it
-# is a rule per transition and not per door — **cancelling is the owner's**,
-# and neither a picker at the bench nor an assistant on the telephone should
-# be able to call off a sale. Somebody has to answer for a cancelled order,
-# and that is the person whose shop it is.
+# Moving an order along. The warehouse joins the office here because most of
+# the moves are theirs: a picker marks an order picked. Which moves each may
+# make is decided inside the endpoint, because it is a rule per transition and
+# not per door — **cancelling is the owner's**, and a picker at the bench
+# should not be able to call off a sale. Somebody has to answer for a
+# cancelled order, and that is the person whose shop it is.
 OrderMover = OrderViewer
 
 # Handling the goods once they are back: a courier brings a collection in and

@@ -336,7 +336,7 @@ def delete_product(
 def update_product(
     product_id: int,
     payload: s.ProductUpdateIn,
-    # The seller's: the words on a card are the shop window, and the person
+    # The admin's: the words on a card are the shop window, and the person
     # who photographs the goods is the person who writes them.
     user: CatalogWriter,
     session: SessionDep,
@@ -374,7 +374,7 @@ def update_product(
 def set_product_status(
     product_id: int,
     payload: s.ProductStatusIn,
-    # The seller's, and only theirs. Goods reaching a shelf and goods reaching
+    # The admin's, and only theirs. Goods reaching a shelf and goods reaching
     # the shop are two decisions, and the second one is somebody's job rather
     # than a side effect of the first.
     user: CatalogWriter,
@@ -657,7 +657,7 @@ def retire_variant(
 def price_card(
     product_id: int,
     payload: s.CardPriceIn,
-    # The seller's. The cost is captured at the bench, where it is known; what
+    # The admin's. The cost is captured at the bench, where it is known; what
     # to charge for it is a decision about the shop window, made by whoever
     # is looking at the window.
     user: CatalogWriter,
@@ -738,8 +738,8 @@ def replace_specs(
     The apps read this as a table and a person writes it as one: the order
     matters, rows get reordered as often as they get changed, and a per-row
     door would mean three requests to swap two lines. There was a schema for
-    this and no endpoint — the seller's cabinet that used to call it went with
-    the sellers, and the phone has been rendering an empty block ever since.
+    this and no endpoint — the merchant cabinet that used to call it went with
+    the marketplace, and the phone has been rendering an empty block ever since.
     """
     product = _product(session, product_id)
 
@@ -810,7 +810,7 @@ def add_image(
     product_id: int,
     payload: s.ImageWriteIn,
     # Both: the receiving desk hangs the identification snapshot on a card it
-    # has just written, and the seller hangs the catalogue photographs.
+    # has just written, and the admin hangs the catalogue photographs.
     user: CatalogReader,
     session: SessionDep,
 ) -> list[s.AdminImageOut]:
@@ -930,7 +930,7 @@ def list_categories(user: CatalogReader, session: SessionDep) -> list[s.AdminCat
 )
 def create_category(
     payload: s.CategoryWriteIn,
-    # The seller's, because filing a card needs somewhere to file it and the
+    # The admin's, because filing a card needs somewhere to file it and the
     # first card ever written has nowhere. Renaming and deleting stay the
     # office's: those move goods that customers are already browsing.
     user: CatalogWriter,

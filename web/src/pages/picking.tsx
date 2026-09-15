@@ -10,9 +10,12 @@
  * shoes needs to be told to look, and the server already knows whether the
  * cell holds more than one thing.
  *
- * **One tap confirms a line.** This is the screen a scanner gun will pay for
- * later — the picker scans the item and the system refuses the wrong
- * colour — and the shape of the row is already the shape that will take it.
+ * **One tap confirms a line, and so does one scan.** This is the screen the
+ * scanner gun pays for: the picker reads the sticker on the shoe in their
+ * hand and the system either ticks the line off or **refuses loudly**. Black
+ * and white of the same model, 42 and 43 off the same shelf — those are the
+ * mistakes a picker cannot see and a barcode cannot miss, so a variant that is
+ * not on this order is the one thing this screen shouts about.
  *
  * **The board fills itself.** Above the tasks are the orders nobody has begun
  * — `GET /warehouse/pick/waiting` — and starting one is a tap. It used to be
@@ -28,6 +31,7 @@ import { Check, MapPin, TriangleAlert } from "lucide-react"
 import { useState } from "react"
 
 import { Empty, PageHeader, Panel, Problem, Waiting } from "@/components/page"
+import { ScanBar, missWords, type ScanAnswer } from "@/components/scan"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/cn"
 import { age, groups } from "@/lib/format"
@@ -158,31 +162,82 @@ function Task({ id, onBack }: { id: number; onBack: () => void }) {
   const task = usePickTask(id)
   const pick = usePickLine(id)
   const complete = useCompleteTask(id)
+  const [said, setSaid] = useState<{ tone: "good" | "danger"; words: string } | null>(null)
+  const [lit, setLit] = useState<number | null>(null)
 
   if (task.isLoading) return <Waiting what="Vazifa" />
   if (!task.data) return <Problem error={task.error} />
 
-  const left = task.data.lines.filter((line) => line.picked_qty < line.qty).length
+  const lines = task.data.lines
+  const left = lines.filter((line) => line.picked_qty < line.qty).length
+
+  /** The sticker in the picker's hand, checked against the order. */
+  function onScan(answer: ScanAnswer) {
+    setLit(null)
+    if (answer.kind === "cell" && answer.cell) {
+      // Cells are where you walk to, not what you confirm. Somebody scanning
+      // the shelf edge is oriented, not wrong.
+      setSaid({
+        tone: "good",
+        words: `${answer.cell.code} — yacheyka. Terish uchun tovarning o'z yorlig'ini o'qiting.`,
+      })
+      return
+    }
+    if (answer.kind === "variant" && answer.variant) {
+      const found = answer.variant
+      const line = lines.find((row) => row.variant_id === found.variant_id)
+      if (!line) {
+        setSaid({
+          tone: "danger",
+          words: `TO'XTANG — ${found.product_title} ${found.variant_label || found.sku} bu buyurtmada yo'q. Javoniga qaytaring.`,
+        })
+        return
+      }
+      if (line.picked_qty >= line.qty) {
+        setLit(line.id)
+        setSaid({
+          tone: "danger",
+          words: `${line.variant_label || line.product_title} allaqachon to'liq olingan — ortiqchasini qaytaring.`,
+        })
+        return
+      }
+      setLit(line.id)
+      pick.mutate({ lineId: line.id, qty: line.qty - line.picked_qty })
+      setSaid({
+        tone: "good",
+        words: `${line.variant_label || line.product_title} — ${groups(line.qty)} dona olindi.`,
+      })
+      return
+    }
+    setSaid({ tone: "danger", words: missWords(answer.code) })
+  }
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title={task.data.order_code}
-        subtitle={`${task.data.lines.length} qator · ${left} qoldi`}
-      >
+      <PageHeader title={task.data.order_code} subtitle={`${lines.length} qator · ${left} qoldi`}>
         <Button variant="ghost" onClick={onBack}>
           Navbatga
         </Button>
       </PageHeader>
 
+      <ScanBar
+        hint="Qo'lingizdagi yorliqni o'qiting — qator o'zi belgilanadi."
+        said={said?.words}
+        tone={said?.tone}
+        onAnswer={onScan}
+        paused={pick.isPending || complete.isPending}
+      />
+
       <Problem error={pick.error || complete.error} />
 
       <ol className="space-y-2">
-        {task.data.lines.map((line, index) => {
+        {lines.map((line, index) => {
           const done = line.picked_qty >= line.qty
           return (
             <li key={line.id}>
-              <Panel className={cn(done && "opacity-60")}>
+              <Panel
+                className={cn(done && "opacity-60", lit === line.id && "ring-2 ring-brand")}
+              >
               <div className="flex items-start gap-3">
                 <span className="grid size-7 shrink-0 place-items-center rounded-full bg-canvas text-micro tabular text-ink-soft">
                   {index + 1}

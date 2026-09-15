@@ -12,9 +12,9 @@
  * The menu nests **one level and no more**. One level is a drawer somebody
  * opens; two is a filing cabinet somebody gives up on, and a back office with
  * fourteen flat items is a list nobody reads past the sixth. The office menu
- * is the only one long enough to want it — the bench, the shop and the road
- * have four or five screens each and stay flat, because grouping five things
- * hides them behind a click for no reason.
+ * is the only one long enough to want it — the bench and the road have four
+ * or five screens each and stay flat, because grouping five things hides them
+ * behind a click for no reason.
  *
  * A group has no route. Its `to` is a `#key` that no router will ever match,
  * which is what makes "clicking it opens rather than navigates" a property of
@@ -33,8 +33,6 @@ import {
   PackageSearch,
   Route,
   ScanBarcode,
-  Sparkles,
-  Tags,
   Truck,
   Undo2,
   Users,
@@ -71,9 +69,11 @@ const ADMIN: NavItem[] = [
     label: "Katalog",
     icon: Boxes,
     children: [
-      { to: "/mahsulotlar", label: "Mahsulotlar" },
+      // The held-back count rides here now that publishing lives on the card:
+      // goods on a shelf no customer can buy break nothing and error nowhere,
+      // so a figure in the rail is the only thing that gets the queue worked.
+      { to: "/mahsulotlar", label: "Mahsulotlar", badge: "held_back" },
       { to: "/kategoriyalar", label: "Kategoriyalar" },
-      { to: "/sotuvga-chiqarish", label: "Sotuvga chiqarish" },
     ],
   },
   // Everything about an order's journey, including the half that runs
@@ -97,7 +97,9 @@ const ADMIN: NavItem[] = [
     icon: Warehouse,
     children: [
       { to: "/ombor", label: "Ombor xaritasi" },
-      { to: "/qabul", label: "Qabul" },
+      // Goods labelled at the bench and not yet in a cell — the second moment
+      // of a receipt, waiting.
+      { to: "/qabul", label: "Qabul", badge: "labelled_unshelved" },
     ],
   },
   {
@@ -143,7 +145,7 @@ const ADMIN: NavItem[] = [
  */
 const WAREHOUSE: NavItem[] = [
   { to: "/ombor", label: "Ombor xaritasi", icon: Map },
-  { to: "/qabul", label: "Qabul", icon: PackageSearch },
+  { to: "/qabul", label: "Qabul", icon: PackageSearch, badge: "labelled_unshelved" },
   { to: "/terish", label: "Terish", icon: PackageCheck },
   { to: "/sanash", label: "Sanash", icon: Layers },
   { to: "/qaytarishlar", label: "Qaytarishlar", icon: Undo2 },
@@ -151,34 +153,10 @@ const WAREHOUSE: NavItem[] = [
   { to: "/yorliqlar", label: "Yorliqlar", icon: ScanBarcode },
 ]
 
-/**
- * The shop window and the telephone — the assistant's two jobs.
- *
- * The window is not in the office's menu and not in the bench's: goods
- * reaching a shelf and goods reaching the shop are two jobs done at different
- * times by people looking at different things — a sack, and a photograph —
- * and while they were one screen neither got done properly. The queue carries
- * its own count, because what is in it is money standing still: goods on a
- * shelf that no customer can buy, and nothing about that breaks or errors.
- *
- * The order queue is here because a customer who rings to ask where their
- * order is asks the person who answers the telephone, and that person had no
- * screen with the answer on it — so every such call reached the owner. Read
- * it and move an order along; **cancelling is not here**, and not because the
- * button is hidden: the server does not offer the move to anybody but the
- * owner. Somebody has to answer for a sale called off.
- */
-const SELLER: NavItem[] = [
-  {
-    to: "/sotuvga-chiqarish",
-    label: "Sotuvga chiqarish",
-    icon: Sparkles,
-    badge: "held_back",
-  },
-  { to: "/buyurtmalar", label: "Buyurtmalar", icon: ListOrdered },
-  { to: "/mahsulotlar", label: "Mahsulotlar", icon: Boxes },
-  { to: "/kategoriyalar", label: "Kategoriyalar", icon: Tags },
-]
+// The seller role is gone, and with it the "Sotuvga chiqarish" screen it
+// owned: there is one shop, and the person who photographs the goods is the
+// person who sells them. Publishing is three gates on the product card in
+// `/mahsulotlar`, and the held-back count rides on that menu item instead.
 
 const COURIER: NavItem[] = [
   { to: "/ishlarim", label: "Mening ishlarim", icon: Route },
@@ -222,7 +200,6 @@ export function canReach(role: Role, to: string): boolean {
 export function navFor(role: Role): NavItem[] {
   if (role === "admin") return ADMIN
   if (role === "warehouse") return WAREHOUSE
-  if (role === "seller") return SELLER
   if (role === "courier") return COURIER
   return []
 }
@@ -281,6 +258,5 @@ export function densityFor(role: Role): string {
 export function homeFor(role: Role): string {
   if (role === "admin") return "/"
   if (role === "warehouse") return "/ombor"
-  if (role === "seller") return "/sotuvga-chiqarish"
   return "/ishlarim"
 }

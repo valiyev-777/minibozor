@@ -24,7 +24,6 @@ import { CustomersPage } from "@/pages/customers"
 import { CategoriesPage, CouriersPage } from "@/pages/people"
 import { StaffPage } from "@/pages/staff"
 import { ProductsPage } from "@/pages/products"
-import { PublishPage } from "@/pages/publish"
 import { ReportsPage } from "@/pages/reports"
 import { LabelsPage } from "@/pages/labels"
 import { PickingPage } from "@/pages/picking"
@@ -78,9 +77,6 @@ export function App() {
         {/* ------------------------------------------------------------ admin */}
         {may("/mahsulotlar") ? (
           <Route path="/mahsulotlar" element={<ProductsPage />} />
-        ) : null}
-        {may("/sotuvga-chiqarish") ? (
-          <Route path="/sotuvga-chiqarish" element={<PublishPage />} />
         ) : null}
         {may("/kategoriyalar") ? (
           <Route path="/kategoriyalar" element={<CategoriesPage />} />

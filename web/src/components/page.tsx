@@ -296,7 +296,7 @@ export function Waiting({ what = "Yuklanmoqda" }: { what?: string }) {
  * Nothing here — and what to do about it.
  *
  * An empty list is a dead end unless it says where the things come from. The
- * warehouse screens all have an answer to that ("qop ochilganda yoziladi"),
+ * warehouse screens all have an answer to that ("qabul qilinganda yoziladi"),
  * and a sentence is cheaper than somebody asking.
  *
  * The shape is the house one: a tinted brand circle holding a glyph, a bold

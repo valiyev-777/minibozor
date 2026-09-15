@@ -1,16 +1,14 @@
 /**
  * The four things a card is made of words about, as one set of controls.
  *
- * These lived inside "Sotuvga chiqarish" and were reachable only from it,
- * which meant a card could be corrected exactly while it was *not* on sale:
- * that screen lists what is held back and what reads thin, so a finished card
- * on sale had no editor anywhere — a name typed wrong at the receiving desk
- * stayed wrong for the life of the card, and the only way out was deleting it
- * and booking the goods in again.
- *
- * So they are here, drawn by both screens rather than copied into the second
- * one. Two copies of a form that writes the same four fields is two forms that
- * disagree about what a card is by the third change.
+ * These once lived inside a separate "Sotuvga chiqarish" screen, which meant
+ * a card could be corrected exactly while it was *not* on sale — a name typed
+ * wrong at the receiving desk stayed wrong for the life of the card. That
+ * screen is gone; the card in "Mahsulotlar" draws these wherever it needs
+ * them: the publish panel takes the filing and the price, the editor takes
+ * the words and the table. One set of controls, because two copies of a form
+ * that writes the same fields disagree about what a card is by the third
+ * change.
  *
  * Each is its own save because each is a different kind of decision: words are
  * the shop window, a category is where a customer finds it, a price is money,
@@ -147,9 +145,9 @@ export function Words({ card }: { card: AdminProduct }) {
  * "Parvarish" from scratch for every card is how a table stays empty, and an
  * empty table is a block the apps do not draw — so the keys come from what was
  * written against this kind of goods last time, and from a starter set the
- * first time a kind is described at all. The seller fills the values and
- * deletes the row that does not apply, which is a faster thing to do than
- * thinking of the words.
+ * first time a kind is described at all. Whoever publishes the card fills the
+ * values and deletes the row that does not apply, which is a faster thing to
+ * do than thinking of the words.
  */
 export function Specs({ card }: { card: AdminProduct }) {
   const stored = useSpecs(card.id)

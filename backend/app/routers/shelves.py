@@ -20,15 +20,18 @@ rack refuses a letter that is taken, because "A, 6 columns" against an
 existing A of four cannot be told from a typo; bolting cells onto a rack that
 is standing is the second door, takes the shape the rack should have, and
 never removes anything. Removing is the third, and it is one cell at a time,
-by somebody who has looked in it: a rack grown to 6×4 by a typo carried two
-dead columns for ever, because nothing anywhere wrote ``is_active`` and the
-two doors above both said "retiring one is ``is_active``" as though a door
-existed. A retired cell keeps its code and its history and leaves the room —
-it cannot be put into, and the map fetches it back from ``GET
-/warehouse/cells/retired`` in order to offer the way back.
+by somebody who has looked in it. It **removes**: the row is deleted when
+nothing in the ledger names the cell, which is every cell built by a typo and
+never used, and kept with ``is_active`` off when a movement or a stocktake
+does — because a deleted row there would leave the ledger pointing at a place
+that does not exist. Both leave the room, and neither is drawn: a rack
+carrying a column of crossed-out tiles is a shelf nobody can point at. Asking
+the second door for that column again is the way back, for both.
 
-And the label sheet, because we generate the barcodes: market goods arrive
-unlabelled, so the only code a pile will ever have is the one we print.
+And the labels, because we generate the barcodes: market goods arrive
+unlabelled, so the only code they will ever carry is the one we print — one
+58 mm sticker per unit. The scanner reads those codes back through one door,
+``GET /warehouse/scan``, which every warehouse screen shares.
 """
 
 from __future__ import annotations
@@ -36,7 +39,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
-from sqlmodel import col, func, select
+from sqlmodel import Session, col, func, or_, select
 
 from app import audit, i18n
 from app import idempotency as idem
@@ -50,6 +53,7 @@ from app.models import (
     CountStatus,
     Location,
     LocationKind,
+    PickLine,
     Product,
     ProductVariant,
     StockCount,
@@ -57,6 +61,7 @@ from app.models import (
     StockMovement,
     StockMovementKind,
     StockPlacement,
+    SupplyLine,
     User,
     utcnow,
 )
@@ -149,19 +154,15 @@ def where_is(
     honest answer to "where are the trainers" — they are in nine places, and
     the screen dims everything else so the nine light up.
     """
-    needle = q.strip().lower()
-    exact = session.exec(
-        select(ProductVariant).where(
-            (func.lower(ProductVariant.barcode) == needle)
-            | (func.lower(ProductVariant.sku) == needle)
-        )
-    ).all()
+    needle = q.strip()
+    exact = _exact_variants(session, needle)
 
     if exact:
-        variants = list(exact)
+        variants = exact
     else:
+        lowered = needle.lower()
         products = session.exec(
-            select(Product.id).where(func.lower(Product.title).like(f"%{needle}%"))
+            select(Product.id).where(func.lower(Product.title).like(f"%{lowered}%"))
         ).all()
         variants = list(
             session.exec(
@@ -173,25 +174,80 @@ def where_is(
 
     found = []
     for variant in variants:
-        places = st.placements(session, variant.id)
-        if not places:
+        out = _where_is_out(session, variant)
+        # A variant with nothing on any shelf would light no cell up, which
+        # on this screen reads as a broken search rather than as an answer.
+        # ``/warehouse/scan`` is the door that answers for those.
+        if not out.places:
             continue
-        product = session.get(Product, variant.product_id)
-        found.append(
-            s.WhereIsOut(
-                variant_id=variant.id,
-                product_id=variant.product_id,
-                product_title=product.title if product else "",
-                variant_label=sv.variant_label(variant),
-                sku=variant.sku,
-                barcode=variant.barcode,
-                places=[
-                    s.PlacementOut(location_id=place.id, code=place.code, qty=qty)
-                    for place, qty in places
-                ],
-            )
-        )
+        found.append(out)
     return found
+
+
+@router.get(
+    "/scan",
+    response_model=s.ScanOut,
+    summary="One answer for whatever was scanned, on every warehouse screen",
+)
+def scan(
+    user: StockViewer,
+    session: SessionDep,
+    code: str = Query(min_length=1, description="Whatever the gun or the camera read"),
+) -> s.ScanOut:
+    """A goods label, a cell label, or noise — the screen decides what to do.
+
+    A scanner gun and a phone camera both end at a string, and every warehouse
+    screen wants the same classification of it: `/qabul` fills in the card or
+    the destination, `/ombor` jumps the map, `/terish` confirms or refuses a
+    line, `/sanash` counts one up. So one door answers all of them.
+
+    Exact matches only. A scan is a code, not a search: the LIKE-on-title leg
+    of ``where-is`` would turn a mis-read into a confident wrong card.
+
+    Two things ``where-is`` will not do, on purpose, that this must:
+
+    * **answer for a cell code** — the sticker on the shelf edge is scanned as
+      often as the one on the shoe, and the answer carries what is standing in
+      the cell so the screen has something to show;
+    * **answer for a variant with no stock** — the receiving desk scans a label
+      already stuck on one of the new shoes precisely *before* they are booked
+      in, so an empty ``places`` is an answer and not a miss.
+
+    A string that names nothing comes back as ``kind="none"`` with 200 rather
+    than a 404: a mis-scan is a normal minute of warehouse work, and the screen
+    shows the refusal loudly and keeps listening.
+    """
+    needle = code.strip()
+
+    hit = _exact_variants(session, needle)
+    if hit:
+        # Barcode and SKU are unique per variant, so an exact hit is one row.
+        variant = hit[0]
+        return s.ScanOut(
+            kind="variant",
+            code=needle,
+            variant=s.ScanVariantOut(
+                **_where_is_out(session, variant).model_dump(),
+                colour=variant.colour,
+                size=variant.size,
+            ),
+        )
+
+    place = loc.by_code(session, needle)
+    if place is not None:
+        # Retired cells included: the sticker outlives the row's is_active
+        # flag, and "that cell was taken out of the room" is an answer the
+        # flag on the payload lets the screen give.
+        return s.ScanOut(
+            kind="cell",
+            code=place.code,
+            cell=s.LocationDetailOut(
+                **_location_out(place, _fill(session)).model_dump(),
+                contents=_contents(session, place),
+            ),
+        )
+
+    return s.ScanOut(kind="none", code=needle)
 
 
 @router.get(
@@ -448,16 +504,18 @@ def extend_rack(
     that rectangle is written and **nothing is ever removed**: a smaller
     shape than the rack already has adds nothing and says so, because
     demolishing a cell that is holding forty pairs is not something a typo in
-    a number box should be able to do. Retiring one is ``POST
-    /warehouse/cells/{code}/active``, one cell at a time, by somebody who has
-    looked in it.
+    a number box should be able to do. Taking one out is ``DELETE
+    /warehouse/cells/{code}``, one cell at a time, by somebody who has looked
+    in it.
 
-    **A retired cell is not brought back by this.** Its code still exists, so
-    the skip above steps over it and the count says nothing was written — the
-    rack looks as though it is already that big. That is deliberate: a cell
-    was taken out of the room by a decision somebody made and recorded, and
-    re-typing the rack's shape is not that decision being reversed. Restoring
-    it is the same door that retired it.
+    **A cell that was taken out and whose row was kept is woken by this**, and
+    this is the only thing that wakes it. Removing a cell deletes its row when
+    nothing in the ledger names it, and keeps the row invisibly when something
+    does; either way the room stops having a cell there. So asking for the
+    column again means the same thing in both cases — *this rack is five
+    columns wide* — and it has to do the same thing in both cases, or a rack
+    would refuse to grow back into a position the shop cannot see is taken.
+    A woken cell counts as written, because from the room's side one appeared.
 
     **Ragged is fine.** A five-row column beside four four-row ones is a real
     shelf and the map draws a blank where a code is missing, so nothing here
@@ -472,18 +530,35 @@ def extend_rack(
             status.HTTP_404_NOT_FOUND, i18n.label("rack_not_found", rack=wanted)
         )
 
+    # The rack as the shop has it, which is not every row carrying its letter:
+    # a cell taken out of the room may have kept its row for the ledger's
+    # sake, and it is neither shelving the shop has nor a shape to copy a new
+    # cell's capacity from.
+    live = [place for place in standing if place.is_active]
     capacity = (
-        payload.capacity if payload.capacity is not None else _house_capacity(standing)
+        payload.capacity
+        if payload.capacity is not None
+        else _house_capacity(live or standing)
     )
-    have = {place.code for place in standing}
+    here = {place.code: place for place in standing}
 
     made = 0
     for column_no in range(1, payload.columns + 1):
         for row_no in range(1, payload.rows + 1):
             code = loc.cell_code(wanted, column_no, row_no)
+            known = here.get(code)
+            if known is not None:
+                # The kept row of a cell that was taken out. Asking for this
+                # column again is what puts it back, and it comes back as
+                # itself — same code, same capacity, same history.
+                if not known.is_active:
+                    known.is_active = True
+                    session.add(known)
+                    made += 1
+                continue
             # Against the whole building and not only against this rack: a
-            # code is unique everywhere, and a retired cell still owns its.
-            if code in have or loc.by_code(session, code) is not None:
+            # code is unique everywhere.
+            if loc.by_code(session, code) is not None:
                 continue
             session.add(
                 Location(
@@ -509,8 +584,8 @@ def extend_rack(
             # a change to that cell, which is the one thing this did not do.
             entity_id=0,
             field="rack",
-            old=len(standing),
-            new=len(standing) + made,
+            old=len(live),
+            new=len(live) + made,
             note=f"{wanted} · {made} ta yacheyka qo'shildi",
         )
         session.commit()
@@ -544,100 +619,68 @@ def _house_capacity(cells: list[Location]) -> int:
     return max(counts, key=lambda capacity: (counts[capacity], capacity))
 
 
-@router.get(
-    "/cells/retired",
-    response_model=list[s.LocationOut],
-    summary="The cells that were taken out of the room, and can be put back",
+@router.delete(
+    "/cells/{code}",
+    response_model=s.CellRemoved,
+    summary="Take a cell out of the room, for good",
 )
-def retired_cells(user: StockViewer, session: SessionDep) -> list[s.LocationOut]:
-    """The short list the map needs to draw the holes in itself.
-
-    Its own door rather than a flag on ``GET /warehouse/locations``, and this
-    is the whole design decision about retiring a cell.
-
-    ``cells`` in the shelf map means *the cells of this room*, and half a
-    dozen things read it that way: the screen counts how many are full and how
-    many are empty, the receiving screen builds its destination grid out of
-    it, the label sheet prints one label per entry. Slipping dead cells into
-    that list would leave every one of those quietly wrong — a full/empty
-    figure counting shelves that are not there, a grid offering a cell that
-    refuses the goods — and wrong in arithmetic, which is the kind of wrong
-    nobody notices for a month. The fix would have to be remembered in every
-    reader, including the ones in the web app, on the same day.
-
-    So the main answer keeps its meaning exactly and the dead cells come back
-    on a door of their own. The map can still draw the hole, and still offer
-    the way back on the tile where somebody is looking for it: it is one more
-    request, on the one screen that wants it, instead of a condition in
-    everything that has ever read a cell.
-
-    In walk order and carrying ``is_active: false``, so the screen can draw
-    them struck through in the grid position they used to occupy — which is
-    what tells a gap that was retired apart from a gap that was never built.
-    """
-    summary = _fill(session)
-    rows = session.exec(
-        select(Location).where(
-            Location.kind == LocationKind.BIN, col(Location.is_active).is_(False)
-        )
-    ).all()
-    return [_location_out(place, summary) for place in sorted(rows, key=loc.walk_order)]
-
-
-@router.post(
-    "/cells/{code}/active",
-    response_model=s.LocationOut,
-    summary="Take a cell out of the room, or bolt it back in",
-)
-def set_cell_active(
+def remove_cell(
     code: str,
-    payload: s.CellActiveIn,
-    # The office's, like building a rack and like growing one. Retiring a cell
-    # is the shape of the building changing, and not a wider guard: everybody
-    # else in here moves goods between places that exist, and the warehouse
-    # hand who finds a cell inconvenient at nine in the evening is exactly the
-    # person this should not be a way out for.
+    # The office's, like building a rack and like growing one. Taking a cell
+    # out is the shape of the building changing, and not a wider guard:
+    # everybody else in here moves goods between places that exist, and the
+    # warehouse hand who finds a cell inconvenient at nine in the evening is
+    # exactly the person this should not be a way out for.
     user: AdminUser,
     session: SessionDep,
-) -> s.LocationOut:
-    """A rack extended to 6×4 by mistake carries two dead columns for ever.
+    reason: str = Query("", max_length=200, description="Why, for the audit trail"),
+) -> s.CellRemoved:
+    """A rack unbolted back to four columns is four columns.
 
-    That was the hole. ``is_active`` has been on ``locations`` since the first
-    migration, three readers filter on it, two docstrings promise it is "the
-    honest way to retire a cell" — and nothing anywhere ever wrote it. Cells
-    were built and never removed.
+    This was ``POST /cells/{code}/active`` with a boolean, and the boolean was
+    the problem. Retiring flipped a flag: the row stayed, the code stayed, and
+    the map drew the dead cell struck through in the grid with a way back on
+    it, so a rack built 6×4 by a typo showed two columns of crossed-out tiles
+    for ever. Correct about the ledger, and a lie about the room — there is no
+    fifth column standing in the shop for anybody to point at.
 
-    One door with a boolean, like ``POST /admin/users/{id}/active``: retiring
-    and restoring are the same decision read from opposite sides, and two
-    endpoints would be two places for the rule and the audit row to drift.
+    **So the row goes, when it can go.** A cell nothing has ever written down
+    is deleted outright, and the shop is left exactly as it would be had the
+    typo never happened. Its empty placement rows go with it: a placement of
+    nought is the absence of stock, which is also what a cell that no longer
+    exists holds.
 
-    **Not a delete, and never a delete.** The row keeps its code, its capacity
-    and every movement that ever named it; a stocktake from March still points
-    at a cell that still exists. What changes is that the room stops offering
-    it — off the shelf map, off the label sheet, off the putaway plan — and
-    that nothing may be put into it.
+    **And it is kept, invisibly, when it cannot.** A movement from March, a
+    stocktake, a picking line — anything that names this cell makes the row
+    load-bearing, and deleting it would leave the ledger pointing at a place
+    that does not exist. That cell keeps its row with ``is_active`` off: out
+    of the map, out of the label sheet, out of the putaway plan, refused as a
+    destination, and gone from every screen exactly like the deleted one. The
+    answer says which of the two happened; the caller cannot ask for the
+    ledger to be broken and does not have to know which case it is in.
 
-    **Refused while it is holding anything.** A retired cell disappears from
-    the map, and goods in a place nobody can see are goods nobody can find:
-    the shop's count would still include them and no picker could be sent.
-    The sentence says what to do instead — carry them somewhere with ``POST
-    /warehouse/move`` or ``POST /warehouse/move-cell``, or write them off with
-    ``POST /warehouse/stock/empty`` — because a refusal a warehouse cannot act
-    on is a refusal somebody works around.
+    **Refused while it is holding anything, and that is the only thing asked
+    of the caller.** Goods in a place nobody can see are goods nobody can
+    find. The sentence names the two ways out — carry them somewhere with
+    ``POST /warehouse/move`` or ``POST /warehouse/move-cell``, or write them
+    off with ``POST /warehouse/stock/empty`` — because a refusal a warehouse
+    cannot act on is a refusal somebody works around.
 
     **Cells only.** ``QABUL``, ``YIGIM``, ``BRAK`` and ``QAYTGAN`` are not
     shelves, they are places with a job: being in ``QABUL`` *is* the unplaced
     state, ``locations.staging`` raises rather than conjuring one up, and the
-    seed writes them by name — so a retired ``QABUL`` is a receiving desk the
+    seed writes them by name — so a removed ``QABUL`` is a receiving desk the
     next seed run silently puts back while every count written into it was
     invisible to the map in between. A courier's bag is the same story from
     the other end: it is made on demand and the map draws it only while it
-    holds something, so there is nothing to retire. Neither is refused for
-    safety's sake; there is simply no such decision to take.
+    holds something. Neither is refused for safety's sake; there is simply no
+    such decision to take.
 
-    Restoring is unconditional. A cell that is standing there again is a cell
-    the room can use, and nothing about it can have gone wrong while it was
-    empty and closed.
+    **The way back is the rack's shape, not a button on a ghost.** There is no
+    ghost any more, so ``POST /warehouse/racks/{rack}/cells`` asking for the
+    column again is what brings it back — it builds the code afresh where the
+    row was deleted, and wakes the kept one where it was not. One door for
+    "this rack is five columns wide", whatever the room did last week.
     """
     cell = _place(session, code)
     if cell.kind is not LocationKind.BIN:
@@ -646,32 +689,94 @@ def set_cell_active(
             i18n.label("cell_retire_needs_a_cell", code=cell.code),
         )
 
-    if cell.is_active and not payload.active:
-        held = st.units_in(session, cell.id)
-        if held:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                i18n.label("cell_retire_not_empty", code=cell.code, units=held),
-            )
-
-    if cell.is_active is not payload.active:
-        audit.record(
-            session,
-            actor=user,
-            action="location.active",
-            entity="location",
-            entity_id=cell.id,
-            field="is_active",
-            old=cell.is_active,
-            new=payload.active,
-            note=payload.note or cell.code,
+    held = st.units_in(session, cell.id)
+    if held:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("cell_retire_not_empty", code=cell.code, units=held),
         )
-        cell.is_active = payload.active
-        session.add(cell)
-        session.commit()
-        session.refresh(cell)
 
-    return _location_out(cell, _fill(session))
+    # Read before anything is written: after the delete the object is detached
+    # and its id is a number that no longer means anything.
+    cell_id = cell.id
+    cell_code = cell.code
+    kept = _ledger_names(session, cell_id)
+
+    audit.record(
+        session,
+        actor=user,
+        action="location.removed",
+        entity="location",
+        entity_id=cell_id,
+        field="code",
+        old=cell_code,
+        # The row is going, so there is nothing to point at afterwards. The
+        # old value is the whole record, which is why it is the code and not
+        # the flag: a year later "A-05-03 was removed" is readable and
+        # "is_active: true → false" is not.
+        new=None,
+        note=reason or cell_code,
+    )
+
+    if kept:
+        cell.is_active = False
+        session.add(cell)
+    else:
+        for row in session.exec(
+            select(StockPlacement).where(StockPlacement.location_id == cell_id)
+        ).all():
+            session.delete(row)
+        session.delete(cell)
+    session.commit()
+
+    return s.CellRemoved(
+        code=cell_code,
+        erased=not kept,
+        message=i18n.label(
+            "cell_removed_kept" if kept else "cell_removed", code=cell_code
+        ),
+    )
+
+
+def _ledger_names(session: Session, cell_id: int) -> bool:
+    """Whether anything written down still points at this cell.
+
+    Three tables and not one: a cell can have been counted without ever having
+    been moved into, and a picking line names the cell a picker was sent to
+    whether or not the goods were still there when they arrived. Any of the
+    three makes the row load-bearing.
+
+    Placements are deliberately not among them. A placement is what a cell
+    holds *now*, not what it did — the caller has already been refused if that
+    is anything at all, so what is left is rows of nought, which say the cell
+    holds none of this model. A cell that does not exist holds none of it
+    either, so they are deleted with it rather than keeping it alive.
+    """
+    moves = session.exec(
+        select(func.count())
+        .select_from(StockMovement)
+        .where(
+            or_(
+                StockMovement.from_location_id == cell_id,
+                StockMovement.to_location_id == cell_id,
+            )
+        )
+    ).one()
+    if moves:
+        return True
+
+    picks = session.exec(
+        select(func.count()).select_from(PickLine).where(PickLine.location_id == cell_id)
+    ).one()
+    if picks:
+        return True
+
+    counted = session.exec(
+        select(func.count())
+        .select_from(StockCount)
+        .where(StockCount.location_id == cell_id)
+    ).one()
+    return bool(counted)
 
 
 # --------------------------------------------------------------------------- moving
@@ -1024,7 +1129,7 @@ def submit_count(
 @router.get(
     "/labels",
     response_model=s.LabelSheetOut,
-    summary="The data behind a printable A4 sheet",
+    summary="The data behind the labels — one 58 mm page per sticker",
 )
 def labels(
     user: StockViewer,
@@ -1033,7 +1138,7 @@ def labels(
     variant_id: list[int] | None = Query(None),
     cells: bool = Query(False, description="A full set of cell labels instead"),
 ) -> s.LabelSheetOut:
-    """What to print, and nothing about how.
+    """What to print, how many times, and nothing about how.
 
     The barcode is drawn in the browser: a barcode is a picture of a string,
     and rendering it client-side means no image to store, no font to install
@@ -1043,6 +1148,12 @@ def labels(
     label is **reprinted** — this endpoint answers with the code that is on
     the row, never a new one — because a second code for one thing is a shelf
     holding it twice.
+
+    **Every unit gets a sticker**, so a receipt's labels carry ``copies``: the
+    line's own quantity, grouped by variant in the order the lines were typed
+    — ten 43s then ten 42s, matching the piles on the table. A reprint by
+    ``variant_id`` answers one copy each, because its usual reason is a
+    printer jam, not a second van.
     """
     if cells:
         return s.LabelSheetOut(
@@ -1057,32 +1168,46 @@ def labels(
             ]
         )
 
-    stmt = select(ProductVariant)
+    # Insertion order is the answer's order: a receipt's labels come out
+    # grouped by variant exactly as the lines were written down.
+    counted: dict[int, int] = {}
     if supply_id is not None:
-        from app.models import SupplyLine
-
-        wanted = session.exec(
-            select(SupplyLine.variant_id).where(SupplyLine.supply_id == supply_id)
+        lines = session.exec(
+            select(SupplyLine)
+            .where(SupplyLine.supply_id == supply_id)
+            .order_by(col(SupplyLine.id))
         ).all()
-        stmt = stmt.where(col(ProductVariant.id).in_(list(wanted) or [-1]))
+        for line in lines:
+            counted[line.variant_id] = counted.get(line.variant_id, 0) + line.quantity
     elif variant_id:
-        stmt = stmt.where(col(ProductVariant.id).in_(variant_id))
+        for wanted in variant_id:
+            counted.setdefault(wanted, 1)
     else:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, i18n.label("labels_need_a_selection")
         )
 
     out = []
-    for variant in session.exec(stmt).all():
+    for wanted, copies in counted.items():
+        # A line of nought would print nothing; sending it would only make
+        # the screen divide by it when it numbers stickers n-of-copies.
+        if copies <= 0:
+            continue
+        variant = session.get(ProductVariant, wanted)
+        if variant is None:
+            continue
         product = session.get(Product, variant.product_id)
         out.append(
             s.ProductLabelOut(
                 variant_id=variant.id,
                 product_title=product.title if product else "",
                 variant_label=sv.variant_label(variant),
+                colour=variant.colour,
+                size=variant.size,
                 sku=variant.sku,
                 barcode=variant.barcode,
                 price=variant.price or (product.price if product else 0),
+                copies=copies,
             )
         )
     return s.LabelSheetOut(products=out)
@@ -1105,6 +1230,46 @@ def _variant(session: SessionDep, variant_id: int) -> ProductVariant:
     if variant is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("variant_invalid"))
     return variant
+
+
+def _exact_variants(session: SessionDep, needle: str) -> list[ProductVariant]:
+    """The variants this string is the code of — barcode or SKU, exactly.
+
+    Shared by ``where-is`` and ``scan`` so the two doors can never disagree
+    about what a code names. Case-insensitive because a scanner gun is honest
+    but a person retyping a smudged label is not.
+    """
+    lowered = needle.strip().lower()
+    return list(
+        session.exec(
+            select(ProductVariant).where(
+                (func.lower(ProductVariant.barcode) == lowered)
+                | (func.lower(ProductVariant.sku) == lowered)
+            )
+        ).all()
+    )
+
+
+def _where_is_out(session: SessionDep, variant: ProductVariant) -> s.WhereIsOut:
+    """One variant with its places — possibly none, which the caller judges.
+
+    ``where-is`` drops the placeless ones because its screen lights cells up;
+    ``scan`` keeps them because the receiving desk scans goods that are not
+    booked in yet. The identity is built once, here, for both.
+    """
+    product = session.get(Product, variant.product_id)
+    return s.WhereIsOut(
+        variant_id=variant.id,
+        product_id=variant.product_id,
+        product_title=product.title if product else "",
+        variant_label=sv.variant_label(variant),
+        sku=variant.sku,
+        barcode=variant.barcode,
+        places=[
+            s.PlacementOut(location_id=place.id, code=place.code, qty=qty)
+            for place, qty in st.placements(session, variant.id)
+        ],
+    )
 
 
 def _fill(session: SessionDep) -> dict[int, tuple[int, int, object]]:

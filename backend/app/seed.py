@@ -57,7 +57,6 @@ DEMO_PIN = "1234"
 # second way in.
 ADMIN_PHONE = "+998900000001"
 WAREHOUSE_PHONE = "+998900000002"
-SELLER_PHONE = "+998900000004"
 COURIER_PHONE = "+998900000003"
 
 CANCEL_REASONS = [
@@ -131,7 +130,6 @@ def seed(session: Session) -> None:
     print(f"Customer: {DEMO_PHONE} · SMS code 123456 (dev) · PIN {DEMO_PIN}")
     print(f"Admin:     {ADMIN_PHONE} · SMS code 123456 (dev)")
     print(f"Warehouse: {WAREHOUSE_PHONE} · SMS code 123456 (dev)")
-    print(f"Seller:    {SELLER_PHONE} · SMS code 123456 (dev)")
     print(f"Courier:   {COURIER_PHONE} · SMS code 123456 (dev)")
 
 
@@ -251,11 +249,6 @@ def _seed_users(session: Session) -> dict[str, User]:
         full_name="Ombor xodimi",
         role=UserRole.WAREHOUSE,
     )
-    seller = User(
-        phone=SELLER_PHONE,
-        full_name="Sotuvchi",
-        role=UserRole.SELLER,
-    )
     courier = User(
         phone=COURIER_PHONE,
         full_name="Kuryer",
@@ -265,7 +258,6 @@ def _seed_users(session: Session) -> dict[str, User]:
         "demo": demo,
         "admin": admin,
         "warehouse": warehouse,
-        "seller": seller,
         "courier": courier,
     }
     for user in people.values():

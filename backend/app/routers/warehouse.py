@@ -1,22 +1,24 @@
 """The warehouse: how goods arrive, get counted, and leave.
 
 Nobody delivers to us. The owner goes to the wholesale market, buys what looks
-worth buying and comes back with sacks — mixed, unlabelled, unphotographed —
-so there is no declaration to check a receipt against and no supplier to
-check it with. What there is instead is **two moments**, and this file is
-shaped by the gap between them:
+worth buying and comes back with the goods — mixed, unlabelled,
+unphotographed — so there is no declaration to check a receipt against and no
+supplier to check it with. Receiving is **two moments**, in the order the
+body moves — enter, print, stick, carry, put away:
 
-* **The sacks arrive.** Thirty seconds at the door: how many, where from, what
-  the van cost. That is a ``draft`` supply, and nothing in it is stock — it is
-  a sack standing in the receiving area that nobody has opened. It cannot be
-  sold because nobody knows what it is.
-* **Somebody sorts it.** Open the sack, separate by colour and size, count
-  each pile, price it. Closing the run is what brings the goods into
-  existence: the lines become movements and the cards go on sale.
+* **At the bench.** What came and how many: one card, one colour, a
+  size→quantity list, the cost while somebody still knows it. ``POST
+  /receipts`` books the goods in, writes the supply row, and answers with the
+  sheet of stickers — one per unit. The goods now exist and stand in
+  ``QABUL``, which is a real, *sellable* place and not a flag: nothing is
+  lost while the second question is unanswered.
+* **At the shelf.** The one thing nobody could know before they walked: which
+  cell. ``POST /receipts/{id}/shelve`` carries the receipt's goods out of the
+  receiving area into the cell that was scanned or typed.
 
-The two are apart because the van arrives at nine in the evening and sorting
-five sacks that night is not going to happen. The alternative is goods in the
-building that the system has never heard of.
+The cell is asked **last** because asking for it at the bench is asking
+somebody who has not walked anywhere yet where they are going to end up —
+they guess, and a guess in the cell field is stock in the wrong place.
 
 Nothing sets a count. Every endpoint writes a *difference*, which is what
 makes two people working the same shelf at once safe: the second save adds to
@@ -85,7 +87,7 @@ def _next_code(session: SessionDep, model, prefix: str) -> str:
     return f"{prefix}-{int(used) + 1:06d}"
 
 
-# --------------------------------------------------------------------------- a pile
+# --------------------------------------------------------------------------- receiving
 
 
 @router.get(
@@ -195,42 +197,36 @@ def vocab(user: CatalogReader, session: SessionDep) -> s.VocabOut:
 
 
 @router.post(
-    "/piles",
-    response_model=s.PileOut,
+    "/receipts",
+    response_model=s.ReceiptOut,
     status_code=status.HTTP_201_CREATED,
-    summary="A pile off the van — booked in and shelved in one action",
+    summary="Moment one, at the bench — what came, how many, what it cost",
 )
-def book_in_pile(
-    payload: s.PileIn,
+def receive(
+    payload: s.ReceiptIn,
     user: WarehouseUser,
     session: SessionDep,
     idempotency_key: IdempotencyKey,
-) -> s.PileOut:
-    """Receipt and putaway together, because the person is holding the goods.
+) -> s.ReceiptOut:
+    """Books the goods in and answers with the stickers to print.
 
-    A sack from the market is usually one thing — only black trainers, only
-    white shirts — and whoever opened it is standing at the shelf with it. The
-    two-stage flow below made them walk the room twice: once to tip the sack
-    out and once to carry what they had already counted. So this books the
-    goods in *and* shelves them, in one submit, with the cell typed on the same
-    form.
+    One call is one receipt: one card, one colour, the sizes in the order
+    they were typed — which is the order the stickers print in and the order
+    the piles sit on the table. It writes three things at once:
 
-    **One cell, or several.** ``location_code`` is the ordinary sack and is
-    unchanged. ``placements`` is the other answer: eighty pairs do not fit in
-    a cell that holds sixty, and the person is standing in front of four
-    cells with the pile at their feet. The cells are filled in the order they
-    are given — the first to its quantity, then the next — and a size may
-    straddle two of them, because that is what physically happens when a pile
-    is split and the movements are per variant and cell anyway. Exactly one
-    of the two ways has to be used: neither is the old homeless state coming
-    back, and both is two answers to one question.
+    * the card stub and its variants — permanent SKUs and barcodes, minted
+      once and never regenerated;
+    * one supply row, already ``received``, with its lines: the market run,
+      written *by* the receipt and never edited by hand;
+    * one ``receipt`` movement per size, into ``QABUL``.
 
-    **Capacity is not enforced, here least of all.** A cell that refuses the
-    last pair at nine in the evening is a cell somebody works around, and the
-    goods are already in the building by the time this request is made. The
-    map draws an over-full cell as over-full — that is what the warning is
-    for — and ``GET /warehouse/putaway-plan`` is what suggests a split that
-    fits before anybody types one.
+    **No cell is asked for.** The door that stood here took the cell on the
+    same form, and that decision is reversed on purpose: the person at the
+    bench has not walked anywhere yet, so a cell typed here is a guess, and a
+    guess in the cell field is stock in the wrong place. The goods stand in
+    the receiving area — a *sellable* place, so nothing is lost while the
+    question waits — until ``POST /receipts/{id}/shelve`` answers it at the
+    shelf, usually with one scan of the cell's own label.
 
     The card this writes is a **stub**: a name, a colour, sizes and counts. It
     has no category, no selling price and no catalogue photograph, so it stays
@@ -238,29 +234,26 @@ def book_in_pile(
     afterwards, in the light, which is the only place that work was ever going
     to get done properly.
     """
-    done = idem.replay(session, user, idempotency_key, "pile", payload)
+    done = idem.replay(session, user, idempotency_key, "receipt", payload)
     if done is not None:
-        return s.PileOut(**done)
+        return s.ReceiptOut(**done)
 
-    # Checked before a card is written: a stub product left behind by a
-    # request that was refused on its cells is a card nobody asked for, in a
-    # catalogue somebody has to tidy.
-    spread = _pile_spread(session, payload)
-
-    product = _pile_card(session, user, payload)
+    desk = loc.staging(session, loc.QABUL)
+    product = _receipt_card(session, user, payload)
     colour = pr.tidy_label(payload.colour)
 
-    # A card that already has colours cannot take a colourless pile. Without
-    # this, an empty colour writes a cell beside the ones that exist and puts
-    # the count on a variant no picker will ever be sent to — the goods would
-    # be on the shelf under a name nobody looks for. Guarded here and not only
-    # on the form, because the form is not the only caller there will be.
+    # A card that already has colours cannot take a colourless receipt.
+    # Without this, an empty colour writes a cell beside the ones that exist
+    # and puts the count on a variant no picker will ever be sent to — the
+    # goods would be on the shelf under a name nobody looks for. Guarded here
+    # and not only on the form, because the form is not the only caller there
+    # will be.
     if payload.product_id is not None and not colour:
         known = [one for one in pr.colours(session, product.id) if one]
         if known:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                i18n.label("pile_needs_a_colour", colours=", ".join(known)),
+                i18n.label("receipt_needs_a_colour", colours=", ".join(known)),
             )
 
     wanted = [pr.tidy_size(line.size) for line in payload.sizes]
@@ -281,7 +274,7 @@ def book_in_pile(
                 raise HTTPException(
                     status.HTTP_409_CONFLICT,
                     i18n.label(
-                        "pile_sized_or_not",
+                        "receipt_sized_or_not",
                         card=product.title,
                         shape=i18n.label(
                             "shape_sized" if was_sized else "shape_sizeless"
@@ -312,19 +305,10 @@ def book_in_pile(
     session.commit()
     session.refresh(run)
 
-    # The cells, and how much is still to go in each. Walked in step with the
-    # sizes below: a size fills what is left of the cell in hand and spills
-    # into the next one, which is the pile being put away as it comes out of
-    # the sack.
-    filling = [[place, units] for place, units in spread]
-    into = 0
-
     quantity = 0
     for line, variant in zip(payload.sizes, cells, strict=True):
-        # One supply line per size, whatever the goods were split across. The
-        # line is what came off the van and what it cost; where it ended up
-        # is the ledger's business, and splitting the cost across cells would
-        # invent an arithmetic nobody asked for.
+        # One supply line per size. The line is what came off the van and
+        # what it cost; where it ends up is the ledger's business.
         session.add(
             SupplyLine(
                 supply_id=run.id,
@@ -333,40 +317,26 @@ def book_in_pile(
                 unit_cost=payload.unit_cost,
             )
         )
-        left = line.quantity
-        while left > 0:
-            place, room = filling[into]
-            step = min(left, room)
-            # One movement per size and cell, from the outside world straight
-            # to where the goods actually are. Not a receipt into QABUL and a
-            # putaway out of it — that is a leg in the ledger for a journey
-            # nobody made.
-            st.move(
-                session,
-                variant=variant,
-                qty=step,
-                kind=StockMovementKind.RECEIPT,
-                frm=None,
-                to=place,
-                actor=user,
-                reason=f"{run.code} · {place.code}",
-                supply_id=run.id,
-                # What this cell's newest lot cost, remembered on the cell.
-                # The pile form makes a unit cost mandatory, so every card
-                # booked in this way can be sold at a margin somebody can
-                # actually read afterwards.
-                unit_cost=payload.unit_cost,
-            )
-            filling[into][1] = room - step
-            if filling[into][1] == 0:
-                into += 1
-            left -= step
+        # One movement per size, from the outside world into the receiving
+        # area — the first leg of a journey whose second leg is walked a
+        # minute later, at the shelf. The unit cost rides on the receipt so
+        # the margin somebody reads afterwards is a fact and not a guess.
+        st.move(
+            session,
+            variant=variant,
+            qty=line.quantity,
+            kind=StockMovementKind.RECEIPT,
+            frm=None,
+            to=desk,
+            actor=user,
+            reason=f"{run.code} · {desk.code}",
+            supply_id=run.id,
+            unit_cost=payload.unit_cost,
+        )
         quantity += line.quantity
 
-    went = ", ".join(place.code for place, _ in spread)
-
     # The identification photograph belongs to the card, and the first one
-    # wins: a second pile of the same goods should not quietly replace the
+    # wins: a second receipt of the same goods should not quietly replace the
     # picture somebody is recognising them by.
     if payload.snapshot_url and not product.snapshot_url:
         product.snapshot_url = payload.snapshot_url
@@ -375,12 +345,12 @@ def book_in_pile(
     audit.record(
         session,
         actor=user,
-        action="pile.receive",
+        action="receipt.receive",
         entity="product",
         entity_id=product.id,
         field="location",
         old=None,
-        new=went,
+        new=desk.code,
         note=f"{run.code} · {quantity} dona · {product.title}",
     )
     session.commit()
@@ -388,108 +358,302 @@ def book_in_pile(
     session.commit()
     session.refresh(product)
 
-    out = s.PileOut(
+    out = s.ReceiptOut(
         product=sv.admin_product_out(session, product),
         run_id=run.id,
         run_code=run.code,
-        location_code=went,
-        placements=[
-            s.PilePlacedOut(code=place.code, quantity=units)
-            for place, units in spread
-        ],
         quantity=quantity,
         total_cost=quantity * payload.unit_cost + run.transport_cost,
         labels=[
-            s.ProductLabelOut(
+            # One line per size, in the order typed, each with its count —
+            # everything the sticker sheet needs and nothing it must look up.
+            s.ReceiptLabelOut(
                 variant_id=variant.id,
                 product_title=product.title,
+                colour=variant.colour,
+                size=variant.size,
                 variant_label=pr.label(variant),
                 sku=variant.sku,
                 barcode=variant.barcode,
-                price=variant.price,
+                copies=line.quantity,
             )
-            for variant in cells
+            for line, variant in zip(payload.sizes, cells, strict=True)
         ],
     )
-    idem.keep(session, user, idempotency_key, "pile", payload, out)
-    replayed = idem.commit(session, user, idempotency_key, "pile")
-    return s.PileOut(**replayed) if replayed else out
+    idem.keep(session, user, idempotency_key, "receipt", payload, out)
+    replayed = idem.commit(session, user, idempotency_key, "receipt")
+    return s.ReceiptOut(**replayed) if replayed else out
+
+
+@router.post(
+    "/receipts/{receipt_id}/shelve",
+    response_model=s.ReceiptShelvedOut,
+    summary="Moment two, at the shelf — the cell, scanned or typed",
+)
+def shelve_receipt(
+    receipt_id: int,
+    payload: s.ReceiptShelveIn,
+    user: WarehouseUser,
+    session: SessionDep,
+    idempotency_key: IdempotencyKey,
+) -> s.ReceiptShelvedOut:
+    """Carries one receipt's goods out of QABUL into the cell that was named.
+
+    The cell is checked against the cells that exist rather than trusted —
+    ``A-03-11`` is one keystroke from ``A-03-01`` — and a mistyped code is
+    refused, not invented. What moves is what of this receipt is still
+    standing in the receiving area: a receipt already shelved has nothing
+    left to carry and is answered politely rather than refused, because the
+    goods are exactly where the person wanted them.
+
+    This is not the old two-stage sorting flow coming back. That one asked a
+    second person to sort a sack at a later time; this is the same person,
+    one minute later, ten metres away, answering the one thing they could
+    not know before they walked.
+    """
+    stamp = {"receipt_id": receipt_id, **payload.model_dump()}
+    done = idem.replay(session, user, idempotency_key, "receipt-shelve", stamp)
+    if done is not None:
+        return s.ReceiptShelvedOut(**done)
+
+    run = _supply(session, receipt_id)
+    cell = _open_cell(session, payload.location_code)
+    desk = loc.staging(session, loc.QABUL)
+
+    lines = session.exec(
+        select(SupplyLine)
+        .where(SupplyLine.supply_id == run.id)
+        .order_by(col(SupplyLine.id))
+    ).all()
+
+    # What of this receipt is still standing at the desk, per variant, off the
+    # ledger: receipted into QABUL less already carried out of it. Capped at
+    # what actually stands there now — goods sold straight from the receiving
+    # area left through a pick, which names an order rather than this run.
+    left = _still_at_the_desk(session, desk.id, run.id)
+
+    moved = 0
+    products: set[int] = set()
+    carried: set[int] = set()
+    for line in lines:
+        if line.variant_id in carried:
+            continue
+        carried.add(line.variant_id)
+        step = min(
+            left.get(line.variant_id, 0),
+            st.at(session, desk.id, line.variant_id),
+        )
+        if step <= 0:
+            continue
+        variant = _variant(session, line.variant_id)
+        st.move(
+            session,
+            variant=variant,
+            qty=step,
+            kind=StockMovementKind.PUTAWAY,
+            frm=desk,
+            to=cell,
+            actor=user,
+            reason=f"{run.code} · {cell.code}",
+            supply_id=run.id,
+        )
+        moved += step
+        products.add(variant.product_id)
+
+    if moved:
+        audit.record(
+            session,
+            actor=user,
+            action="receipt.shelve",
+            entity="supply",
+            entity_id=run.id,
+            field="location",
+            old=desk.code,
+            new=cell.code,
+            note=f"{run.code} · {moved} dona · {cell.code}",
+        )
+
+    out = s.ReceiptShelvedOut(
+        receipt_id=run.id,
+        run_code=run.code,
+        location_code=cell.code,
+        quantity=moved,
+        total_cost=sum(line.line_cost for line in lines) + run.transport_cost,
+        message="" if moved else i18n.label("receipt_already_shelved"),
+    )
+    idem.keep(session, user, idempotency_key, "receipt-shelve", stamp, out)
+    replayed = idem.commit(session, user, idempotency_key, "receipt-shelve")
+    if replayed:
+        return s.ReceiptShelvedOut(**replayed)
+    for product_id in sorted(products):
+        pr.refresh(session, product_id)
+    session.commit()
+    return out
+
+
+@router.get(
+    "/receipts/waiting",
+    response_model=list[s.ReceiptWaitingOut],
+    summary="Labelled, not yet shelved — the second moment's queue",
+)
+def waiting_receipts(
+    user: StockViewer, session: SessionDep
+) -> list[s.ReceiptWaitingOut]:
+    """Receipts whose goods are still standing in the receiving area.
+
+    The screen may be closed between the two moments — nothing is lost, QABUL
+    is a sellable place — and this is what brings the question back after a
+    reload: on ``/qabul`` as the queue, on the dashboard as a count with the
+    oldest age on it. Oldest first, because a queue is worked from the front.
+    """
+    out = []
+    for run, quantity in receipts_waiting(session):
+        line = session.exec(
+            select(SupplyLine)
+            .where(SupplyLine.supply_id == run.id)
+            .order_by(col(SupplyLine.id))
+        ).first()
+        variant = (
+            session.get(ProductVariant, line.variant_id) if line else None
+        )
+        since = run.received_at or run.declared_at
+        out.append(
+            s.ReceiptWaitingOut(
+                id=run.id,
+                code=run.code,
+                product_id=variant.product_id if variant else None,
+                product_title=run.note,
+                quantity=quantity,
+                age_minutes=max(
+                    0, int((utcnow() - since).total_seconds() // 60)
+                ),
+            )
+        )
+    out.sort(key=lambda row: -row.age_minutes)
+    return out
+
+
+def receipts_waiting(session) -> list[tuple[Supply, int]]:
+    """Every receipt with goods still in QABUL, and how many are standing.
+
+    Off the ledger, per supply: receipted into the receiving area less
+    carried out of it. Shared with the dashboard tile so the queue and the
+    count on the first screen cannot disagree.
+
+    Capped by what actually stands. QABUL is a sellable place, so a receipt
+    can shrink before it is shelved — a pick or a damage takes goods out
+    without naming the run — and a receipt whose goods have all left through
+    those doors is not waiting for anything. Two unshelved receipts of the
+    same variant can each claim the same stragglers under this cap, which is
+    accepted: that state lasts minutes, and the alternative is allocating
+    anonymous departures between runs by guesswork.
+    """
+    desk = loc.staging(session, loc.QABUL)
+    into = {
+        int(supply_id): int(units)
+        for supply_id, units in session.exec(
+            select(
+                StockMovement.supply_id,
+                func.coalesce(func.sum(StockMovement.qty), 0),
+            )
+            .where(
+                StockMovement.to_location_id == desk.id,
+                col(StockMovement.supply_id).is_not(None),
+            )
+            .group_by(col(StockMovement.supply_id))
+        ).all()
+    }
+    gone = {
+        int(supply_id): int(units)
+        for supply_id, units in session.exec(
+            select(
+                StockMovement.supply_id,
+                func.coalesce(func.sum(StockMovement.qty), 0),
+            )
+            .where(
+                StockMovement.from_location_id == desk.id,
+                col(StockMovement.supply_id).is_not(None),
+            )
+            .group_by(col(StockMovement.supply_id))
+        ).all()
+    }
+    waiting = []
+    for supply_id, received in into.items():
+        if received - gone.get(supply_id, 0) <= 0:
+            continue
+        standing = sum(
+            min(left, st.at(session, desk.id, variant_id))
+            for variant_id, left in _still_at_the_desk(
+                session, desk.id, supply_id
+            ).items()
+            if left > 0
+        )
+        if standing > 0:
+            run = session.get(Supply, supply_id)
+            if run is not None:
+                waiting.append((run, standing))
+    return waiting
+
+
+def _still_at_the_desk(
+    session: SessionDep, desk_id: int, supply_id: int
+) -> dict[int, int]:
+    """This receipt's goods still in QABUL, per variant, off the ledger."""
+    into = {
+        int(variant_id): int(units)
+        for variant_id, units in session.exec(
+            select(
+                StockMovement.variant_id,
+                func.coalesce(func.sum(StockMovement.qty), 0),
+            )
+            .where(
+                StockMovement.supply_id == supply_id,
+                StockMovement.to_location_id == desk_id,
+            )
+            .group_by(col(StockMovement.variant_id))
+        ).all()
+    }
+    for variant_id, units in session.exec(
+        select(
+            StockMovement.variant_id,
+            func.coalesce(func.sum(StockMovement.qty), 0),
+        )
+        .where(
+            StockMovement.supply_id == supply_id,
+            StockMovement.from_location_id == desk_id,
+        )
+        .group_by(col(StockMovement.variant_id))
+    ).all():
+        into[int(variant_id)] = into.get(int(variant_id), 0) - int(units)
+    return into
 
 
 # --------------------------------------------------------------------------- market runs
 
 
-@router.post(
-    "/supplies",
-    response_model=list[s.SupplyOut],
-    status_code=status.HTTP_201_CREATED,
-    summary="Sacks are in the building — thirty seconds at the door",
-)
-def start_run(
-    payload: s.SupplyCreateIn, user: WarehouseUser, session: SessionDep
-) -> list[s.SupplyOut]:
-    """One draft per sack, so each is sorted and closed on its own.
-
-    Five sacks is five rows and not one row with a count on it: they will be
-    opened on different evenings by different people, and a run that can only
-    be closed all at once is a run that stays open until the last sack is
-    dealt with.
-    """
-    runs = []
-    for _ in range(payload.sacks):
-        run = Supply(
-            code=_next_code(session, Supply, "SUP"),
-            place=payload.place.strip(),
-            # The whole fare against the first sack rather than divided by
-            # five: apportioning a taxi across sacks is arithmetic nobody
-            # asked for, and the total run cost is the same either way.
-            transport_cost=payload.transport_cost if not runs else 0,
-            note=payload.note,
-            buyer_id=user.id,
-        )
-        session.add(run)
-        session.commit()
-        session.refresh(run)
-        runs.append(run)
-
-    audit.record(
-        session,
-        actor=user,
-        action="supply.start",
-        entity="supply",
-        entity_id=runs[0].id,
-        field="sacks",
-        old=None,
-        new=payload.sacks,
-        note=payload.place,
-    )
-    session.commit()
-    return [_supply_out(session, run) for run in runs]
-
-
 @router.get(
     "/supplies",
     response_model=list[s.SupplyOut],
-    summary="Market runs, unsorted ones first",
+    summary="Market runs, newest first",
 )
 def list_supplies(
     user: StockViewer,
     session: SessionDep,
     status_filter: SupplyStatus | None = Query(None, alias="status"),
 ) -> list[s.SupplyOut]:
+    """The runs, every one of them written by a receipt.
+
+    The hand-driven doors — declaring sacks, dismissing them as sorted,
+    calling one off — are gone with the sack flow: a supply row exists
+    because ``POST /receipts`` wrote it, already ``received``, and it is
+    never edited by hand. This list and the row below it stay because the
+    labels screen reprints from a run and the reports read what a run cost.
+    """
     stmt = select(Supply)
     if status_filter is not None:
         stmt = stmt.where(Supply.status == status_filter)
-    # The same rule as the order queue: a queue is worked from the front, a
-    # history is read from the top. `draft` is sacks standing on the floor,
-    # and serving the newest first is how the one that came on Monday is still
-    # there on Friday.
-    waiting = status_filter is SupplyStatus.DRAFT
     rows = session.exec(
-        stmt.order_by(
-            col(Supply.declared_at) if waiting else col(Supply.declared_at).desc(),
-            col(Supply.id) if waiting else col(Supply.id).desc(),
-        )
+        stmt.order_by(col(Supply.declared_at).desc(), col(Supply.id).desc())
     ).all()
     return [_supply_out(session, row) for row in rows]
 
@@ -497,80 +661,6 @@ def list_supplies(
 @router.get("/supplies/{supply_id}", response_model=s.SupplyOut)
 def get_supply(supply_id: int, user: StockViewer, session: SessionDep) -> s.SupplyOut:
     return _supply_out(session, _supply(session, supply_id))
-
-
-@router.post(
-    "/supplies/{supply_id}/sorted",
-    response_model=s.SupplyOut,
-    summary="This sack has been dealt with — its goods went in as piles",
-)
-def sack_sorted(
-    supply_id: int, user: WarehouseUser, session: SessionDep
-) -> s.SupplyOut:
-    """Closes the reminder, not a receipt.
-
-    A ``draft`` supply is two words for one thing: goods are standing in the
-    building and nobody knows what they are. Its value is entirely the age on
-    the dashboard. When somebody finally tips it out, what comes out is piles —
-    one card each, one receipt each, booked through ``POST /piles`` — and there
-    is no arrangement of lines on *this* row that would describe that, because
-    a sack is not one pile.
-
-    So this row is dismissed rather than filled in. Not ``cancel``: cancelling
-    says the goods were never booked, and these were.
-    """
-    run = _draft(session, supply_id)
-    run.status = SupplyStatus.RECEIVED
-    run.received_at = utcnow()
-    run.received_by_id = user.id
-    run.note = i18n.label("sack_sorted_note")
-    session.add(run)
-    audit.record(
-        session,
-        actor=user,
-        action="supply.sorted",
-        entity="supply",
-        entity_id=run.id,
-        field="status",
-        old=SupplyStatus.DRAFT,
-        new=SupplyStatus.RECEIVED,
-        note=run.note,
-    )
-    session.commit()
-    session.refresh(run)
-    return _supply_out(session, run)
-
-
-@router.post(
-    "/supplies/{supply_id}/cancel",
-    response_model=s.SupplyOut,
-    summary="A sack that is not going to be booked in",
-)
-def cancel_supply(
-    supply_id: int,
-    payload: s.SupplyCancelIn,
-    user: WarehouseUser,
-    session: SessionDep,
-) -> s.SupplyOut:
-    """Only a draft. A closed run is corrected, never called off."""
-    run = _draft(session, supply_id)
-    run.status = SupplyStatus.CANCELLED
-    run.note = payload.reason.strip()
-    session.add(run)
-    audit.record(
-        session,
-        actor=user,
-        action="supply.cancel",
-        entity="supply",
-        entity_id=run.id,
-        field="status",
-        old=SupplyStatus.DRAFT,
-        new=SupplyStatus.CANCELLED,
-        note=run.note,
-    )
-    session.commit()
-    session.refresh(run)
-    return _supply_out(session, run)
 
 
 # --------------------------------------------------------------------------- the shelf
@@ -599,7 +689,7 @@ def empty_room(
     the reason is on every row.
     """
     if payload.code.strip():
-        cells = [_pile_cell(session, payload.code)]
+        cells = [_cell(session, payload.code)]
     else:
         cells = [
             row
@@ -768,19 +858,19 @@ def _one_spelling(rows: list) -> list[str]:
     return sorted(tally, key=lambda label: -tally[label])[:40]
 
 
-def _pile_cell(session: SessionDep, code: str) -> Location:
-    """Where the pile is going, which is always a cell.
+def _cell(session: SessionDep, code: str) -> Location:
+    """A typed or scanned cell code, checked rather than trusted.
 
-    A typed cell code is checked against the cells that exist rather than
-    trusted, because there is no scanner yet and ``A-03-11`` is one keystroke
-    away from ``A-03-01``. A code for a cell that is not there is refused; a
-    code for the wrong *cell* is caught by the form showing what is in it.
+    ``A-03-11`` is one keystroke away from ``A-03-01``, and a scanner can
+    read a label still stuck to a shelf that left the room. A code for a cell
+    that is not there is refused; a code for the wrong *cell* is caught by
+    the screen showing what is in it.
 
     Says nothing about whether the cell is retired, because the two callers
-    want opposite answers: a pile is *arriving* and must not go into a cell
-    that is off the map, while emptying one is the way goods get out of
-    exactly that mess and must keep working. ``_open_cell`` below is the
-    arriving half.
+    want opposite answers: goods being shelved must not go into a cell that
+    is off the map, while emptying one is the way goods get out of exactly
+    that mess and must keep working. ``_open_cell`` below is the arriving
+    half.
     """
     wanted = code.strip().upper()
     cell = loc.by_code(session, wanted)
@@ -799,17 +889,16 @@ def _open_cell(session: SessionDep, code: str) -> Location:
     """The same, and standing in the room: goods may actually go in here.
 
     ``loc.by_code`` finds a cell by its code and says nothing about whether it
-    is still part of the building, so a pile could be shelved into a cell
+    is still part of the building, so a receipt could be shelved into a cell
     somebody retired last month — where the count would include it and the map
     would not show it, which is the one thing retiring a cell is not allowed
     to produce.
 
     Refused here rather than left to ``st.move``, which refuses it too: this
-    runs before a stub card is written, and a request turned away at the
-    ledger would leave a product nobody asked for in the catalogue. The
-    sentence names the cell and says to bring it back or pick another one.
+    runs before anything is written, and the sentence names the cell and says
+    to bring it back or pick another one.
     """
-    cell = _pile_cell(session, code)
+    cell = _cell(session, code)
     if not cell.is_active:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -818,59 +907,11 @@ def _open_cell(session: SessionDep, code: str) -> Location:
     return cell
 
 
-def _pile_spread(session: SessionDep, payload: s.PileIn) -> list[tuple[Location, int]]:
-    """Where the pile is going and how much of it goes to each cell.
-
-    One cell or several, and exactly one of the two ways of saying so.
-    Neither is the old "empty means the receiving area" state, which is a
-    putaway queue nobody used; both is two answers to one question, and
-    picking one of them silently is how goods end up on a shelf nobody was
-    told about.
-
-    The split has to **add up to the pile**. The sizes are the count of what
-    came off the van and the cells are where it went, so a disagreement is
-    somebody having mistyped one of the two — and there is no way to tell
-    which, so neither is guessed at. The sentence says both numbers, because
-    "does not add up" without them is a person recounting a sack.
-
-    Every cell is checked the way a single one always was: a ``BIN`` that
-    exists and has not been retired, because ``A-03-11`` is one keystroke from
-    ``A-03-01`` and a cell that left the room a month ago still answers to its
-    code.
-
-    **Capacity is not checked.** Deliberately, and not an omission — see the
-    endpoint.
-    """
-    total = sum(line.quantity for line in payload.sizes)
-    one = payload.location_code.strip()
-
-    if one and payload.placements:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, i18n.label("pile_one_place_or_the_other")
-        )
-    if not one and not payload.placements:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, i18n.label("pile_needs_a_place")
-        )
-    if one:
-        return [(_open_cell(session, one), total)]
-
-    placed = sum(line.quantity for line in payload.placements)
-    if placed != total:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            i18n.label("pile_split_does_not_add_up", placed=placed, total=total),
-        )
-    return [
-        (_open_cell(session, line.code), line.quantity) for line in payload.placements
-    ]
-
-
-def _pile_card(session: SessionDep, user: User, payload: s.PileIn) -> Product:
-    """The card this pile goes on: one that exists, or a stub written now.
+def _receipt_card(session: SessionDep, user: User, payload: s.ReceiptIn) -> Product:
+    """The card this receipt goes on: one that exists, or a stub written now.
 
     Written here rather than through the catalogue's own door because what the
-    desk knows is not what that door asks for. It has a name, a colour and
+    bench knows is not what that door asks for. It has a name, a colour and
     sizes; it has no category, no price and no catalogue picture, and requiring
     any of them is what stopped the goods reaching the shelf.
     """
@@ -891,7 +932,7 @@ def _pile_card(session: SessionDep, user: User, payload: s.PileIn) -> Product:
     )
     if not title:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, i18n.label("pile_needs_a_name")
+            status.HTTP_400_BAD_REQUEST, i18n.label("receipt_needs_a_name")
         )
 
     product = Product(
@@ -930,16 +971,6 @@ def _supply(session: SessionDep, supply_id: int) -> Supply:
     run = session.get(Supply, supply_id)
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("supply_not_found"))
-    return run
-
-
-def _draft(session: SessionDep, supply_id: int) -> Supply:
-    run = _supply(session, supply_id)
-    if run.status is not SupplyStatus.DRAFT:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            i18n.label("bad_transition", from_=run.status.value, to="received"),
-        )
     return run
 
 

@@ -268,7 +268,7 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "У каждого цвета должно быть своё фото. Без фото: {colours}",
         "en": "Every colour needs its own photograph. Without one: {colours}",
     },
-    # The three gates between a pile on the shelf and a card in the shop. Each
+    # The three gates between goods on the shelf and a card in the shop. Each
     # is named on its own so a queue can say what is missing without anybody
     # opening the card to find out.
     "needs_category": {
@@ -290,11 +290,6 @@ LABELS: dict[str, dict[str, str]] = {
         "uz": "Javonda bor, do'konda yo'q",
         "ru": "На полке есть, в магазине нет",
         "en": "On the shelf, not in the shop",
-    },
-    "sack_sorted_note": {
-        "uz": "Saralandi — tovarlari uyum bo'lib kirdi",
-        "ru": "Разобрано — товар оформлен партиями",
-        "en": "Sorted — the goods went in as piles",
     },
     # The soft list: what a card is missing to read like a shop. Not refused,
     # so the wording is a thing to do rather than a thing that is wrong.
@@ -348,7 +343,7 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Такой ячейки нет: {code}",
         "en": "No such cell: {code}",
     },
-    "pile_needs_a_colour": {
+    "receipt_needs_a_colour": {
         "uz": "Qaysi rang kelganini tanlang: {colours}",
         "ru": "Выберите, какой цвет пришёл: {colours}",
         "en": "Say which colour arrived: {colours}",
@@ -363,7 +358,7 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Здесь ещё {count} шт. — сначала спишите или переместите",
         "en": "It still holds {count} — take them off the shelf first",
     },
-    "pile_sized_or_not": {
+    "receipt_sized_or_not": {
         "uz": "«{card}» kartasi {shape}. Bir kartada ikkalasi bo'lmaydi — "
               "yangi karta oching yoki o'lchamni to'g'rilang",
         "ru": "Карточка «{card}» {shape}. В одной карточке не может быть и "
@@ -381,7 +376,7 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "без размеров",
         "en": "has no sizes",
     },
-    "pile_needs_a_name": {
+    "receipt_needs_a_name": {
         "uz": "Tavar nomi yoki turi kerak",
         "ru": "Нужно название или тип товара",
         "en": "The goods need a name or a kind",
@@ -707,25 +702,20 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "That variant does not belong to this product",
     },
     # the warehouse
-    "supply_nothing_sorted": {
-        "uz": "Avval qopni saralang: birorta ham qator yo'q.",
-        "ru": "Сначала разберите мешок: ни одной строки.",
-        "en": "Sort the sack first: it has no lines.",
+    "tile_labelled_unshelved": {
+        "uz": "Yorliqlangan, javonga qo'yilmagan",
+        "ru": "Промаркировано, не на полке",
+        "en": "Labelled, not yet shelved",
     },
-    "tile_unsorted_sacks": {
-        "uz": "Saralanmagan qoplar",
-        "ru": "Неразобранные мешки",
-        "en": "Sacks nobody has opened",
+    "receipt_already_shelved": {
+        "uz": "Bu qabul allaqachon javonga qo'yilgan",
+        "ru": "Эта приёмка уже разложена по полкам",
+        "en": "That receipt is already on a shelf",
     },
     "tile_orders_today": {
         "uz": "Bugungi buyurtmalar",
         "ru": "Заказы за сегодня",
         "en": "Orders today",
-    },
-    "tile_awaiting_putaway": {
-        "uz": "Qabulda turibdi",
-        "ru": "Ждёт размещения",
-        "en": "Standing in the receiving area",
     },
     "tile_cells_full": {
         "uz": "To'lgan kataklar",
@@ -816,16 +806,43 @@ LABELS: dict[str, dict[str, str]] = {
         "en": "{code} still holds {units} — move them to another cell or write "
               "them off first",
     },
+    # Taken out of the room, and its row kept because the ledger names it.
+    # Nobody can see such a cell, so these two are for a code that was typed
+    # or scanned from a label still stuck to a shelf. The way back is the
+    # rack's shape — asking for that column again — and not a button on the
+    # cell, because there is no cell on the screen to put a button on.
     "cell_retired_destination": {
-        "uz": "{code} yacheykasi olib tashlangan — avval qaytaring yoki boshqa "
-              "yacheykani tanlang",
-        "ru": "Ячейка {code} убрана — сначала верните её или выберите другую",
-        "en": "{code} is retired — bring it back first, or choose another cell",
+        "uz": "{code} yacheykasi olib tashlangan — boshqa yacheykani tanlang "
+              "yoki javon shaklidan shu ustunni qaytaring",
+        "ru": "Ячейка {code} убрана — выберите другую или верните этот столбец "
+              "через форму стеллажа",
+        "en": "{code} was removed — choose another cell, or ask the rack for "
+              "that column again",
     },
     "cell_retired_count": {
-        "uz": "{code} yacheykasi olib tashlangan — sanashdan oldin uni qaytaring",
-        "ru": "Ячейка {code} убрана — верните её, прежде чем считать",
-        "en": "{code} is retired — bring it back before counting it",
+        "uz": "{code} yacheykasi olib tashlangan — sanashdan oldin javon "
+              "shaklidan shu ustunni qaytaring",
+        "ru": "Ячейка {code} убрана — верните этот столбец через форму "
+              "стеллажа, прежде чем считать",
+        "en": "{code} was removed — ask the rack for that column again before "
+              "counting it",
+    },
+    # What removing one did. Two sentences, because the two are different
+    # facts about the shop's records and the office is the one audience that
+    # should be told which: one cell is gone, the other is out of the room
+    # with its history still readable.
+    "cell_removed": {
+        "uz": "{code} yacheykasi o'chirildi",
+        "ru": "Ячейка {code} удалена",
+        "en": "{code} deleted",
+    },
+    "cell_removed_kept": {
+        "uz": "{code} xaritadan olib tashlandi — tarixi borligi uchun yozuvi "
+              "saqlandi",
+        "ru": "Ячейка {code} убрана с карты — запись сохранена, у неё есть "
+              "история",
+        "en": "{code} is out of the room — its row was kept because the ledger "
+              "names it",
     },
     # Not enough there to take. The numbers rather than a sentence built in
     # code: this used to reach the screen as English off the exception.
@@ -849,21 +866,6 @@ LABELS: dict[str, dict[str, str]] = {
         "uz": "{code} yacheykasi bo'sh — ko'chiradigan narsa yo'q",
         "ru": "Ячейка {code} пуста — переносить нечего",
         "en": "{code} is empty — there is nothing to move",
-    },
-    "pile_needs_a_place": {
-        "uz": "Qayerga qo'yilishini ko'rsating: bitta yacheyka yoki bo'lib joylash",
-        "ru": "Укажите, куда кладём: одну ячейку или разбивку",
-        "en": "Say where it goes: one cell, or a split across cells",
-    },
-    "pile_one_place_or_the_other": {
-        "uz": "Yo bitta yacheyka, yo bo'lib joylash — ikkalasi birga emas",
-        "ru": "Либо одна ячейка, либо разбивка — не оба сразу",
-        "en": "One cell or a split, not both",
-    },
-    "pile_split_does_not_add_up": {
-        "uz": "Yacheykalarga {placed} dona bo'lindi, pilada esa {total} dona bor",
-        "ru": "По ячейкам разложено {placed} шт., а в партии {total} шт.",
-        "en": "The cells add up to {placed}, the pile is {total}",
     },
     "putaway_plan_over_capacity": {
         "uz": "Javonlarda joy yetmaydi — oxirgi {code} yacheykasiga {over} dona "

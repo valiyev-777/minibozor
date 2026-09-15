@@ -39,20 +39,16 @@ class UserRole(StrEnum):
     takes the calls and cancels the orders, and a role that only ever names one
     person who is already an admin is a second name for admin.
 
-    ``seller`` is **not** the seller that went with the marketplace. That one
-    was an outside merchant with their own stock, their own prices and their
-    own payout. This one is somebody who works here, and their job is the shop
-    window: they take the catalogue photographs, write what the thing is,
-    price it and put it on sale. The warehouse gets goods onto a shelf, which
-    is a different job done at a different time by somebody with a sack in
-    front of them — and the two were one screen for a while, which is why
-    neither got done properly.
+    ``seller`` went the same way, twice. The marketplace one was an outside
+    merchant with their own stock and payout. The in-house one owned the shop
+    window — photographs, words, prices — and named a person this shop does
+    not have: there is one shop, and whoever photographs the goods is the
+    person who sells them. Publishing is the admin's now.
     """
 
     CUSTOMER = "customer"      # the app
     ADMIN = "admin"            # everything
     WAREHOUSE = "warehouse"    # receiving, putaway, picking, counts
-    SELLER = "seller"          # the shop window: photographs, prices, listings
     COURIER = "courier"        # a delivery round
 
 
@@ -852,7 +848,7 @@ class ReturnRequest(SQLModel, table=True):
     # A refund answers the customer. It says nothing about the shirt, which is
     # in a box at the warehouse and is either sellable again or is not. That
     # used to be two answers from two parties — the warehouse inspected and
-    # the seller decided what to do about it. The goods are ours now, so the
+    # the merchant decided what to do about it. The goods are ours now, so the
     # inspection is the whole of it: whoever opened the parcel says what they
     # found, and the shelf follows from that.
     inspection: ReturnInspection | None = Field(default=None, index=True)

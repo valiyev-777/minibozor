@@ -73,20 +73,19 @@ import { ROLE_LABEL, type StaffMember, type UserRole } from "@/lib/types"
  *  because standing somebody down is a role change like any other — it is
  *  simply the one that closes the panel behind them. */
 const ROLES: Array<{ key: UserRole; label: string }> = (
-  ["admin", "warehouse", "seller", "courier", "customer"] as const
+  ["admin", "warehouse", "courier", "customer"] as const
 ).map((key) => ({ key, label: ROLE_LABEL[key] }))
 
-/** The four that are jobs. `customer` is not one, and the server refuses an
+/** The three that are jobs. `customer` is not one, and the server refuses an
  *  appointment to it — so the form does not offer it. */
 const JOBS = ROLES.filter((role) => role.key !== "customer")
 
-/** Only the office's own job is coloured. Four neutral pills and one brand
+/** Only the office's own job is coloured. Three neutral pills and one brand
  *  one says "these people work here, and that one can change what they do";
- *  five colours would say nothing at all. */
+ *  four colours would say nothing at all. */
 const ROLE_TONE: Record<UserRole, Tone> = {
   admin: "brand",
   warehouse: "neutral",
-  seller: "neutral",
   courier: "neutral",
   customer: "warn",
 }

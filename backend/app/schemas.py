@@ -746,30 +746,6 @@ class ShelfOut(BaseModel):
     places: list[PlacementOut] = []
 
 
-class SupplyCreateIn(BaseModel):
-    """Sacks brought back from the market, before anybody has opened them.
-
-    Thirty seconds at the door: how many sacks, where from, what the van cost.
-    The lines are filled in later, while sorting — nobody knows what is in a
-    sack until it is tipped out on the table.
-    """
-
-    sacks: int = Field(default=1, ge=1, le=100)
-    place: str = ""
-    transport_cost: int = Field(default=0, ge=0)
-    note: str = ""
-
-
-class SupplyCancelIn(BaseModel):
-    """Why a run is not being booked in.
-
-    Required: a sack that vanished without a sentence against it is
-    indistinguishable from one nobody bothered to sort.
-    """
-
-    reason: str = Field(min_length=1, max_length=500)
-
-
 class SupplyLineOut(StockLineOut):
     id: int
     quantity: int
@@ -920,35 +896,39 @@ class RackOut(BaseModel):
     message: str
 
 
-class CellActiveIn(BaseModel):
-    """Taking a cell out of the room, or bolting it back in.
+class CellRemoved(BaseModel):
+    """A cell taken out of the room, and whether its row went with it.
 
-    One door with a boolean rather than a retire door and a restore door, the
-    way ``POST /admin/users/{id}/active`` is one door for somebody leaving and
-    somebody coming back. The two are the same decision read from opposite
-    sides, and two endpoints would be two places for the audit row and the
-    last-one rule to drift apart.
+    **Removing a cell means removing it.** For a long time it meant
+    ``is_active = False``: the row stayed, the code stayed, and the map drew
+    the hole struck through with a way back on it. That is a correct thing to
+    do with a ledger and the wrong thing to show a shop. A rack unbolted back
+    to four columns is four columns; a fifth column of crossed-out tiles is a
+    shelf nobody can point at in the room, and it is on the screen for ever.
 
-    **Not a delete.** The cell keeps its code, its capacity and every movement
-    that ever named it — a stocktake from March still points at ``A-02-04``,
-    and deleting the row would leave the ledger naming a place that does not
-    exist. What changes is that the room stops offering it: it is off the
-    shelf map, off the label sheet, off the putaway plan, and nothing may be
-    put into it.
+    So the row goes — *when it can*. A cell that was built by a typo and never
+    used is named by nothing, and deleting it leaves the shop exactly as it
+    would be had the typo never happened. A cell that has been lived in is a
+    different object: a movement from March, a stocktake, a picking line all
+    name it, and deleting the row would leave the ledger pointing at a place
+    that does not exist — which is not a tidier shop, it is a shop that cannot
+    say where its goods came from. That one keeps its row and leaves the room
+    the quiet way, invisible to every screen.
 
-    Its own schema and not a reuse of ``ActiveWriteIn``: that one is about a
-    person, its wording is about somebody leaving the shop, and a cell is not
-    somebody. The fields being identical today is a coincidence of two
-    booleans.
+    ``erased`` is which of the two happened, and it is reported rather than
+    chosen: the caller cannot ask for the ledger to be broken, and does not
+    have to know which case it is in. Both are gone from the map.
 
-    ``note`` is why — two dead columns on a rack that was built 6×4 by
-    mistake, a shelf that collapsed. Not required, because the audit row
-    records who and when regardless, but it is the field that makes the log
-    worth reading a year later.
+    Emptiness is the one thing asked of the caller beforehand, and it is
+    refused loudly: goods in a place nobody can see are goods nobody can find.
+    Carry them somewhere first.
     """
 
-    active: bool
-    note: str = Field("", max_length=200)
+    code: str
+    # True when the row itself is gone, false when it was kept for the
+    # ledger's sake. Either way the cell is out of the room.
+    erased: bool
+    message: str
 
 
 class WhereIsOut(BaseModel):
@@ -1226,62 +1206,32 @@ class CardPriceIn(BaseModel):
     colour: str | None = None
 
 
-class PileSizeIn(BaseModel):
-    """One size of one pile. An empty size is goods that have none."""
+class ReceiptSizeIn(BaseModel):
+    """One size of one receipt. An empty size is goods that have none."""
 
     size: str = Field(default="", max_length=40)
     quantity: int = Field(gt=0)
 
 
-class PilePlacementIn(BaseModel):
-    """How much of the pile goes in one cell.
+class ReceiptIn(BaseModel):
+    """What came through the door, and how many — and nothing about where.
 
-    In units and not in sizes. A person splitting a sack across four cells is
-    filling the first one until it is full and starting the next; they are
-    not deciding that the 42s go here and the 43s there, and asking them for
-    that matrix is asking them to invent an answer at the shelf.
-    """
-
-    code: str = Field(min_length=1, max_length=20)
-    quantity: int = Field(gt=0)
-
-
-class PilePlacedOut(BaseModel):
-    """One cell of a split pile, and what went into it."""
-
-    code: str
-    quantity: int
-
-
-class PileIn(BaseModel):
-    """A pile off the van, booked in and shelved in one action.
-
-    This is the receiving desk's whole vocabulary. A sack from the market is
-    usually one thing — only black trainers, only white shirts — so the form
-    is one row and not a matrix, and it does receipt *and* putaway together
-    because the person is standing at the shelf holding the goods. Splitting
-    those into two screens was making somebody walk the room twice.
+    The first of the receiving flow's two moments. The person is at the bench
+    with the goods; the cell is asked at the shelf, one minute and ten metres
+    later, by ``POST /warehouse/receipts/{id}/shelve`` — asking for it here
+    is asking somebody who has not walked anywhere yet where they will end
+    up, and a guess in a cell field is stock in the wrong place. Until the
+    second moment the goods stand in ``QABUL``, which is a real, sellable
+    place and not a flag.
 
     Either ``product_id`` names a card that already exists, or ``kind`` /
     ``brand`` / ``colour`` write a new one. Two black trainers of different
     makes are two cards, which is why the brand is part of the identity and
     why the identification photograph matters more than the spelling.
 
-    ``location_code`` is required — or ``placements`` is, and exactly one of
-    the two. It was optional for a while — empty meant the receiving area,
-    and a putaway queue offered the goods to whoever had time — but that
-    queue was never used: whoever opens a sack is standing at the shelf with
-    it, and shelving in the same breath is what the form is for. A wrong cell
-    is corrected with ``POST /warehouse/move`` rather than by leaving goods
-    homeless. Neither given is that old homeless state coming back, and is
-    refused; both given is two answers to one question, and is refused too.
-
-    ``placements`` is the big sack: eighty pairs do not go in a cell that
-    holds sixty, and the person is standing in front of four cells with the
-    pile at their feet. The quantities must add up to the pile — the sizes
-    are the count of what came off the van and the cells are where it went,
-    so a disagreement between them is somebody having mistyped one of the
-    two, and guessing which is how goods go missing on paper.
+    One receipt is one colour. White shoes and black shoes are two receipts,
+    each with its own sheet of labels — the second keeps the card, the kind,
+    the brand and the cost, so only the colour and the sizes are retyped.
     """
 
     product_id: int | None = None
@@ -1295,7 +1245,9 @@ class PileIn(BaseModel):
     title: str = Field(default="", max_length=200)
     snapshot_url: str = Field(default="", max_length=300)
 
-    sizes: list[PileSizeIn] = Field(min_length=1, max_length=60)
+    # In the order they were typed, which is the order the stickers print in
+    # and the order the piles sit on the table.
+    sizes: list[ReceiptSizeIn] = Field(min_length=1, max_length=60)
 
     # What one of these cost at the market. Required, and required *here*:
     # this is the only moment anybody knows it. By the evening it is a guess,
@@ -1303,49 +1255,86 @@ class PileIn(BaseModel):
     # profit report looking like a fact.
     unit_cost: int = Field(gt=0)
 
-    # One cell for the whole pile, which is the ordinary sack. Kept as it
-    # was, minus the length floor: `placements` is the other way of
-    # answering, and one of the two has to be allowed to be absent. Which is
-    # missing is checked at the door rather than by the schema, so the reason
-    # comes back as a sentence in the reader's language instead of as a
-    # validation error naming a field.
-    location_code: str = Field(default="", max_length=20)
-    # Or several cells, in the order they should be filled. The first is
-    # filled to its quantity, then the next: a size may straddle two cells,
-    # because that is what happens when a pile is split and the movements are
-    # per variant and cell anyway.
-    placements: list[PilePlacementIn] = Field(default=[], max_length=40)
-
-    # This pile's own receipt. Where it was bought and what the van cost, both
-    # optional — and its own row rather than a line on a shared daily run,
-    # because a ``draft`` supply means "a sack nobody has opened" and goods
-    # that are already on a shelf cannot be sitting in one.
+    # This receipt's own supply row. Where it was bought and what the van
+    # cost, both optional — written *by* the receipt, never edited by hand.
     place: str = Field(default="", max_length=120)
     transport_cost: int = Field(default=0, ge=0)
 
 
-class PileOut(BaseModel):
-    """What was booked in, and what to write on the box."""
+class ReceiptLabelOut(BaseModel):
+    """One variant's sticker, and how many of it to print.
+
+    ``copies`` is the quantity received: twenty shoes are twenty stickers of
+    one barcode, because twenty identical shoes are twenty of one thing. The
+    size and the colour ride separately from ``variant_label`` because the
+    58 mm sticker draws the size biggest and the colour beside it.
+    """
+
+    variant_id: int
+    product_title: str
+    colour: str
+    size: str
+    variant_label: str
+    sku: str
+    barcode: str
+    copies: int
+
+
+class ReceiptOut(BaseModel):
+    """What was booked in, and the sheet of stickers to print for it.
+
+    No cell on it: the goods are standing in ``QABUL`` and the screen's next
+    question — the only one left — is answered through the shelve door.
+    """
 
     product: AdminProductOut
     run_id: int
     run_code: str
-    # Where it went, as one string, because the receiving screen prints a
-    # line. One cell is its code, exactly as before; a split is the codes
-    # joined by a comma, which is what somebody would write on the box. Still
-    # a string and not a list: every caller prints it, and turning it into an
-    # array to serve the rarer case would have broken all of them to spare
-    # one a join.
-    location_code: str
-    # And the same thing with the counts on it, for a screen that wants to
-    # show the split rather than print it. One entry for the ordinary pile.
-    placements: list[PilePlacedOut] = []
     quantity: int
     total_cost: int
-    # For the box: the codes we generated. Printed when there is a printer,
-    # written with a marker when there is not — either way the goods carry
-    # something that tells them apart from the next sack.
-    labels: list[ProductLabelOut] = []
+    # One line per size, in the order they were typed, each with its count.
+    labels: list[ReceiptLabelOut] = []
+
+
+class ReceiptShelveIn(BaseModel):
+    """The second moment: the one thing nobody could know at the bench."""
+
+    location_code: str = Field(min_length=1, max_length=20)
+
+
+class ReceiptShelvedOut(BaseModel):
+    """The confirmation line: ``20 dona · B-01-02 · 2 400 000 so'm``.
+
+    ``quantity`` is what was carried *now* — nought when the receipt had
+    already been shelved, which is answered politely rather than refused: the
+    goods are where the person wanted them, and a second tap at the shelf is
+    not a mistake to shout about. ``message`` says so in the reader's
+    language when there was nothing left to carry.
+    """
+
+    receipt_id: int
+    run_code: str
+    location_code: str
+    quantity: int
+    total_cost: int
+    message: str = ""
+
+
+class ReceiptWaitingOut(BaseModel):
+    """One receipt whose goods are labelled and still standing in QABUL.
+
+    What the ``/qabul`` screen restores its second moment from after a
+    reload, and what the dashboard's "Yorliqlangan, javonga qo'yilmagan"
+    tile counts. ``product_id`` is there so the screen can ask
+    ``suggest-cell`` where the rest of this model already lives.
+    """
+
+    id: int
+    code: str
+    product_id: int | None = None
+    product_title: str = ""
+    quantity: int
+    age_minutes: int
 
 
 class RetireIn(BaseModel):
@@ -1389,9 +1378,19 @@ class ProductLabelOut(BaseModel):
     variant_id: int
     product_title: str
     variant_label: str
+    # The two halves of the label's face, separately: at 58 × 40 mm the size
+    # is the biggest thing on the sticker and the colour sits beside it, so
+    # the printer needs them apart rather than glued into ``variant_label``.
+    colour: str = ""
+    size: str = ""
     sku: str
     barcode: str
     price: int
+    # How many stickers to print of this line — every unit gets one, so a
+    # receipt of ten 43s is one label printed ten times. Defaults to one
+    # because a reprint from the label screen is usually a printer jam, not a
+    # second van.
+    copies: int = 1
 
 
 class CellLabelOut(BaseModel):
@@ -1402,7 +1401,7 @@ class CellLabelOut(BaseModel):
 
 
 class LabelSheetOut(BaseModel):
-    """The data behind an A4 sheet the browser prints.
+    """The data behind the labels the browser prints — one 58 mm page each.
 
     Rendered client-side: a barcode is a picture of a string and drawing it in
     the browser means no image to store, no font to install on a server, and a
@@ -1411,6 +1410,40 @@ class LabelSheetOut(BaseModel):
 
     products: list[ProductLabelOut] = []
     cells: list[CellLabelOut] = []
+
+
+class ScanVariantOut(WhereIsOut):
+    """What a scanned goods label names, whether or not any is on a shelf.
+
+    ``where-is`` hides a variant with no placements because its screen lights
+    cells up and there is no cell to light. A scan is a different question —
+    "what is this sticker?" — and the receiving desk asks it precisely about
+    goods that are not booked in yet, so the places may be an empty list and
+    the identity still comes back whole.
+    """
+
+    colour: str = ""
+    size: str = ""
+
+
+class ScanOut(BaseModel):
+    """One answer for whatever the scanner read, whichever screen read it.
+
+    A gun and a phone camera both end at a string, and the string is one of
+    three things: a goods label (barcode or SKU), a cell label, or noise.
+    ``kind`` says which, and exactly one of the two payloads is filled. A miss
+    is a typed answer rather than a 404 because a mis-scan is a normal minute
+    of warehouse work, not an error — the screen shows it loudly and listens
+    for the next one.
+    """
+
+    kind: Literal["variant", "cell", "none"]
+    # What was looked up — normalised to the cell's own spelling on a cell
+    # hit, echoed as scanned otherwise, so the screen can name the code it is
+    # refusing.
+    code: str
+    variant: ScanVariantOut | None = None
+    cell: LocationDetailOut | None = None
 
 
 class FigureOut(BaseModel):
@@ -1460,12 +1493,13 @@ class DashboardTileOut(BaseModel):
     value: int
     hint: str = ""
     href: str = ""
-    # For the one tile that must be impossible to ignore — sacks that have
-    # been standing too long.
+    # For the one tile that must be impossible to ignore — goods that have
+    # stood in the receiving area too long.
     urgent: bool = False
     # The same figure a period ago, where a period ago means anything. Most of
-    # these tiles are about now — how many cells are full, how many sacks are
-    # standing — and the shop keeps no history of that, so they carry null and
+    # these tiles are about now — how many cells are full, how many receipts
+    # are unshelved — and the shop keeps no history of that, so they carry
+    # null and
     # the screen draws no arrow. Orders today has yesterday.
     previous: int | None = None
 

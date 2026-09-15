@@ -322,9 +322,9 @@ function Run({
 
           {run.status === "collected" ? (
             <p className="mt-3 rounded-control bg-brand-soft p-3 text-micro text-brand-deep">
-              Kuryer {groups(got)} ta qopni olganini aytdi. Ombor qabul qilganda{" "}
-              <span className="font-medium">zaxira qimirlamaydi</span>: har bir qop
-              «Qaytarishlar» ekranida alohida ochiladi va butunligi o'sha yerda
+              Kuryer {groups(got)} ta qaytarmani olganini aytdi. Ombor qabul
+              qilganda <span className="font-medium">zaxira qimirlamaydi</span>: har bir
+              qaytarma «Qaytarishlar» ekranida alohida ochiladi va butunligi o'sha yerda
               yoziladi.
             </p>
           ) : null}
@@ -337,7 +337,7 @@ function Run({
 
           {run.status === "received" ? (
             <p className="mt-3 rounded-control bg-good-soft p-3 text-micro text-good">
-              Qoplar omborda. Zaxira hali o'zgargani yo'q — har bir qop
+              Qaytarmalar omborda. Zaxira hali o'zgargani yo'q — har bir qaytarma
               «Qaytarishlar»da ochilganda o'zgaradi.
             </p>
           ) : null}

@@ -9,7 +9,7 @@ specification table. Enough for the phone to look like a shop rather than a
 test fixture, and few enough that a person can recognise all of it.
 
 **Through the API, not the database.** Every pile is booked in by the warehouse
-account and every card is filled in and published by the seller, so what comes
+account and every card is filled in and published by the admin, so what comes
 out is a catalogue the ledger can explain: the placements equal the movements,
 the cards went active through the same gate a real one does, and nothing here
 knows a column name. A fixture written straight into the tables would prove
@@ -35,7 +35,6 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 WAREHOUSE = "+998900000002"
-SELLER = "+998900000004"
 ADMIN = "+998900000001"
 
 COLOURS: dict[str, tuple[int, int, int]] = {
@@ -251,10 +250,9 @@ def main() -> None:
 
     api = Api(args.base)
     warehouse = api.signin(WAREHOUSE)
-    seller = api.signin(SELLER)
+    admin = api.signin(ADMIN)
 
     if args.clear:
-        admin = api.signin(ADMIN)
         out = api.call("/warehouse/stock/empty",
                        {"reason": "demo katalog qayta yozildi"}, tok=admin)
         print(f"cleared: {out['cells']} cells, {out['units']} units written off")
@@ -263,7 +261,7 @@ def main() -> None:
     for model in CATALOGUE:
         slug, name = model["category"]
         api.call("/admin/categories", {"slug": slug, "name": name},
-                 tok=seller, ok_also=(409,))
+                 tok=admin, ok_also=(409,))
 
         card_id = None
         for colour, counts in model["colours"].items():
@@ -274,34 +272,40 @@ def main() -> None:
             ]
             body = {
                 "colour": colour, "sizes": sizes, "unit_cost": model["cost"],
-                "location_code": model["cell"], "place": "Chorsu",
+                "place": "Chorsu",
             }
             if card_id is None:
                 body |= {"kind": model["kind"], "brand": model["brand"]}
             else:
                 body |= {"product_id": card_id}
-            pile = api.call("/warehouse/piles", body, tok=warehouse,
-                            key=f"demo-{model['shape']}-{colour}")
-            card_id = pile["product"]["id"]
+            # Receiving is two doors now: the goods land in QABUL, and the cell
+            # is answered at the shelf. The demo walks both so the shelf map
+            # has something in it.
+            receipt = api.call("/warehouse/receipts", body, tok=warehouse,
+                               key=f"demo-{model['shape']}-{colour}")
+            card_id = receipt["product"]["id"]
+            api.call(f"/warehouse/receipts/{receipt['run_id']}/shelve",
+                     {"location_code": model["cell"]}, tok=warehouse,
+                     key=f"demo-shelve-{model['shape']}-{colour}")
 
-            url = api.upload(seller, draw(model["shape"], colour, shots))
+            url = api.upload(admin, draw(model["shape"], colour, shots))
             api.call(f"/admin/products/{card_id}/images",
-                     {"url": url, "colour": colour}, tok=seller)
+                     {"url": url, "colour": colour}, tok=admin)
 
         api.call(f"/admin/products/{card_id}", {
             "title": model["title"], "subtitle": model["subtitle"],
             "description": model["description"], "category_slug": slug,
-        }, tok=seller, method="PATCH")
+        }, tok=admin, method="PATCH")
         api.call(f"/admin/products/{card_id}/specs", {
             "specs": [{"key": k, "value": v} for k, v in model["specs"]],
-        }, tok=seller, method="PUT")
+        }, tok=admin, method="PUT")
         api.call(f"/admin/products/{card_id}/price", {
             "price": model["price"], "old_price": model["old_price"],
-        }, tok=seller)
+        }, tok=admin)
         # A card already on sale is the state this wants, so the refusal for
         # active → active is a success here.
         live = api.call(f"/admin/products/{card_id}/status", {"status": "active"},
-                        tok=seller, ok_also=(409,)) or {"status": "active"}
+                        tok=admin, ok_also=(409,)) or {"status": "active"}
 
         units = sum(sum(counts) for counts in model["colours"].values())
         print(f"  {model['title']:34} {live['status']:8} "

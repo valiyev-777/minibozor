@@ -79,12 +79,12 @@ const HEADLINE = "orders_today"
  * A face for each counter, from the same set the menu uses.
  *
  * Not decoration: six rows of grey text are six rows of grey text, and the
- * one about sacks standing in the receiving area is the one somebody is
- * scanning for. The icon is what the eye finds before it has read anything,
+ * one about labelled goods waiting in the receiving area is the one somebody
+ * is scanning for. The icon is what the eye finds before it has read anything,
  * and it is the *same* icon as the menu item the row leads to.
  */
 const FACES: Record<string, LucideIcon> = {
-  unsorted_sacks: PackageSearch,
+  labelled_unshelved: PackageSearch,
   held_back: Sparkles,
   cells_full: Map,
   sold_out: PackageX,

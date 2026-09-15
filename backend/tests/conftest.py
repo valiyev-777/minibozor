@@ -3,8 +3,36 @@ from __future__ import annotations
 import os
 import pathlib
 
-os.environ.setdefault("MB_DATABASE_URL", "sqlite:///./test.db")
-os.environ.setdefault("MB_ENV", "dev")
+# The database the suite runs against, **set** rather than defaulted.
+#
+# `setdefault` was a hole with a shop's catalogue at the bottom of it. It does
+# nothing when the variable is already there, and in the api container it
+# always is — compose sets `MB_DATABASE_URL=sqlite:///./minibozor.db`, which is
+# the development database. So `docker exec minibozor_api pytest` ran the whole
+# suite against the live one, and the fixture below **deletes the file it is
+# given** before rebuilding it from `create_all` and the seed. One command, and
+# the catalogue, the orders, the staff and every audit row were replaced by
+# fixtures, with the running server left reading a deleted inode and answering
+# `database disk image is malformed`.
+#
+# So the suite names its own database and overwrites whatever it was handed.
+# Pointing it somewhere else — Postgres, a file in /tmp — is `MB_TEST_DATABASE_URL`,
+# a variable nothing else in the system reads and which therefore cannot
+# already be set by the thing you are testing.
+os.environ["MB_DATABASE_URL"] = os.environ.get(
+    "MB_TEST_DATABASE_URL", "sqlite:///./test.db"
+)
+os.environ["MB_ENV"] = "dev"
+
+# And the belt to that pair of braces. The name is the application's own
+# default, so it is the one database on the machine that is certainly somebody's
+# work rather than a fixture — and this file's whole job is to delete what it is
+# pointed at.
+if "minibozor.db" in os.environ["MB_DATABASE_URL"]:
+    raise RuntimeError(
+        "The suite deletes the database it is given, and MB_TEST_DATABASE_URL "
+        "points at minibozor.db — the development database. Refusing to run."
+    )
 
 from collections.abc import Callable
 
@@ -122,14 +150,6 @@ def warehouse(
 ) -> dict[str, str]:
     """The bench: receiving, putaway, picking, counts."""
     return staff(UserRole.WAREHOUSE, "+998900009002")
-
-
-@pytest.fixture
-def seller(
-    staff: Callable[[UserRole, str], dict[str, str]],
-) -> dict[str, str]:
-    """The shop window: catalogue photographs, the words, the price, on sale."""
-    return staff(UserRole.SELLER, "+998900009004")
 
 
 @pytest.fixture

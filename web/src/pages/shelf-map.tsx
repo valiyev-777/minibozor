@@ -75,6 +75,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 
 import { Empty, Fill, PageHeader, Panel, Problem, Waiting } from "@/components/page"
+import { ScanBar, missWords, type ScanAnswer } from "@/components/scan"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -168,6 +169,7 @@ export function ShelfMapPage() {
   const [needle, setNeedle] = useState("")
   const found = useWhereIs(needle)
   const [open, setOpen] = useState<string | null>(null)
+  const [scanSaid, setScanSaid] = useState("")
 
   // Goods in the hand, so to speak: chosen, and looking for somewhere to go.
   const [moving, setMoving] = useState<Moving | null>(null)
@@ -268,6 +270,60 @@ export function ShelfMapPage() {
     ? { from: moving.from, holds, pending, onPick: pick }
     : null
 
+  /**
+   * Whatever was read, the map goes to it.
+   *
+   * A cell label opens that cell. A goods sticker lights the cells that hold
+   * it — the search box already does exactly this, so the scan fills it in
+   * rather than growing a second way for the room to be highlighted — and
+   * opens the first of them, because "where is this" is the question somebody
+   * standing in the aisle with a shoe is asking.
+   *
+   * With goods in the hand it means something stronger: a scanned cell is the
+   * destination, and the move happens. That is the whole gesture the shelving
+   * half of `/qabul` is built on, and it is the same gesture here.
+   */
+  function onScan(answer: ScanAnswer) {
+    setScanSaid("")
+    if (answer.kind === "cell" && answer.cell) {
+      const cell = answer.cell
+      if (moving) {
+        // A retired cell is refused before the request: the server would 409
+        // it anyway, and "scanned and nothing happened" at the shelf reads as
+        // a broken scanner rather than as a closed cell.
+        if (cell.is_active === false) {
+          setScanSaid(`${cell.code} yopilgan yacheyka — bu yerga qo'yib bo'lmaydi.`)
+          return
+        }
+        if (cell.code === moving.from) {
+          setScanSaid(`${cell.code} — tovar allaqachon shu yerda.`)
+          return
+        }
+        pick(cell.code)
+        return
+      }
+      setOpen(cell.code)
+      return
+    }
+    if (answer.kind === "variant" && answer.variant) {
+      const found = answer.variant
+      if (moving) {
+        setScanSaid(
+          `${found.product_title} — hozir joy tanlanmoqda. Yacheyka yorlig'ini o'qiting yoki Escape bosing.`,
+        )
+        return
+      }
+      setNeedle(found.barcode)
+      if (!found.places.length) {
+        setScanSaid(`${found.product_title} ${found.variant_label} hali javonda yo'q.`)
+        return
+      }
+      setOpen(found.places[0].code)
+      return
+    }
+    setScanSaid(missWords(answer.code))
+  }
+
   return (
     <div className={cn("space-y-4", moving && "pb-28")}>
       <PageHeader title="Ombor xaritasi" subtitle="Nima qayerda turibdi">
@@ -292,6 +348,17 @@ export function ShelfMapPage() {
         <AddRack />
         <EmptyRoom />
       </PageHeader>
+
+      <ScanBar
+        hint={
+          moving
+            ? "Yacheyka yorlig'ini o'qiting — tovar o'sha zahoti ko'chadi."
+            : "Yorliqni o'qiting — xarita o'sha joyga boradi."
+        }
+        said={scanSaid}
+        onAnswer={onScan}
+        paused={pending}
+      />
 
       <Problem error={room.error} />
 
@@ -475,35 +542,37 @@ function MoveBar({
  *
  * A queue that has been standing too long turns red. An hour for picking,
  * because an order taken this morning and still on the board at noon is a
- * customer being let down; an evening for sacks, because a run judged
- * against an hour would be red every market day.
+ * customer being let down; an evening for receiving, because a market run
+ * judged against an hour would be red every market day.
  */
 
 const PICK_LATE_MINUTES = 60
-const SACK_LATE_MINUTES = 14 * 60
+const RECEIPT_LATE_MINUTES = 14 * 60
 
 function Work() {
   const { staff } = useSession()
   const queue = usePickQueue()
-  const sacks = useSupplies("draft")
+  const arrivals = useSupplies("draft")
 
   const role = staff?.role ?? "warehouse"
   const picking = (queue.data ?? []).filter((task) => task.status !== "picked")
   const oldestPick = Math.max(0, ...picking.map((task) => task.age_minutes))
-  const unopened = sacks.data ?? []
-  const oldestSack = Math.max(0, ...unopened.map((sack) => sack.age_minutes))
+  const unshelved = arrivals.data ?? []
+  const oldestArrival = Math.max(0, ...unshelved.map((run) => run.age_minutes))
 
   const jobs = [
     {
       to: "/qabul",
       icon: PackageSearch,
       label: "Qabul",
-      hint: unopened.length
-        ? `${unopened.length > 1 ? "eng eskisi " : ""}${ageBrief(oldestSack)} turgan`
+      hint: unshelved.length
+        ? `${unshelved.length > 1 ? "eng eskisi " : ""}${ageBrief(oldestArrival)} turgan`
         : "tavar keldi — javonga qo'yish",
-      count: unopened.length,
-      unit: "qop",
-      late: unopened.length > 0 && oldestSack >= SACK_LATE_MINUTES,
+      count: unshelved.length,
+      // What the figure counts: receipts written at the bench and not yet
+      // carried to a shelf. The thing they arrived in is nobody's business.
+      unit: "qabul",
+      late: unshelved.length > 0 && oldestArrival >= RECEIPT_LATE_MINUTES,
     },
     {
       to: "/terish",

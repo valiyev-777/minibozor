@@ -6,10 +6,10 @@ and find them. So each tile carries the path of the screen it is answered on,
 and the client's job is to make it clickable rather than to work out where it
 goes.
 
-**One tile is allowed to shout.** Sacks that have been standing unopened for
-longer than an evening are the thing this shop actually loses money on — goods
-in the building that the system has never heard of — so that tile is marked
-urgent and the rest are not. If everything is urgent, nothing is.
+**One tile is allowed to shout.** Goods that were labelled at the bench and
+never carried to a shelf are the receiving flow's one loose end — the second
+moment left unanswered — so that tile is marked urgent once it is old enough,
+and the rest are not. If everything is urgent, nothing is.
 
 Read-only, and deliberately cheap: this is the screen that is open all day.
 """
@@ -38,8 +38,6 @@ from app.models import (
     StockMovement,
     StockMovementKind,
     StockPlacement,
-    Supply,
-    SupplyStatus,
     utcnow,
 )
 
@@ -50,21 +48,24 @@ from app.models import (
 # disagreeing about the shop's own revenue.
 from app.routers.reports import day_of, figure
 
+# The labelled-not-shelved queue, borrowed for the same reason: the tile and
+# the queue on /qabul must count the same receipts or one of them is lying.
+from app.routers.warehouse import receipts_waiting
+
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-# When a sack standing in the receiving area stops being normal.
+# When goods standing in the receiving area stop being normal.
 #
-# An hour, because the brief is plain that a QABUL tile with anything older
-# than an hour in it should be impossible to ignore. Sacks are given the
-# evening they were always going to need — an unsorted run is judged against
-# a night rather than an hour, because that is the actual working pattern.
+# An hour. The two moments of a receipt are one person, one minute apart —
+# the shelve happens right after the stickers go on — so a receipt still
+# unshelved an hour later is one somebody was pulled away from, and the tile
+# has to be impossible to ignore before the evening buries it.
 QABUL_ALERT_MINUTES = 60
 
 # Three days. A card held back for an afternoon is somebody waiting for
 # daylight to photograph it; one held back for three days is goods nobody is
 # going to get round to, sitting on a shelf costing rent and earning nothing.
 HELD_BACK_ALERT_MINUTES = 3 * 24 * 60
-SACK_ALERT_HOURS = 14
 
 # What counts as nearly full. Nearly out is `products.LOW_STOCK`, because the
 # catalogue list asks the same question and two answers would disagree.
@@ -90,20 +91,24 @@ def dashboard(user: DashboardViewer, session: SessionDep) -> s.DashboardOut:
 
     tiles: list[s.DashboardTileOut] = []
 
-    # ---------------------------------------------------------- unsorted sacks
-    drafts = session.exec(
-        select(Supply).where(Supply.status == SupplyStatus.DRAFT)
-    ).all()
-    oldest_sack = min((run.declared_at for run in drafts), default=None)
-    standing = _hours(oldest_sack, now)
+    # ------------------------------------------- labelled, not yet shelved
+    # Receipts whose goods are still standing in QABUL: the stickers are on,
+    # the cell was never scanned. Nothing is lost — the receiving area is a
+    # sellable place — but every one of these is a walk somebody was pulled
+    # away from, and the age is what turns the row into something acted on.
+    waiting = receipts_waiting(session)
+    oldest_receipt = min(
+        (run.received_at or run.declared_at for run, _ in waiting), default=None
+    )
     tiles.append(
         s.DashboardTileOut(
-            key="unsorted_sacks",
-            label=i18n.label("tile_unsorted_sacks"),
-            value=len(drafts),
-            hint=_age_words(oldest_sack, now),
+            key="labelled_unshelved",
+            label=i18n.label("tile_labelled_unshelved"),
+            value=len(waiting),
+            hint=_age_words(oldest_receipt, now),
             href="/qabul",
-            urgent=bool(drafts) and standing >= SACK_ALERT_HOURS,
+            urgent=bool(waiting)
+            and _minutes(oldest_receipt, now) >= QABUL_ALERT_MINUTES,
         )
     )
 
@@ -131,11 +136,6 @@ def dashboard(user: DashboardViewer, session: SessionDep) -> s.DashboardOut:
         )
     )
 
-    # A tile counting what stood in QABUL used to be here, beside a putaway
-    # queue that fed it. Goods land on a shelf in one action now, so nothing
-    # reaches the receiving area and the figure was always nought — a dashboard
-    # row that is always zero teaches people to stop reading the dashboard.
-
     # ------------------------------------------------- on the shelf, not in the shop
     # The thing this shop loses money on quietly. Goods are shelved, counted
     # and findable, and a customer cannot buy them because the card still has
@@ -156,7 +156,9 @@ def dashboard(user: DashboardViewer, session: SessionDep) -> s.DashboardOut:
             label=i18n.label("tile_held_back"),
             value=len(held_back),
             hint=_age_words(oldest, now) if held_back else "",
-            href="/sotuvga-chiqarish",
+            # Publishing lives on the card itself now — the separate screen
+            # is gone, and the draft filter is where those cards are opened.
+            href="/mahsulotlar?status=draft",
             urgent=bool(held_back) and _minutes(oldest, now) >= HELD_BACK_ALERT_MINUTES,
         )
     )
@@ -427,10 +429,6 @@ def _midnight(day: date):
 
 def _minutes(since, now) -> int:
     return 0 if since is None else max(0, int((now - since).total_seconds() // 60))
-
-
-def _hours(since, now) -> int:
-    return _minutes(since, now) // 60
 
 
 def _age_words(since, now) -> str:

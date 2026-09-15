@@ -42,8 +42,9 @@ import type {
   AdminImage,
   AdminProduct,
   AdminVariant,
-  LabelSheet,
+  LabelRollSheet,
   LocationDetail,
+  ScanAnswer,
   Page,
   PickTask,
   OrderDetail,
@@ -62,8 +63,6 @@ import type {
   Supply,
   UserRole,
   AdminProductDetail,
-  Pile,
-  PileSize,
   Spec,
   Vocab,
   WhereIs,
@@ -102,6 +101,8 @@ export const keys = {
   roundDone: ["round", "done"] as const,
   earnings: ["earnings"] as const,
   whereIs: (q: string) => ["where-is", q] as const,
+  /** The receiving queue: receipts labelled and still standing in QABUL. */
+  receiptsWaiting: ["receipts", "waiting"] as const,
   vocab: ["vocab"] as const,
   product: (id: number) => ["products", id, "detail"] as const,
   specs: (id: number) => ["products", id, "specs"] as const,
@@ -232,7 +233,7 @@ export function useCount(id: number | null) {
 export function useLabels(params: string, enabled: boolean) {
   return useQuery({
     queryKey: keys.labels(params),
-    queryFn: () => api<LabelSheet>(`/warehouse/labels?${params}`),
+    queryFn: () => api<LabelRollSheet>(`/warehouse/labels?${params}`),
     enabled,
   })
 }
@@ -649,22 +650,6 @@ export function usePutawayPlan(productId: number | null, quantity: number) {
 // cheaper question and the next screen that has no quantity to hand will want
 // it, and it will want a fresh hook rather than this one's stale key.
 
-export function useStartRun() {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: (input: {
-      sacks: number
-      place: string
-      transport_cost: number
-      note?: string
-    }) => api<Supply[]>("/warehouse/supplies", { body: input }),
-    onSuccess: () => invalidate(client, [["supplies"]]),
-  })
-}
-
-
-
-
 export function useTakeTask() {
   const client = useQueryClient()
   return useMutation({
@@ -752,61 +737,6 @@ export function useSubmitCount(id: number) {
 }
 
 // ------------------------------------------------------- writing a card
-
-/**
- * A pile off the van: booked in, shelved, and labelled, in one request.
- *
- * The one write on the receiving screen. It carries an idempotency key because
- * the person tapping it is standing in a warehouse on warehouse wifi, and a
- * second tap on a slow connection must not be a second sack.
- */
-export function useBookInPile() {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: (input: {
-      product_id?: number
-      kind?: string
-      brand?: string
-      colour?: string
-      title?: string
-      snapshot_url?: string
-      sizes: PileSize[]
-      unit_cost: number
-      /** One cell — or `placements`, and exactly one of the two. */
-      location_code?: string
-      /** The split, in units per cell, summing to the pile. The sizes are
-       *  allocated across it in order: the first cell is filled to its stated
-       *  quantity, then the next. A size may straddle two cells, which is
-       *  what physically happens when a sack is split. */
-      placements?: { code: string; quantity: number }[]
-      place?: string
-      transport_cost?: number
-    }) =>
-      api<Pile>("/warehouse/piles", {
-        body: input,
-        idempotencyKey: idempotencyKey(),
-      }),
-    // Everything this touches: the room, the receiving queue, the catalogue,
-    // the publishing queue behind it, and the figures on the dashboard.
-    onSuccess: () =>
-      invalidate(client, [
-        keys.locations,
-        ["products"],
-        ["supplies"],
-        keys.dashboard,
-        keys.vocab,
-      ]),
-  })
-}
-
-/** The reminder closed: its goods went in as piles, not as lines. */
-export function useSackSorted(id: number) {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: () => api<Supply>(`/warehouse/supplies/${id}/sorted`, { body: {} }),
-    onSuccess: () => invalidate(client, [["supplies"], keys.dashboard]),
-  })
-}
 
 /** One selling price for every cell of a card — what publishing needs. */
 export function usePriceCard(productId: number) {
@@ -1526,17 +1456,6 @@ export function useDamage() {
   })
 }
 
-/** A sack that was never goods — a miscount at the door, a sack that went
- *  back. Not "sorted": sorted says the goods went in as piles. */
-export function useCancelSupply(id: number) {
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: (reason: string) =>
-      api<Supply>(`/warehouse/supplies/${id}/cancel`, { body: { reason } }),
-    onSuccess: () => invalidate(client, [["supplies"], keys.dashboard]),
-  })
-}
-
 export function useBuildPickTask() {
   const client = useQueryClient()
   return useMutation({
@@ -1552,4 +1471,171 @@ function invalidate(
   keyList: readonly (readonly unknown[])[],
 ) {
   for (const key of keyList) void client.invalidateQueries({ queryKey: key })
+}
+
+// ------------------------------------------------------ receiving (receipts)
+
+/**
+ * One variant's sticker and how many of it to print. `copies` is the
+ * quantity received — every unit gets one, so ten 43s are one label printed
+ * ten times, numbered n/10 by the printing component.
+ */
+export type ReceiptLabel = {
+  variant_id: number
+  product_title: string
+  colour: string
+  size: string
+  variant_label: string
+  sku: string
+  barcode: string
+  copies: number
+}
+
+/**
+ * What `POST /warehouse/receipts` answers with: the card, the run, and the
+ * sheet of stickers — and no cell, because the cell is the second moment's
+ * question, answered at the shelf.
+ */
+export type Receipt = {
+  product: AdminProduct
+  run_id: number
+  run_code: string
+  quantity: number
+  total_cost: number
+  /** In the order the sizes were typed — the order the piles sit on the table. */
+  labels: ReceiptLabel[]
+}
+
+/** The confirmation line: `20 dona · B-01-02 · 2 400 000 so'm`. `quantity`
+ *  is what moved *now* — nought, with a `message`, when the receipt had
+ *  already been shelved. */
+export type ReceiptShelved = {
+  receipt_id: number
+  run_code: string
+  location_code: string
+  quantity: number
+  total_cost: number
+  message: string
+}
+
+/** One receipt whose goods are labelled and still standing in QABUL. */
+export type WaitingReceipt = {
+  id: number
+  code: string
+  product_id: number | null
+  product_title: string
+  quantity: number
+  age_minutes: number
+}
+
+/**
+ * Moment one, at the bench: what came, how many, what it cost — and nothing
+ * about where. One receipt is one colour; the goods land in QABUL and the
+ * cell is asked by [[useShelveReceipt]] at the shelf. Idempotent, because a
+ * second tap on warehouse wifi must not be a second receipt.
+ */
+export function useReceive() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      product_id?: number
+      kind?: string
+      brand?: string
+      colour?: string
+      colour_hex?: string
+      title?: string
+      snapshot_url?: string
+      /** In typed order — it is the order the stickers print in. */
+      sizes: { size: string; quantity: number }[]
+      unit_cost: number
+      place?: string
+      transport_cost?: number
+    }) =>
+      api<Receipt>("/warehouse/receipts", {
+        body: input,
+        idempotencyKey: idempotencyKey(),
+      }),
+    // Everything this touches: the room (QABUL now holds goods), the second
+    // moment's queue, the catalogue, the market runs it wrote, the chips it
+    // may have taught a word to, and the figures on the dashboard.
+    onSuccess: () =>
+      invalidate(client, [
+        keys.locations,
+        keys.receiptsWaiting,
+        ["products"],
+        ["supplies"],
+        keys.dashboard,
+        keys.vocab,
+      ]),
+  })
+}
+
+/**
+ * Moment two, at the shelf: the one thing nobody could know at the bench.
+ * A mistyped cell is a 404 and a staging or retired cell a 409 — the goods
+ * stay in QABUL and the error is shown where the code was asked for.
+ */
+export function useShelveReceipt() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: number; location_code: string }) =>
+      api<ReceiptShelved>(`/warehouse/receipts/${input.id}/shelve`, {
+        body: { location_code: input.location_code },
+        idempotencyKey: idempotencyKey(),
+      }),
+    onSuccess: () =>
+      invalidate(client, [
+        keys.locations,
+        keys.receiptsWaiting,
+        ["products"],
+        ["supplies"],
+        keys.dashboard,
+      ]),
+  })
+}
+
+/**
+ * The second moment's queue: what `/qabul` restores after a reload, and what
+ * the dashboard's "Yorliqlangan, javonga qo'yilmagan" tile counts. Refetched
+ * on an interval because another bench may be shelving while this one reads.
+ */
+export function useWaitingReceipts() {
+  return useQuery({
+    queryKey: keys.receiptsWaiting,
+    queryFn: () => api<WaitingReceipt[]>("/warehouse/receipts/waiting"),
+    refetchInterval: 30_000,
+  })
+}
+
+/**
+ * A receipt's stickers, again — printers jam, and the alternative to a
+ * reprint is somebody writing a barcode by hand. The label door already
+ * answers per market run with `copies` on every line, so this is the same
+ * cache entry [[useLabels]] fills, read with the richer shape.
+ */
+export function useRunLabels(runId: number | null) {
+  return useQuery({
+    queryKey: keys.labels(`supply_id=${runId ?? 0}`),
+    queryFn: () =>
+      api<{ products: ReceiptLabel[] }>(`/warehouse/labels?supply_id=${runId}`),
+    enabled: Boolean(runId),
+  })
+}
+
+// -------------------------------------------------------------- scan + labels
+
+/**
+ * One answer for whatever the gun or the camera read — `GET /warehouse/scan`.
+ *
+ * A mutation over a GET, on purpose: a scan is an *event*, not state. The
+ * same barcode read twice is two acts — two picked lines, two counted units —
+ * and a cached query answering the second read from the first would swallow
+ * one of them. The endpoint always answers 200; a miss arrives as
+ * `kind: "none"` for the screen to refuse loudly.
+ */
+export function useScan() {
+  return useMutation({
+    mutationFn: (code: string) =>
+      api<ScanAnswer>(`/warehouse/scan?code=${encodeURIComponent(code)}`),
+  })
 }

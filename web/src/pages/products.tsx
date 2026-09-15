@@ -6,28 +6,33 @@
  * colour is missing rather than the word "draft" — and the dashboard's own
  * tile links straight here with the filter already applied.
  *
- * Opening a card gives the three things a card is made of: the grid of colours
- * and sizes, the photographs (one per colour), and the button that puts it on
- * sale. Its stock is the ledger's and is not edited from a form here.
+ * **Publishing lives on the card.** The separate "Sotuvga chiqarish" screen is
+ * gone with the seller role that owned it: a card that is not on sale opens
+ * with one panel at the top holding the three gates the server names — a
+ * category, a price, a photograph per colour — each editable in place, and
+ * one button that enables the moment the three are satisfied. Somebody who
+ * notices a card is not on sale is already here; sending them to a second
+ * screen was the whole reason nothing got published.
  *
- * **And what was written wrong can be corrected.** The editor — the words, the
- * filing, the price, the table — used to live only inside "Sotuvga
- * chiqarish", which lists what is *held back*; a card that went on sale
- * cleanly dropped off every list that had a form on it, so a name mistyped at
- * the receiving desk was permanent and deleting the card was the only way out.
- * It is folded away behind a button because most visits here are to read a
- * row, not to rewrite one.
+ * **And what was written wrong can be corrected.** The editor — the words and
+ * the specification table, plus the filing and the price once the card is on
+ * sale — is folded away behind a button because most visits here are to read
+ * a row, not to rewrite one. Stock is the ledger's and is not edited from a
+ * form here.
  */
 
 import {
   Check,
+  ChevronDown,
   Image as ImageIcon,
   Loader2,
   PackageSearch,
   Pencil,
   Trash2,
+  X,
 } from "lucide-react"
 import { useState } from "react"
+import type { ReactNode } from "react"
 import { useSearchParams } from "react-router-dom"
 
 import {
@@ -50,6 +55,7 @@ import { cn } from "@/lib/cn"
 import { groups, money } from "@/lib/format"
 import {
   useAddImage,
+  useCategories,
   useDamage,
   useDeleteCard,
   useDeleteImage,
@@ -96,7 +102,7 @@ export function ProductsPage() {
         empty={{
           icon: PackageSearch,
           title: "Bunday karta yo'q",
-          what: "Kartalar qabul ekranida, qop ochilganda yoziladi.",
+          what: "Kartalar qabul ekranida yoziladi.",
         }}
         beforeSearch={
           <div className="flex flex-wrap items-center gap-2">
@@ -504,13 +510,13 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
   const [editing, setEditing] = useState(false)
 
   const product = products.data?.items.find((one) => one.id === id)
+  const live = product?.status === "active"
   const colours = [...new Set((grid.data ?? []).map((one) => one.colour))].filter(
     Boolean,
   )
   const taken = Object.fromEntries(
     (images.data ?? []).map((image) => [image.colour, image.url]),
   )
-  const missing = (colours.length ? colours : [""]).filter((one) => !taken[one])
 
   return (
     <div className="space-y-4">
@@ -533,16 +539,28 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
         </Button>
       </PageHeader>
 
-      {/* The same controls "Sotuvga chiqarish" draws, and deliberately the
-          same ones: a card is corrected in one vocabulary wherever somebody
-          happens to have opened it. Each block saves itself — the words, the
-          filing, the price and the table are four decisions, not one form. */}
+      {/* A card not on sale opens with the one panel that gets it there.
+          First, before the grid: it is the reason this card was opened. */}
+      {product && !live ? (
+        <PublishPanel
+          card={product}
+          colours={colours.length ? colours : [""]}
+          taken={taken}
+          onTaken={(colour, url) => addImage.mutate({ url, colour })}
+          publish={publish}
+        />
+      ) : null}
+
+      {/* The words and the table always; the filing and the price only while
+          the card is on sale — a held-back card edits those two inside the
+          publish panel, and two copies of the same form on one screen is two
+          forms that disagree by the third change. */}
       {editing && product ? (
         <Panel title="Tahrirlash">
           <div className="space-y-5">
             <Words card={product} />
-            <Filing card={product} />
-            <Pricing card={product} />
+            {live ? <Filing card={product} /> : null}
+            {live ? <Pricing card={product} /> : null}
             <Specs card={product} />
           </div>
         </Panel>
@@ -563,14 +581,14 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
         {grid.data?.length === 0 ? (
           <Empty bare what="To'r hali yaratilmagan." />
         ) : null}
-        {/* Where a colour comes from, said once and here: the sack. Somebody
-            publishing a card asked whether they were meant to be adding
-            colours on this screen — nothing on it invents one, and a colour
-            with no goods behind it would be a shop window offering something
-            the room does not have. */}
+        {/* Where a colour comes from, said once and here: the receiving desk.
+            Somebody publishing a card asked whether they were meant to be
+            adding colours on this screen — nothing on it invents one, and a
+            colour with no goods behind it would be a shop window offering
+            something the room does not have. */}
         <p className="mb-2 text-micro text-ink-faint">
-          Ranglar va o'lchamlar qabulda yoziladi — qop ochilganda. Bu yerda
-          faqat rasm, narx va sotuvga chiqarish.
+          Ranglar va o'lchamlar qabulda yoziladi. Bu yerda faqat rasm, narx va
+          sotuvga chiqarish.
         </p>
         <ul className="divide-y">
           {(grid.data ?? []).map((variant) => (
@@ -586,36 +604,207 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
         </ul>
       </Panel>
 
-      <Panel
-        title="Rasmlar — har rangga bittadan"
-        aside={<ImageIcon className="size-4 text-ink-faint" />}
-      >
-        <PhotoStep
-          colours={colours.length ? colours : [""]}
-          taken={taken}
-          onTaken={(colour, url) => addImage.mutate({ url, colour })}
-        />
-        <Gallery
-          productId={id}
-          images={images.data ?? []}
-          live={product?.status === "active"}
-        />
-      </Panel>
-
-      {product ? (
-        <Button size="lg" className="w-full gap-2" disabled={publish.isPending || (product.status !=="active" && missing.length > 0)}
-          onClick={() =>
-            publish.mutate(product.status === "active" ? "archived" : "active")
-          }
+      {/* On a held-back card the tiles live in the publish panel above; this
+          panel is then only the gallery — extra shots, covers, deletion. */}
+      {live || (images.data ?? []).length > 0 ? (
+        <Panel
+          title="Rasmlar — har rangga bittadan"
+          aside={<ImageIcon className="size-4 text-ink-faint" />}
         >
-          <Check className="size-5" />
-          {product.status === "active"
-            ? "Sotuvdan olish"
-            : missing.length
-              ? `Rasmsiz rang: ${missing.join(", ")}`
-              : "Sotuvga chiqarish"}
+          {live ? (
+            <PhotoStep
+              colours={colours.length ? colours : [""]}
+              taken={taken}
+              onTaken={(colour, url) => addImage.mutate({ url, colour })}
+            />
+          ) : null}
+          <Gallery productId={id} images={images.data ?? []} live={live} />
+        </Panel>
+      ) : null}
+
+      {product && live ? (
+        <Button
+          size="lg"
+          variant="secondary"
+          className="w-full gap-2"
+          disabled={publish.isPending}
+          onClick={() => publish.mutate("archived")}
+        >
+          {publish.isPending ? (
+            <Loader2 className="size-5 animate-spin" />
+          ) : null}
+          Sotuvdan olish
         </Button>
       ) : null}
+    </div>
+  )
+}
+
+// ------------------------------------------------------------ the shop window
+
+/**
+ * Do'konga chiqarish — one panel, three gates, one button.
+ *
+ * The gates are the server's (`unready`): a category, a price, a photograph
+ * per colour. The browser branches on the key to pick the control and prints
+ * the server's own words for what is missing — it keeps neither the rule nor
+ * the wording. Each gate is editable right here; the button enables the
+ * moment the list is empty and says what stands in the way while it is not.
+ */
+function PublishPanel({
+  card,
+  colours,
+  taken,
+  onTaken,
+  publish,
+}: {
+  card: AdminProduct
+  colours: string[]
+  taken: Record<string, string>
+  onTaken: (colour: string, url: string) => void
+  publish: ReturnType<typeof usePublish>
+}) {
+  const categories = useCategories()
+
+  const gate = new Set(card.unready.map((gap) => gap.key))
+  const ready = gate.size === 0 && card.next_statuses.includes("active")
+  const missing = card.unready.map((gap) => gap.label)
+
+  const filedAs =
+    (categories.data ?? []).find((one) => one.slug === card.category_slug)
+      ?.name ?? card.category_slug
+  const cost = card.last_cost
+  // The owner's habitual markup, as a concrete figure rather than a formula —
+  // rounded to the thousand the way every price here is.
+  const suggested = cost > 0 ? Math.round((cost * 1.6) / 1000) * 1000 : 0
+
+  return (
+    <Panel
+      title="Do'konga chiqarish"
+      aside={
+        <Button
+          className="gap-2"
+          disabled={!ready || publish.isPending}
+          onClick={() => publish.mutate("active")}
+        >
+          {publish.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Check className="size-4" />
+          )}
+          Chiqarish
+        </Button>
+      }
+    >
+      <div>
+        <Gate
+          ok={!gate.has("needs_category")}
+          name="Kategoriya"
+          value={
+            gate.has("needs_category") ? "tanlanmagan" : (filedAs ?? "")
+          }
+        >
+          <Filing card={card} />
+        </Gate>
+
+        <Gate
+          ok={!gate.has("needs_price")}
+          name="Narx"
+          value={
+            gate.has("needs_price")
+              ? cost > 0
+                ? `tannarx ${money(cost)} · taklif +60% → ${money(suggested)}`
+                : "kiritilmagan"
+              : cost > 0
+                ? `${money(card.price)} · tannarx ${money(cost)}`
+                : money(card.price)
+          }
+        >
+          <Pricing card={card} />
+        </Gate>
+
+        <Gate
+          ok={!gate.has("needs_photo")}
+          name="Rasm"
+          value={colours
+            .map((one) => `${one || "umumiy"} ${taken[one] ? "✓" : "✗"}`)
+            .join(" · ")}
+        >
+          <PhotoStep colours={colours} taken={taken} onTaken={onTaken} />
+        </Gate>
+      </div>
+
+      {/* The button's reason, in the server's words, next to the button's
+          panel rather than in a tooltip nobody hovers on a phone. */}
+      {!ready ? (
+        <p className="mt-3 rounded-control bg-warn-soft p-2 text-micro text-warn-ink">
+          {missing.length
+            ? `Chiqishi uchun yetishmayapti: ${missing.join(", ")}.`
+            : "Bu kartani hozir sotuvga chiqarib bo'lmaydi."}
+        </p>
+      ) : (
+        <p className="mt-3 rounded-control bg-good-soft p-2 text-micro text-good">
+          Hammasi tayyor — «Chiqarish» bosilsa karta do'konda ko'rinadi.
+        </p>
+      )}
+
+      <Problem error={publish.error} />
+    </Panel>
+  )
+}
+
+/**
+ * One gate: the mark, the name, the current answer, and the control under it.
+ *
+ * A satisfied gate arrives folded — its one line says everything — and opens
+ * on a tap for the correction case. An unsatisfied one arrives open, because
+ * the control under it is the very next thing the person has to touch.
+ */
+function Gate({
+  ok,
+  name,
+  value,
+  children,
+}: {
+  ok: boolean
+  name: string
+  value: string
+  children: ReactNode
+}) {
+  const [open, setOpen] = useState(!ok)
+
+  return (
+    <div className="border-t border-line first:border-t-0">
+      <button
+        type="button"
+        onClick={() => setOpen((was) => !was)}
+        className="flex w-full items-center gap-2 py-2.5 text-left"
+      >
+        <span
+          className={cn(
+            "grid size-5 shrink-0 place-items-center rounded-full",
+            ok ? "bg-good-soft text-good" : "bg-warn-soft text-warn-ink",
+          )}
+        >
+          {ok ? <Check className="size-3.5" /> : <X className="size-3.5" />}
+        </span>
+        <span className="w-24 shrink-0 text-small font-medium">{name}</span>
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate text-small",
+            ok ? "text-ink-soft" : "text-warn-ink",
+          )}
+        >
+          {value}
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-ink-faint transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open ? <div className="pb-3 pl-7">{children}</div> : null}
     </div>
   )
 }

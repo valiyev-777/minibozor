@@ -613,14 +613,14 @@ export type StaffOrder = {
 /**
  * Every role there is.
  *
- * `seller` was missing from the union while the role existed on the server,
- * so a shop assistant's row typed as something the compiler had never heard
- * of and the role chooser could not offer the job it was for.
+ * `seller` is gone from the server's enum — publishing belongs to the admin
+ * now — so it is gone from here too: a union wider than the server's is a
+ * role chooser offering a job that no longer exists.
  */
-export type UserRole = "admin" | "warehouse" | "seller" | "courier" | "customer"
+export type UserRole = "admin" | "warehouse" | "courier" | "customer"
 
 /**
- * The same five roles, in the words the office says them in.
+ * The same four roles, in the words the office says them in.
  *
  * Here rather than on a screen because three screens print them — the staff
  * directory, the journal's actor column and its actor chooser — and a word
@@ -630,7 +630,6 @@ export type UserRole = "admin" | "warehouse" | "seller" | "courier" | "customer"
 export const ROLE_LABEL: Record<UserRole, string> = {
   admin: "Administrator",
   warehouse: "Ombor",
-  seller: "Sotuvchi",
   courier: "Kuryer",
   customer: "Mijoz",
 }
@@ -1100,4 +1099,36 @@ export type OperationsReport = {
   failure_reasons: ReasonRow[]
   return_reasons: ReasonRow[]
   durations: Duration[]
+}
+
+// ------------------------------------------------------------- scan + labels
+
+/** One printable roll label: the older label shape plus the two halves of the
+ *  sticker's face — at 58 × 40 mm the size is the biggest thing on it and the
+ *  colour sits beside it, so they arrive apart rather than glued into
+ *  `variant_label` — and how many stickers this line is worth. */
+export type RollProductLabel = ProductLabel & {
+  colour: string
+  size: string
+  copies: number
+}
+
+export type LabelRollSheet = { products: RollProductLabel[]; cells: CellLabel[] }
+
+/** What a scanned goods label names. `places` may be empty — the receiving
+ *  desk scans labels on goods that are not booked in yet, and an empty list
+ *  is an answer there, not a miss. */
+export type ScanVariant = WhereIs & { colour: string; size: string }
+
+/**
+ * `GET /warehouse/scan` — one answer for whatever the gun or the camera read,
+ * on every warehouse screen. Always HTTP 200: `kind: "none"` is a mis-scan,
+ * which is a normal minute of warehouse work, and the screen says so loudly
+ * and keeps listening rather than treating it as an error.
+ */
+export type ScanAnswer = {
+  kind: "variant" | "cell" | "none"
+  code: string
+  variant: ScanVariant | null
+  cell: LocationDetail | null
 }
