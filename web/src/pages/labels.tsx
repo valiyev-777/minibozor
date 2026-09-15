@@ -20,11 +20,31 @@ import { Printer, Search } from "lucide-react"
 import { useMemo, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 
+import { Swatch } from "@/components/card-form/bits"
 import { CellRoll, LabelRoll, type RollLabel } from "@/components/label-roll"
 import { Empty, PageHeader, Panel, Problem, Waiting } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/cn"
+import { ageBrief, date } from "@/lib/format"
 import { useLabels, useSupplies, useWhereIs } from "@/lib/queries"
+import type { Supply } from "@/lib/types"
+
+/**
+ * What a run says about itself, beyond its number.
+ *
+ * `/warehouse/supplies` sends the card's title, the colour of the receipt and
+ * when it happened. The shared `Supply` type is the receiving screen's to
+ * widen and is being edited beside this one, so the bench reads the fields it
+ * needs through this rather than waiting — and keeps working either way.
+ */
+type RunRow = Supply &
+  Partial<{
+    product_title: string
+    colour: string
+    colour_hex: string
+    created_at: string
+  }>
 
 export function LabelsPage() {
   // The URL is the state. A receipt line links in with `?supply_id=12`, the
@@ -82,7 +102,7 @@ export function LabelsPage() {
           <ByVariant onAsk={ask} />
           <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
             <Button variant="secondary" onClick={() => ask({ cells: "1" })}>
-              Katak yorliqlari
+              Yacheyka yorliqlari
             </Button>
             <p className="text-micro text-ink-faint">
               Javon chetiga yopishtiriladi — kodi katta, ostida shtrix-kodi.
@@ -92,11 +112,19 @@ export function LabelsPage() {
       </Panel>
 
       {/* The five-minute support call every shop makes once, answered in the
-          screen's own words — the same sentence /qabul says. */}
-      <p className="no-print text-micro text-ink-faint">
-        Birinchi marta chop etishda brauzer oynasida: <b>Headers and footers</b> belgisini
-        oling, <b>Margins</b> ni <b>None</b> qiling. Har dona uchun bitta yorliq — 58 × 40 mm.
-      </p>
+          screen's own words — the same two lines /qabul says.
+
+          Two lines rather than one paragraph, because they are two different
+          machines: the checkbox names stay in English because that is what is
+          written in the browser's own window, and everything around them is
+          the sentence the person reads. */}
+      <div className="no-print space-y-0.5 text-micro text-ink-faint">
+        <p>
+          Kompyuterda: chop etish oynasida <b>Headers and footers</b> belgisini oling,{" "}
+          <b>Margins</b> ni <b>None</b> qiling.
+        </p>
+        <p>Telefonda: chop etish oynasida chetlarni “Yo'q” qiling.</p>
+      </div>
 
       <Problem error={sheet.error} />
       {sheet.isFetching ? <Waiting what="Yorliqlar" /> : null}
@@ -157,22 +185,52 @@ function ByRun({
       </div>
 
       {runs.data?.length ? (
-        <p className="text-micro text-ink-soft">
-          Oxirgi qabullar:{" "}
-          {runs.data.slice(0, 6).map((run) => (
-            <button
-              key={run.id}
-              type="button"
-              onClick={() => {
-                setTyped(String(run.id))
-                onAsk({ supply_id: String(run.id) })
-              }}
-              className="mr-2 tabular underline underline-offset-2"
-            >
-              {run.code}
-            </button>
-          ))}
-        </p>
+        <div className="space-y-1">
+          <span className="caption">Oxirgi qabullar</span>
+          {/* `SUP-000032` is not a name anybody remembers. A run is one card
+              in one colour, received at one moment, and those three words are
+              what somebody with a jammed printer is looking down this list
+              for — the code stays, quietly, because it is what the receipt in
+              their hand says. */}
+          <ul className="divide-y divide-line rounded-control border border-line">
+            {runs.data.slice(0, 6).map((run) => {
+              const row = run as RunRow
+              return (
+                <li key={run.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTyped(String(run.id))
+                      onAsk({ supply_id: String(run.id) })
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2 p-2 text-left transition-colors hover:bg-line-soft",
+                      runId === run.id && "bg-brand-soft",
+                    )}
+                  >
+                    {/* The same swatch the receipt and the price table draw —
+                        a raw hex is the shop's data, not a colour this design
+                        chose, and there is one component that knows that. */}
+                    {row.colour ? <Swatch hex={row.colour_hex || undefined} /> : null}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-small font-medium">
+                        {row.product_title || run.note || run.code}
+                      </span>
+                      <span className="block truncate text-micro text-ink-soft">
+                        <span className="tabular">{run.code}</span>
+                        {row.colour ? ` · ${row.colour}` : ""}
+                        {row.created_at ? ` · ${date(row.created_at)}` : ""}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-micro text-ink-faint">
+                      {ageBrief(run.age_minutes)} oldin
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
       ) : null}
     </div>
   )

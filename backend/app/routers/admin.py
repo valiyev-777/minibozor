@@ -116,13 +116,13 @@ def list_products(
                 | func.lower(Product.sku).like(needle)
             )
     total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
-    # Oldest first when it is a queue of cards waiting on a photograph, newest
-    # first when it is a catalogue.
-    order = (
-        col(Product.created_at)
-        if status_filter is ProductStatus.DRAFT
-        else col(Product.created_at).desc()
-    )
+    # Newest first, in the queue too. Oldest-first was the librarian's answer —
+    # work through the backlog in order — but the person opening this filter is
+    # the owner who just heard the bench book something in, looking for THAT
+    # card; with oldest-first it sat at the bottom of the list every time, and
+    # the seam audit watched it happen. The backlog does not get lost by being
+    # lower down; the new arrival gets lost by not being on top.
+    order = col(Product.created_at).desc()
     rows = session.exec(
         stmt.order_by(order).offset((page - 1) * page_size).limit(page_size)
     ).all()

@@ -71,8 +71,8 @@ import {
   X,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
-import { Link } from "react-router-dom"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Link, useSearchParams } from "react-router-dom"
 
 import { Empty, Fill, PageHeader, Panel, Problem, Waiting } from "@/components/page"
 import { ScanBar, missWords, type ScanAnswer } from "@/components/scan"
@@ -171,6 +171,63 @@ export function ShelfMapPage() {
   const [open, setOpen] = useState<string | null>(null)
   const [scanSaid, setScanSaid] = useState("")
 
+  /* ------------------------------------------------------ a cell has an address
+   *
+   * `?q=A-04-04`. Receiving finishes with "shelved in A-04-04" and links the
+   * code here; the map read no parameters at all, so the link landed on
+   * forty-eight identical boxes and left somebody to find the one they had
+   * just been told about. The same address is what the map writes when a cell
+   * is opened, so a cell can be sent to somebody — there is no `/ombor/A-04-04`
+   * route and there should not be two spellings of one place.
+   *
+   * Anything that is not a place in this room is a search, which is what the
+   * letter `q` means everywhere else in the app.
+   */
+  const [params, setParams] = useSearchParams()
+  const asked = (params.get("q") ?? "").trim()
+  const honoured = useRef<string | null>(null)
+
+  // Every place the room has, by its code — cells, staging areas and the vans.
+  const places = useMemo(() => {
+    const all = new Map<string, string>()
+    for (const place of [
+      ...(room.data?.cells ?? []),
+      ...(room.data?.staging ?? []),
+      ...(room.data?.couriers ?? []),
+    ]) {
+      all.set(place.code.toUpperCase(), place.code)
+    }
+    return all
+  }, [room.data])
+
+  /** Open a place, and say so in the address bar. */
+  function show(code: string | null) {
+    setOpen(code)
+    honoured.current = code
+    const next = new URLSearchParams(params)
+    if (code) next.set("q", code)
+    else next.delete("q")
+    setParams(next, { replace: true })
+  }
+
+  useEffect(() => {
+    if (!asked || !room.data || honoured.current === asked) return
+    honoured.current = asked
+    const code = places.get(asked.toUpperCase())
+    if (!code) {
+      // Not a place: it is what somebody typed into the search box.
+      setNeedle(asked)
+      return
+    }
+    setOpen(code)
+    // After the paint that draws the room, or there is nothing to scroll to.
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-cell="${code}"]`)
+        ?.scrollIntoView({ block: "center", inline: "center" })
+    })
+  }, [asked, room.data, places])
+
   // Goods in the hand, so to speak: chosen, and looking for somewhere to go.
   const [moving, setMoving] = useState<Moving | null>(null)
   const [landed, setLanded] = useState<{ to: LocationDetail; what: string } | null>(null)
@@ -212,7 +269,7 @@ export function ShelfMapPage() {
     moveCell.reset()
     setLanded(null)
     // The sheet is over the map, and the map is now the control.
-    setOpen(null)
+    show(null)
     setMoving(next)
   }
 
@@ -302,7 +359,7 @@ export function ShelfMapPage() {
         pick(cell.code)
         return
       }
-      setOpen(cell.code)
+      show(cell.code)
       return
     }
     if (answer.kind === "variant" && answer.variant) {
@@ -318,7 +375,7 @@ export function ShelfMapPage() {
         setScanSaid(`${found.product_title} ${found.variant_label} hali javonda yo'q.`)
         return
       }
-      setOpen(found.places[0].code)
+      show(found.places[0].code)
       return
     }
     setScanSaid(missWords(answer.code))
@@ -363,7 +420,7 @@ export function ShelfMapPage() {
       <Problem error={room.error} />
 
       {landed ? (
-        <Landed landed={landed} onOpen={setOpen} onClose={() => setLanded(null)} />
+        <Landed landed={landed} onOpen={show} onClose={() => setLanded(null)} />
       ) : null}
 
       {searching && !moving ? <FoundSummary lit={lit} rows={found.data ?? []} /> : null}
@@ -380,19 +437,19 @@ export function ShelfMapPage() {
           <Staging
             tiles={[...room.data.staging, ...room.data.couriers]}
             lit={searching && !moving ? lit : null}
-            onOpen={setOpen}
+            onOpen={show}
             targeting={targeting}
           />
           <Racks
             cells={room.data.cells}
             lit={searching && !moving ? lit : null}
-            onOpen={setOpen}
+            onOpen={show}
             targeting={targeting}
           />
         </>
       ) : null}
 
-      <CellDialog code={open} onClose={() => setOpen(null)} onMove={start} />
+      <CellDialog code={open} onClose={() => show(null)} onMove={start} />
 
       {moving ? (
         <MoveBar
@@ -569,7 +626,7 @@ function Work() {
       label: "Qabul",
       hint: unshelved.length
         ? `${unshelved.length > 1 ? "eng eskisi " : ""}${ageBrief(oldestArrival)} turgan`
-        : "tavar keldi — javonga qo'yish",
+        : "tovar keldi — javonga qo'yish",
       count: unshelved.length,
       // What the figure counts: receipts written at the bench and not yet
       // carried to a shelf. The thing they arrived in is nobody's business.
@@ -768,7 +825,7 @@ function Racks({
             <b className="font-semibold text-ink">
               {busy}/{cells.length}
             </b>{" "}
-            katak band
+            yacheyka band
           </span>
           {full ? (
             <span className="tabular text-danger">{full} ta to'lgan</span>
@@ -853,7 +910,7 @@ function Legend({ targeting }: { targeting: Targeting | null }) {
       </span>
       <span className="flex items-center gap-1.5">
         <span className="h-3 w-4 rounded-xs border border-dashed border-line" />
-        bo'sh katak
+        bo'sh yacheyka
       </span>
     </p>
   )
@@ -987,6 +1044,7 @@ function Cell({
   const highlighted = lit?.has(cell.code) ?? false
   const dimmed = lit !== null && !highlighted
   const empty = cell.units === 0
+  const over = cell.fill_percent > 100
 
   // --------------------------------------------------- the cell as a target
   if (targeting) {
@@ -997,6 +1055,8 @@ function Cell({
     return (
       <button
         type="button"
+        // How a link to this cell finds it — see `?q=` at the top.
+        data-cell={cell.code}
         disabled={source || targeting.pending}
         onClick={() => targeting.onPick(cell.code)}
         title={
@@ -1056,12 +1116,24 @@ function Cell({
   return (
     <button
       type="button"
+      data-cell={cell.code}
       onClick={() => onOpen(cell.code)}
-      title={`${cell.code} · ${units(cell.units)}`}
+      title={
+        over
+          ? `${cell.code} · ${units(cell.units)} — sig'imdan ortiq`
+          : `${cell.code} · ${units(cell.units)}`
+      }
       className={cn(
         "flex min-h-16 flex-col justify-between rounded-control border p-1.5 text-left transition",
         "hover:border-brand hover:bg-brand-soft",
-        empty ? "border-dashed border-line bg-canvas" : "border-line bg-surface",
+        empty
+          ? "border-dashed border-line bg-canvas"
+          : over
+            ? // A cell holding three times what it was built for is not a
+              // full cell with a red bar — the bar stops at full, so without
+              // the tile itself saying so, 350% is drawn exactly like 100%.
+              "border-danger bg-danger-soft/50"
+            : "border-line bg-surface",
         highlighted && "border-brand ring-2 ring-brand",
         dimmed && "opacity-25",
       )}
@@ -1086,8 +1158,8 @@ function Cell({
             <span className="tabular text-small font-semibold leading-none">
               {groups(cell.units)}
             </span>
-            {cell.fill_percent > 100 ? (
-              <span className="tabular text-micro font-medium leading-none text-danger">
+            {over ? (
+              <span className="tabular text-micro font-semibold leading-none text-danger">
                 {percent(cell.fill_percent)}
               </span>
             ) : null}
@@ -1151,6 +1223,7 @@ function Staging({
               <button
                 key={tile.code}
                 type="button"
+                data-cell={tile.code}
                 disabled={targeting ? targeting.from === tile.code || targeting.pending : false}
                 onClick={() => (targeting ? pick(tile.code) : onOpen(tile.code))}
                 className={cn(
@@ -1204,6 +1277,7 @@ function Staging({
               <button
                 key={tile.code}
                 type="button"
+                data-cell={tile.code}
                 disabled={targeting ? targeting.from === tile.code || targeting.pending : false}
                 onClick={() => (targeting ? pick(tile.code) : onOpen(tile.code))}
                 className={cn(
@@ -1215,7 +1289,7 @@ function Staging({
                     : targeting && "border-brand/40",
                 )}
               >
-                {tile.code.toLowerCase()}
+                {placeWord(tile.code)}
               </button>
             )
           })}
@@ -1542,6 +1616,25 @@ function RemoveCell({ place, onDone }: { place: LocationDetail; onDone: () => vo
       <Problem error={remove.error} />
     </form>
   )
+}
+
+/**
+ * A staging area in the word a person says, not in the code a scanner reads.
+ *
+ * The chips were `tile.code.toLowerCase()`, so `YIGIM` was printed `yigim`
+ * and `QAYTGAN` `qaytgan` — Uzbek words with the apostrophe filed off and a
+ * capital nobody would write. The **code** is untouched; this is only what is
+ * drawn where the code is not what is being asked for.
+ */
+const PLACE_WORDS: Record<string, string> = {
+  QABUL: "Qabul",
+  YIGIM: "Yig'im",
+  BRAK: "Brak",
+  QAYTGAN: "Qaytgan",
+}
+
+function placeWord(code: string): string {
+  return PLACE_WORDS[code] ?? code.charAt(0) + code.slice(1).toLowerCase()
 }
 
 /**
@@ -2051,7 +2144,7 @@ function RackShapeForm({
             </span>
           </>
         ) : (
-          <span className="tabular">· {columns * rows} katak</span>
+          <span className="tabular">· {columns * rows} yacheyka</span>
         )}
       </p>
 
@@ -2081,7 +2174,7 @@ function RackShapeForm({
       {plan.going.length && !plan.holding.length ? (
         <div className="space-y-2 rounded-control bg-danger-soft p-2">
           <p className="text-micro text-danger">
-            Kataklar butunlay o'chadi. Qaytarish kerak bo'lsa, shu ustunni yana
+            Yacheykalar butunlay o'chadi. Qaytarish kerak bo'lsa, shu ustunni yana
             qo'shasiz. Nega?
           </p>
           <Input
@@ -2123,7 +2216,7 @@ function RackShapeForm({
       {/* The other door, on the screen where somebody is looking for it: one
           cell is the tile's own business, not the rack's shape. */}
       <p className="text-micro text-ink-faint">
-        Bitta katakni o'chirish uchun uning ustiga bosing.
+        Bitta yacheykani o'chirish uchun uning ustiga bosing.
       </p>
     </form>
   )
@@ -2237,20 +2330,20 @@ function shapePlan(
 /**
  * What Saqlash would do, in a few words.
  *
- * The blocked case names the cells rather than counting them: "2 ta katakda
- * mol bor" sends somebody to look in the whole column, and the codes are the
- * two tiles they should be standing at.
+ * The blocked case names the cells rather than counting them: "2 ta
+ * yacheykada tovar bor" sends somebody to look in the whole column, and the
+ * codes are the two tiles they should be standing at.
  */
 function planWords(plan: ShapePlan, shaped: boolean): string {
   if (!shaped) return "Javonning shakli: ustun × qator"
   if (plan.holding.length) {
     return `${plan.holding
       .map((cell) => cell.code)
-      .join(", ")} da mol bor — avval ko'chiring`
+      .join(", ")} da tovar bor — avval ko'chiring`
   }
   const parts: string[] = []
-  if (plan.made) parts.push(`${plan.made} ta yangi katak`)
-  if (plan.going.length) parts.push(`${plan.going.length} katak o'chiriladi`)
+  if (plan.made) parts.push(`${plan.made} ta yangi yacheyka`)
+  if (plan.going.length) parts.push(`${plan.going.length} yacheyka o'chiriladi`)
   if (!parts.length) return "Shakl o'zgarmadi"
   return parts.join(" · ")
 }
@@ -2258,8 +2351,8 @@ function planWords(plan: ShapePlan, shaped: boolean): string {
 /** What just happened, on the line the person comes back to. */
 function doneWords(rack: string, made: number, gone: number): string {
   const parts: string[] = []
-  if (made) parts.push(`${made} katak qo'shildi`)
-  if (gone) parts.push(`${gone} katak o'chirildi`)
+  if (made) parts.push(`${made} yacheyka qo'shildi`)
+  if (gone) parts.push(`${gone} yacheyka o'chirildi`)
   return `${rack}: ${parts.join(", ")}`
 }
 

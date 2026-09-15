@@ -19,15 +19,57 @@
  * of a thing that did not work.
  */
 
-import { AlertTriangle, ArrowLeft, Home, RotateCw } from "lucide-react"
+import { AlertTriangle, ArrowLeft, Home, Lock, RotateCw } from "lucide-react"
 import { Component, type ReactNode } from "react"
 import { Link, useLocation } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
+import { roleWord, rolesFor } from "@/lib/nav"
 
-/** A wrong address — said, not silently corrected. */
+/**
+ * A wrong address — said, not silently corrected.
+ *
+ * And **two different wrong addresses**, because the router cannot tell them
+ * apart on its own: it builds a route table per role, so a warehouse worker
+ * opening `/mahsulotlar` and anybody opening `/mahsulotla` both land here.
+ * Telling the first one "Bunday sahifa yo'q" is a lie — the page exists, it
+ * is the owner's — and the person who read it goes and reports a broken link
+ * instead of asking for the screen. `rolesFor` is what knows the difference.
+ */
 export function NotFound({ home }: { home: string }) {
   const where = useLocation()
+  const owners = rolesFor(where.pathname)
+
+  if (owners.length) {
+    return (
+      <Shape
+        tone="quiet"
+        icon={Lock}
+        code="403"
+        title="Bu sahifa sizning rolingizga ochiq emas"
+        what={
+          <>
+            {owners.map((role) => roleWord(role)).join(", ")} ochadi:{" "}
+            <code className="rounded-control bg-line-soft px-1.5 py-0.5 text-micro">
+              {where.pathname}
+            </code>
+          </>
+        }
+      >
+        <Button variant="secondary" onClick={() => window.history.back()}>
+          <ArrowLeft />
+          Orqaga
+        </Button>
+        <Button asChild variant="primary">
+          <Link to={home}>
+            <Home />
+            Bosh sahifa
+          </Link>
+        </Button>
+      </Shape>
+    )
+  }
+
   return (
     <Shape
       code="404"
@@ -92,17 +134,29 @@ function Shape({
   title,
   what,
   children,
+  tone = "bad",
+  icon: Face = AlertTriangle,
 }: {
   code: string
   title: string
   what: ReactNode
   children: ReactNode
+  /** A door that is somebody else's is not a fault. Nothing broke, nothing
+   *  was mistyped, and a red triangle over it reads as one. */
+  tone?: "bad" | "quiet"
+  icon?: typeof AlertTriangle
 }) {
   return (
     <div className="grid min-h-[60vh] place-items-center">
       <div className="w-full max-w-lg rounded-panel border border-panel-edge bg-surface p-8 text-center">
-        <div className="mx-auto grid size-12 place-items-center rounded-panel bg-danger-soft text-danger">
-          <AlertTriangle className="size-6" />
+        <div
+          className={
+            tone === "quiet"
+              ? "mx-auto grid size-12 place-items-center rounded-panel bg-line-soft text-ink-soft"
+              : "mx-auto grid size-12 place-items-center rounded-panel bg-danger-soft text-danger"
+          }
+        >
+          <Face className="size-6" />
         </div>
         <p className="mt-4 text-micro font-semibold tracking-widest text-ink-faint">
           {code}

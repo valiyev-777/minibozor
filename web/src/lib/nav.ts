@@ -52,6 +52,17 @@ export type NavItem = {
   /** A dashboard tile key whose value rides on this item as a count. A queue
    *  nobody can see the length of is a queue that grows. */
   badge?: string
+  /** Where the **count** goes, when that is not where the item goes.
+   *
+   *  `Mahsulotlar 15` opened the catalogue: twenty-six rows, oldest first,
+   *  with the fifteen the badge was about scattered through it. A number that
+   *  opens a different set from the one it counted is a number nobody trusts
+   *  twice — so the word opens the catalogue and the figure opens the queue,
+   *  and they are two targets because they are two questions. */
+  badgeTo?: string
+  /** What that figure is, for the tooltip on it — "15" beside "Mahsulotlar"
+   *  says how many and not of what. */
+  badgeWord?: string
   /** One level deep. A parent with children navigates nowhere: it opens. */
   children?: NavItem[]
 }
@@ -74,7 +85,16 @@ const ADMIN: NavItem[] = [
   // the card: goods on a shelf no customer can buy break nothing and error
   // nowhere, so a figure in the rail is the only thing that gets the queue
   // worked — and it was one level down, which is where a count goes unread.
-  { to: "/mahsulotlar", label: "Mahsulotlar", icon: Boxes, badge: "held_back" },
+  {
+    to: "/mahsulotlar",
+    label: "Mahsulotlar",
+    icon: Boxes,
+    badge: "held_back",
+    // The same address the dashboard tile carries, so the rail, the tile and
+    // the list are three views of one figure rather than three figures.
+    badgeTo: "/mahsulotlar?status=draft",
+    badgeWord: "Do'konga chiqarilmagan kartalar",
+  },
   { to: "/kategoriyalar", label: "Kategoriyalar", icon: FolderTree },
   // Everything about an order's journey, including the half that runs
   // backwards. A return is not a kind of order and not a kind of receiving —
@@ -196,6 +216,53 @@ export function canReach(role: Role, to: string): boolean {
   )
 }
 
+/**
+ * Who this address belongs to, when it does not belong to the person asking.
+ *
+ * A warehouse worker opening `/mahsulotlar` — from a link, from a bookmark,
+ * from yesterday's session — was told "Bunday sahifa yo'q", which is not
+ * true: the page is there, it is the owner's, and the sentence sent somebody
+ * to report a broken link instead of asking for it. The router builds a route
+ * table per role, so "this role has no route" and "there is no such screen"
+ * arrive at the same place and have to be told apart here.
+ *
+ * Matched **exactly**, because the route table is exact: `/ombor/A-02-01` is
+ * not a screen anybody has, and answering "it is the warehouse's" because
+ * `/ombor` is would be the same lie the other way round. The one prefix is
+ * the courier's app, whose own screens hang under `/kuryer`.
+ */
+const ROLES: Role[] = ["admin", "warehouse", "courier"]
+
+/** Screens a role has that are in no menu — the courier's own app. */
+const UNLISTED: Partial<Record<Role, string[]>> = { courier: ["/kuryer"] }
+
+export function rolesFor(pathname: string): Role[] {
+  return ROLES.filter((role) => {
+    const own = [
+      ...leaves(navFor(role)).map((item) => item.to),
+      ...(REACHABLE[role] ?? []),
+    ]
+    return (
+      own.some((to) => !to.startsWith("#") && to === pathname) ||
+      (UNLISTED[role] ?? []).some(
+        (to) => to === pathname || pathname.startsWith(`${to}/`),
+      )
+    )
+  })
+}
+
+/** The role in the words the building uses for the people in it. */
+const ROLE_WORDS: Record<Role, string> = {
+  admin: "Egasi (admin)",
+  warehouse: "Ombor xodimi",
+  courier: "Kuryer",
+  customer: "Xaridor",
+}
+
+export function roleWord(role: Role): string {
+  return ROLE_WORDS[role]
+}
+
 export function navFor(role: Role): NavItem[] {
   if (role === "admin") return ADMIN
   if (role === "warehouse") return WAREHOUSE
@@ -270,6 +337,29 @@ export type BarSlot = {
 }
 
 /**
+ * Which three screens a role gets on the bar, said out loud.
+ *
+ * The bar used to take the first three items of the rail, and the rail is
+ * ordered for a **desk** — a list somebody reads down with a pointer, where
+ * `Kategoriyalar` sitting under `Mahsulotlar` costs nothing. Down here it cost
+ * the two screens the day is actually spent in: the office's bar read
+ * `Boshqaruv · Mahsulotlar · Kategoriyalar`, and `Buyurtmalar` and `Qabul`
+ * were both behind `Yana`. A catalogue of categories is edited about once a
+ * season; an order arrives every few minutes.
+ *
+ * So the phone's order is declared, per role, as the work it does — and
+ * anything not named here keeps the rail's order behind it, which is what the
+ * bench gets: `Ombor xaritasi`, `Qabul`, `Terish` is already the day.
+ */
+const BAR_ORDER: Partial<Record<Role, string[]>> = {
+  admin: ["/", "/buyurtmalar", "/mahsulotlar"],
+}
+
+export function barOrderFor(role: Role): string[] {
+  return BAR_ORDER[role] ?? []
+}
+
+/**
  * The menu as a row of at most five targets, and whether anything was left
  * over.
  *
@@ -284,6 +374,7 @@ export type BarSlot = {
 export function barSlots(
   items: NavItem[],
   at?: NavLeaf,
+  order: string[] = [],
 ): { slots: BarSlot[]; more: boolean } {
   const all: BarSlot[] = items.map((item) => {
     const kids = item.children ?? []
@@ -300,10 +391,18 @@ export function barSlots(
 
   if (all.length <= BAR_SLOTS) return { slots: all, more: false }
 
-  const slots = all.slice(0, BAR_SLOTS - 1)
+  // The declared screens first, in the order they were declared, then the
+  // rail's own order for everything the role did not name. A screen named
+  // twice is still one slot.
+  const named = order
+    .map((to) => all.find((slot) => slot.to === to || slot.covers.includes(to)))
+    .filter((slot): slot is BarSlot => Boolean(slot))
+  const ranked = [...new Set([...named, ...all])]
+
+  const slots = ranked.slice(0, BAR_SLOTS - 1)
   const here = at?.item.to
   if (here && !slots.some((slot) => slot.covers.includes(here))) {
-    const mine = all.find((slot) => slot.covers.includes(here))
+    const mine = ranked.find((slot) => slot.covers.includes(here))
     if (mine) slots[slots.length - 1] = mine
   }
   return { slots, more: true }

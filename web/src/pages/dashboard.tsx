@@ -92,6 +92,43 @@ const FACES: Record<string, LucideIcon> = {
   couriers_out: Truck,
 }
 
+/**
+ * The two rows this screen says in different words from the server's.
+ *
+ * Not a translation layer and not a habit — two counters were named for what
+ * they *count* rather than for the work they are, and the row is read as a
+ * job somebody has to do:
+ *
+ * * `held_back` counts **every** draft now, including the ones holding
+ *   nothing, so "Javonda bor, do'konda yo'q" is wrong for most of them: an
+ *   empty draft is not goods on a shelf, it is a card nobody finished.
+ * * `low_stock` counts variants and opens a list of **cards** — 21 against
+ *   "7 ta karta", two honest figures that read as one of them being wrong.
+ *   The screen only has the one figure, so the row says which list it opens
+ *   rather than inventing the other.
+ *
+ * The labels themselves live in the server's `i18n`, which is where they
+ * belong and which is not this session's to edit; when they are written there
+ * these entries come out.
+ */
+const SAYS: Record<string, { label?: string; hint?: (hint: string) => string }> = {
+  held_back: { label: "Do'konga chiqarilmagan" },
+  low_stock: {
+    hint: (hint) =>
+      hint
+        ? `${hint} — kartalar ro'yxati ochiladi`
+        : "kartalar ro'yxati ochiladi",
+  },
+}
+
+function says(tile: DashboardTile): { label: string; hint: string } {
+  const said = SAYS[tile.key]
+  return {
+    label: said?.label ?? tile.label,
+    hint: said?.hint ? said.hint(tile.hint) : tile.hint,
+  }
+}
+
 export function DashboardPage() {
   const board = useDashboard()
   const tiles = board.data?.tiles ?? []
@@ -204,7 +241,7 @@ function Today({ headlines }: { headlines: Figure[] }) {
             label="So'nggi 7 kun"
             figure={week}
             hint="oldingi 7 kunga nisbatan"
-            to="/hisobotlar?report=savdo"
+            to={salesOver(7)}
             className="border-b border-line lg:border-b-0"
           />
         ) : null}
@@ -213,12 +250,39 @@ function Today({ headlines }: { headlines: Figure[] }) {
             label="So'nggi 30 kun"
             figure={month}
             hint="oldingi 30 kunga nisbatan"
-            to="/hisobotlar?report=savdo"
+            to={salesOver(30)}
           />
         ) : null}
       </div>
     </Panel>
   )
+}
+
+/**
+ * The report these two cells are a summary of, over **their own** period.
+ *
+ * Both used to link to `/hisobotlar?report=savdo`, which opens at thirty days
+ * whichever cell was clicked: the seven-day figure sent you to a thirty-day
+ * report and the two numbers did not match, which reads as the dashboard
+ * being wrong. The period lives in the address bar (`report-chrome`), spelled
+ * `from`/`to` and not as a count of days, so that is what is written here —
+ * a `range=7` nobody reads would have been a link that still lies, silently.
+ */
+function salesOver(days: number): string {
+  const to = new Date()
+  const from = new Date()
+  from.setDate(from.getDate() - (days - 1))
+  return `/hisobotlar?report=savdo&from=${isoDay(from)}&to=${isoDay(to)}`
+}
+
+/** `2026-09-15` — the wire's spelling of a day. `Intl` is never used here;
+ *  `lib/format` prints the one a person reads. */
+function isoDay(when: Date): string {
+  return [
+    when.getFullYear(),
+    String(when.getMonth() + 1).padStart(2, "0"),
+    String(when.getDate()).padStart(2, "0"),
+  ].join("-")
 }
 
 /**
@@ -320,6 +384,7 @@ function Tasks({ asking, quiet }: { asking: DashboardTile[]; quiet: DashboardTil
 
 function Task({ tile }: { tile: DashboardTile }) {
   const Face = FACES[tile.key] ?? Boxes
+  const said = says(tile)
   return (
     <Link
       to={tile.href || "#"}
@@ -336,9 +401,9 @@ function Task({ tile }: { tile: DashboardTile }) {
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="block text-small font-medium text-ink">{tile.label}</span>
-        {tile.hint ? (
-          <span className="block text-micro text-ink-faint">{tile.hint}</span>
+        <span className="block text-small font-medium text-ink">{said.label}</span>
+        {said.hint ? (
+          <span className="block text-micro text-ink-faint">{said.hint}</span>
         ) : null}
       </span>
 
@@ -365,7 +430,8 @@ function Clear({ tiles }: { tiles: DashboardTile[] }) {
           key={tile.key}
           to={tile.href || "#"}
           className="rounded-full border border-line px-2 py-0.5 text-micro text-ink-soft transition-colors hover:border-brand hover:text-ink">
-          {tile.label.toLowerCase()} <span className="tabular font-medium">0</span>
+          {says(tile).label.toLowerCase()}{" "}
+          <span className="tabular font-medium">0</span>
         </Link>
       ))}
     </div>

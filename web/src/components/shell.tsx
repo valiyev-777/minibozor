@@ -71,7 +71,7 @@ import {
   X,
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
-import { NavLink, Outlet, useLocation } from "react-router-dom"
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom"
 
 import { RailSearch } from "@/components/rail-search"
 import { ScreenBoundary } from "@/pages/oops"
@@ -89,6 +89,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/cn"
 import {
+  barOrderFor,
   barSlots,
   densityFor,
   homeFor,
@@ -151,7 +152,7 @@ export function Shell() {
     setPinned(true)
   }
 
-  const bar = barSlots(items, here)
+  const bar = barSlots(items, here, barOrderFor(staff.role))
 
   return (
     <PageTitleProvider>
@@ -284,7 +285,12 @@ function BottomBar({
             ) : null}
             <span className="relative">
               {slot.icon ? <slot.icon className="size-6" /> : null}
-              <Count of={slot.badge} dot on="surface" />
+              {/* The figure, not a dot. `nav.ts` keeps a count on an item
+                  because a queue nobody can see the length of grows — and a
+                  red dot says only "something", which is the state the queue
+                  was already in. Four slots on 390px are 97px each and a
+                  two-digit pill perched on a 24px glyph is 20 of them. */}
+              <Count of={slot.badge} perched on="surface" />
             </span>
             {/* Two lines, centred, never an ellipsis — see `BAR_SLOTS`. */}
             <span className="w-full text-center text-micro font-medium leading-tight">
@@ -468,8 +474,20 @@ function RailRow({
   return <RailLink item={item} open={open} />
 }
 
+/**
+ * A row of the rail — and, when the count on it opens something else, two
+ * targets in one row.
+ *
+ * `Mahsulotlar 15` was one link: the word and the figure both opened the
+ * catalogue, where the fifteen the figure counted were mixed into twenty-six
+ * rows. So the figure is a link of its own to the set it counted, laid over
+ * the row rather than inside it — an anchor inside an anchor is not HTML, and
+ * the row keeps the space the figure sits in so nothing shifts.
+ */
 function RailLink({ item, open }: { item: NavItem; open: boolean }) {
+  const linked = Boolean(open && item.badgeTo)
   return (
+    <div className="relative">
     <NavLink
       to={item.to}
       end={item.to === "/"}
@@ -498,7 +516,13 @@ function RailLink({ item, open }: { item: NavItem; open: boolean }) {
           {open ? (
             <>
               <span className="flex-1 truncate">{item.label}</span>
-              <Count of={item.badge} />
+              {/* The figure's own target is drawn over the row; the space it
+                  stands in is reserved here. */}
+              {linked ? (
+                <span aria-hidden className="w-6 shrink-0" />
+              ) : (
+                <Count of={item.badge} />
+              )}
             </>
           ) : (
             <Count of={item.badge} dot />
@@ -506,6 +530,18 @@ function RailLink({ item, open }: { item: NavItem; open: boolean }) {
         </>
       )}
     </NavLink>
+
+    {linked ? (
+      <Link
+        to={item.badgeTo as string}
+        title={item.badgeWord ?? item.label}
+        aria-label={item.badgeWord ?? item.label}
+        className="absolute end-3 top-1/2 flex -translate-y-1/2 items-center rounded-full ring-brand/40 transition hover:ring-2"
+      >
+        <Count of={item.badge} />
+      </Link>
+    ) : null}
+    </div>
   )
 }
 
@@ -652,10 +688,14 @@ function RailGroup({
 function Count({
   of,
   dot = false,
+  perched = false,
   on = "rail",
 }: {
   of?: string
   dot?: boolean
+  /** Sitting on the corner of an icon rather than at the end of a row — the
+   *  phone's bar, where the slot is a column and there is no end of a row. */
+  perched?: boolean
   /** Which background it is sitting on — the near-black column, or the white
    *  bar at the foot of a phone. The ring has to be the colour behind it or
    *  the dot has a grey halo. */
@@ -667,6 +707,20 @@ function Count({
   if (!of) return null
   const tile = dashboard.data?.tiles.find((one) => one.key === of)
   if (!tile?.value) return null
+
+  if (perched) {
+    return (
+      <span
+        className={cn(
+          "absolute -right-3 -top-1.5 min-w-4 rounded-full px-1 text-center text-micro font-semibold leading-snug tabular ring-2",
+          on === "rail" ? "ring-rail" : "ring-surface",
+          tile.urgent ? "bg-danger text-danger-ink" : "bg-brand-soft text-brand-deep",
+        )}
+      >
+        {tile.value}
+      </span>
+    )
+  }
 
   if (dot) {
     return (
