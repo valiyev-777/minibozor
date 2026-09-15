@@ -1,29 +1,33 @@
 /**
- * §5.2 ·6 — the defined attributes: at most five, each a chip you can take off.
+ * §5.2 ·6 — colour and size, asked directly.
  *
- * Two of them do real work and the rest of the list is the shop's to grow.
+ * The brief drew this as a chip-picker: "+ Xususiyat tanlash" opening a list,
+ * a chip per chosen attribute. Built that way, the owner called it "juda
+ * yomon", and he was right about why: there are exactly two attributes that do
+ * anything, and hiding two questions behind a third button is a step that
+ * exists only to be clicked through. So both questions are simply on the
+ * screen, each with its answer showing on the control itself.
  *
- * - **Rang** opens the palette modal. It is stored as which colours the
- *   variant grid carries — there is no `product_attributes` table and there
- *   should not be one, because a colour that is not on a variant is a colour
- *   nothing can be sold in.
- * - **An o'lcham system** is `products.size_system_id`, written through its own
- *   door. Naming one turns the size boxes into that system's values, so `43`
- *   is offered rather than typed and a European 43 never lands on the same
- *   card as a UK 9.
+ * - **Rang** opens the palette modal. Stored as which colours the variant grid
+ *   carries — there is no `product_attributes` table and there should not be
+ *   one, because a colour that is not on a variant is a colour nothing can be
+ *   sold in.
+ * - **O'lcham** is `products.size_system_id`, written through its own door.
+ *   Naming a system turns the size boxes into that system's values, so `43` is
+ *   offered rather than typed and a European 43 never lands on the same card
+ *   as a UK 9.
  *
- * The systems are grouped by `family`, which is why the server sends `family`
- * and `scale` apart from `name`: *Erkaklar poyabzali* is drawn once with
- * EUR / UK / US / RUS under it, rather than as four unrelated strings that
- * happen to share a prefix. Splitting the display name on a space would work
- * until the first system called `Kamar`.
+ * The systems are grouped by `family`; a chip is labelled by its `scale`
+ * (EUR / UK / US) when it has one, and by the run of its values (`S–XXXL`)
+ * when it does not — the first draft printed `run.name` there, which drew
+ * "Kiyim  Kiyim" and "Kamar  Kamar", a label stuttering at its own chip.
  *
  * **Sizeless is a chosen answer, not an empty box.** §6.3 says a card is sized
- * or sizeless and never both, so *O'lchamsiz* is one of the things you can
- * pick here and it writes `null` deliberately.
+ * or sizeless and never both, so *O'lchamsiz* is one of the chips and it
+ * writes `null` deliberately.
  */
 
-import { Loader2, Plus, X } from "lucide-react"
+import { Loader2, X } from "lucide-react"
 import { useState } from "react"
 
 import { Swatch } from "@/components/card-form/bits"
@@ -35,8 +39,11 @@ import { bySize, tidySize } from "@/lib/format"
 import { useColours, useSizeSystems } from "@/lib/queries"
 import type { SizeSystem } from "@/lib/types"
 
-/** §5.2 ·6: "the defined attributes, at most five". */
-const MOST = 5
+/** `S–XXXL`, `42–58`: what a scale-less system offers, said by its ends. */
+function runOf(values: string[]): string {
+  if (!values.length) return "—"
+  return values.length === 1 ? values[0] : `${values[0]}–${values[values.length - 1]}`
+}
 
 export function Attributes({
   colours,
@@ -64,7 +71,6 @@ export function Attributes({
   const systems = useSizeSystems()
   const palette = useColours()
   const [picking, setPicking] = useState(false)
-  const [offering, setOffering] = useState(false)
 
   const hex = new Map((palette.data ?? []).map((row) => [row.name, row.hex]))
 
@@ -77,144 +83,115 @@ export function Attributes({
     else families.set(family, [one])
   }
 
-  const chosen = [
-    colours.length ? "rang" : null,
-    system ? system.slug : sizeless ? "o-lchamsiz" : null,
-  ].filter(Boolean)
-  const full = chosen.length >= MOST
-
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {/* The chip is the way back into the palette, not only a receipt for
-            it. Adding a seventh colour used to mean taking the chip off — and
-            `onColours([])` on a card with a live variant grid clears every
-            colour it sells in. Two sibling buttons rather than one inside the
-            other: a chip that opens the picker and a cross that empties it are
-            two acts, and only one of them should ever happen by accident. */}
-        {colours.length ? (
-          <span className="flex h-control items-center rounded-control border border-line text-small">
-            <button
-              type="button"
-              aria-label="Ranglarni tanlash"
-              onClick={() => setPicking(true)}
-              className={cn(
-                "flex h-full items-center gap-2 rounded-s-control ps-2 pe-1",
-                "transition-colors hover:bg-line-soft",
-                "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
-              )}
-            >
-              <span className="font-medium">Rang</span>
-              <span className="flex items-center gap-1">
-                {colours.map((name) => (
-                  <Swatch key={name} hex={hex.get(name)} />
-                ))}
-              </span>
-            </button>
-            <button
-              type="button"
-              aria-label="Rangni o'chirish"
-              onClick={() => onColours([])}
-              className={cn(
-                "flex h-full items-center rounded-e-control ps-1 pe-2 text-ink-faint",
-                "transition-colors hover:text-danger",
-                "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
-              )}
-            >
-              <X className="size-3.5" />
-            </button>
-          </span>
-        ) : null}
-
-        {system || sizeless ? (
-          <span className="flex h-control items-center gap-2 rounded-control border border-line px-2 text-small">
-            <span className="font-medium">{system ? system.name : "O'lchamsiz"}</span>
-            <button
-              type="button"
-              aria-label="O'lcham tizimini o'chirish"
-              onClick={() => {
-                onSizes([])
-                // Back to "nothing named" is the same write as sizeless, and
-                // the two are told apart by whether the card has sizes on it.
-                onSystem(null)
-              }}
-              className="text-ink-faint hover:text-danger"
-            >
-              <X className="size-3.5" />
-            </button>
-          </span>
-        ) : null}
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="gap-1"
-          disabled={full}
-          onClick={() => setOffering((was) => !was)}
-        >
-          <Plus className="size-4" />
-          Xususiyat tanlash
-        </Button>
-        {saving ? <Loader2 className="size-4 animate-spin text-ink-faint" /> : null}
-      </div>
-
-      {offering ? (
-        <div className="space-y-3 rounded-control border border-line p-3">
-          <div>
-            <p className="mb-1 text-micro text-ink-soft">Rang</p>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setPicking(true)
-                setOffering(false)
-              }}
-            >
+    <div className="space-y-4">
+      {/* ------------------------------------------------------------- rang */}
+      <div>
+        <p className="mb-1.5 text-small font-medium">Rang</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {colours.length ? (
+            <span className="flex h-control items-center rounded-control border border-line">
+              <button
+                type="button"
+                aria-label="Ranglarni tanlash"
+                onClick={() => setPicking(true)}
+                className={cn(
+                  "flex h-full items-center gap-2 rounded-s-control ps-3 pe-2 text-small",
+                  "transition-colors hover:bg-line-soft",
+                  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
+                )}
+              >
+                <span className="flex items-center gap-1">
+                  {colours.map((name) => (
+                    <Swatch key={name} hex={hex.get(name)} />
+                  ))}
+                </span>
+                {/* The names, not only the dots: three swatches of near-white
+                    are unreadable as dots alone. */}
+                <span className="font-medium">
+                  {colours.length > 3
+                    ? `${colours.slice(0, 3).join(" · ")} +${colours.length - 3}`
+                    : colours.join(" · ")}
+                </span>
+              </button>
+              <button
+                type="button"
+                aria-label="Ranglarni o'chirish"
+                onClick={() => onColours([])}
+                className={cn(
+                  "flex h-full items-center rounded-e-control ps-1 pe-2.5 text-ink-faint",
+                  "transition-colors hover:text-danger",
+                  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
+                )}
+              >
+                <X className="size-3.5" />
+              </button>
+            </span>
+          ) : (
+            <Button type="button" variant="secondary" onClick={() => setPicking(true)}>
               Ranglarni tanlash
             </Button>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-micro text-ink-soft">O'lcham tizimi</p>
-            {[...families].map(([family, runs]) => (
-              <div key={family} className="flex flex-wrap items-center gap-1">
-                <span className="mr-1 w-full text-small sm:w-auto">{family}</span>
-                {runs.map((run) => (
-                  <button
-                    key={run.slug}
-                    type="button"
-                    onClick={() => {
-                      onSystem(run.slug)
-                      setOffering(false)
-                    }}
-                    className={cn(
-                      "h-control-sm rounded-control border border-line px-2.5 text-micro hover:bg-line-soft",
-                      system?.slug === run.slug && "border-brand bg-brand-soft",
-                    )}
-                  >
-                    {run.scale || run.name}
-                  </button>
-                ))}
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                onSizes([])
-                onSystem(null)
-                setOffering(false)
-              }}
-              className="h-control-sm rounded-control border border-line px-2.5 text-micro hover:bg-line-soft"
-            >
-              O'lchamsiz — bu tovarda o'lcham yo'q
-            </button>
-          </div>
-
-          <Problem error={systems.error} />
+          )}
+          {colours.length ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setPicking(true)}>
+              O'zgartirish
+            </Button>
+          ) : null}
+          {saving ? <Loader2 className="size-4 animate-spin text-ink-faint" /> : null}
         </div>
-      ) : null}
+      </div>
+
+      {/* ---------------------------------------------------------- o'lcham */}
+      <div className="space-y-2">
+        <p className="text-small font-medium">O'lcham</p>
+        {[...families].map(([family, runs]) => {
+          // One system, no scale: the family label and the chip would be the
+          // same word twice, so the chip carries the whole row alone.
+          const alone = runs.length === 1 && !runs[0].scale
+          return (
+            <div key={family} className="flex flex-wrap items-center gap-1.5">
+              {/* The lone chip still gets the spacer, so every chip in the
+                  grid starts on the same column. */}
+              <span className="w-40 shrink-0 text-small text-ink-soft">
+                {alone ? "" : family}
+              </span>
+              {runs.map((run) => (
+                <button
+                  key={run.slug}
+                  type="button"
+                  onClick={() => onSystem(run.slug)}
+                  className={cn(
+                    "h-control rounded-control border border-line px-3 text-small transition-colors hover:bg-line-soft",
+                    system?.slug === run.slug &&
+                      "border-brand bg-brand-soft font-medium text-brand-deep",
+                  )}
+                >
+                  {alone ? family : run.scale || runOf(run.values)}
+                </button>
+              ))}
+            </div>
+          )
+        })}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="w-40 shrink-0 text-small text-ink-soft">Yoki</span>
+          <button
+            type="button"
+            onClick={() => {
+              onSizes([])
+              // Back to "nothing named" is the same write as sizeless, and the
+              // two are told apart by whether the card has sizes on it.
+              onSystem(null)
+            }}
+            className={cn(
+              "h-control rounded-control border border-line px-3 text-small transition-colors hover:bg-line-soft",
+              sizeless && "border-brand bg-brand-soft font-medium text-brand-deep",
+            )}
+          >
+            O'lchamsiz — bu tovarda o'lcham yo'q
+          </button>
+        </div>
+        <Problem error={systems.error} />
+      </div>
 
       {/* The values of the named system, offered rather than typed. A size
           already on the card that the system does not list is still drawn —
@@ -222,10 +199,10 @@ export function Attributes({
           form that stops showing it is a form that quietly un-picks it. */}
       {system ? (
         <div>
-          <p className="mb-1 text-micro text-ink-soft">
-            {system.name} — bu kartada bor o'lchamlar
+          <p className="mb-1.5 text-small font-medium">
+            {system.name} — <span className="font-normal text-ink-soft">kartada bor o'lchamlar</span>
           </p>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {[...new Set([...system.values, ...sizes])]
               .map(tidySize)
               .sort(bySize)
@@ -241,8 +218,8 @@ export function Attributes({
                       )
                     }
                     className={cn(
-                      "h-control min-w-11 rounded-control border border-line px-2 text-small tabular hover:bg-line-soft",
-                      on && "border-brand bg-brand text-brand-ink",
+                      "h-control min-w-11 rounded-control border border-line px-2 text-small tabular transition-colors hover:bg-line-soft",
+                      on && "border-brand bg-brand font-medium text-brand-ink",
                     )}
                   >
                     {size}

@@ -82,7 +82,19 @@ export function ProductsPage() {
   // list it sent you to was the whole catalogue.
   const stock = params.get("stock") ?? ""
   const state = useTableState()
-  const [openId, setOpenId] = useState<number | null>(null)
+  // The open card lives in the URL, not in component state. State-held ids
+  // looked identical until somebody reloaded — the card silently closed — or
+  // tried to send a colleague "the card I mean" and found the address bar
+  // still said /mahsulotlar. The list's own filters are already links; the
+  // card it opens has to be one too.
+  const openId = Number(params.get("card")) || null
+  const setOpenId = (id: number | null) =>
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (id) next.set("card", String(id))
+      else next.delete("card")
+      return next
+    })
   const [view, setView] = useCatalogueView()
   const products = useProducts(state.q, status, stock)
 
@@ -609,7 +621,7 @@ function Card({ id, onBack }: { id: number; onBack: () => void }) {
   const live = product?.status === "active"
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-3xl space-y-4">
       <PageHeader
         title={product?.title ?? "Karta"}
         subtitle={product ? `${product.sku} · ${money(product.price)}` : ""}

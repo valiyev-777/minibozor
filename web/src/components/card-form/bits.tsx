@@ -36,10 +36,16 @@ export function Section({
   aside?: ReactNode
   children: ReactNode
 }) {
+  // A bounded panel per section, not a hairline on a bare canvas. The form
+  // used to be one 3000px run of sections floating on the grey page — the
+  // owner called it "to'liq yoyilib ketgan" — and the design system's own
+  // chrome rule (a screen is panels on canvas) says the same thing. The header
+  // band carries the number and the title the way a table carries its header
+  // row, so "the sixth one" is findable while scrolling.
   return (
-    <section className="border-t border-line pt-5 first:border-t-0 first:pt-0">
-      <header className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="flex items-baseline gap-2 text-small font-semibold">
+    <section className="overflow-hidden rounded-panel border border-line bg-surface shadow-panel">
+      <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line bg-line-soft/60 px-4 py-2.5">
+        <h3 className="flex items-baseline gap-2 text-body font-semibold">
           <span className="tabular text-ink-faint">{step}</span>
           <span>
             {title}
@@ -48,8 +54,10 @@ export function Section({
         </h3>
         {aside ? <div className="flex items-center gap-2">{aside}</div> : null}
       </header>
-      {hint ? <p className="mb-2 text-micro text-ink-soft">{hint}</p> : null}
-      {children}
+      <div className="p-4">
+        {hint ? <p className="mb-3 text-small text-ink-soft">{hint}</p> : null}
+        {children}
+      </div>
     </section>
   )
 }

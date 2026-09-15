@@ -1324,24 +1324,37 @@ function SizeRun({
 
       {showing ? (
         <div className="mt-2 space-y-2 rounded-control border border-line p-3">
-          {families.map(([family, runs]) => (
-            <div key={family} className="flex flex-wrap items-center gap-1">
-              <span className="mr-1 w-full text-small sm:w-auto">{family}</span>
-              {runs.map((run) => (
-                <button
-                  key={run.slug}
-                  type="button"
-                  onClick={() => choose(run.slug)}
-                  className={cn(
-                    "h-control rounded-control border border-line px-3 text-small hover:bg-line-soft",
-                    system?.slug === run.slug && "border-brand bg-brand-soft",
-                  )}
-                >
-                  {run.scale || run.name}
-                </button>
-              ))}
-            </div>
-          ))}
+          {families.map(([family, runs]) => {
+            // One system, no scale: the family label and its chip would be the
+            // same word twice ("Kamar  Kamar"), so the chip stands alone.
+            const alone = runs.length === 1 && !runs[0].scale
+            return (
+              <div key={family} className="flex flex-wrap items-center gap-1.5">
+                <span className="w-40 shrink-0 text-small text-ink-soft">
+                  {alone ? "" : family}
+                </span>
+                {runs.map((run) => (
+                  <button
+                    key={run.slug}
+                    type="button"
+                    onClick={() => choose(run.slug)}
+                    className={cn(
+                      "h-control rounded-control border border-line px-3 text-small transition-colors hover:bg-line-soft",
+                      system?.slug === run.slug &&
+                        "border-brand bg-brand-soft font-medium text-brand-deep",
+                    )}
+                  >
+                    {alone
+                      ? family
+                      : run.scale ||
+                        (run.values.length > 1
+                          ? `${run.values[0]}–${run.values[run.values.length - 1]}`
+                          : (run.values[0] ?? "—"))}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
           <button
             type="button"
             onClick={() => choose(null)}

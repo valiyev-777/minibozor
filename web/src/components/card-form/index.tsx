@@ -164,7 +164,7 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
   const [snapshot, setSnapshot] = useState("")
 
   return (
-    <div className="space-y-5">
+    <div className="w-full max-w-3xl space-y-4">
       <AsteriskLine />
 
       <Section step={1} title="Mahsulot toifasi" required>
@@ -223,7 +223,7 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
         >
           <div className="space-y-3">
             <div>
-              <p className="mb-1 text-micro text-ink-soft">Tur</p>
+              <p className="mb-1.5 text-small font-medium">Tur</p>
               <div className="flex flex-wrap items-center gap-2">
                 {(vocab.data?.kinds ?? []).slice(0, 8).map((one) => (
                   <Button
@@ -248,7 +248,7 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <p className="w-full text-micro text-ink-soft sm:w-auto">Brend</p>
+              <p className="w-full text-small font-medium sm:w-auto">Brend</p>
               <select
                 value={brand ?? ""}
                 disabled={noBrand}
@@ -277,7 +277,7 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
             </div>
 
             <div>
-              <p className="mb-1 text-micro text-ink-soft">
+              <p className="mb-1.5 text-small font-medium">
                 Tanish uchun rasm — qopning ustidan, oq fon shart emas
               </p>
               <Capture
@@ -298,7 +298,7 @@ function StartingACard({ onCreated }: { onCreated: (id: number) => void }) {
 /** The line at the top that says what the asterisk means. */
 function AsteriskLine() {
   return (
-    <p className="text-micro text-ink-soft">
+    <p className="text-small text-ink-soft">
       <Required /> belgisi — to'ldirilishi shart bo'lgan maydon.
     </p>
   )
@@ -433,7 +433,7 @@ function WritingACard({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="w-full max-w-3xl space-y-4">
       {/* §5.4: the gate panel is at the top of the form and not a panel beside
           it — the three things holding a card out of the shop are the first
           thing somebody opening the card in the catalogue needs to see. */}
@@ -822,7 +822,7 @@ function WritingACard({
           they have their own doors and their own guards, and a card whose
           price waits on a button at the bottom of a long form is a card that
           gets published unpriced. */}
-      <div className="sticky bottom-[var(--bottom-nav)] z-10 -mx-4 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur">
+      <div className="sticky bottom-[var(--bottom-nav)] z-10 rounded-panel border border-line bg-surface/95 px-4 py-3 shadow-raised backdrop-blur">
         <Button
           type="button"
           className="w-full gap-2 sm:w-auto"
@@ -841,7 +841,7 @@ function WritingACard({
 
 /** The filled-field classes, for the two `<select>`s this form draws by hand. */
 const FIELD =
-  "h-control w-full rounded-control border border-transparent bg-line-soft px-3 text-small text-ink outline-none focus-visible:border-brand focus-visible:bg-surface focus-visible:ring-2 focus-visible:ring-brand/25 disabled:opacity-50"
+  "h-control w-full rounded-control border border-transparent bg-line-soft px-3 text-body text-ink outline-none focus-visible:border-brand focus-visible:bg-surface focus-visible:ring-2 focus-visible:ring-brand/25 disabled:opacity-50"
 
 /**
  * A field with a **Mavjud emas** beside it.
