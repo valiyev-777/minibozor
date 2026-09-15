@@ -42,6 +42,10 @@ should say so and stop, not choose differently.
 | Colour | **One colour per receipt** | The multi-colour row comes out of the screen |
 | Cell | **Asked last**, at the shelf | Two moments, one screen (§2) |
 | Role | **`seller` is deleted** | Publishing is the admin's (§5) |
+| Card form | **One form, Uzum's shape, no Russian** | Used at Qabul *and* in Mahsulotlar (§5) |
+| Colours | **A seeded palette with swatches** | No more typing a colour by hand |
+| Sizes | **Named size systems** (EUR/UK/US, kiyim) | Offered, not typed |
+| Catalogue | **Cards with the photograph first** | And no full-width buttons (§5A.1) |
 
 ---
 
@@ -294,7 +298,24 @@ variant with no placements, and the scan router needs both.
 
 ---
 
-## 5. Publishing — inside the card, three gates, no role
+## 5. The card form — one form, used in two places
+
+The owner sent screenshots of Uzum Market's *Tovarni yaratish* and said: **this
+shape, here too.** He is right that it is the right shape, and the reason is
+worth writing down: it is **one long form in one column, in the order a person
+actually knows the answers**, with everything optional folded away behind a
+button until it is wanted. Our current answer is three panels on two screens
+and a role that owns them.
+
+Two things about the reference, before the detail:
+
+- **No Russian.** Uzum asks for every field twice because it sells in two
+  languages. We sell in one. Every doubled input becomes a single input, and
+  the form is half as long for it. *"Bizda yo'q rus tili, kerak emas narsalarni
+  qo'shmasin."*
+- **No marketplace furniture.** No MXIK fiscal code, no seller code (we
+  generate the SKU), no moderation state, no 360° photographs. We are not a
+  marketplace and nobody is approving our cards.
 
 ### 5.1 The seller role is deleted
 
@@ -308,50 +329,225 @@ variant with no placements, and the scan router needs both.
 - An Alembic revision for the enum (Postgres enums do not drop a value — the
   existing revision `3b4d3d7fc68b` added it; write the reverse properly, and
   move any account that holds the role to `admin` first).
-- `docs/`, the Walleo pages and `dev.sh`'s sign-in table mention it — fix the
-  ones in this repo; the Walleo pages are handled separately.
 
-Anyone who can open the catalogue can publish. There is one shop and the
-person who photographs the goods is the person who sells them.
+**The owner publishes.** There is one shop, and the person who photographs the
+goods is the person who sells them.
 
-### 5.2 The screen
+### 5.2 The sections, in order
 
-`/sotuvga-chiqarish` is **deleted** (`web/src/pages/publish.tsx`, 392 lines).
-Its job moves onto the product card in `/mahsulotlar`, which is where somebody
-already is when they notice a card is not on sale.
+One column. Each heading is a small capitalised label; required ones carry a
+red asterisk and a line at the top of the form says what the asterisk means.
 
-A card that is not on sale shows **one panel at the top**, not three, and the
-panel contains exactly what is missing:
+**1 · Mahsulot toifasi** — the category, and it comes **first** because it
+decides which attributes the rest of the form offers.
+
+Cascading selects, one per level, each appearing when its parent is chosen:
+`Kiyim → Oyoq kiyim → Erkaklar → Krossovka`. Under them, one button —
+**Qabul qilish**. Once accepted the selects collapse into a breadcrumb with an
+**O'zgartirish** beside it, and the rest of the form appears. Our category tree
+already nests to any depth (`categories.parent_id`); the form reads it.
+
+**2 · Tovar nomi** — one line, with a `0/90` counter. The counter is not
+decoration: a name that runs past the card in the phone app is a name that
+gets truncated in the one place it matters.
+
+**3 · Brend · Model · Ishlab chiqarilgan mamlakat** — three selects, each with
+a **"Mavjud emas"** checkbox beside it, because market goods genuinely often
+have no brand and the alternative is somebody typing "yo'q". Brand reads the
+existing `brands` table through its alias lookup.
+
+**4 · Tovar tavsifi** — a **rich text editor**, not a textarea. Bold, italic,
+bullets, numbered list, a heading level, and nothing else. The phone app
+renders it, so the editor must not be able to produce anything the app cannot
+draw — no tables, no colours, no embedded video. Store HTML, sanitise on the
+way in, and keep the plain text alongside it for search.
+
+Use a small editor (TipTap or Lexical); do not hand-roll `contenteditable`.
+
+**5 · Tovar xususiyatlari** — free rows: `Material · Charm`, `Taglik ·
+Rezina`. **One column of inputs, not two.** Add a row with a button, remove one
+with the bin at its end, `0/255` on each. This is `product_specs`, which
+already exists.
+
+**6 · Xususiyatlarni tanlash** — the defined attributes, at most five, from a
+list the system knows:
 
 ```
-  Do'konga chiqarish                            [ Chiqarish ]  ← disabled
-  ─────────────────────────────────────────────────────────────
-  ✓ Kategoriya   Oyoq kiyim ▾
-  ✗ Narx         [ 240 000 ]  ← tannarx 150 000, +60% taklif
-  ✗ Rasm         Qora ✓   Oq ✗  ← har rangga bitta
+  Rang
+  Erkaklar poyabzali o'lchami — EUR / UK / US / RUS
+  Ayollar poyabzali o'lchami — EUR / UK / US / RUS
+  Kiyim o'lchami — S M L XL XXL
+  Kamar o'lchami
 ```
 
-- Each gate is **editable in place**. No navigation, no second screen.
-- The button enables the moment the three are satisfied, and says what is
-  missing while it is not.
-- The catalogue list keeps its `Rasmsiz` filter; the dashboard tile keeps
-  linking to `/mahsulotlar?status=draft`.
+Choosing one adds a chip with a **O'chirish** on it. What a chosen attribute
+*does* depends on which it is:
 
-### 5.3 Photographs must be easy
+- **Rang** opens a modal: a checkbox list of named colours, each with its
+  swatch — `Alvon`, `Ametist`, `To'q qizil`, `Sarg'ish`, `Oq`, `Feruza`… Tick
+  the ones this card comes in, press **OK**, and they are written down with
+  their name and their colour. **This replaces typing a colour by hand**, which
+  is how `qora`, `Qora` and `QORA` became three colours.
+- **An o'lcham system** turns the size boxes into that system's own values, so
+  `43` is offered rather than typed, and a European 43 is never mixed with a
+  UK 9 on the same card.
+
+Both are **data, not code** (§5.3). A shop that starts selling belts adds a
+row; nobody edits a component.
+
+**7 · Har bir rang uchun tovar fotosurati** — one block per chosen colour,
+headed by its swatch and name, holding that colour's photographs: the first is
+that colour's cover, and `+ Rasm qo'shish` adds more. A `+ Video qo'shish` slot
+beside them, optional. **No 360°.**
+
+**8 · Tovar bo'yicha umumiy rasmlar** — the card's own gallery, and the rules
+written on the screen where somebody photographing goods will read them:
+
+```
+  Format:   PNG, JPEG.  Tavsiya: 1080×1440
+  Hajmi:    5 MB gacha
+  Tartib:   birinchi rasm — karta muqovasi
+  Fon:      oq fon (#efefef), bitta tovar, qo'l ko'rinmasin
+```
+
+**9 · Folded away until wanted** — each is a heading with a **Qo'shish**
+button that reveals its field, and nothing more:
+
+```
+  O'lchovli to'r        (a size chart)
+  Tarkib                (composition)
+  Parvarish             (care)
+  Sertifikatlar
+```
+
+A form that shows eleven empty textareas is a form nobody finishes. Four
+buttons is four words.
+
+**10 · Narx jadvali** — one row per variant, and it is a table because that is
+what it is:
+
+| Rang | O'lcham | Shtrix-kod | Tannarx | Narx | Chegirma | Sotish narxi |
+| --- | --- | --- | --- | --- | --- | --- |
+| Oq | 43 | `MB-…-OQ-43` | 180 000 | 290 000 | 0 | 290 000 |
+
+- The barcode is ours and is read-only — it is on the sticker already.
+- **Tannarx** comes from the receipt and is read-only here; it is the number
+  the markup is offered against (`+60%` suggested from the last cost).
+- `Sotish narxi` is computed, never typed.
+- One price for the whole card by default, with a per-row override for the 43
+  that really does cost more.
+
+### 5.3 The colour palette and the size systems are data
+
+Two new reference tables, seeded, editable by the admin, never hard-coded:
+
+- `colours` — `name` (`Sarg'ish melanj`), `hex`, `sort`. The modal in §5.2
+  reads this. `product_variants.colour` keeps holding the **name**, so nothing
+  about the ledger changes; the palette is what stops three spellings of one
+  colour.
+- `size_systems` and their values — `Erkaklar poyabzali EUR` → `39 … 46`;
+  `Kiyim` → `S M L XL XXL`. A card names the system it uses, and the receiving
+  form offers that system's values.
+
+Seed both with what this shop actually sells, in Uzbek. Everything already in
+the database keeps working: a colour that is not in the palette yet is still a
+valid string, and the form offers **"+ yangi rang"** which adds it to the
+palette rather than only to the card.
+
+### 5.4 Where the form appears
+
+**One component, two entrances.**
+
+- **`/qabul`, new goods.** *"Qabulda yangi tovar qo'shishda shuni ishlat
+  birvora."* When the receiving screen needs a card that does not exist, it
+  opens **this form**, showing the part that is knowable with the goods in your
+  hands: category, name, brand, the colour from the palette, the size system,
+  the quantities, the cost. Press **Qabul** → labels print (§2, §3). The card
+  exists, in `draft`, with everything the shop window still needs left blank.
+- **`/mahsulotlar`, an existing card.** The same form, opened on the same card,
+  now showing everything: the description, the specs, the photographs, the
+  price table. At the top sits the gate panel — category, price, a photo per
+  colour — with one button, **Do'konga chiqarish**, that enables the moment
+  the three are satisfied and says what is missing while they are not.
+
+The form is therefore **progressive, not staged**: no wizard, no "step 2 of
+3", no save-and-continue. It is one page, and what is filled in is filled in.
+
+### 5.5 Photographs must be easy
 
 This is the part that is "juda noqulay" today and it is worth real work:
 
-- **One photo per colour**, presented as a row of colour tiles: a tile with a
-  photo shows it, a tile without shows a dashed camera box. Tap a tile →
-  camera / file / paste, and it is done.
-- On a phone, `<input type="file" accept="image/*" capture="environment">` —
-  the camera opens directly; no upload dialog.
-- Paste (`Ctrl+V`) anywhere on the panel attaches to the selected colour.
-- Drag and drop a file onto a tile.
-- Show the upload as it happens and replace the tile the moment it lands; a
+- Tap a slot → camera / file / paste. On a phone,
+  `<input type="file" accept="image/*" capture="environment">` opens the
+  camera directly; no upload dialog.
+- Paste (`Ctrl+V`) anywhere on the block attaches to that colour.
+- Drag and drop onto a slot.
+- Show the upload as it happens and replace the slot the moment it lands; a
   photograph that appears three seconds later reads as a failure.
 - A colour with no photograph is still not published — that rule stays, and
-  the reason is written on the tile rather than in a paragraph.
+  the reason is written on the slot rather than in a paragraph.
+
+## 5A. The two screens that get redrawn with it
+
+### 5A.1 Mahsulotlar — a catalogue, not a spreadsheet
+
+The list was migrated onto the shared table last week and that was right for
+orders, customers and the audit trail. It is **wrong for a catalogue**: goods
+are recognised by their picture, and a row of text with a 20-pixel thumbnail
+is a list you read rather than a list you scan.
+
+So the catalogue gets **cards** — and the owner was specific about what not to
+copy from the reference: *"rasmdagidek bo'lib qolmasin, uzun uzun qilib
+qo'yma buttonlarni."* Uzum's card carries nine metrics and two full-width grey
+bars, and the result is a card where nothing is the product.
+
+Ours:
+
+```
+   ┌──────────────────────────────────────┐
+   │  ┌────────┐   Krossovka Nike Air      │   ← the picture is the biggest
+   │  │        │   MB-000007      [sotuvda]│     thing, then the name
+   │  │  foto  │                           │
+   │  │        │   290 000 so'm            │
+   │  └────────┘   44 dona · 3 rang        │
+   │                                       │
+   │  Tugagan: Qora / 43          ⋯        │   ← only when true; ⋯ is the menu
+   └──────────────────────────────────────┘
+```
+
+- **The photograph is the card.** A card with no photograph shows a dashed
+  frame saying `rasm yo'q` — which is also the thing holding it out of the
+  shop, so the gap and the reason are the same pixel.
+- **Four facts and no more**: name, code, price, what is on the shelf. The
+  status is a pill, not a bar.
+- **No full-width buttons.** Row actions live behind a `⋯` menu at the end —
+  publish, edit, print labels, archive. A card with two grey bars across it is
+  two objects competing with the product.
+- Grid: `repeat(auto-fill, minmax(260px, 1fr))`, `gap-4`.
+- The toolbar, the filters, the search, the export and the URL state stay
+  exactly as they are — that part *did* match and it is the part that makes
+  a filtered list a link somebody can send.
+- Keep a **table/grid toggle** in the toolbar and remember it: the office
+  sometimes wants two hundred rows of figures, and the same data answers both.
+
+### 5A.2 Boshqaruv — the dashboard
+
+*"Dashboard design o'zgarsin."* The order of the page is right and was argued
+for; what is wrong is the drawing. Specifically:
+
+- The four figures of the day are a four-column grid with rules between them,
+  and on a narrow screen they become two by two rather than a column of four
+  cells each a screen tall.
+- The counters below are **rows**, not cards — icon, name, figure, chevron —
+  two to a line. A row is meant to be as wide as its container; a card that is
+  only wide is a stretched card.
+- The chart panel and the movers panel are the same height, aligned at the
+  top, and neither is taller than the screen.
+- Everything reads the type scale: a hint must not be the size of the number
+  it explains.
+
+Redraw it against the `backoffice-design` skill, and check it at 1280, 1440
+and on a phone before saying it is done.
 
 ---
 
@@ -395,13 +591,20 @@ Walk it, do not assume it. With `./dev.sh` up and the demo catalogue seeded:
 7a. Receive the **black** ones as a second receipt: the card, the kind, the
    brand and the cost are still there; only the colour and the sizes are
    retyped.
-8. As the admin, open the new card in `/mahsulotlar`: one panel, three gates.
-   Add a photo for each colour from a phone camera, set a price, pick a
-   category, press one button. The card is on sale.
-9. There is no `seller` anywhere: not in the menu, not in the staff role list,
-   not in the enum, not in `dev.sh`'s table.
-10. `pytest -q` green, `npm run lint` and `npm run build` clean.
-11. The words `qop`, `pilla` and `saralash` appear nowhere on screen.
+8. The receiving screen, on a card that does not exist yet, opens **the card
+   form** (§5.4) — category first, then name, then the colour **from the
+   palette**, then sizes from the chosen system.
+9. As the admin, open that card in `/mahsulotlar`: the same form, now with the
+   description editor, the spec rows, the per-colour photograph blocks and the
+   price table, and the gate panel at the top. Add a photo for each colour
+   from a phone camera, set a price, press one button. The card is on sale.
+10. `/mahsulotlar` is a grid of cards with the photograph as the biggest thing
+   on each, no full-width buttons, and a table/grid toggle that is remembered.
+11. Nothing on any screen asks for anything in Russian.
+12. There is no `seller` anywhere: not in the menu, not in the staff role
+   list, not in the enum, not in `dev.sh`'s table.
+13. `pytest -q` green, `npm run lint` and `npm run build` clean.
+14. The words `qop`, `pilla` and `saralash` appear nowhere on screen.
 
 ---
 
@@ -444,7 +647,7 @@ the point of the recon is to catch what has moved.
 | --- | --- | --- |
 | **B1 · receiving** | `app/routers/warehouse.py`, `app/products.py`, `app/schemas.py` (pile/receipt section), `app/routers/dashboard.py` (one tile) | The receipt in its two moments: `POST` writes the card, the variants, a `RECEIPT` movement into `QABUL` and the supply row, and answers with the label lines **and their counts**. A second door moves a receipt's goods from `QABUL` to a cell. A dashboard tile counts what is labelled and not yet shelved, with its age. Keep idempotency on both. |
 | **B2 · labels + scan** | `app/routers/shelves.py`, `app/schemas.py` (label/scan section) | `copies` on labels; `GET /warehouse/scan`; reuse `find`. |
-| **B3 · roles** | `app/models.py`, `app/deps.py`, `app/roles.py`, `app/seed.py`, `app/routers/admin.py`, `app/routers/staff.py`, `app/routers/dashboard.py`, `alembic/versions/*` | Delete `SELLER`. Move any account holding it to `admin` in the migration. |
+| **B3 · roles + reference data** | `app/models.py`, `app/deps.py`, `app/roles.py`, `app/seed.py`, `app/routers/admin.py`, `app/routers/staff.py`, `alembic/versions/*` | Delete `SELLER` (move any account holding it to `admin` in the migration). Add the **colour palette** and the **size systems** as tables with their seeds and their read/write endpoints (§5.3). |
 
 `app/schemas.py` is shared: **B1 owns the pile/receipt classes, B2 owns the
 label/scan classes**, and neither touches the other's. If that proves
@@ -453,17 +656,24 @@ impossible, B1 goes first and B2 rebases.
 Tests: each agent writes its own in `backend/tests/test_api.py` — **append
 only, at the end of the file**, and run the whole suite before reporting.
 
-### Wave 2 — web (3 agents, parallel; starts when Wave 1 is green)
+### Wave 2 — web (4 agents, parallel; starts when Wave 1 is green)
 
 | Agent | Owns | Job |
 | --- | --- | --- |
 | **W1 · receiving screen** | `web/src/pages/qabul.tsx`, `web/src/lib/queries.ts` (receipt hooks) | §2, top to bottom. Delete the sack machinery. |
-| **W2 · publishing** | `web/src/pages/products.tsx`, `web/src/components/card-editor.tsx`, `web/src/components/photo-step.tsx`, delete `web/src/pages/publish.tsx`, `web/src/App.tsx`, `web/src/lib/nav.ts` | §5.2 and §5.3. |
+| **W2 · the card form** | `web/src/components/card-form/*` (new folder), `web/src/components/card-editor.tsx`, `web/src/components/photo-step.tsx`, delete `web/src/pages/publish.tsx` | **The whole of §5.2–§5.5**: the cascading category with its accept-and-breadcrumb, the rich text editor, the one-column spec rows, the attribute picker with the colour modal and the size systems, the per-colour photograph blocks, the folded-away sections, the price table, and the gate panel. This is the largest single piece of work in the brief — if it needs two agents, split it at §5.2 §1–6 / §7–10 and share the folder, not the files. |
+| **W2b · the two screens** | `web/src/pages/products.tsx`, `web/src/pages/dashboard.tsx`, `web/src/App.tsx`, `web/src/lib/nav.ts` | §5A: the catalogue as cards with a table toggle, the dashboard redrawn, the routes and the menu after `publish.tsx` goes. Mounts W2's form; agree the props with W2 **before** either starts. |
 | **W3 · scan + labels** | `web/src/components/scan.tsx` (new), `web/src/pages/labels.tsx`, `web/src/pages/shelf-map.tsx`, `web/src/pages/counts.tsx`, `web/src/pages/picking.tsx` | §3 and §4: the 58 mm one-label-per-page print, the keyboard-wedge listener, the `BarcodeDetector` camera button, and the four screens that answer a scan. |
 
-`queries.ts` is shared: **W1 owns the receipt hooks, W3 owns the scan and
-label hooks, W2 owns the catalogue hooks.** Add hooks at the end of their own
-section; do not reformat the file.
+`queries.ts` is shared four ways: **W1 owns the receipt hooks, W2 owns the
+card-form hooks (colours, size systems, specs, images, price), W2b owns the
+catalogue and dashboard hooks, W3 owns the scan and label hooks.** Add hooks at
+the end of your own section; do not reformat the file.
+
+**A dependency to respect:** W1's receiving screen *opens W2's form* for a new
+card (§5.4). W2 publishes the component and its props first — an empty shell
+with the right signature on day one is worth more to W1 than a finished form
+on day three.
 
 ### Wave 3 — one agent, serial
 
@@ -475,6 +685,9 @@ and commit.
 
 - The design system is not optional: no hex, no Tailwind palette colour, no
   pixel height for a control. Load the `backoffice-design` skill first.
+- **One new dependency is allowed** — the rich text editor (§5.2 ·4). Pick
+  TipTap or Lexical, pin it, and say in the commit why. Everything else is
+  built from what is already here.
 - Uzbek on screen, English in comments. `Intl` is never used for formatting.
 - A comment says **why**, not what. Do not narrate the code.
 - Never hand-write an `ALTER`; autogenerate the Alembic revision.
