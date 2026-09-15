@@ -30,10 +30,11 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import col, func, select
 
-from app import audit, brands, i18n
+from app import audit, brands, colours, i18n
 from app import products as pr
 from app import schemas as s
 from app import services as sv
+from app import sizes
 from app import stock as st
 from app import transitions as tr
 from app.deps import AdminUser, CatalogReader, CatalogWriter, SessionDep
@@ -41,12 +42,15 @@ from app.models import (
     Brand,
     BrandAlias,
     Category,
+    Colour,
     OrderItem,
     Product,
     ProductImage,
     ProductSpec,
     ProductStatus,
     ProductVariant,
+    SizeSystem,
+    SizeValue,
     StockMovement,
     User,
 )
@@ -1253,6 +1257,513 @@ def _ensure_name_is_free(
             status.HTTP_409_CONFLICT,
             i18n.label("brand_name_taken", name=name, slug=held.slug),
         )
+
+
+# --------------------------------------------------------------------------- the colour palette
+#
+# **Who may do what, and why the two doors differ.** Reading is
+# ``CatalogReader`` — the warehouse as well as the admin — because the palette
+# is what the receiving bench picks a colour from, and a bench that cannot
+# read it is a bench back at a text box. *Writing a new colour is the bench's
+# too*, deliberately: §5.2's form offers "+ yangi rang" and that form opens at
+# `/qabul`, so a guard of ``CatalogWriter`` there would mean somebody holding
+# a sack of a colour nobody has sold before must go and find the owner before
+# the goods can be booked in. They will not; they will type the colour into
+# the nearest box that accepts it, which is how this table came to be needed.
+# The same argument is already settled for makes: ``brands.named`` writes a
+# row from the desk for exactly this reason.
+#
+# **Changing or removing a colour is the admin's alone.** Those act on rows
+# other people's cards are wearing — a rename moves a swatch under forty
+# cards, a merge rewrites their colour strings — and that is a decision about
+# the shop's vocabulary rather than about the sack on the table.
+
+
+@router.get(
+    "/colours",
+    response_model=list[s.ColourSwatchOut],
+    summary="The palette, with what each colour is worn by",
+)
+def list_colours(user: CatalogReader, session: SessionDep) -> list[s.ColourSwatchOut]:
+    """Every colour the shop sells, in the order the picker draws them.
+
+    ``variant_count`` and ``spellings`` are both here for the merge screen, in
+    one pass: the count says whether a row can simply be deleted, and the
+    spellings say which rows look like each other in the words people actually
+    typed. One query for the whole variant table rather than one per colour —
+    the palette is drawn in full on one screen, and a lookup per row is how
+    thirty swatches become thirty-one queries.
+    """
+    used = colours.spellings_in_use(session)
+    rows = session.exec(
+        select(Colour).order_by(col(Colour.sort), col(Colour.name))
+    ).all()
+    return [
+        s.ColourSwatchOut(
+            id=row.id,
+            slug=row.slug,
+            name=row.name,
+            hex=row.hex,
+            sort=row.sort,
+            variant_count=sum(count for _, count in used.get(row.key, [])),
+            spellings=[name for name, _ in used.get(row.key, [])],
+        )
+        for row in rows
+    ]
+
+
+@router.post(
+    "/colours",
+    response_model=s.ColourSwatchOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="+ yangi rang — a colour the shop had not sold before",
+)
+def create_colour(
+    payload: s.ColourWriteIn,
+    # The bench's as well as the admin's — see the note at the head of this
+    # section. Adding to a palette is additive and reversible; being unable to
+    # add to it mid-receipt is neither.
+    user: CatalogReader,
+    session: SessionDep,
+) -> s.ColourSwatchOut:
+    """Refused when the palette already answers to the name.
+
+    Not a courtesy. The point of the table is that one spelling means one
+    colour, so a second row keyed the same way would give the picker two right
+    answers and put the shop back where it started — with the extra insult
+    that the new row would collect nothing, because everything already lands
+    on the first.
+    """
+    held = colours.by_spelling(session, payload.name)
+    if held is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("colour_name_taken", name=payload.name, slug=held.slug),
+        )
+    if payload.slug and session.exec(
+        select(Colour).where(Colour.slug == payload.slug)
+    ).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("slug_exists"))
+
+    name = pr.tidy_label(payload.name)
+    row = Colour(
+        slug=payload.slug or colours.free_slug(session, name),
+        name=name,
+        key=colours.key(name),
+        hex=payload.hex,
+        sort=payload.sort if payload.sort is not None else colours.next_sort(session),
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return _colour_out(session, row)
+
+
+@router.patch("/colours/{slug}", response_model=s.ColourSwatchOut)
+def update_colour(
+    slug: str,
+    payload: s.ColourPatchIn,
+    # The admin's: a rename moves the swatch under every card wearing the
+    # colour, and the shop's vocabulary is the owner's.
+    user: CatalogWriter,
+    session: SessionDep,
+) -> s.ColourSwatchOut:
+    """Correct a colour's name, its swatch, its slug or where it sits.
+
+    **The variants are not renamed.** A card whose colour reads ``Ko'k`` goes
+    on reading ``Ko'k`` after the palette row is renamed to ``Moviy`` — the
+    string on the variant is what the ledger's neighbours, the photographs and
+    every past order agree on, and a rename here is a change to what the
+    *picker offers next*. Renaming what is already out there is
+    ``POST /colours/{slug}/merge``, which is a different sentence and says so.
+    """
+    row = _colour(session, slug)
+    fields = payload.model_dump(exclude_unset=True)
+
+    if fields.get("slug") and fields["slug"] != row.slug:
+        if session.exec(
+            select(Colour).where(Colour.slug == fields["slug"])
+        ).first():
+            raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("slug_exists"))
+        row.slug = fields["slug"]
+
+    if "name" in fields and fields["name"]:
+        name = pr.tidy_label(fields["name"])
+        held = colours.by_spelling(session, name)
+        if held is not None and held.id != row.id:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                i18n.label("colour_name_taken", name=name, slug=held.slug),
+            )
+        row.name = name
+        row.key = colours.key(name)
+
+    if "hex" in fields and fields["hex"] is not None:
+        row.hex = fields["hex"]
+    if "sort" in fields and fields["sort"] is not None:
+        row.sort = fields["sort"]
+
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return _colour_out(session, row)
+
+
+@router.post(
+    "/colours/{slug}/merge",
+    response_model=s.ColourMergeOut,
+    summary="Two swatches were one colour — fold this one into another",
+)
+def merge_colour(
+    slug: str,
+    payload: s.ColourMergeIn,
+    user: CatalogWriter,
+    session: SessionDep,
+) -> s.ColourMergeOut:
+    """Rename every variant and photograph off ``slug`` onto ``into``.
+
+    **This is the repair, and the palette alone is not one.** Offering a list
+    stops the *next* duplicate; it does nothing about the ``Siniy`` sitting
+    beside ``Ko'k`` in this shop's data right now, and there is no composition
+    of the other doors that fixes it — ``DELETE`` refuses while anything wears
+    the colour, and nothing rewrites a variant's colour in bulk. The only
+    other route was opening every card by hand.
+
+    **No stock moves.** A movement names a ``variant_id`` and a placement
+    names ``(location, variant)``; neither holds a colour. So the ledger is
+    untouched, every placement still equals it, and the figures on the shelf
+    map are the same before and after.
+
+    **The photographs come with it**, because the publishing gate wants a
+    picture per colour and renaming the variants alone would take that picture
+    away from every card in the merge.
+
+    **Order lines are left alone.** They are snapshots of what somebody bought
+    in the words the shop used that day, and tidying a vocabulary is not a
+    reason to edit a sale after the fact.
+    """
+    loser = _colour(session, slug)
+    winner = _colour(session, payload.into)
+    if loser.id == winner.id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("colour_merge_itself")
+        )
+
+    # Refused rather than guessed: a card holding both colours at one size is
+    # two ledger rows trying to become one, which is a stock decision somebody
+    # makes with the shelf in front of them.
+    clashing = colours.collisions(session, loser=loser, winner=winner)
+    if clashing:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            i18n.label("colour_merge_clash", cards=", ".join(clashing)),
+        )
+
+    variants, images = colours.merge(
+        session, actor=user, loser=loser, winner=winner
+    )
+    session.commit()
+    session.refresh(winner)
+    return s.ColourMergeOut(
+        colour=_colour_out(session, winner),
+        variants_moved=variants,
+        images_moved=images,
+    )
+
+
+@router.delete("/colours/{slug}", response_model=s.Message)
+def delete_colour(
+    slug: str, user: CatalogWriter, session: SessionDep
+) -> s.Message:
+    """Only a colour nothing is wearing. One with variants is merged, not deleted.
+
+    Counted on the key and not the exact spelling, or a swatch that thirty
+    ``qora`` variants are wearing would delete cleanly because the palette
+    happens to spell it ``Qora`` — and the picker would then stop offering a
+    colour the shop demonstrably sells.
+    """
+    row = _colour(session, slug)
+    worn = colours.variant_count(session, row)
+    if worn:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("colour_in_use", count=worn)
+        )
+    i18n.forget(session, "colour", row.id)
+    session.delete(row)
+    session.commit()
+    return s.Message(message=i18n.label("deleted"))
+
+
+def _colour(session: SessionDep, slug: str) -> Colour:
+    row = session.exec(select(Colour).where(Colour.slug == slug)).first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, i18n.label("colour_not_found"))
+    return row
+
+
+def _colour_out(session: SessionDep, row: Colour) -> s.ColourSwatchOut:
+    used = colours.spellings_in_use(session).get(row.key, [])
+    return s.ColourSwatchOut(
+        id=row.id,
+        slug=row.slug,
+        name=row.name,
+        hex=row.hex,
+        sort=row.sort,
+        variant_count=sum(count for _, count in used),
+        spellings=[name for name, _ in used],
+    )
+
+
+# --------------------------------------------------------------------------- the size systems
+#
+# Read by the bench, written by the admin — and here the split is the plain
+# one. A size system is a decision about how a whole category of goods is
+# numbered, made once; nothing about a sack on the table requires inventing
+# one, and a bench that could would be a bench that invents "Erkaklar
+# poyabzali EUR" a second time under a different name.
+
+
+@router.get(
+    "/size-systems",
+    response_model=list[s.SizeSystemOut],
+    summary="Every run of sizes a card can be numbered in",
+)
+def list_size_systems(
+    user: CatalogReader, session: SessionDep
+) -> list[s.SizeSystemOut]:
+    """The systems with their values, in the order the picker draws them.
+
+    Values and card counts in two queries for the whole list rather than two
+    per row: §5.2's attribute picker draws every system at once, grouped by
+    ``family``, and it needs the values in hand to turn the size boxes into
+    that system's own.
+    """
+    counts = dict(
+        session.exec(
+            select(Product.size_system_id, func.count())
+            .where(col(Product.size_system_id).is_not(None))
+            .group_by(col(Product.size_system_id))
+        ).all()
+    )
+    values: dict[int, list[str]] = {}
+    for row in session.exec(
+        select(SizeValue).order_by(col(SizeValue.sort), col(SizeValue.id))
+    ).all():
+        values.setdefault(row.system_id, []).append(row.value)
+
+    systems = session.exec(
+        select(SizeSystem).order_by(col(SizeSystem.sort), col(SizeSystem.name))
+    ).all()
+    return [
+        s.SizeSystemOut(
+            id=row.id,
+            slug=row.slug,
+            name=row.name,
+            family=row.family,
+            scale=row.scale,
+            sort=row.sort,
+            values=values.get(row.id, []),
+            card_count=int(counts.get(row.id, 0)),
+        )
+        for row in systems
+    ]
+
+
+@router.post(
+    "/size-systems",
+    response_model=s.SizeSystemOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="A new run of sizes — the shop started selling belts",
+)
+def create_size_system(
+    payload: s.SizeSystemWriteIn, user: CatalogWriter, session: SessionDep
+) -> s.SizeSystemOut:
+    """Refused when a system of that name already exists.
+
+    Two systems called "Kiyim" is two answers to "what sizes does a shirt come
+    in", and the card that picks the wrong one is indistinguishable afterwards
+    from the card that picked the right one.
+    """
+    _ensure_system_name_is_free(session, payload.name, mine=None)
+    if payload.slug and session.exec(
+        select(SizeSystem).where(SizeSystem.slug == payload.slug)
+    ).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("slug_exists"))
+
+    row = SizeSystem(
+        slug=payload.slug or sizes.free_slug(session, payload.name),
+        name=payload.name.strip(),
+        family=payload.family.strip(),
+        scale=payload.scale.strip(),
+        sort=payload.sort if payload.sort is not None else sizes.next_sort(session),
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    sizes.replace_values(session, row.id, payload.values)
+    session.commit()
+    return _size_system_out(session, row)
+
+
+@router.patch("/size-systems/{slug}", response_model=s.SizeSystemOut)
+def update_size_system(
+    slug: str, payload: s.SizeSystemPatchIn, user: CatalogWriter, session: SessionDep
+) -> s.SizeSystemOut:
+    """Correct a system, and optionally replace the sizes it offers.
+
+    **Changing the values changes nothing already on a card.** A variant's
+    size is a string on the variant with a barcode printed against it (§6.5),
+    and dropping ``47`` from the list stops it being *offered* — it does not
+    reach into the shelf and remove the 47s that are on it. That asymmetry is
+    deliberate: the list is what the form suggests, never a validator run
+    against stock.
+
+    ``values`` absent leaves the list alone; ``[]`` empties it.
+    """
+    row = _size_system(session, slug)
+    fields = payload.model_dump(exclude_unset=True)
+
+    if fields.get("slug") and fields["slug"] != row.slug:
+        if session.exec(
+            select(SizeSystem).where(SizeSystem.slug == fields["slug"])
+        ).first():
+            raise HTTPException(status.HTTP_409_CONFLICT, i18n.label("slug_exists"))
+        row.slug = fields["slug"]
+
+    if fields.get("name"):
+        _ensure_system_name_is_free(session, fields["name"], mine=row)
+        row.name = fields["name"].strip()
+    if fields.get("family") is not None:
+        row.family = fields["family"].strip()
+    if fields.get("scale") is not None:
+        row.scale = fields["scale"].strip()
+    if fields.get("sort") is not None:
+        row.sort = fields["sort"]
+
+    session.add(row)
+    if fields.get("values") is not None:
+        sizes.replace_values(session, row.id, fields["values"])
+    session.commit()
+    session.refresh(row)
+    return _size_system_out(session, row)
+
+
+@router.delete("/size-systems/{slug}", response_model=s.Message)
+def delete_size_system(
+    slug: str, user: CatalogWriter, session: SessionDep
+) -> s.Message:
+    """Only a system no card names.
+
+    A card whose system vanished would be sized in nothing — the form would
+    offer no values and could not tell whether that means "sizeless" or "the
+    list is gone", which is precisely the ambiguity §6.3 exists to forbid. So
+    the cards come off it first, one decision at a time, by somebody who knows
+    what they should be numbered in instead.
+    """
+    row = _size_system(session, slug)
+    cards = sizes.card_count(session, row.id)
+    if cards:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, i18n.label("size_system_in_use", count=cards)
+        )
+    for value in session.exec(
+        select(SizeValue).where(SizeValue.system_id == row.id)
+    ).all():
+        session.delete(value)
+    i18n.forget(session, "size_system", row.id)
+    session.delete(row)
+    session.commit()
+    return s.Message(message=i18n.label("deleted"))
+
+
+@router.get(
+    "/products/{product_id}/size-system",
+    response_model=s.ProductSizeSystemOut,
+    summary="What this card is sized in, and therefore what its form offers",
+)
+def get_product_size_system(
+    product_id: int, user: CatalogReader, session: SessionDep
+) -> s.ProductSizeSystemOut:
+    """``null`` means sizeless, not unknown — see ``PUT``."""
+    product = _product(session, product_id)
+    row = (
+        session.get(SizeSystem, product.size_system_id)
+        if product.size_system_id
+        else None
+    )
+    return s.ProductSizeSystemOut(
+        product_id=product.id,
+        size_system=_size_system_out(session, row) if row else None,
+    )
+
+
+@router.put(
+    "/products/{product_id}/size-system",
+    response_model=s.ProductSizeSystemOut,
+    summary="Name the run of sizes this card is numbered in",
+)
+def set_product_size_system(
+    product_id: int,
+    payload: s.ProductSizeSystemIn,
+    # The bench's as well, because §5.4 opens this same form at `/qabul` for a
+    # card that does not exist yet, and the sizes are the half of that form
+    # the person with the goods in their hands is filling in.
+    user: CatalogReader,
+    session: SessionDep,
+) -> s.ProductSizeSystemOut:
+    """Its own door, and not a field on the edit form, for the ordinary reason
+    the price and the status have their own: this is the answer to §6.3's
+    either/or. ``slug: null`` says **sizeless** — a cap, a bag — which is a
+    statement about the goods and not an empty box somebody has not got to.
+
+    It changes no variant. A card already carrying 41, 42 and 43 goes on
+    carrying them; what moves is what the form offers next.
+    """
+    product = _product(session, product_id)
+    row = _size_system(session, payload.slug) if payload.slug else None
+    product.size_system_id = row.id if row else None
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+    return s.ProductSizeSystemOut(
+        product_id=product.id,
+        size_system=_size_system_out(session, row) if row else None,
+    )
+
+
+def _size_system(session: SessionDep, slug: str) -> SizeSystem:
+    row = session.exec(select(SizeSystem).where(SizeSystem.slug == slug)).first()
+    if row is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, i18n.label("size_system_not_found")
+        )
+    return row
+
+
+def _size_system_out(session: SessionDep, row: SizeSystem) -> s.SizeSystemOut:
+    return s.SizeSystemOut(
+        id=row.id,
+        slug=row.slug,
+        name=row.name,
+        family=row.family,
+        scale=row.scale,
+        sort=row.sort,
+        values=sizes.values(session, row.id),
+        card_count=sizes.card_count(session, row.id),
+    )
+
+
+def _ensure_system_name_is_free(
+    session: SessionDep, name: str, *, mine: SizeSystem | None
+) -> None:
+    """Refuse a name another system already holds, case and spacing aside."""
+    wanted = colours.key(name)
+    for row in session.exec(select(SizeSystem)).all():
+        if colours.key(row.name) == wanted and (mine is None or row.id != mine.id):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                i18n.label("size_system_name_taken", name=name, slug=row.slug),
+            )
 
 
 # --------------------------------------------------------------------------- what a card is made of

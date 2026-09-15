@@ -2963,3 +2963,173 @@ class OperationsReportOut(BaseModel):
     failure_reasons: list[ReasonRowOut]
     return_reasons: list[ReasonRowOut]
     durations: list[DurationOut]
+
+
+# --------------------------------------------------------------------------- the palette and the size systems (§5.3)
+#
+# Appended as its own region. `ColourOut` at the top of this file is the
+# *variant grid's* colour — one colour a card comes in, with its photograph —
+# and is a different thing from a palette row, which is a colour the shop
+# sells whether or not any card is currently that colour. Two names for two
+# things rather than one name that means both depending on the endpoint.
+
+
+class ColourSwatchOut(BaseModel):
+    """One colour in the palette, as the picker draws it.
+
+    ``variant_count`` is what says whether a row can simply be deleted, and it
+    counts every spelling that folds onto this colour's key — ``qora`` and
+    ``Qora`` are one colour, and a count that only saw the exact string would
+    report zero for a swatch thirty variants are wearing.
+
+    ``spellings`` is those variations themselves, in the words that are
+    actually on the variants. It is what a merge screen has to show: two rows
+    are the same colour when somebody recognises the words, and a similarity
+    score is a number nobody can check.
+    """
+
+    id: int
+    slug: str
+    name: str
+    # "#rrggbb", or empty for a colour no single swatch describes.
+    hex: str
+    sort: int
+    variant_count: int = 0
+    spellings: list[str] = []
+
+
+_HEX_DIGITS = "0123456789abcdefABCDEF"
+
+
+def _tidy_hex(value: str) -> str:
+    """``#rrggbb`` lower case, or empty.
+
+    Normalised rather than merely checked: ``#FFF``, ``ffffff`` and ``#FFFFFF``
+    are one swatch to a browser and three different strings to everything that
+    compares them — and the comparison happens on the merge screen, which is
+    where it matters.
+    """
+    clean = value.strip().lstrip("#")
+    if not clean:
+        return ""
+    if len(clean) == 3 and all(ch in _HEX_DIGITS for ch in clean):
+        clean = "".join(ch * 2 for ch in clean)
+    if len(clean) != 6 or not all(ch in _HEX_DIGITS for ch in clean):
+        raise ValueError("rang kodi #rrggbb ko'rinishida bo'lishi kerak")
+    return f"#{clean.lower()}"
+
+
+class ColourWriteIn(BaseModel):
+    """A colour the shop sells, added to the palette.
+
+    The slug is generated from the name when it is absent, because this is
+    what "+ yangi rang" posts: somebody standing at a receiving bench with a
+    sack open types a colour, and asking them for a URL-safe identifier for it
+    is asking them to stop working.
+    """
+
+    name: str = Field(min_length=1, max_length=60)
+    hex: str = Field(default="", max_length=9)
+    slug: str | None = Field(default=None, max_length=60, pattern=r"^[a-z0-9-]+$")
+    sort: int | None = None
+
+    @field_validator("hex")
+    @classmethod
+    def _hex(cls, value: str) -> str:
+        return _tidy_hex(value)
+
+
+class ColourPatchIn(BaseModel):
+    """Correct a colour. Everything optional; what is absent is left alone."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    hex: str | None = Field(default=None, max_length=9)
+    slug: str | None = Field(default=None, max_length=60, pattern=r"^[a-z0-9-]+$")
+    sort: int | None = None
+
+    @field_validator("hex")
+    @classmethod
+    def _hex(cls, value: str | None) -> str | None:
+        return None if value is None else _tidy_hex(value)
+
+
+class ColourMergeIn(BaseModel):
+    """Which palette row survives.
+
+    The colour in the path disappears into this one, so the request reads the
+    way the sentence does: merge ``siniy`` **into** ``kok``.
+    """
+
+    into: str = Field(min_length=1, max_length=60)
+
+
+class ColourMergeOut(BaseModel):
+    """What the merge renamed, in the two figures somebody will check."""
+
+    colour: ColourSwatchOut
+    # Variants whose colour string was rewritten. No stock moved: a movement
+    # names a variant id and never a colour.
+    variants_moved: int
+    # Photographs that came with them. They must, or the merged cards lose the
+    # picture-per-colour the publishing gate wants.
+    images_moved: int
+
+
+class SizeSystemOut(BaseModel):
+    """A run of sizes, with the values it offers.
+
+    ``family`` and ``scale`` are sent apart from ``name`` so the picker can
+    draw *Erkaklar poyabzali* once with EUR/UK/US/RUS under it without
+    splitting a display string on a space — a rule that breaks on the first
+    system called ``Kamar``. Either may be empty.
+    """
+
+    id: int
+    slug: str
+    name: str
+    family: str
+    scale: str
+    sort: int
+    values: list[str] = []
+    # How many cards name this system — whether it can be deleted.
+    card_count: int = 0
+
+
+class SizeSystemWriteIn(BaseModel):
+    """A new run of sizes. ``values`` are tidied and de-duplicated on the way in."""
+
+    name: str = Field(min_length=1, max_length=80)
+    family: str = Field(default="", max_length=60)
+    scale: str = Field(default="", max_length=20)
+    slug: str | None = Field(default=None, max_length=60, pattern=r"^[a-z0-9-]+$")
+    sort: int | None = None
+    values: list[str] = Field(default_factory=list)
+
+
+class SizeSystemPatchIn(BaseModel):
+    """Correct a system. ``values`` absent leaves the list alone; ``[]`` empties it."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    family: str | None = Field(default=None, max_length=60)
+    scale: str | None = Field(default=None, max_length=20)
+    slug: str | None = Field(default=None, max_length=60, pattern=r"^[a-z0-9-]+$")
+    sort: int | None = None
+    values: list[str] | None = None
+
+
+class ProductSizeSystemIn(BaseModel):
+    """Which system a card's sizes are numbered in — or none of them.
+
+    ``null`` is not "not set yet", it is **sizeless**: a cap, a bag. §6.3 says
+    a card is one or the other and never both, and this is the field that
+    says which.
+    """
+
+    slug: str | None = None
+
+
+class ProductSizeSystemOut(BaseModel):
+    """What a card is sized in, and therefore what its form should offer."""
+
+    product_id: int
+    size_system: SizeSystemOut | None

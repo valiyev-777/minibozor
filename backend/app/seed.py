@@ -18,7 +18,12 @@ So what is seeded is what cannot be typed in:
   otherwise and no second login to make one with;
 * **the vocabulary a picker needs** — why an order was called off, why
   something came back. Both are lists the apps render and neither has a screen
-  to write them from.
+  to write them from;
+* **the palette and the size systems** — the colours and the runs of sizes the
+  card form offers instead of a text box. A starting point rather than a rule:
+  the admin edits them, and a shop that starts selling belts adds a row. They
+  are here because the alternative is a form whose pickers are empty on day
+  one, which is a form that teaches its first user to type.
 
 Everything else starts empty. The categories, the brands, the cards and the
 orders are all the shop's own, and the shop does not exist yet.
@@ -34,16 +39,20 @@ import sys
 # Aliased: `text` is a local name in the label rows below, and that is the
 # right name there.
 from sqlalchemy import text as sql_text
-from sqlmodel import Session, SQLModel, delete, select
+from sqlmodel import Session, SQLModel, delete, func, select
 
+from app import colours
 from app import locations as loc
+from app import sizes
 from app.core.security import hash_secret
 from app.db import engine, require_current_schema
 from app.models import (
     Banner,
     CancelReason,
+    Colour,
     HomeSection,
     ReturnReason,
+    SizeSystem,
     User,
     UserRole,
 )
@@ -73,6 +82,88 @@ RETURN_REASONS = [
     ("Rasmga mos kelmadi", False),
     ("Nuqsonli yoki shikastlangan", True),
     ("Boshqa tovar keldi", True),
+]
+
+# The palette a clothes-and-shoes shop needs, in the words used at the counter
+# — not a colour wheel. Names are Uzbek because the form is Uzbek; the shop's
+# live data already holds `Siniy` beside `Ko'k`, which is exactly the split
+# this list exists to stop happening again.
+#
+# The hex is the swatch and not the truth: a colour is chosen by looking at
+# the goods, so the photograph wins the moment there is one. This is what the
+# picker draws before there is.
+COLOURS = [
+    ("Oq", "#ffffff"),
+    ("Sut rang", "#faf7f0"),
+    ("Krem", "#fffdd0"),
+    ("Bej", "#e8d9bf"),
+    ("Qora", "#000000"),
+    ("Kulrang", "#808080"),
+    ("Kulrang melanj", "#b5b5b5"),
+    ("Kumush", "#c0c0c0"),
+    ("Oltin", "#d4af37"),
+    ("Bronza", "#cd7f32"),
+    ("Jigarrang", "#6f4e37"),
+    ("To'q jigarrang", "#3e2723"),
+    ("Xaki", "#78866b"),
+    ("Qizil", "#e53935"),
+    ("To'q qizil", "#8b0000"),
+    ("Bordo", "#6d071a"),
+    ("Pushti", "#f48fb1"),
+    ("To'q pushti", "#d81b60"),
+    ("To'q sariq", "#ef6c00"),
+    ("Sariq", "#fdd835"),
+    ("Sarg'ish", "#e8d98a"),
+    ("Sarg'ish melanj", "#d8cfa8"),
+    ("Yashil", "#2e7d32"),
+    ("Och yashil", "#8bc34a"),
+    ("To'q yashil", "#1b5e20"),
+    ("Ko'k", "#1e88e5"),
+    ("To'q ko'k", "#0d47a1"),
+    ("Havorang", "#87ceeb"),
+    ("Feruza", "#40e0d0"),
+    ("Binafsha", "#8e24aa"),
+    ("Siyohrang", "#283593"),
+]
+
+# `(slug, name, family, scale, values)`. One row per *scale*, because that is
+# what a card has to name: a European 43 and a UK 9 on one card is the thing
+# this table exists to make impossible, and a single "Erkaklar poyabzali" row
+# would let both in again.
+#
+# The numbers are the ones this shop has actually been typing — 41, 42, 43 on
+# trainers and S, M, L, XL on shirts — widened to the run a market stall
+# carries rather than to the full international chart, which would be a
+# picker nobody can scroll.
+SIZE_SYSTEMS = [
+    ("erkaklar-poyabzali-eur", "Erkaklar poyabzali EUR", "Erkaklar poyabzali", "EUR",
+     ["39", "40", "41", "42", "43", "44", "45", "46", "47"]),
+    ("erkaklar-poyabzali-uk", "Erkaklar poyabzali UK", "Erkaklar poyabzali", "UK",
+     ["6", "6.5", "7", "7.5", "8", "8.5", "9", "9.5", "10", "10.5", "11", "12"]),
+    ("erkaklar-poyabzali-us", "Erkaklar poyabzali US", "Erkaklar poyabzali", "US",
+     ["7", "7.5", "8", "8.5", "9", "9.5", "10", "10.5", "11", "11.5", "12", "13"]),
+    ("erkaklar-poyabzali-rus", "Erkaklar poyabzali RUS", "Erkaklar poyabzali", "RUS",
+     ["40", "41", "42", "43", "44", "45", "46", "47"]),
+
+    ("ayollar-poyabzali-eur", "Ayollar poyabzali EUR", "Ayollar poyabzali", "EUR",
+     ["35", "36", "37", "38", "39", "40", "41"]),
+    ("ayollar-poyabzali-uk", "Ayollar poyabzali UK", "Ayollar poyabzali", "UK",
+     ["2.5", "3", "3.5", "4", "4.5", "5", "5.5", "6", "6.5", "7", "7.5", "8"]),
+    ("ayollar-poyabzali-us", "Ayollar poyabzali US", "Ayollar poyabzali", "US",
+     ["5", "5.5", "6", "6.5", "7", "7.5", "8", "8.5", "9", "9.5", "10"]),
+    ("ayollar-poyabzali-rus", "Ayollar poyabzali RUS", "Ayollar poyabzali", "RUS",
+     ["34", "35", "36", "37", "38", "39", "40", "41"]),
+
+    ("kiyim", "Kiyim", "Kiyim", "",
+     ["XS", "S", "M", "L", "XL", "XXL", "XXXL"]),
+    # Uzum and the Russian-language labels on half the stock number clothing
+    # 42-58, and the desk has typed both. Two systems rather than one mixed
+    # list, for the same reason EUR and UK are two.
+    ("kiyim-raqamli", "Kiyim (raqamli)", "Kiyim", "RUS",
+     ["42", "44", "46", "48", "50", "52", "54", "56", "58"]),
+
+    ("kamar", "Kamar", "Kamar", "",
+     ["85", "90", "95", "100", "105", "110", "115", "120", "125", "130"]),
 ]
 
 
@@ -116,6 +207,15 @@ def seed(session: Session) -> None:
     if places:
         print(f"Seeded {places} places — {len(loc.RACKS)} racks and the staging areas.")
 
+    # The vocabulary the card form picks from, on the same terms as the room:
+    # idempotent on the name, and therefore ahead of the "already seeded" gate
+    # below. A shop that has been running for a month has accounts and no
+    # palette, and that is exactly the database this has to reach.
+    swatches = _seed_colours(session)
+    systems = _seed_size_systems(session)
+    if swatches or systems:
+        print(f"Seeded {swatches} colours and {systems} size systems.")
+
     if session.exec(select(User)).first():
         print("Database already seeded — nothing to do. Use --reset to start over.")
         return
@@ -131,6 +231,82 @@ def seed(session: Session) -> None:
     print(f"Admin:     {ADMIN_PHONE} · SMS code 123456 (dev)")
     print(f"Warehouse: {WAREHOUSE_PHONE} · SMS code 123456 (dev)")
     print(f"Courier:   {COURIER_PHONE} · SMS code 123456 (dev)")
+
+
+def _seed_colours(session: Session) -> int:
+    """Write the palette, and say how many swatches were new.
+
+    Idempotent **on the key** rather than on the name: a shop that already
+    typed ``qora`` has a row the desk has been landing on for weeks, and
+    writing ``Qora`` beside it would create the very duplicate the palette
+    exists to prevent. So a colour already in the table is left exactly as it
+    is — its hex too, because a hex somebody corrected is a decision and this
+    file is not the place it gets undone.
+
+    Deliberately does not delete. A colour taken out of the palette was taken
+    out by somebody, and a deployment is not a reason to put it back.
+    """
+    existing = {row.key for row in session.exec(select(Colour)).all()}
+    written = 0
+    # Tens, so a shade can later be slotted in beside the colour it is a shade
+    # of without renumbering the palette.
+    sort = (
+        int(session.exec(select(func.max(Colour.sort))).one() or 0) + 10
+        if existing
+        else 0
+    )
+    for name, hex_code in COLOURS:
+        wanted = colours.key(name)
+        if wanted in existing:
+            continue
+        session.add(
+            Colour(
+                slug=colours.free_slug(session, name),
+                name=name,
+                key=wanted,
+                hex=hex_code,
+                sort=sort,
+            )
+        )
+        existing.add(wanted)
+        written += 1
+        sort += 10
+    if written:
+        session.commit()
+    return written
+
+
+def _seed_size_systems(session: Session) -> int:
+    """Write the size systems and their values. Idempotent on the slug.
+
+    A system already there keeps its values untouched, including values
+    somebody added or removed by hand: the list is the shop's, and the seed's
+    job is to give a new database a starting point rather than to hold every
+    database to this file's opinion for ever.
+    """
+    existing = {row.slug for row in session.exec(select(SizeSystem)).all()}
+    written = 0
+    sort = (
+        int(session.exec(select(func.max(SizeSystem.sort))).one() or 0) + 10
+        if existing
+        else 0
+    )
+    for slug, name, family, scale, values in SIZE_SYSTEMS:
+        if slug in existing:
+            continue
+        row = SizeSystem(
+            slug=slug, name=name, family=family, scale=scale, sort=sort
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        # Through the same tidying every variant door runs, so the palette can
+        # never be the one place where `xl` and `XL` are two sizes (§6.4).
+        sizes.replace_values(session, row.id, values)
+        session.commit()
+        written += 1
+        sort += 10
+    return written
 
 
 def _seed_home(session: Session) -> None:

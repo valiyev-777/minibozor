@@ -1377,6 +1377,63 @@ LABELS: dict[str, dict[str, str]] = {
         "ru": "Рынок не указан",
         "en": "Market not recorded",
     },
+
+    # The palette and the size systems (§5.3). Every refusal here names the
+    # row that is in the way and says what to do instead, because the person
+    # reading it is mid-form with goods in their hands.
+    "colour_not_found": {
+        "uz": "Bunday rang yo'q",
+        "ru": "Такого цвета нет",
+        "en": "No such colour",
+    },
+    "colour_in_use": {
+        "uz": "Bu rangda {count} ta variant bor — o'chirib bo'lmaydi. "
+              "Boshqa rangga qo'shing.",
+        "ru": "У этого цвета {count} вариантов — удалить нельзя. "
+              "Объедините его с другим цветом.",
+        "en": "{count} variants are this colour — it cannot be deleted. "
+              "Merge it into another instead.",
+    },
+    "colour_name_taken": {
+        "uz": "«{name}» nomi paletdagi boshqa rangga ({slug}) tegishli",
+        "ru": "Название «{name}» уже принадлежит другому цвету палитры ({slug})",
+        "en": "Another colour in the palette ({slug}) already answers to “{name}”",
+    },
+    "colour_merge_itself": {
+        "uz": "Rangni o'ziga qo'shib bo'lmaydi — qaysi biri qoladi?",
+        "ru": "Цвет нельзя объединить с самим собой — какой из них остаётся?",
+        "en": "A colour cannot be merged into itself — which one would be left?",
+    },
+    # Refused rather than guessed: two variants of one card at one size is two
+    # rows in the ledger, and joining those is a stock decision.
+    "colour_merge_clash": {
+        "uz": "Bu kartalarda ikkala rang ham bir xil o'lchamda bor: {cards}. "
+              "Avval o'sha variantlarni hal qiling.",
+        "ru": "В этих карточках оба цвета есть в одном размере: {cards}. "
+              "Сначала разберитесь с этими вариантами.",
+        "en": "These cards hold both colours at the same size: {cards}. "
+              "Deal with those variants first.",
+    },
+    "colour_merged_note": {
+        "uz": "«{loser}» «{winner}» ichiga qo'shildi — {variants} ta variant",
+        "ru": "«{loser}» объединён с «{winner}» — вариантов: {variants}",
+        "en": "“{loser}” folded into “{winner}” — {variants} variants",
+    },
+    "size_system_not_found": {
+        "uz": "Bunday o'lchov tizimi yo'q",
+        "ru": "Такой размерной системы нет",
+        "en": "No such size system",
+    },
+    "size_system_in_use": {
+        "uz": "Bu tizimdan {count} ta karta foydalanmoqda — o'chirib bo'lmaydi",
+        "ru": "Эту систему использует карточек: {count} — удалить нельзя",
+        "en": "{count} cards use this system — it cannot be deleted",
+    },
+    "size_system_name_taken": {
+        "uz": "«{name}» nomli o'lchov tizimi allaqachon bor ({slug})",
+        "ru": "Размерная система «{name}» уже есть ({slug})",
+        "en": "A size system called “{name}” already exists ({slug})",
+    },
 }
 
 MONTHS: dict[str, list[str]] = {

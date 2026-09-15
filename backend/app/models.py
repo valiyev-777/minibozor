@@ -332,6 +332,16 @@ class Product(SQLModel, table=True):
     )
     brand_id: int | None = Field(default=None, foreign_key="brands.id", index=True)
 
+    # Which run of sizes this card's variants are numbered in — EUR, UK, or
+    # the letters. Null is not "unknown", it is **sizeless**: a cap, a bag, a
+    # belt buckle. §6.3 says a card is sized or sizeless and never both, and
+    # this column is the one place that answers which, so the form offers a
+    # size box or does not. It names the system and not the sizes: the sizes
+    # a card actually has are its variants, and they are the ledger's.
+    size_system_id: int | None = Field(
+        default=None, foreign_key="size_systems.id", index=True
+    )
+
     # The identification photograph, taken over the open sack in two seconds.
     # It is not a catalogue picture and is never shown to a customer: its job
     # is to tell two black trainers apart in a search result and in the
@@ -1404,3 +1414,96 @@ class PickupLine(SQLModel, table=True):
     reason: str = ""              # why not, when not
     photo_url: str = ""
     attempted_at: datetime | None = None
+
+
+# --------------------------------------------------------------------------- the palette and the size systems
+
+
+class Colour(SQLModel, table=True):
+    """One named colour, and the swatch a picker draws for it.
+
+    ``product_variants.colour`` goes on holding the **name as a string**, and
+    that is deliberate: the ledger, the shelf map, ``product_images.colour``
+    and every order line already agree on that string, and turning it into a
+    foreign key would rewrite all of them to solve a problem none of them has.
+    What this table fixes is upstream of that. The colour was typed at the
+    receiving desk, so ``qora``, ``Qora`` and ``QORA`` became three chips, three
+    filters and three photograph groups for one black shoe — and this shop's
+    live data holds ``Siniy`` beside ``Ko'k``, which is the same failure in two
+    languages. Offering a list instead of a box is what stops the next one.
+
+    **It is a palette, not a whitelist.** A colour already on a variant that is
+    not in this table is still a perfectly good colour and nothing rejects it;
+    the form's "+ yangi rang" writes it in here so the *next* person picks it
+    rather than retyping it.
+
+    ``key`` is the name with case and punctuation flattened — the same rule
+    ``app.brands`` uses, and unique for the same reason: one spelling must mean
+    one row, or the picker is offering two right answers again.
+    """
+
+    __tablename__ = "colours"
+
+    id: int | None = Field(default=None, primary_key=True)
+    slug: str = Field(index=True, unique=True, max_length=60)
+    # 60 to match ``ProductVariant.colour``: a palette name that will not fit
+    # in the column it is copied into is a name that fails at the receipt.
+    name: str = Field(max_length=60)
+    key: str = Field(index=True, unique=True, max_length=60)
+    # ``#rrggbb``, or empty for a colour no single swatch describes. The
+    # picker falls back to the photograph, which is what it prefers anyway.
+    hex: str = Field(default="", max_length=9)
+    sort: int = 0
+
+
+class SizeSystem(SQLModel, table=True):
+    """A named run of sizes — ``Erkaklar poyabzali EUR`` — that a card can use.
+
+    The desk used to type sizes, so a European 43 and a UK 9 could sit on one
+    card and nothing could tell them apart afterwards. A card names a system
+    and the form then offers that system's values, so the mixture cannot be
+    typed in the first place.
+
+    ``family`` and ``scale`` are split out rather than left for a screen to
+    parse back out of ``name``: §5.2 draws *Erkaklar poyabzali* once with
+    EUR/UK/US/RUS under it, and splitting a display name on a space to find
+    that grouping is the kind of rule that breaks on the first system called
+    ``Kamar``. Either may be empty — ``Kiyim`` is a family with one scale and
+    no name for it.
+
+    **Nothing here makes a card sized.** A card that names no system is
+    sizeless, which is the state ``VocabOut.sizeless`` already reports and
+    §6.3 requires to stay a single either/or.
+    """
+
+    __tablename__ = "size_systems"
+
+    id: int | None = Field(default=None, primary_key=True)
+    slug: str = Field(index=True, unique=True, max_length=60)
+    name: str = Field(max_length=80)
+    family: str = Field(default="", max_length=60)   # "Erkaklar poyabzali"
+    scale: str = Field(default="", max_length=20)    # "EUR"
+    sort: int = 0
+
+
+class SizeValue(SQLModel, table=True):
+    """One size a system offers, in the order it is worn or numbered.
+
+    Stored already tidied by ``app.products.tidy_size`` — the same function
+    every door that writes a variant runs — so the palette cannot be the one
+    place in the system where ``xl`` and ``XL`` are two sizes (§6.4). The
+    uniqueness is on the tidied value for the same reason.
+
+    ``sort`` is stored rather than derived because a shop reorders its own
+    list, and ``app.products.size_order`` only knows the orders it was taught.
+    """
+
+    __tablename__ = "size_values"
+    __table_args__ = (
+        UniqueConstraint("system_id", "value", name="uq_size_value"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    system_id: int = Field(foreign_key="size_systems.id", index=True)
+    value: str = Field(max_length=40)
+    sort: int = 0
