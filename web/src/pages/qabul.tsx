@@ -588,16 +588,9 @@ function IdentifyCard({
   onCreated: (productId: number) => void
 }) {
   const [needle, setNeedle] = useState("")
-  const [kind, setKind] = useState("")
-  const [brand, setBrand] = useState("")
   const [writing, setWriting] = useState(false)
   const [made, setMade] = useState(false)
-  const vocab = useVocab()
-  // The typed words and the tapped chips are one search, not two.
-  const asked = [needle, kind, brand]
-    .map((word) => word.trim())
-    .filter(Boolean)
-    .join(" ")
+  const asked = needle.trim()
   const found = useProducts(writing ? "" : asked, "")
   const results = asked && !writing ? (found.data?.items ?? []).slice(0, 8) : []
 
@@ -616,19 +609,6 @@ function IdentifyCard({
                 aria-label="Mavjud kartani qidirish"
                 className="h-control-lg pl-8 text-body" />
             </div>
-
-            {/* The vocabulary the receipts have taught, as taps. Not a second
-                way to write a card any more — a shorter way to find one. */}
-            <Chips
-              label="Tur"
-              options={vocab.data?.kinds ?? []}
-              value={kind}
-              onChange={setKind} />
-            <Chips
-              label="Brend"
-              options={vocab.data?.brands ?? []}
-              value={brand}
-              onChange={setBrand} />
 
             {asked && found.isLoading ? <Waiting what="Kartalar" /> : null}
 
@@ -778,49 +758,6 @@ function Thumb({ product }: { product: AdminProduct }) {
 }
 
 /** A chip row that grows. One spelling per thing — the server tidies them. */
-function Chips({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string
-  options: string[]
-  value: string
-  onChange: (value: string) => void
-}) {
-  // Quiet filter pills, not a data entry row. These narrow the search above —
-  // they stopped being a way to *write* a card when the card form took that
-  // job — so the "+ yangi" free-text they used to carry was a second, blunter
-  // search box drawn under the real one, and it is gone. The tint style is on
-  // purpose too: a filled-brand pill next to the screen's one primary button
-  // reads as a second primary.
-  const shown = [
-    ...(value && !options.includes(value) ? [value] : []),
-    ...options.slice(0, 8),
-  ]
-  if (!shown.length) return null
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="w-14 shrink-0 text-small text-ink-soft">{label}</span>
-      {shown.map((one) => (
-        <button
-          key={one}
-          type="button"
-          onClick={() => onChange(one === value ? "" : one)}
-          className={cn(
-            "h-control-sm rounded-full bg-line-soft px-3 text-small transition-colors hover:bg-line",
-            one === value && "bg-brand-soft font-medium text-brand-deep",
-          )}
-        >
-          {one}
-        </button>
-      ))}
-    </div>
-  )
-}
-
 // --------------------------------------------------------------------- nechta
 
 /**

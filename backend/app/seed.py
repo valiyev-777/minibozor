@@ -49,6 +49,7 @@ from app.db import engine, require_current_schema
 from app.models import (
     Banner,
     CancelReason,
+    Category,
     Colour,
     HomeSection,
     ReturnReason,
@@ -206,6 +207,84 @@ def reset(session: Session) -> None:
     session.commit()
 
 
+# `(slug, name, icon, children)`. What a bozor clothes-and-shoes stall files
+# under, in Uzbek, two levels deep — deep enough that the cascade in §5.2 ·1
+# has something to cascade, shallow enough that nobody gets lost. The admin
+# edits these freely; the seed only ever adds, and it adopts a category whose
+# name still equals its slug (i.e. was machine-made and never renamed) so the
+# two hand-made lowercase roots this started with get proper names and a
+# parent instead of a duplicate.
+CATEGORIES = [
+    ("oyoq-kiyim", "Oyoq kiyim", "box", [
+        ("krossovka", "Krossovka"),
+        ("tufli", "Tufli"),
+        ("botinka", "Botinka"),
+        ("sandal", "Sandal"),
+        ("shippak", "Shippak"),
+    ]),
+    ("kiyim", "Kiyim", "shirt", [
+        ("futbolka", "Futbolka"),
+        ("koylak", "Ko'ylak"),
+        ("shim", "Shim"),
+        ("jinsi", "Jinsi"),
+        ("kurtka", "Kurtka"),
+        ("kofta", "Kofta"),
+        ("spartivka", "Spartivka"),
+        ("dvoyka", "Dvoyka"),
+    ]),
+    ("aksessuar", "Aksessuar", "backpack", [
+        ("sumka", "Sumka"),
+        ("kamar", "Kamar"),
+        ("shapka", "Shapka"),
+        ("paypoq", "Paypoq"),
+        ("sharf", "Sharf"),
+    ]),
+]
+
+
+def _seed_categories(session: Session) -> int:
+    """Write the default catalogue tree. Idempotent on the slug.
+
+    A slug already present is left alone — except one case: a row whose name
+    still *equals* its slug was written by a machine and never touched by a
+    person, so it is adopted — given its proper name, its parent and a sort —
+    rather than left to sit beside a duplicate of itself at the root.
+    """
+    held = {row.slug: row for row in session.exec(select(Category)).all()}
+    written = 0
+    sort = 0
+    for slug, name, icon, children in CATEGORIES:
+        parent = held.get(slug)
+        if parent is None:
+            parent = Category(slug=slug, name=name, icon=icon, sort=sort)
+            session.add(parent)
+            session.flush()  # the children need its id
+            held[slug] = parent
+            written += 1
+        sort += 10
+        child_sort = 0
+        for child_slug, child_name in children:
+            row = held.get(child_slug)
+            if row is None:
+                row = Category(
+                    slug=child_slug, name=child_name, icon=icon,
+                    parent_id=parent.id, sort=child_sort,
+                )
+                session.add(row)
+                held[child_slug] = row
+                written += 1
+            elif row.name == row.slug:
+                row.name = child_name
+                row.parent_id = parent.id
+                row.sort = child_sort
+                session.add(row)
+                written += 1
+            child_sort += 10
+    if written:
+        session.commit()
+    return written
+
+
 def seed(session: Session) -> None:
     # The room first, and on its own terms: it is idempotent on the code, so
     # a database that already has accounts but has just grown a fourth rack
@@ -220,8 +299,12 @@ def seed(session: Session) -> None:
     # palette, and that is exactly the database this has to reach.
     swatches = _seed_colours(session)
     systems = _seed_size_systems(session)
-    if swatches or systems:
-        print(f"Seeded {swatches} colours and {systems} size systems.")
+    filed = _seed_categories(session)
+    if swatches or systems or filed:
+        print(
+            f"Seeded {swatches} colours, {systems} size systems "
+            f"and {filed} categories."
+        )
 
     if session.exec(select(User)).first():
         print("Database already seeded — nothing to do. Use --reset to start over.")
