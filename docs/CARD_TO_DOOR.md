@@ -74,20 +74,36 @@ and is tested (203 tests green). **Read that file before planning anything.**
 | `seller` deleted everywhere including the enum | §B of the recon |
 | Publishing living on the product card | `products.tsx:748` |
 | Photographs: camera, paste, drag-drop, per colour | `photo-step.tsx` |
+| **The card form itself** — category cascade, colour modal, attributes, rich text, price table, gate panel | `web/src/components/card-form/*` — 3,133 lines |
+| **The colour palette and the size systems, as data** | `app/colours.py`, `app/sizes.py`, `models.Colour`, `models.SizeSystem` |
+| **The catalogue card** | `web/src/components/product-card.tsx` |
 
-**So this rebuild is not a rewrite.** It is: move *who* does the first half,
-put a document between the two halves, and finish the three things that were
-never built — the card form, the colour palette, the size systems.
+> ⚠️ **Most of that is uncommitted.** Measured 2026-09-16 in a dirty working
+> tree. It is real, working code that nobody has committed yet. **Wave 0's
+> first job is to get it committed** — every one of these files is on an
+> agent's ownership list below, and an agent that starts on top of
+> uncommitted work cannot be reviewed, reverted or merged.
+
+**So this rebuild is not a rewrite.** The two halves exist and work. What is
+missing is the **document between them** — and the consequences of there being
+one.
 
 ### What is genuinely new
 
-1. The admin's **card form** (§3) and the fact that it, not the bench, is
-   where a card is born.
-2. The **shipment** — a declared consignment with a discrepancy loop (§4).
+The card form exists. What does **not** exist is the journey around it:
+
+1. The **shipment** — a declared consignment with states and a discrepancy
+   loop (§4). Nothing like it is in the tree.
+2. The card form's **tail**: quantities, cost, *Jo'natish*, and the label roll
+   — the form writes a card today, it does not send goods (§3.2).
 3. The warehouse's **scan-count** in front of the existing put-away (§5).
-4. Publishing **gated on accepted stock** (§6).
+4. Publishing **gated on accepted stock** — the fourth gate (§6).
 5. Picking **one scan per unit**, a **parcel label**, a **handover scan** (§7).
 6. The courier being **told, with a sound** (§8).
+
+And one rule to re-check rather than assume: **the card form must write no
+stock.** If its submit currently books anything into the room, that is the
+first thing to change.
 
 ---
 
@@ -437,61 +453,130 @@ With `./dev.sh` up:
 
 ---
 
-## 11. The agent split
+## 11. The agent split — wide, and without collisions
 
-Explicit file ownership. **No two agents in a wave touch the same file.** Each
-reports what it changed and stops. `docs/RECON_WAVE0.md` is required reading
-for every one of them.
+The owner is running these on a fast model and wants **as many in parallel as
+the work allows** — *"lekin sifat tushmasin"*. Both halves of that sentence are
+load-bearing, and they pull against each other in exactly one place: two agents
+editing one file. So the split below buys parallelism by **giving every agent
+its own files**, and pays for quality with **a contracts wave in front and a
+proof wave behind**.
 
-### Wave 0 — recon (1 agent, read-only)
+### The shape
 
-The last recon is one day old and still mostly true. Re-check only:
+```
+   Wave 0 ·  1 agent   ·  commit the tree, re-measure          ~15 min
+   Wave 1 ·  1 agent   ·  contracts: tables, schemas, types    ~30 min
+   Wave 2 ·  8 agents  ·  the work, all at once                 ── parallel ──
+   Wave 3 ·  2 agents  ·  drive it, and test it                ~45 min
+```
 
-- what `POST /warehouse/receipts` and `/putaway` do today, exactly;
-- `Supply` / `SupplyLine` / `SupplyStatus` as they stand, and every reader of
-  `supply_id`;
-- what `qabul.tsx` would keep and what would move to the admin's side;
-- whether the working tree is clean — the last recon found 67 files of
-  in-flight work, and **nothing starts until that is committed**.
+Waves are **barriers**: nothing in wave 2 starts until wave 1 reports, because
+every one of them builds on the same table and the same types. Inside a wave,
+nobody waits for anybody.
 
-### Wave 1 — backend (3 agents, parallel)
+---
 
-| Agent | Owns | Job |
-| --- | --- | --- |
-| **B1 · shipment** | `app/routers/warehouse.py`, `app/models.py` (Supply\*), `app/schemas.py` (shipment section), `alembic/versions/*` | §4 in full: states, the declared lines, the scan-count endpoint that writes one movement per unit, the discrepancy, the admin's confirmation. Keep idempotency. |
-| **B2 · reference data** | `app/colours.py` + `app/sizes.py` (new), `app/routers/admin.py`, `app/schemas.py` (palette section), `app/seed.py` | §3.3: the palette and the size systems, seeded in Uzbek, with their read/write doors. |
-| **B3 · orders** | `app/routers/picking.py`, `app/routers/operations.py`, `app/routers/courier.py`, `app/notifications.py` | §7 and §8 on the server: pick-by-scan, the parcel label's data, the handover scan, and what the courier board must expose for a live refresh. |
+### Wave 0 — one agent, read-only except for one commit
 
-`schemas.py` is shared — **B1 owns the shipment classes, B2 the palette
-classes, B3 the order ones.** Nobody reformats the file.
+1. **Commit the working tree first.** It holds the card form, the palette, the
+   size systems and the catalogue card — real work nobody has committed.
+   Split it into honest commits; do not squash it into one.
+2. Re-measure §1 against the committed tree and correct it in place: what is
+   built, what is not, with file and line.
+3. Answer three questions the rest depends on:
+   - does the card form's submit write **any** stock today?
+   - what exactly do `Supply`, `SupplyLine` and `SupplyStatus` hold, and who
+     reads `stock_movements.supply_id`?
+   - is picking already one-scan-per-unit, or a quantity field?
+4. **Stop and report.** If §1 is materially wrong, say so — wave 1 is written
+   against it.
 
-### Wave 2 — web (3 agents, parallel; starts when Wave 1 is green)
+---
 
-| Agent | Owns | Job |
-| --- | --- | --- |
-| **W1 · the card form** | `web/src/components/card-form/*` (new), `web/src/pages/products.tsx`, `card-editor.tsx` | §3 in full, and §6's gate panel. The largest piece in the brief. Publish the component's props **on day one** — W2 mounts it. |
-| **W2 · receiving** | `web/src/pages/qabul.tsx`, `web/src/pages/labels.tsx` | §5: the shipment list, the scan-count with its sounds, then the put-away that already works. Move what belongs to the admin into W1's form rather than duplicating it. |
-| **W3 · orders** | `web/src/pages/picking.tsx`, `web/src/pages/courier.tsx`, `web/src/components/scan.tsx` | §7 and §8 on screen: pick-by-scan, the parcel label, the handover, the board that refreshes and **makes a sound**. |
+### Wave 1 — one agent, the contracts
 
-`queries.ts` and `types.ts` are shared and do **not** split cleanly — the
-recon says so. Add to the end of your own area, never reformat, and expect one
-merge conflict each; resolve it by keeping both.
+Small, and everything waits on it, so it is alone in its wave.
 
-### Wave 3 — one agent, serial
+**Owns:** `app/models.py` (shipment fields only), `alembic/versions/*`,
+`app/schemas.py` (**one new block, at the end, marked
+`# --- shipment ---`**), `web/src/lib/types.ts` (one block at the end).
 
-Walk §10 in a browser against the running stack. Fix what fails. Update
-`docs/BUILD_PROMPT.md` and the `backoffice-design` skill if a rule changed.
-Commit.
+**Writes:**
+- the shipment's states on `Supply`, its declared lines, who declared, who
+  counted, the difference and its confirmation — **the tables and the
+  migration only, no endpoint logic**;
+- every Pydantic shape wave 2 will return;
+- the matching TypeScript types;
+- **eight empty hook files** — `web/src/lib/queries.shipments.ts`,
+  `queries.palette.ts`, `queries.orders.ts` … each re-exported from
+  `queries.ts` in **one** edit made here and never again. This is what stops
+  eight agents fighting over a 1,928-line file, and it is worth the small
+  ugliness of a split module.
 
-### House rules
+**Done when** `alembic upgrade head` runs, `pytest -q` is green, `tsc` is
+clean, and every wave-2 agent has a type to build against.
 
-- Load the `backoffice-design` skill before any screen work. No hex, no
+---
+
+### Wave 2 — eight agents, parallel
+
+| # | Agent | Owns — nobody else touches these | Job |
+| --- | --- | --- | --- |
+| 1 | **Jo'natma · admin** | `app/routers/shipments.py` (new), `tests/test_shipments.py` (new) | §4: create a shipment from the form, list them, the admin's **confirmation** of a difference. |
+| 2 | **Jo'natma · ombor** | `app/routers/warehouse.py`, `tests/test_receiving.py` | §5 on the server: the scan-count door — one movement per scanned unit, linked to the shipment — the live count, refusing a label from another shipment, closing with a difference. |
+| 3 | **To'rtinchi darvoza** | `app/products.py`, `app/routers/admin.py`, `tests/test_publishing.py` (new) | §6: a card cannot go on sale until its goods are **accepted**, and the reason says which. Plus: the card form writes **no stock** (fix it if it does). |
+| 4 | **Terish skani** | `app/routers/picking.py`, `tests/test_picking.py` | §7.1: one scan per unit off the shelf, a wrong unit refused. |
+| 5 | **Qadoq va topshirish** | `app/routers/operations.py`, `app/routers/shelves.py` (label door only), `tests/test_handover.py` (new) | §7.3–7.4: the parcel label's data, and the handover as a scan. |
+| 6 | **Kuryerga xabar** | `app/routers/courier.py`, `app/notifications.py`, `tests/test_courier_board.py` (new) | §8 on the server: what the board must expose so a screen can refresh and know an order is **new**. |
+| 7 | **Forma dumi** | `web/src/components/card-form/*`, `web/src/lib/queries.shipments.ts` | §3.2: quantities per colour, the cost, **Yorliqlarni chiqarish va jo'natish**, the label roll, and the line that follows it. The form exists — this is its tail, not a rewrite. |
+| 8 | **Qabul ekrani** | `web/src/pages/qabul.tsx` | §5 on screen: the shipment list, the scan-count with its **sounds**, then the put-away that already works. Move nothing that belongs to the admin — delete it and let agent 7's form own it. |
+| 9 | **Terish va kuryer ekrani** | `web/src/pages/picking.tsx`, `web/src/pages/courier.tsx`, `web/src/components/parcel-label.tsx` (new) | §7 and §8 on screen: scan per unit, the parcel label, the board that refreshes and **makes a sound**. |
+
+That is nine; run all nine. `app/schemas.py` is the only shared file left and
+wave 1 has already written every shape any of them needs — **if an agent needs
+a new one, it adds it at the end of its own marked block and says so in its
+report.**
+
+**Each agent owns its own test file.** A new file per agent is why nine agents
+can run `pytest` at the same time without merge pain.
+
+---
+
+### Wave 3 — two agents
+
+| Agent | Job |
+| --- | --- |
+| **Yurib chiqish** | Walk **every numbered step of §10** in a browser against the running stack. Not screenshots — **drive it**: type, scan (a scan is a fast keystroke burst ending in Enter, so it can be simulated), press, and assert on what changed in the database. Fix what fails. |
+| **Sinov supurgisi** | Read the nine agents' tests as one body. Fill the holes between them — the seams are where parallel work leaks: a shipment closed twice, a scan after closing, a difference confirmed by the wrong person, an order picked from a shipment that was never accepted. Re-assert the room adds up. |
+
+---
+
+### How to launch them
+
+One session per agent. Give each the same three lines and its own row:
+
+```
+Read docs/CARD_TO_DOOR.md in full, then docs/RECON_WAVE0.md.
+You are Wave 2 · agent N. You own ONLY the files in your row of §11.
+Do not edit a file another agent owns — if you need one changed, say so and stop.
+```
+
+---
+
+### House rules — this is where the quality is
+
+- **Own your files, nothing else.** A one-line fix in somebody else's file is
+  how a wave of nine becomes a merge nobody can read.
+- **Load the `backoffice-design` skill** before any screen work. No hex, no
   Tailwind palette colour, no pixel height for a control.
-- **One new dependency is allowed**: the rich text editor (§3.1·8). Pin it and
-  say in the commit why.
-- A comment says **why**, not what.
-- Never hand-write an `ALTER`; autogenerate the Alembic revision.
-- Run `pytest -q`, `npm run lint`, `npm run build` before reporting.
+- **Tests are not the last wave's job.** An agent reports done when its own
+  `pytest -q` is green, and `npm run lint` and `npm run build` are clean.
 - **A screenshot proves a page rendered, not that it works.** Drive the
   interaction and assert on what changed.
-- If this brief and the code disagree, **say so** rather than guessing.
+- **The ledger rules in §9 are not negotiable.** An agent that needs to break
+  one has found a design bug — report it, do not work around it.
+- **A comment says why, not what.**
+- Never hand-write an `ALTER`; autogenerate the Alembic revision.
+- **If this brief and the code disagree, stop and say so.** Nine agents
+  guessing in the same direction is nine times the wrong answer.
