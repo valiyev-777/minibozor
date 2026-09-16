@@ -268,6 +268,45 @@ The `:?` in `${MB_POSTGRES_PASSWORD:?set MB_POSTGRES_PASSWORD in backend/.env}`
 means *fail with this message if unset*. A default would have been worse: a
 database that quietly comes up with a known password is not a convenience.
 
+**`restart` does not re-read `env_file`.** Editing `backend/.env` and running
+`docker compose restart api` restarts the same container with the environment it
+was created with, so the change appears to have been ignored. The container has
+to be *recreated*:
+
+```bash
+docker compose --env-file backend/.env up -d api
+```
+
+`docker exec minibozor_api printenv | grep MB_` is how you check what the
+container actually holds, rather than what the file says.
+
+### The two failures that look like a dead server
+
+Both of these print "Server javob bermayapti" in the browser and neither is the
+server being down. They cost an hour each, once.
+
+**A blocked CORS origin.** `MB_CORS_ORIGINS` in `backend/.env` is an allow-list
+of exact origins, and a rejected preflight surfaces to the page as a network
+error with no status — indistinguishable from nothing listening. If the app is
+served from any host or port not on that list, every call fails this way. Serving
+the built app to a phone on the shop wifi means adding that exact origin, e.g.
+`http://192.168.100.58:5174`, and recreating the container as above. `curl -i -X
+OPTIONS <api>/api/v1/auth/otp/request -H "Origin: <origin>" -H
+"Access-Control-Request-Method: POST"` answers it in one line: `200` allowed,
+`400 Disallowed CORS origin` not.
+
+**`VITE_API_URL` baked at build time.** `web/src/lib/api.ts` falls back to
+`http://localhost:8000`, which is correct at a desk and wrong on a handset,
+where `localhost` is the handset. A build for any device other than this machine
+has to say so:
+
+```bash
+cd web && VITE_API_URL=http://192.168.100.58:8000 npm run build
+```
+
+Rebuilding without it changes nothing — the address is compiled into the bundle,
+not read at run time.
+
 ---
 
 ## 6. The commands worth knowing
@@ -352,6 +391,8 @@ and the container takes the full ten-second timeout to die every time.
 | `Cannot connect to the Docker daemon` | Docker is not running. `sudo systemctl start docker` |
 | `container name ... already in use` | An older container has the name. `docker rm -f minibozor_db` — the volume, and so the data, is not touched. |
 | API up, web says connection refused | `VITE_API_URL` or CORS. The browser's address, not the container's. |
+| API up, the page says "Server javob bermayapti" | Same two causes, and neither reports a status — see §5. On a phone it is usually `VITE_API_URL` still pointing at `localhost`; on a new port or host it is the CORS allow-list. |
+| A change to `backend/.env` seems ignored | `restart` keeps the old environment. Recreate: `docker compose --env-file backend/.env up -d api` |
 | Web container runs, browser gets nothing | Vite bound to 127.0.0.1 inside the container. It needs `--host 0.0.0.0`. |
 | Code edits do nothing | The bind mount is missing or the wrong path. `docker compose exec web ls /app/web/src` |
 | `exec: not found` on `bash` | Alpine images have `sh`, not `bash`. |
